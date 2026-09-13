@@ -53,7 +53,10 @@ window.APP = (function () {
       : U.isOver(i) ? `<span class="tag danger">Quá hạn ${U.overDays(i)} ngày</span>` : '<span class="tag">Chưa đến hạn</span>';
   U.traderDebt = id => U.sum(A.db.invoices.filter(i => i.traderId === id && i.status !== 'paid'), U.due);
   U.traderOverdue = id => U.sum(A.db.invoices.filter(i => i.traderId === id && U.isOver(i)), U.due);
-  U.can = r => { const it = A.menuItem(r); return !!it && it.roles.includes(ui.role); };
+  U.can = r => {
+    const it = A.menuItem(r), role = A.PERM.role(ui.role);
+    return !!it && !!role && role.active && A.PERM.canScreen(ui.role, r);
+  };
   U.pager = (key, total, size) => {
     const pages = Math.max(1, Math.ceil(total / size));
     const p = Math.min(ui.page[key] || 0, pages - 1);
@@ -239,49 +242,51 @@ window.APP = (function () {
   };
 
   // ---------- menu & định tuyến ----------
-  const ALL = ['lanhdao', 'bql'];
+  // Ghi chú: từ Giai đoạn 2, quyền truy cập từng mục KHÔNG còn khai báo cứng ở đây nữa —
+  // xem A.PERM (js/permissions.js). Danh sách vai trò cũng lấy động từ A.PERM.activeRoles().
   A.MENU = [
     { group: 'Điều hành', items: [
-      { id: 'tong-quan', ico: '📊', label: 'Tổng quan liên chợ', roles: ALL },
-      { id: 'so-do', ico: '🗺️', label: 'Sơ đồ mặt bằng', roles: ALL },
-      { id: 'phien-cho', ico: '🪷', label: 'Phiên chợ quê', roles: ALL }
+      { id: 'tong-quan', ico: '📊', label: 'Tổng quan liên chợ' },
+      { id: 'cau-truc', ico: '🧱', label: 'Thiết lập mặt bằng chợ' },
+      { id: 'so-do', ico: '🗺️', label: 'Sơ đồ mặt bằng' },
+      { id: 'phien-cho', ico: '🪷', label: 'Phiên chợ quê' }
     ] },
     { group: 'Tiểu thương & hợp đồng', items: [
-      { id: 'diem-kd', ico: '🏪', label: 'Điểm kinh doanh', roles: ['bql'] },
-      { id: 'tieu-thuong', ico: '👥', label: 'Tiểu thương', roles: ALL },
-      { id: 'hop-dong', ico: '📄', label: 'Hợp đồng', roles: ['bql'], badge: () => A.db.contracts.filter(c => U.inM(c) && c.status === 'hieuluc' && U.days(U.today(), c.end) <= 30).length }
+      { id: 'diem-kd', ico: '🏪', label: 'Điểm kinh doanh' },
+      { id: 'tieu-thuong', ico: '👥', label: 'Tiểu thương' },
+      { id: 'hop-dong', ico: '📄', label: 'Hợp đồng', badge: () => A.db.contracts.filter(c => U.inM(c) && c.status === 'hieuluc' && U.days(U.today(), c.end) <= 30).length }
     ] },
     { group: 'Tài chính', items: [
-      { id: 'dien-nuoc', ico: '⚡', label: 'Chỉ số điện, nước', roles: ['bql'] },
-      { id: 'phai-thu', ico: '🧾', label: 'Khoản phải thu', roles: ['bql'] },
-      { id: 'thu-tien', ico: '💳', label: 'Thu tiền & biên lai', roles: ['bql'] },
-      { id: 'doi-soat', ico: '🔁', label: 'Đối soát', roles: ['bql'], badge: () => A.db.bank.filter(b => !b.matched).length },
-      { id: 'cong-no', ico: '⏰', label: 'Công nợ & nhắc nợ', roles: ['bql'] }
+      { id: 'dien-nuoc', ico: '⚡', label: 'Chỉ số điện, nước' },
+      { id: 'phai-thu', ico: '🧾', label: 'Khoản phải thu' },
+      { id: 'thu-tien', ico: '💳', label: 'Thu tiền & biên lai' },
+      { id: 'doi-soat', ico: '🔁', label: 'Đối soát', badge: () => A.db.bank.filter(b => !b.matched).length },
+      { id: 'cong-no', ico: '⏰', label: 'Công nợ & nhắc nợ' }
     ] },
     { group: 'Vận hành', items: [
-      { id: 'su-co', ico: '🛠️', label: 'Phản ánh & sự cố', roles: ALL, badge: () => A.db.incidents.filter(i => U.inM(i) && i.state === 'tiepnhan').length },
-      { id: 'thong-bao', ico: '📣', label: 'Thông báo đa kênh', roles: ['bql'] },
-      { id: 'bao-cao', ico: '📈', label: 'Báo cáo thống kê', roles: ALL },
-      { id: 'cai-dat', ico: '⚙️', label: 'Cài đặt & phân quyền', roles: ['bql'] }
+      { id: 'su-co', ico: '🛠️', label: 'Phản ánh & sự cố', badge: () => A.db.incidents.filter(i => U.inM(i) && i.state === 'tiepnhan').length },
+      { id: 'thong-bao', ico: '📣', label: 'Thông báo đa kênh' },
+      { id: 'bao-cao', ico: '📈', label: 'Báo cáo thống kê' },
+      { id: 'tai-khoan', ico: '🧑‍💼', label: 'Tài khoản người dùng' },
+      { id: 'cai-dat', ico: '⚙️', label: 'Cài đặt & phân quyền' }
     ] },
     { group: 'Dành cho tiểu thương', items: [
-      { id: 'mini-app', ico: '📱', label: 'Mini app tiểu thương', roles: ['lanhdao', 'bql', 'tieuthuong'] }
+      { id: 'mini-app', ico: '📱', label: 'Mini app tiểu thương' }
     ] }
   ];
   A.menuItem = id => { for (const g of A.MENU) for (const it of g.items) if (it.id === id) return it; return null; };
-  const ROLES = [['lanhdao', 'Lãnh đạo phường'], ['bql', 'Ban Quản lý chợ'], ['tieuthuong', 'Tiểu thương']];
   const MKTS = [['ALL', 'Tất cả'], ['CL', 'Chợ Cao Lãnh'], ['TTD', 'Chợ quê TTĐ']];
 
   function chrome() {
     $('#nav').innerHTML = A.MENU.map(g => {
-      const items = g.items.filter(it => it.roles.includes(ui.role));
+      const items = g.items.filter(it => U.can(it.id));
       if (!items.length) return '';
       return `<div class="nav-group">${g.group}</div>` + items.map(it => {
         const b = it.badge ? it.badge() : 0;
         return `<a href="#/${it.id}" class="${A.current === it.id ? 'active' : ''}"><span class="ico">${it.ico}</span>${it.label}${b ? `<span class="badge">${b}</span>` : ''}</a>`;
       }).join('');
     }).join('');
-    $('#role-seg').innerHTML = ROLES.map(r => `<button class="${ui.role === r[0] ? 'on' : ''}" data-act="role" data-id="${r[0]}">${r[1]}</button>`).join('');
+    $('#role-seg').innerHTML = A.PERM.activeRoles().map(r => `<button class="${ui.role === r.id ? 'on' : ''}" data-act="role" data-id="${r.id}">${U.esc(r.name)}</button>`).join('');
     $('#market-seg').innerHTML = MKTS.map(m => `<button class="${ui.market === m[0] ? 'on' : ''}" data-act="market" data-id="${m[0]}">${m[1]}</button>`).join('');
     $('#market-wrap').style.display = A.current === 'mini-app' ? 'none' : '';
     const it = A.menuItem(A.current);
@@ -304,7 +309,8 @@ window.APP = (function () {
   };
   A.route = function () {
     let r = (location.hash || '').replace(/^#\/?/, '');
-    const def = ui.role === 'tieuthuong' ? 'mini-app' : 'tong-quan';
+    const role = A.PERM.role(ui.role);
+    const def = (role && role.selfService) ? 'mini-app' : 'tong-quan';
     if (!r || !U.can(r)) r = def;
     const changed = A.current !== r;
     A.current = r;
@@ -321,7 +327,8 @@ window.APP = (function () {
     menu: () => $('#sidebar').classList.toggle('open'),
     role: el => {
       ui.role = el.dataset.id; A.saveUi();
-      if (ui.role === 'tieuthuong') A.go('mini-app'); else if (!U.can(A.current) || A.current === 'mini-app') A.go('tong-quan'); else A.route();
+      const role = A.PERM.role(ui.role);
+      if (role && role.selfService) A.go('mini-app'); else if (!U.can(A.current) || A.current === 'mini-app') A.go('tong-quan'); else A.route();
     },
     market: el => { ui.market = el.dataset.id; ui.page = {}; ui.sel = null; A.saveUi(); A.render(); },
     page: el => { ui.page[el.dataset.k] = (ui.page[el.dataset.k] || 0) + Number(el.dataset.d); A.render(); },

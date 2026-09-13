@@ -108,8 +108,8 @@
         .concat([`<tr><td><b>Tổng cộng</b></td><td class="num"><b>${U.money(i.amount)}</b></td></tr>`]))}
       ${pays.length ? '<div class="divider"></div><b>Thanh toán</b>' + U.table([{ t: 'Biên lai' }, { t: 'Ngày' }, { t: 'Hình thức' }, { t: 'Số tiền', num: true }], pays.map(p => `<tr class="click" data-act="receipt" data-id="${p.receipt}"><td>${p.receipt}</td><td>${U.dmy(p.date)} ${p.time}</td><td>${D.METHOD[p.method]}</td><td class="num">${U.money(p.amount)}</td></tr>`)) : ''}
       </div><div class="modal-f">
-      ${i.status !== 'paid' && !i.adjust && ui.role === 'bql' ? `<button class="btn" data-act="inv-adjust" data-id="${i.id}">Miễn giảm / điều chỉnh</button>` : ''}
-      ${i.status !== 'paid' && ui.role === 'bql' ? `<button class="btn primary" data-act="pay-open" data-id="${i.traderId}" data-inv="${i.id}">💳 Thu tiền</button>` : ''}
+      ${i.status !== 'paid' && !i.adjust && A.PERM.canAction(ui.role, 'phai-thu.mien-giam') ? `<button class="btn" data-act="inv-adjust" data-id="${i.id}">Miễn giảm / điều chỉnh</button>` : ''}
+      ${i.status !== 'paid' && A.PERM.canAction(ui.role, 'thu-tien.thu') ? `<button class="btn primary" data-act="pay-open" data-id="${i.traderId}" data-inv="${i.id}">💳 Thu tiền</button>` : ''}
       <button class="btn" data-act="close">Đóng</button></div>`, true);
   };
   A.ACT['inv-adjust'] = el => {

@@ -1,3 +1,5 @@
+
+
 /* Màn hình điều hành: Tổng quan liên chợ, Sơ đồ mặt bằng, Phiên chợ quê. */
 (function (A) {
   'use strict';
@@ -118,7 +120,10 @@
     const t = st.traderId ? A.idx.trader.get(st.traderId) : null;
     const c = st.contractId ? A.idx.contract.get(st.contractId) : null;
     const unpaid = A.db.invoices.filter(i => i.stallId === st.id && i.status !== 'paid');
-    const bql = ui.role === 'bql';
+    const canThuTien = A.PERM.canAction(ui.role, 'thu-tien.thu');
+    const canXemHoSo = A.PERM.canAction(ui.role, 'so-do.xem-ho-so');
+    const canTaoHopDong = A.PERM.canAction(ui.role, 'so-do.tao-hop-dong');
+    const canDoiTrangThai = A.PERM.canAction(ui.role, 'so-do.doi-trang-thai');
     const left = c ? U.days(U.today(), c.end) : null;
     return `<div class="row"><h3>${st.code}</h3>${U.statusTag(st.status)}</div>
       <div class="muted small" style="margin:2px 0 12px">${U.esc(st.sectionName)} · ${U.market(st.market).floors.find(f => f.id === st.floor).name} · ${U.mShort(st.market)}</div>
@@ -131,10 +136,10 @@
         ${c ? `<dt>Hợp đồng</dt><dd>${c.id}<br><span class="small muted">${U.dmy(c.start)} – ${U.dmy(c.end)} · ${left <= 30 ? `<b style="color:#d6453b">còn ${left} ngày</b>` : 'còn ' + left + ' ngày'}</span></dd>` : ''}
         <dt>Công nợ</dt><dd>${unpaid.length ? `<b style="color:#d6453b">${U.money(U.sum(unpaid, U.due))}</b> <span class="small muted">(${unpaid.length} kỳ)</span>` : '<span class="tag ok">Không nợ</span>'}</dd></dl>`
         : '<div class="note info">Điểm kinh doanh đang trống, có thể cho thuê.</div>'}
-      ${bql ? `<div class="row" style="margin-top:14px">
-        ${t && unpaid.length ? `<button class="btn primary" data-act="pay-open" data-id="${t.id}">💳 Thu tiền</button>` : ''}
-        ${t ? `<button class="btn" data-act="trader" data-id="${t.id}">Hồ sơ</button>` : `<button class="btn primary" data-act="ct-new" data-id="${st.id}">Tạo hợp đồng</button>`}
-        <button class="btn" data-act="stall-status" data-id="${st.id}">Đổi trạng thái</button></div>` : ''}
+      ${(canThuTien || canXemHoSo || canTaoHopDong || canDoiTrangThai) ? `<div class="row" style="margin-top:14px">
+        ${canThuTien && t && unpaid.length ? `<button class="btn primary" data-act="pay-open" data-id="${t.id}">💳 Thu tiền</button>` : ''}
+        ${t ? (canXemHoSo ? `<button class="btn" data-act="trader" data-id="${t.id}">Hồ sơ</button>` : '') : (canTaoHopDong ? `<button class="btn primary" data-act="ct-new" data-id="${st.id}">Tạo hợp đồng</button>` : '')}
+        ${canDoiTrangThai ? `<button class="btn" data-act="stall-status" data-id="${st.id}">Đổi trạng thái</button>` : ''}</div>` : ''}
       ${st.history && st.history.length ? `<div class="divider"></div><div class="small"><b>Lịch sử thay đổi</b>${st.history.map(h => `<div class="muted">${h}</div>`).join('')}</div>` : ''}`;
   };
 
@@ -219,7 +224,7 @@
       ${k('Doanh thu tiểu thương (ước)', U.moneyShort(last.revenue), 'tổng hợp tự khai')}
     </div>
     ${pending ? `<div class="card"><div class="card-b row" style="padding-top:16px"><div style="flex:1"><b>Phiên thứ Bảy 12/09/2026 chưa chốt số liệu</b><div class="small muted">Điểm danh quầy tham gia, ghi lượt khách ước tính, hệ thống tự tính phí phiên.</div></div>
-      ${ui.role === 'bql' ? '<button class="btn primary" data-act="session-open">Điểm danh & chốt phiên 12/09</button>' : ''}</div></div>` : ''}
+      ${A.PERM.canAction(ui.role, 'phien-cho.chot-phien') ? '<button class="btn primary" data-act="session-open">Điểm danh & chốt phiên 12/09</button>' : ''}</div></div>` : ''}
     <div class="grid g2">
       <div class="card"><div class="card-h"><h3>Lượt khách theo phiên</h3></div><div class="card-b">
         ${U.bars(ss.map(s => s.date.slice(8) + '/' + s.date.slice(5, 7)), [{ name: 'Lượt khách (ước)', values: ss.map(s => s.visitors), color: '#c93d6e' }], { fmt: v => Math.round(v).toLocaleString('vi-VN'), stacked: false })}</div></div>

@@ -269,3 +269,28 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
   .app { display: block; }
   .card { box-shadow: none; }
 }
+
+/* ---------- Thiết lập cấu trúc & phân khu mặt bằng (UC01.1) ---------- */
+.qh-block { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--surface-2); }
+.qh-block + .qh-block { margin-top: 10px; }
+.qh-floor { border-left: 2px solid var(--line); margin: 8px 0 0 6px; padding: 8px 0 4px 14px; }
+.qh-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.qh-zones { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.qh-zone-chip { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 6px 10px; font-size: 12.5px; cursor: pointer; text-align: left; }
+.qh-zone-chip:hover { border-color: #9fbdb4; }
+.qh-zone-chip.on { border-color: var(--brand-2); background: var(--brand-soft); font-weight: 600; }
+.qh-visual { display: flex; flex-wrap: wrap; gap: 10px; }
+.qh-visual-zone { flex: 1 1 140px; min-width: 140px; border: 1.5px solid var(--brand-2); background: var(--brand-soft); border-radius: 10px; padding: 10px 12px; cursor: pointer; }
+.qh-visual-zone.draft { border-style: dashed; border-color: #c9b26a; background: var(--warn-soft); }
+.qh-visual-zone:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+
+/* ---------- Tài khoản người dùng ---------- */
+.avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12.5px; flex: none; }
+.avatar.lg { width: 52px; height: 52px; font-size: 17px; }
+.drawer-overlay { position: fixed; inset: 0; background: rgba(12, 30, 26, .45); z-index: 100; }
+.drawer { position: fixed; top: 0; right: 0; height: 100vh; width: min(420px, 100%); background: #fff; box-shadow: -20px 0 60px rgba(0,0,0,.25); display: flex; flex-direction: column; z-index: 101; animation: slideIn .18s ease-out; }
+@keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+.drawer-h { padding: 16px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; }
+.drawer-b { padding: 16px 20px; overflow-y: auto; flex: 1; }
+.drawer-f { padding: 12px 20px 16px; border-top: 1px solid var(--line); display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+@media (max-width: 480px) { .drawer { width: 100%; } }

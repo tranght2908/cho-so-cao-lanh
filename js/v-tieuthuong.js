@@ -53,7 +53,7 @@
     return `<div class="card"><div class="card-h"><h3>${ui.role === 'lanhdao' ? 'Tra cứu tiểu thương' : 'Hồ sơ tiểu thương'}</h3>
       <select class="input" data-ch="tt-app"><option value="">Mini app: tất cả</option><option value="yes" ${f.ttApp === 'yes' ? 'selected' : ''}>Đã cài mini app</option><option value="no" ${f.ttApp === 'no' ? 'selected' : ''}>Chưa cài</option></select>
       <input class="input" placeholder="Tên, SĐT, mã điểm KD" data-in="tt-search" value="${U.esc(f.ttSearch || '')}">
-      ${ui.role === 'bql' ? '<button class="btn primary" data-act="tt-new">+ Thêm tiểu thương</button>' : ''}</div>
+      ${A.PERM.canAction(ui.role, 'tieu-thuong.them-moi') ? '<button class="btn primary" data-act="tt-new">+ Thêm tiểu thương</button>' : ''}</div>
       <div class="card-b">${U.table([{ t: 'Mã' }, { t: 'Họ tên' }, { t: 'Điện thoại' }, { t: 'Chợ' }, { t: 'Ngành hàng' }, { t: 'Điểm KD' }, { t: 'Mini app' }, { t: 'Công nợ', num: true }],
         rows.slice(pg.start, pg.end).map(t => {
           const debt = U.traderDebt(t.id), over = U.traderOverdue(t.id);
@@ -84,7 +84,7 @@
       <div class="divider"></div><b>Khoản phải thu gần đây</b>
       ${U.table([{ t: 'Mã' }, { t: 'Kỳ' }, { t: 'Số tiền', num: true }, { t: 'Đã thu', num: true }, { t: 'Trạng thái' }], invs.map(i => `<tr><td>${i.id}</td><td>${U.per(i.period)}</td><td class="num">${U.money(i.amount)}</td><td class="num">${U.money(i.paid)}</td><td>${U.invTag(i)}</td></tr>`))}
       ${pays.length ? `<div class="divider"></div><b>Biên lai gần đây</b>${U.table([{ t: 'Biên lai' }, { t: 'Ngày' }, { t: 'Hình thức' }, { t: 'Số tiền', num: true }], pays.map(p => `<tr class="click" data-act="receipt" data-id="${p.receipt}"><td>${p.receipt}</td><td>${U.dmy(p.date)}</td><td>${D.METHOD[p.method]}</td><td class="num">${U.money(p.amount)}</td></tr>`))}` : ''}
-      </div><div class="modal-f">${ui.role === 'bql' && U.traderDebt(t.id) ? `<button class="btn primary" data-act="pay-open" data-id="${t.id}">💳 Thu tiền</button>` : ''}<button class="btn" data-act="close">Đóng</button></div>`, true);
+      </div><div class="modal-f">${A.PERM.canAction(ui.role, 'thu-tien.thu') && U.traderDebt(t.id) ? `<button class="btn primary" data-act="pay-open" data-id="${t.id}">💳 Thu tiền</button>` : ''}<button class="btn" data-act="close">Đóng</button></div>`, true);
   };
 
   const OCR_SAMPLE = { name: 'Nguyễn Thị Mỹ Duyên', idNo: '087196012345', birth: '1988', gender: 'Nữ', address: 'Khóm 3, phường Cao Lãnh' };
