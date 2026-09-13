@@ -174,7 +174,7 @@
     let chart = '';
     if (r.chart === 'doanhthu') chart = U.bars(r.rows.map(x => x[0]), [{ name: 'Phải thu', values: r.rows.map(x => x[2]), color: '#b9d8cf' }, { name: 'Đã thu', values: r.rows.map(x => x[3]), color: '#13806b' }], { stacked: false });
     if (r.chart === 'khongtienmat') chart = U.bars(r.rows.map(x => x[0]), [{ name: 'Không tiền mặt %', values: r.rows.map(x => x[4]), color: '#c93d6e' }], { stacked: false, max: 100, fmt: v => Math.round(v) + '%' });
-    return `<div class="grid" style="grid-template-columns:minmax(200px,260px) minmax(0,1fr);align-items:start">
+    return `<div class="grid g-report">
       <div class="card no-print"><div class="card-b report-list" style="padding-top:10px">${Object.keys(R).map((k, n) => `<button class="${(R[ui.report] ? ui.report : 'lapday') === k ? 'on' : ''}" data-act="rp" data-id="${k}">${n + 1}. ${R[k].t}</button>`).join('')}</div></div>
       <div class="card"><div class="card-h"><h3>${r.t}</h3><span class="small muted">${ui.market === 'ALL' ? 'Tất cả chợ' : U.mShort(ui.market)} · lập ngày ${U.dmy(U.today())}</span>
         <button class="btn no-print" data-act="rp-csv">⬇ Xuất Excel</button><button class="btn no-print" data-act="print">🖨 In / PDF</button></div>
