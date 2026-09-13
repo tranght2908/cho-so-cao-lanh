@@ -4,7 +4,6 @@ Prototype **Hệ thống quản lý chợ số** phường Cao Lãnh, tỉnh Đ�
 
 **Xem trực tiếp:** https://tranght2908.github.io/cho-so-cao-lanh/
 
-> ⚠️ Toàn bộ tên tiểu thương, số điện thoại, số sạp và số tiền trong prototype là **dữ liệu mẫu giả lập**. Đây chưa phải số liệu chính thức của Chợ Cao Lãnh hay Chợ quê Cù lao Tân Thuận Đông.
 
 ## Phạm vi
 
