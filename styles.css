@@ -103,6 +103,9 @@ table { border-collapse: collapse; width: 100%; }
 .input:focus { outline: 2px solid #9bd3c5; border-color: var(--brand-2); }
 .field { display: flex; flex-direction: column; gap: 4px; }
 .field label { font-size: 12px; color: var(--muted); }
+.field .input { width: 100%; max-width: 100%; }
+select.input { max-width: 100%; text-overflow: ellipsis; }
+.grid > *, .mini-wrap > *, .kpis > * { min-width: 0; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
 .tbl-wrap { overflow-x: auto; }
