@@ -1,6 +1,6 @@
 # Chợ số Cao Lãnh – Prototype
 
-Prototype **Phân hệ 2 – Giải pháp quản lý chợ số** thuộc dự án nền tảng số phường Cao Lãnh, tỉnh Đồng Tháp. Prototype phục vụ trình bày Báo cáo kinh tế – kỹ thuật (BCKTKT).
+Prototype **Hệ thống quản lý chợ số** phường Cao Lãnh, tỉnh Đồng Tháp.
 
 **Xem trực tiếp:** https://tranght2908.github.io/cho-so-cao-lanh/
 
@@ -10,7 +10,7 @@ Prototype **Phân hệ 2 – Giải pháp quản lý chợ số** thuộc dự �
 
 Có 02 chợ: **Chợ Cao Lãnh** (hạng 1, tòa nhà mới gồm hầm, tầng 1, tầng 2 và khu ngoài nhà lồng) và **Chợ quê Cù lao Tân Thuận Đông** (phiên chợ họp chiều thứ Bảy).
 
-Prototype mô phỏng đủ các chức năng tại mục 7.3 BCKTKT:
+Các chức năng chính:
 
 | Vai trò | Màn hình |
 |---|---|

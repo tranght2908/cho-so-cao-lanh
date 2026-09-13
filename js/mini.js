@@ -136,9 +136,7 @@
           <li><div>Ở Trang chủ, bấm <b>Thanh toán bằng QR</b> → <b>Giả lập: đã chuyển khoản</b>. Hệ thống ghi nhận, phát hành biên lai điện tử, cập nhật công nợ.</div></li>
           <li><div>Mở tab <b>Phản ánh</b>, đính kèm ảnh và <b>Gửi phản ánh</b>.</div></li>
           <li><div>Đổi vai trò sang <b>Ban Quản lý chợ</b> → <b>Phản ánh & sự cố</b>: phản ánh mới nằm ở cột "Tiếp nhận". Chuyển đến "Hoàn thành" rồi quay lại đây để <b>đánh giá sao</b>.</div></li>
-        </ol></div></div>
-        <div class="note info">Mục tiêu theo BCKTKT: ≥ 70% tiểu thương cài đặt và sử dụng sau 06 tháng; mức độ hài lòng ≥ 4/5.</div>
-      </div></div>`;
+        </ol></div></div>      </div></div>`;
   };
 
   A.CH['mini-trader'] = el => { Object.assign(mini(), { traderId: el.value, step: 'login', tab: 'home', pay: null, bill: null, attach: false }); A.render(); };
@@ -164,7 +162,7 @@
       const title = text.length > 60 ? text.slice(0, 57) + '…' : text;
       const i = A.addIncident(A.$('#mr-stall').value, A.$('#mr-cat').value, title, text, 'Mini app tiểu thương', mini().attach);
       mini().attach = false; A.render();
-      U.toast('Đã gửi ' + i.id + '. Ban Quản lý sẽ phản hồi trong 24 giờ.');
+      U.toast('Đã gửi ' + i.id + '. Ban Quản lý đã tiếp nhận phản ánh của bạn.');
     },
     'mini-rate': el => {
       const i = A.db.incidents.find(x => x.id === el.dataset.id);

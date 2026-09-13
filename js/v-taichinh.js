@@ -200,7 +200,7 @@
     cashPays.forEach(p => { const s = byStaff[p.by] || (byStaff[p.by] = { n: 0, amt: 0 }); s.n++; s.amt += p.amount; });
     return `<div class="kpis">
       <div class="card kpi"><div class="k-label">Giao dịch trên sao kê ${U.dmy(U.today())}</div><div class="k-value">${bank.length}</div><div class="k-sub">${U.money(U.sum(bank, b => b.amount))}</div></div>
-      <div class="card kpi"><div class="k-label">Khớp tự động</div><div class="k-value">${U.pctTxt(U.pct(matched, bank.length))}</div><div class="k-sub">Mục tiêu ≥ 95%</div></div>
+      <div class="card kpi"><div class="k-label">Khớp tự động</div><div class="k-value">${U.pctTxt(U.pct(matched, bank.length))}</div><div class="k-sub">${matched}/${bank.length} giao dịch QR, chuyển khoản</div></div>
       <div class="card kpi"><div class="k-label">Chưa khớp</div><div class="k-value" style="color:${bank.length - matched ? '#d6453b' : '#2e9e6a'}">${bank.length - matched}</div><div class="k-sub">Cần gán thủ công</div></div>
       <div class="card kpi"><div class="k-label">Tiền mặt nhân viên thu</div><div class="k-value">${U.moneyShort(U.sum(cashPays, p => p.amount))}</div><div class="k-sub">${cashPays.length} biên lai</div></div></div>
     <div class="grid g-main" style="align-items:start">

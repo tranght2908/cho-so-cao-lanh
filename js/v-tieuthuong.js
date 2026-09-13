@@ -137,7 +137,7 @@
             <td class="num">${c.monthly ? U.money(c.monthly) : 'Theo phiên'}</td><td>${c.scanned ? '<span class="tag info">PDF</span>' : '<span class="tag warn">Chưa scan</span>'}</td>
             <td class="nowrap">${c.status === 'hieuluc' ? `<button class="btn sm" data-act="ct-extend" data-id="${c.id}">Gia hạn</button> <button class="btn sm danger" data-act="ct-end" data-id="${c.id}">Thanh lý</button>` : ''}</td></tr>`;
         }))}${pg.html}
-        <div class="small muted" style="margin-top:8px">Hệ thống tự cảnh báo và gửi thông báo cho tiểu thương trước khi hợp đồng hết hạn tối thiểu 30 ngày.</div></div></div>`;
+        <div class="small muted" style="margin-top:8px">Hệ thống tự cảnh báo và gửi thông báo cho tiểu thương khi hợp đồng sắp hết hạn.</div></div></div>`;
   };
   A.ACT['hd-tab'] = el => { ui.contractTab = el.dataset.id; A.render(); };
   A.IN['hd-search'] = el => { f.hdSearch = el.value; ui.page['hd' + ui.contractTab] = 0; A.render(); };

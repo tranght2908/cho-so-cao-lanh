@@ -71,9 +71,9 @@
       ${kpi('Điểm kinh doanh', s.stalls, `Lấp đầy ${U.pctTxt(s.occPct)}`, '', s.occPct)}
       ${kpi('Tiểu thương đang kinh doanh', s.traders, `${U.pctTxt(s.app)} đã dùng mini app`, '', s.app)}
       ${kpi('Đã thu kỳ 09/2026', U.moneyShort(s.paid), `/ ${U.moneyShort(s.due)} phải thu (${U.pctTxt(U.pct(s.paid, s.due))})`, '', U.pct(s.paid, s.due))}
-      ${kpi('Thanh toán không tiền mặt', U.pctTxt(s.noncash), `Kỳ 08: ${U.pctTxt(s.noncashAug)} · mục tiêu ≥ 60%`, s.noncash >= 60 ? 'up' : 'down', s.noncash)}
+      ${kpi('Thanh toán không tiền mặt', U.pctTxt(s.noncash), `Kỳ 08/2026: ${U.pctTxt(s.noncashAug)}`, s.noncash >= s.noncashAug ? 'up' : 'down', s.noncash)}
       ${kpi('Nợ phí quá hạn', U.moneyShort(s.over), `${s.overTraders} tiểu thương`, 'down')}
-      ${kpi('Phản ánh đang xử lý', s.inc, `${s.incLate} quá hạn · phản hồi ≤ 24 giờ`, s.incLate ? 'down' : 'up')}
+      ${kpi('Phản ánh đang xử lý', s.inc, `${s.incLate} quá hạn xử lý`, s.incLate ? 'down' : 'up')}
       ${kpi('Hợp đồng sắp hết hạn', s.expiring, 'Trong 30 ngày tới', s.expiring ? 'down' : '')}
       ${kpi('Cập nhật', U.dmy(U.today()), 'Số liệu theo thời gian thực')}
     </div>

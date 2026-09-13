@@ -332,7 +332,7 @@ window.APP = (function () {
 
   A.guide = function () {
     A.modal(A.mHead('Hướng dẫn xem prototype') + `<div class="modal-b">
-      <p class="muted" style="margin-top:0">Prototype mô phỏng <b>Phân hệ 2 – Giải pháp quản lý chợ số</b> cho 02 chợ: Chợ Cao Lãnh và Chợ quê Cù lao Tân Thuận Đông. Đổi <b>Vai trò</b> và <b>Chợ</b> ở thanh trên cùng.</p>
+      <p class="muted" style="margin-top:0">Prototype mô phỏng <b>Hệ thống quản lý chợ số</b> cho 02 chợ: Chợ Cao Lãnh và Chợ quê Cù lao Tân Thuận Đông. Đổi <b>Vai trò</b> và <b>Chợ</b> ở thanh trên cùng.</p>
       <ol class="script">
         <li><div><b>Lãnh đạo phường → Tổng quan liên chợ:</b> số liệu tổng hợp, so sánh 02 chợ, cảnh báo cần xử lý.</div></li>
         <li><div><b>Ban Quản lý chợ → Sơ đồ mặt bằng:</b> bấm vào một ô màu đỏ (nợ phí) để xem tiểu thương, hợp đồng, công nợ → <b>Thu tiền</b> bằng mã QR → nhận biên lai điện tử.</div></li>
