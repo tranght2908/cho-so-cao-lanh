@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chợ số Cao Lãnh – Prototype</title>
+  <meta name="description" content="Prototype Hệ thống quản lý chợ số phường Cao Lãnh, tỉnh Đồng Tháp (dữ liệu mẫu minh họa).">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪷</text></svg>">
+</head>
+<body>
+  <div class="demo-banner">
+    <span><b>PROTOTYPE</b> · Hệ thống quản lý chợ số phường Cao Lãnh · Toàn bộ tên, số tiền, số sạp là <b>dữ liệu mẫu minh họa</b>, chưa phải số liệu chính thức</span>
+    <button type="button" data-act="guide">Hướng dẫn xem</button>
+  </div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-logo">
+          <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true">
+            <path d="M16 5c3 4 3 9 0 14-3-5-3-10 0-14z" fill="#c93d6e"/>
+            <path d="M16 19c-4-1-8-4-9-9 4 0 8 3 9 9z" fill="#e36a93"/>
+            <path d="M16 19c4-1 8-4 9-9-4 0-8 3-9 9z" fill="#e36a93"/>
+            <path d="M6 22h20c-2 4-6 6-10 6s-8-2-10-6z" fill="#0f5c4d"/>
+          </svg>
+        </div>
+        <div>
+          <div class="brand-title">Chợ số Cao Lãnh</div>
+          <div class="brand-sub">UBND phường Cao Lãnh</div>
+        </div>
+      </div>
+      <nav class="nav" id="nav"></nav>
+      <div class="sidebar-foot">Phân hệ 2 – Giải pháp quản lý chợ số<br>Bản prototype phục vụ trình bày BCKTKT</div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <button class="btn menu-toggle" type="button" data-act="menu" aria-label="Mở menu">☰</button>
+        <h1 id="page-title">Tổng quan</h1>
+        <div class="row">
+          <span class="label-sm">Vai trò</span>
+          <div class="seg" id="role-seg"></div>
+        </div>
+        <div class="row" id="market-wrap">
+          <span class="label-sm">Chợ</span>
+          <div class="seg" id="market-seg"></div>
+        </div>
+      </header>
+      <main class="content" id="view"></main>
+    </div>
+  </div>
+  <div id="modal-root"></div>
+  <div class="toasts" id="toasts"></div>
+  <script src="data.js"></script>
+  <script src="js/core.js"></script>
+  <script src="js/v-dieuhanh.js"></script>
+  <script src="js/v-tieuthuong.js"></script>
+  <script src="js/v-taichinh.js"></script>
+  <script src="js/v-vanhanh.js"></script>
+  <script src="js/mini.js"></script>
+</body>
+</html>
