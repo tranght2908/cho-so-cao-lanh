@@ -176,7 +176,7 @@
     const mk = empty[0].market;
     const traders = A.db.traders.filter(t => t.market === mk || t.stalls.length === 0).slice(-60).reverse();
     A.modal(A.mHead('Tạo hợp đồng thuê điểm kinh doanh') + `<div class="modal-b"><div class="form-grid">
-      <div class="field"><label>Điểm kinh doanh còn trống</label><select class="input" id="nc-stall">${empty.map(s => `<option value="${s.id}">${s.code} · ${U.esc(s.sectionName)} · ${s.area} m²</option>`).join('')}</select></div>
+      <div class="field"><label>Điểm kinh doanh còn trống</label><select class="input" id="nc-stall">${empty.map(s => `<option value="${s.id}">${s.code} · ${U.esc(s.sectionName)} · ${s.area.toLocaleString('vi-VN')} m²</option>`).join('')}</select></div>
       <div class="field"><label>Tiểu thương</label><select class="input" id="nc-trader">${traders.map(t => `<option value="${t.id}">${t.id} · ${U.esc(t.name)}</option>`).join('')}</select></div>
       <div class="field"><label>Thời hạn</label><select class="input" id="nc-term"><option value="12">12 tháng</option><option value="36" selected>36 tháng</option></select></div>
       <div class="field"><label>Ngày bắt đầu</label><input class="input" value="${U.dmy(U.today())}" disabled></div></div>

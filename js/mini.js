@@ -66,7 +66,7 @@
     return `<div class="m-card m-due"><div class="small" style="opacity:.85">Tổng cần thanh toán</div><div class="amt">${U.money(total)}</div>
         ${over.length ? `<div class="small" style="background:rgba(255,255,255,.15);padding:6px 10px;border-radius:8px;margin-bottom:10px">⚠ ${over.length} khoản quá hạn – vui lòng thanh toán sớm</div>` : ''}
         ${total ? '<button class="m-btn" data-act="mini-pay">Thanh toán bằng QR</button>' : '<div class="small">Bạn không có khoản nào cần thanh toán 🎉</div>'}</div>
-      <div class="m-card"><b>Điểm kinh doanh</b><div class="m-list">${t.stalls.map(id => { const s = A.idx.stall.get(id); return `<div class="it"><span>${s.code} · ${U.esc(s.sectionName)}</span><span class="muted">${s.area} m²</span></div>`; }).join('')}
+      <div class="m-card"><b>Điểm kinh doanh</b><div class="m-list">${t.stalls.map(id => { const s = A.idx.stall.get(id); return `<div class="it"><span>${s.code} · ${U.esc(s.sectionName)}</span><span class="muted">${s.area.toLocaleString('vi-VN')} m²</span></div>`; }).join('')}
         ${c ? `<div class="it"><span class="muted">Hợp đồng đến</span><span>${U.dmy(c.end)} (${U.days(U.today(), c.end)} ngày)</span></div>` : ''}</div></div>
       <div class="m-card"><b>Thông báo mới</b><div class="m-list">${notis.map(n => `<div class="it"><span>${U.esc(n.title)}</span><span class="muted small">${U.dmy(n.at).slice(0, 5)}</span></div>`).join('') || '<div class="small muted">Chưa có</div>'}</div></div>
       ${mine.length ? `<div class="m-card"><b>Phản ánh của tôi</b><div class="m-list">${mine.map(i => `<div class="it"><span>${U.esc(i.title)}</span><span class="tag info">${D.INCIDENT_STATES.find(s => s.id === i.state).label}</span></div>`).join('')}</div></div>` : ''}`;
@@ -82,7 +82,7 @@
     return A.db.contracts.filter(c => c.traderId === t.id).map(c => {
       const s = A.idx.stall.get(c.stallId);
       return `<div class="m-card"><b>${c.kind}</b><div class="m-list">
-        <div class="it"><span class="muted">Số</span><span>${c.id}</span></div><div class="it"><span class="muted">Điểm KD</span><span>${s.code} · ${s.area} m²</span></div>
+        <div class="it"><span class="muted">Số</span><span>${c.id}</span></div><div class="it"><span class="muted">Điểm KD</span><span>${s.code} · ${s.area.toLocaleString('vi-VN')} m²</span></div>
         <div class="it"><span class="muted">Thời hạn</span><span>${U.dmy(c.start)} – ${U.dmy(c.end)}</span></div>
         <div class="it"><span class="muted">Đơn giá</span><span>${U.unitLabel(s)}</span></div>
         ${c.monthly ? `<div class="it"><span class="muted">Giá dịch vụ/tháng</span><b>${U.money(c.monthly)}</b></div>` : ''}
