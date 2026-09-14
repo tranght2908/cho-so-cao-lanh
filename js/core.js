@@ -9,6 +9,7 @@ window.APP = (function () {
     ui: {
       role: 'bql', market: 'ALL', planMarket: 'CL', floor: { CL: 'T1', TTD: 'KHU' }, hidden: {}, sel: null, planSearch: '',
       page: {}, f: {}, contractTab: 'all', period: '2026-09', report: 'lapday', readingsFilter: 'all', incCat: '',
+      dsTab: null, dsBankFilter: 'all', dsBankSearch: '', dsFrom: null, dsTo: null,
       mini: { traderId: null, step: 'login', tab: 'home', pay: null, lastPays: null, attach: false, bill: null }
     }
   };
@@ -202,7 +203,16 @@ window.APP = (function () {
       };
       db.payments.push(p);
       out.push(p);
-      if (method !== 'tm') db.bank.push({ id: 'SK' + U.pad(db.bank.length + 1, 4), time, amount: take, ref: 'CHOSO ' + inv.id, paymentId: p.id, matched: true });
+      if (method !== 'tm') {
+        const bk = {
+          id: 'SK' + U.pad(db.bank.length + 1, 4), date: db.today, time, amount: take, ref: 'CHOSO ' + inv.id,
+          market: inv.market, bankName: (D.BANK_BY_MARKET && D.BANK_BY_MARKET[inv.market]) || 'Vietcombank',
+          paymentId: p.id, receivableId: inv.id, receiptId: p.receipt,
+          status: 'MATCHED_AUTO', matched: true, matchedBy: null, matchedAt: null, matchMethod: 'AUTO',
+          log: [{ at: time, actor: 'Hệ thống', text: 'Nhận sao kê tương ứng thanh toán ' + p.id }, { at: time, actor: 'Hệ thống', text: 'Khớp tự động với khoản phải thu ' + inv.id }]
+        };
+        db.bank.push(bk);
+      }
       A.refreshStall(A.idx.stall.get(inv.stallId));
     });
     A.save();

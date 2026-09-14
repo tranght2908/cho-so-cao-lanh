@@ -6,7 +6,7 @@
 window.DATA = (function () {
   'use strict';
 
-  const VERSION = 3;
+  const VERSION = 6;
   const TODAY = new Date(2026, 8, 13); // 13/09/2026
 
   // Giá dịch vụ sử dụng diện tích bán hàng – QĐ 480/QĐ-UBND ngày 14/02/2026 (đ/m²/ngày, đã gồm VAT)
@@ -15,6 +15,8 @@ window.DATA = (function () {
   const SESSION_FEE = 20000;
   const ELEC = 3200;   // đ/kWh – đơn giá mẫu
   const WATER = 12000; // đ/m³ – đơn giá mẫu
+  // Tài khoản ngân hàng thu hộ của Ban Quản lý theo từng chợ (đối soát) – GIẢ ĐỊNH minh họa
+  const BANK_BY_MARKET = { CL: 'Vietcombank', TTD: 'Agribank' };
 
   const MARKETS = [
     {
@@ -208,6 +210,17 @@ window.DATA = (function () {
 
     // ---- Khoản phải thu & thanh toán ----
     const PERIODS = ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09'];
+    // Kỳ tài chính dùng chung cho 5 màn Tài chính (điện nước, khoản phải thu, thu tiền, đối soát, công nợ):
+    // kỳ nghiệp vụ (billing period) tách biệt với ngày phát sinh giao dịch thực tế (payment/transaction date).
+    const BILLING_PERIODS = PERIODS.map((p, idx) => {
+      const [y, mo] = p.split('-').map(Number);
+      const lastDay = new Date(y, mo, 0).getDate();
+      return {
+        id: p, label: pad(mo) + '/' + y,
+        startDate: p + '-01', endDate: p + '-' + pad(lastDay), dueDate: p + '-15',
+        status: idx === PERIODS.length - 1 ? 'COLLECTING' : 'PAST'
+      };
+    });
     const NONCASH = { '2026-05': 0.45, '2026-06': 0.52, '2026-07': 0.58, '2026-08': 0.64, '2026-09': 0.67 };
     const collectors = { CL: ['NV03', 'NV04'], TTD: ['NV07'] };
     let iSeq = 0, rSeq = 0;
@@ -275,22 +288,55 @@ window.DATA = (function () {
     // Ổn định mã tra cứu theo seed
     payments.forEach(p => { p.lookup = (Math.floor(R() * 2176782336)).toString(36).toUpperCase().padStart(6, 'X'); });
 
-    // ---- Chỉ số điện nước kỳ 09/2026 ----
+    // ---- Kỳ ghi chỉ số điện, nước: mỗi tháng là 1 dataset độc lập, liên kết với nhau
+    // (chỉ số MỚI của kỳ trước = chỉ số CŨ của kỳ sau) ----
+    const METER_PERIODS = [
+      { id: '2026-07', month: 7, year: 2026, status: 'CLOSED', closeDate: '2026-08-10', closedBy: 'Trần Minh Khoa', closedAt: '10/08/2026 17:05' },
+      { id: '2026-08', month: 8, year: 2026, status: 'CLOSED', closeDate: '2026-09-10', closedBy: 'Trần Minh Khoa', closedAt: '10/09/2026 17:20' },
+      { id: '2026-09', month: 9, year: 2026, status: 'RECORDING', closeDate: '2026-10-10' }
+    ];
+    const recAt = (mo, y, dMin, dMax) => pad(between(dMin, dMax)) + '/' + pad(mo) + '/' + y + ' ' + pad(between(7, 17)) + ':' + pad(between(0, 59));
+    const mockPhoto = (code, kind, period) => ({ name: code + '-' + kind + '-' + period.slice(5) + '-' + period.slice(0, 4) + '.jpg', type: 'image/jpeg', size: between(180, 420) * 1000, mock: true });
+
     const readings = [];
     stalls.filter(s => s.hasMeter && s.traderId && s.status !== 'ngung').forEach(st => {
-      const base = between(1200, 9800);
       const avg = st.type === 'kiot' ? between(150, 260) : between(60, 150);
-      const entered = chance(0.62);
-      const abnormal = entered && chance(0.08);
-      const cons = abnormal ? Math.round(avg * (1.7 + R())) : Math.round(avg * (0.8 + R() * 0.4));
-      const wBase = between(100, 900);
       const wAvg = between(3, 12);
-      readings.push({
-        stallId: st.id, period: '2026-09',
-        elecPrev: base, elecCur: entered ? base + cons : null, elecAvg: avg,
-        waterPrev: wBase, waterCur: entered ? wBase + Math.round(wAvg * (0.8 + R() * 0.5)) : null, waterAvg: wAvg,
-        photo: entered, by: entered ? 'NV05' : null
-      });
+
+      // Kỳ 09/2026 (đang ghi) – giữ nguyên phân bố demo trước đây
+      const base09 = between(1200, 9800), wBase09 = between(100, 900);
+      const entered09 = chance(0.62);
+      const abnormal09 = entered09 && chance(0.08);
+      const cons09 = abnormal09 ? Math.round(avg * (1.7 + R())) : Math.round(avg * (0.8 + R() * 0.4));
+      const elecCur09 = entered09 ? base09 + cons09 : null;
+      const waterCur09 = entered09 ? wBase09 + Math.round(wAvg * (0.8 + R() * 0.5)) : null;
+
+      // Kỳ 08/2026 (đã chốt): MỚI(08) = CŨ(09); CŨ(08) suy từ tiêu thụ trung bình
+      const elecCur08 = base09, waterCur08 = wBase09;
+      const elecPrev08 = elecCur08 - Math.round(avg * (0.8 + R() * 0.4));
+      const waterPrev08 = waterCur08 - Math.round(wAvg * (0.8 + R() * 0.5));
+
+      // Kỳ 07/2026 (đã chốt): MỚI(07) = CŨ(08)
+      const elecCur07 = elecPrev08, waterCur07 = waterPrev08;
+      const elecPrev07 = elecCur07 - Math.round(avg * (0.8 + R() * 0.4));
+      const waterPrev07 = waterCur07 - Math.round(wAvg * (0.8 + R() * 0.5));
+
+      function mk(period, mo, y, elecPrev, elecCur, waterPrev, waterCur, closed) {
+        const done = closed || (elecCur != null && waterCur != null);
+        readings.push({
+          stallId: st.id, period,
+          elecPrev, elecCur, elecAvg: avg,
+          waterPrev, waterCur, waterAvg: wAvg,
+          status: done ? 'RECORDED' : 'PENDING',
+          recordedBy: done ? 'NV05' : null,
+          recordedAt: done ? recAt(mo, y, 4, closed ? 9 : 12) : null,
+          elecPhoto: done ? mockPhoto(st.code, 'dien', period) : null,
+          waterPhoto: done ? mockPhoto(st.code, 'nuoc', period) : null
+        });
+      }
+      mk('2026-07', 7, 2026, elecPrev07, elecCur07, waterPrev07, waterCur07, true);
+      mk('2026-08', 8, 2026, elecPrev08, elecCur08, waterPrev08, waterCur08, true);
+      mk('2026-09', 9, 2026, base09, elecCur09, wBase09, waterCur09, false);
     });
 
     // ---- Phản ánh, sự cố ----
@@ -350,14 +396,54 @@ window.DATA = (function () {
       });
     }
 
-    // ---- Sao kê ngân hàng ngày 13/09/2026 (đối soát) ----
+    // ---- Đối soát: sao kê ngân hàng ngày 13/09/2026 ----
+    // Chuỗi truy vết: BankStatementTransaction -> Payment -> Receivable (khoản phải thu) -> Receipt (biên lai)
     const todayIso = iso(TODAY);
-    const bank = payments.filter(p => p.date === todayIso && p.method !== 'tm').map((p, i) => ({
-      id: 'SK' + pad(i + 1, 4), time: p.time, amount: p.amount, ref: 'CHOSO ' + p.invoiceId, paymentId: p.id, matched: true
-    }));
-    bank.push({ id: 'SK' + pad(bank.length + 1, 4), time: '10:42', amount: 450000, ref: 'CK TIEN SAP CO HANG', paymentId: null, matched: false });
-    bank.push({ id: 'SK' + pad(bank.length + 1, 4), time: '15:07', amount: 1260000, ref: 'NOP PHI CHO THANG 9', paymentId: null, matched: false });
+    const bankLog = (b, actor, text) => b.log.push({ at: b.time, actor, text });
+    const bank = payments.filter(p => p.date === todayIso && p.method !== 'tm').map((p, i) => {
+      const b = {
+        id: 'SK' + pad(i + 1, 4), date: p.date, time: p.time, amount: p.amount, ref: 'CHOSO ' + p.invoiceId,
+        market: p.market, bankName: BANK_BY_MARKET[p.market] || 'Vietcombank',
+        paymentId: p.id, receivableId: p.invoiceId, receiptId: p.receipt,
+        status: 'MATCHED_AUTO', matched: true, matchedBy: null, matchedAt: null, matchMethod: 'AUTO', log: []
+      };
+      bankLog(b, 'Hệ thống', 'Nhận sao kê ' + b.id);
+      bankLog(b, 'Hệ thống', 'Khớp tự động với khoản phải thu ' + p.invoiceId + ' (trùng mã tham chiếu, số tiền, trong cửa sổ thời gian hợp lệ)');
+      return b;
+    });
+    function addBankMock(o) {
+      const b = Object.assign({ date: todayIso, market: 'CL', bankName: BANK_BY_MARKET.CL, paymentId: null, receivableId: null, receiptId: null, matched: false, matchedBy: null, matchedAt: null, matchMethod: null, log: [] }, o);
+      bank.push(b);
+      return b;
+    }
+    const bUnmatched = addBankMock({ id: 'SK' + pad(bank.length + 1, 4), time: '10:42', amount: 450000, ref: 'CK TIEN SAP CO HANG', status: 'UNMATCHED' });
+    bankLog(bUnmatched, 'Hệ thống', 'Nhận sao kê ' + bUnmatched.id);
+    bankLog(bUnmatched, 'Hệ thống', 'Không tìm thấy khoản phải thu phù hợp');
+
+    const bReview = addBankMock({ id: 'SK' + pad(bank.length + 1, 4), time: '15:07', amount: 1260000, ref: 'NOP PHI CHO THANG 9', status: 'NEEDS_REVIEW' });
+    bankLog(bReview, 'Hệ thống', 'Nhận sao kê ' + bReview.id);
+    bankLog(bReview, 'Hệ thống', 'Nội dung có khả năng liên quan phí chợ nhưng không xác định được khoản phải thu cụ thể – cần kiểm tra thủ công');
+
+    const mismatchInv = invoices.find(i => i.market === 'CL' && i.period === '2026-09' && i.status === 'unpaid');
+    if (mismatchInv) {
+      const bMis = addBankMock({
+        id: 'SK' + pad(bank.length + 1, 4), time: '16:35', amount: Math.max(0, mismatchInv.amount - 20000),
+        ref: 'CHOSO ' + mismatchInv.id, market: mismatchInv.market, bankName: BANK_BY_MARKET[mismatchInv.market] || 'Vietcombank',
+        receivableId: mismatchInv.id, status: 'AMOUNT_MISMATCH'
+      });
+      bankLog(bMis, 'Hệ thống', 'Nhận sao kê ' + bMis.id);
+      bankLog(bMis, 'Hệ thống', 'Tìm thấy khoản phải thu ' + mismatchInv.id + ' qua mã tham chiếu nhưng số tiền chuyển khoản lệch so với số tiền phải thu – cần Kế toán kiểm tra');
+    }
     bank.sort((a, b) => a.time.localeCompare(b.time));
+
+    // ---- Đối soát: nộp quỹ tiền mặt ngày 13/09/2026 ----
+    const cashTotalForEmployee = employeeId => payments.filter(p => p.date === todayIso && p.method === 'tm' && p.by === employeeId).reduce((a, p) => a + p.amount, 0);
+    const nv03Cash = cashTotalForEmployee('NV03'), nv04Cash = cashTotalForEmployee('NV04');
+    const cashDeposits = [
+      { id: 'NQ-00030', employeeId: 'NV03', market: 'CL', date: todayIso, amount: nv03Cash, depositedAt: '13/09/2026 17:10', receivedBy: 'NV02', attachment: { name: 'phieu_nop_quy_00030.pdf', type: 'application/pdf' } },
+      { id: 'NQ-00031', employeeId: 'NV04', market: 'CL', date: todayIso, amount: Math.max(0, nv04Cash - 93600), depositedAt: '13/09/2026 17:30', receivedBy: 'NV02', attachment: { name: 'phieu_nop_quy_00031.pdf', type: 'application/pdf' } }
+    ];
+    const cashConfirms = [];
 
     // ---- Chuỗi 12 tháng (mô phỏng) cho biểu đồ ----
     const months = [];
@@ -380,9 +466,11 @@ window.DATA = (function () {
 
     return {
       version: VERSION, today: iso(TODAY), stalls, traders, contracts, invoices, payments, readings, incidents,
-      notifications, sessions, bank, months, audit, issuedPeriods: PERIODS.slice(), extraLog: []
+      notifications, sessions, bank, months, audit, issuedPeriods: PERIODS.slice(), extraLog: [],
+      meterPeriods: METER_PERIODS, meterAdjustRequests: [],
+      cashDeposits, cashConfirms, billingPeriods: BILLING_PERIODS
     };
   }
 
-  return { VERSION, TODAY, UNIT, SESSION_FEE, ELEC, WATER, MARKETS, STATUS, METHOD, INCIDENT_STATES, STAFF, ROLES, build };
+  return { VERSION, TODAY, UNIT, SESSION_FEE, ELEC, WATER, BANK_BY_MARKET, MARKETS, STATUS, METHOD, INCIDENT_STATES, STAFF, ROLES, build };
 })();

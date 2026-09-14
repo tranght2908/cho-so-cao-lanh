@@ -56,7 +56,7 @@
     const alerts = [];
     const exp = db.contracts.filter(c => U.inM(c) && c.status === 'hieuluc' && U.days(U.today(), c.end) <= 30).length;
     const over60 = new Set(db.invoices.filter(i => U.inM(i) && U.isOver(i) && U.overDays(i) > 60).map(i => i.traderId)).size;
-    const abn = db.readings.filter(r => U.inM(A.idx.stall.get(r.stallId)) && r.elecCur != null && (r.elecCur - r.elecPrev) > r.elecAvg * 1.5).length;
+    const abn = db.readings.filter(r => r.period === '2026-09' && U.inM(A.idx.stall.get(r.stallId)) && r.elecCur != null && (r.elecCur - r.elecPrev) > r.elecAvg * 1.5).length;
     const unmatched = db.bank.filter(b => !b.matched).length;
     if (exp) alerts.push(['warn', `${exp} hợp đồng hết hạn trong 30 ngày tới`, 'hop-dong']);
     if (over60) alerts.push(['danger', `${over60} tiểu thương nợ phí quá hạn trên 60 ngày`, 'cong-no']);

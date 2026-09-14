@@ -46,8 +46,16 @@
     { key: 'action:so-do.doi-trang-thai', kind: 'action', group: 'Điều hành', screenId: 'so-do', label: 'Đổi trạng thái điểm kinh doanh' },
     { key: 'action:phien-cho.chot-phien', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Điểm danh & chốt phiên chợ quê' },
     { key: 'action:tieu-thuong.them-moi', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'tieu-thuong', label: 'Thêm hồ sơ tiểu thương' },
+    { key: 'action:dien-nuoc.ghi-chi-so', kind: 'action', group: 'Tài chính', screenId: 'dien-nuoc', label: 'Nhập / lưu nháp chỉ số điện, nước' },
+    { key: 'action:dien-nuoc.chot-ky', kind: 'action', group: 'Tài chính', screenId: 'dien-nuoc', label: 'Chốt kỳ ghi chỉ số điện, nước' },
+    { key: 'action:dien-nuoc.yeu-cau-dieu-chinh', kind: 'action', group: 'Tài chính', screenId: 'dien-nuoc', label: 'Yêu cầu điều chỉnh chỉ số kỳ đã chốt' },
     { key: 'action:phai-thu.mien-giam', kind: 'action', group: 'Tài chính', screenId: 'phai-thu', label: 'Miễn giảm / điều chỉnh khoản phải thu' },
     { key: 'action:thu-tien.thu', kind: 'action', group: 'Tài chính', screenId: 'thu-tien', label: 'Thu tiền (mọi nơi có nút "Thu tiền")' },
+    { key: 'action:doi-soat.xem-ngan-hang', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Xem đối soát ngân hàng / QR' },
+    { key: 'action:doi-soat.gan-thu-cong', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Gắn khoản thu thủ công cho giao dịch ngân hàng' },
+    { key: 'action:doi-soat.xem-tien-mat', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Xem đối soát tiền mặt' },
+    { key: 'action:doi-soat.xac-nhan-nop-quy', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Xác nhận đối soát nộp quỹ tiền mặt' },
+    { key: 'action:doi-soat.xem-truy-vet', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Xem lịch sử truy vết đối soát' },
     { key: 'action:su-co.tao-phan-anh', kind: 'action', group: 'Vận hành', screenId: 'su-co', label: 'Tạo phản ánh / sự cố thủ công' },
     { key: 'action:su-co.phan-cong', kind: 'action', group: 'Vận hành', screenId: 'su-co', label: 'Phân công người xử lý' },
     { key: 'action:su-co.chuyen-trang-thai', kind: 'action', group: 'Vận hành', screenId: 'su-co', label: 'Chuyển trạng thái xử lý' },
@@ -104,7 +112,7 @@
       'dien-nuoc': ['bql'],
       'phai-thu': ['bql'],
       'thu-tien': ['bql'],
-      'doi-soat': ['bql'],
+      'doi-soat': ['lanhdao', 'bql'],
       'cong-no': ['bql'],
       'su-co': ['lanhdao', 'bql'],
       'thong-bao': ['bql'],
@@ -119,8 +127,16 @@
       'so-do.doi-trang-thai': ['bql'],
       'phien-cho.chot-phien': ['bql'],
       'tieu-thuong.them-moi': ['bql'],
+      'dien-nuoc.ghi-chi-so': ['bql'],
+      'dien-nuoc.chot-ky': ['bql'],
+      'dien-nuoc.yeu-cau-dieu-chinh': ['bql'],
       'phai-thu.mien-giam': ['bql'],
       'thu-tien.thu': ['bql'],
+      'doi-soat.xem-ngan-hang': ['lanhdao', 'bql'],
+      'doi-soat.gan-thu-cong': ['bql'],
+      'doi-soat.xem-tien-mat': ['lanhdao', 'bql'],
+      'doi-soat.xac-nhan-nop-quy': ['bql'],
+      'doi-soat.xem-truy-vet': ['bql'],
       'su-co.tao-phan-anh': ['bql'],
       'su-co.phan-cong': ['bql'],
       'su-co.chuyen-trang-thai': ['bql'],
@@ -156,11 +172,18 @@
   // ============================================================
 
   function loadState() {
+    let s = null;
     try {
-      const s = localStorage.getItem(PKEY);
-      if (s) { const x = JSON.parse(s); if (x && x.roles && x.rolePerms) return x; }
+      const raw = localStorage.getItem(PKEY);
+      if (raw) { const x = JSON.parse(raw); if (x && x.roles && x.rolePerms) s = x; }
     } catch (e) { /* bỏ qua */ }
-    return { roles: defaultRoles(), rolePerms: defaultRolePermissions() };
+    if (!s) return { roles: defaultRoles(), rolePerms: defaultRolePermissions() };
+    // Tự bổ sung các permission MỚI được thêm ở các phiên bản sau (chưa từng có trong
+    // dữ liệu đã lưu của trình duyệt) theo seed mặc định, không đụng vào các quyền
+    // người dùng đã tự cấp/thu hồi cho những permission đã tồn tại từ trước.
+    const known = new Set(s.rolePerms.map(r => r.permKey));
+    defaultRolePermissions().forEach(d => { if (!known.has(d.permKey)) s.rolePerms.push(d); });
+    return s;
   }
   let STATE = loadState();
   function saveState() { try { localStorage.setItem(PKEY, JSON.stringify(STATE)); } catch (e) { /* bỏ qua */ } }
