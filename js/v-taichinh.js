@@ -79,8 +79,8 @@
   }
   A.VIEWS['dien-nuoc'] = function () {
     const p = currentPeriod();
-    const canEdit = A.PERM.canAction(ui.role, 'dien-nuoc.ghi-chi-so');
-    const canClose = A.PERM.canAction(ui.role, 'dien-nuoc.chot-ky');
+    const canEdit = A.canDo('dien-nuoc.ghi-chi-so', ui.market);
+    const canClose = A.canDo('dien-nuoc.chot-ky', ui.market);
     const header = periodHeaderHtml(p);
     const all = A.db.readings.filter(r => r.period === p.id && U.inM(A.idx.stall.get(r.stallId)));
     if (!all.length) return header + '<div class="card"><div class="empty">Chợ quê không có đồng hồ điện, nước riêng cho quầy.</div></div>';
@@ -109,6 +109,7 @@
   };
   A.ACT['dn-filter'] = el => { ui.readingsFilter = el.dataset.id; A.render(); };
   A.CH.reading = el => {
+    if (!A.canDo('dien-nuoc.ghi-chi-so', ui.market)) { A.render(); return; }
     const period = el.dataset.period, id = el.dataset.id, k = el.dataset.k;
     const p = A.db.meterPeriods.find(x => x.id === period), r = findReading(id, period);
     if (!r || !p || p.status !== 'RECORDING') { A.render(); return; }
@@ -122,6 +123,7 @@
     if (k === 'elecCur' && abnormal(r)) U.toast('⚠ Chỉ số điện ' + A.idx.stall.get(r.stallId).code + ' tăng bất thường – đề nghị kiểm tra đồng hồ');
   };
   A.CH['dn-photo-add'] = el => {
+    if (!A.canDo('dien-nuoc.ghi-chi-so', ui.market)) return;
     const file = el.files && el.files[0];
     if (!file) return;
     const period = el.dataset.period, id = el.dataset.id, kind = el.dataset.k;
@@ -142,6 +144,7 @@
       </div><div class="modal-f"><button class="btn primary" data-act="close">Đóng</button></div>`);
   };
   A.ACT['dn-save-draft'] = () => {
+    if (!A.canDo('dien-nuoc.ghi-chi-so', ui.market)) return;
     const p = currentPeriod();
     const rows = A.db.readings.filter(r => r.period === p.id && U.inM(A.idx.stall.get(r.stallId)));
     const done = rows.filter(r => r.status === 'RECORDED').length;
@@ -149,6 +152,7 @@
     U.toast('Đã lưu dữ liệu kỳ ' + U.per(p.id) + ' (' + done + '/' + rows.length + ' đã ghi)');
   };
   A.ACT['dn-close-period'] = () => {
+    if (!A.canDo('dien-nuoc.chot-ky', ui.market)) return;
     const p = currentPeriod();
     const rows = A.db.readings.filter(r => r.period === p.id && U.inM(A.idx.stall.get(r.stallId)));
     const done = rows.filter(r => r.status === 'RECORDED').length, todo = rows.length - done, abn = rows.filter(abnormal).length;
@@ -159,7 +163,11 @@
       <button class="btn primary" data-act="dn-close-confirm" data-id="${p.id}" ${todo ? 'disabled' : ''}>Xác nhận chốt kỳ</button></div>`);
   };
   A.ACT['dn-close-confirm'] = el => {
+    if (!A.canDo('dien-nuoc.chot-ky', ui.market)) return;
     const p = A.db.meterPeriods.find(x => x.id === el.dataset.id);
+    if (!p || p.status !== 'RECORDING') { A.closeModal(); A.render(); return; }
+    const rows = A.db.readings.filter(r => r.period === p.id && U.inM(A.idx.stall.get(r.stallId)));
+    if (rows.some(r => r.status !== 'RECORDED')) { U.toast('Còn điểm kinh doanh chưa ghi chỉ số, chưa thể chốt kỳ'); return; }
     p.status = 'CLOSED'; p.closedBy = 'Trần Minh Khoa'; p.closedAt = nowStamp();
     U.log('Chốt kỳ ghi chỉ số điện, nước ' + U.per(p.id));
     A.save(); A.closeModal(); A.render();
@@ -169,7 +177,7 @@
     const period = el.dataset.period, id = el.dataset.id;
     const r = findReading(id, period), st = A.idx.stall.get(id), t = A.idx.trader.get(st.traderId);
     const p = A.db.meterPeriods.find(x => x.id === period);
-    const canAdjust = p.status === 'CLOSED' && A.PERM.canAction(ui.role, 'dien-nuoc.yeu-cau-dieu-chinh');
+    const canAdjust = p.status === 'CLOSED' && A.canDo('dien-nuoc.yeu-cau-dieu-chinh', ui.market);
     A.modal(A.mHead('Chi tiết ghi chỉ số · ' + st.code) + `<div class="modal-b">
       <dl class="kv"><dt>Điểm KD</dt><dd>${st.code} · ${U.esc(t ? t.name : '')}</dd><dt>Kỳ</dt><dd>${U.per(period)}</dd>
         <dt>Người ghi</dt><dd>${U.esc(U.staffName(r.recordedBy))}</dd><dt>Thời gian ghi</dt><dd>${U.esc(r.recordedAt || '')}</dd>
@@ -180,6 +188,8 @@
   };
   A.ACT['dn-adjust-req'] = el => {
     const period = el.dataset.period, id = el.dataset.id;
+    const p = A.db.meterPeriods.find(x => x.id === period);
+    if (!A.canDo('dien-nuoc.yeu-cau-dieu-chinh', ui.market) || !p || p.status !== 'CLOSED') return;
     const r = findReading(id, period), st = A.idx.stall.get(id), t = A.idx.trader.get(st.traderId);
     A.modal(A.mHead('Yêu cầu điều chỉnh chỉ số · ' + st.code) + `<div class="modal-b">
       <dl class="kv"><dt>Điểm KD</dt><dd>${st.code} · ${U.esc(t ? t.name : '')}</dd><dt>Kỳ</dt><dd>${U.per(period)}</dd>
@@ -194,6 +204,8 @@
   };
   A.ACT['dn-adjust-send'] = el => {
     const period = el.dataset.period, id = el.dataset.id;
+    const p = A.db.meterPeriods.find(x => x.id === period);
+    if (!A.canDo('dien-nuoc.yeu-cau-dieu-chinh', ui.market) || !p || p.status !== 'CLOSED') return;
     const r = findReading(id, period), st = A.idx.stall.get(id);
     const reason = A.$('#adjr-reason').value.trim();
     if (!reason) { U.toast('Vui lòng nhập lý do điều chỉnh'); return; }
@@ -221,9 +233,10 @@
     const pg = U.pager('pt' + p, rows.length, 25);
     const amt = U.sum(inv, i => i.amount), paid = U.sum(inv, i => i.paid);
     const next = periods.includes('2026-10') ? null : '2026-10';
+    const canIssue = A.canDo('phai-thu.phat-hanh');
     return `<div class="card"><div class="card-b" style="padding-top:14px">${financeTimeBarRow('Kỳ thu')}
       <div class="row small" style="margin-top:8px;flex-wrap:wrap"><span class="muted">Hạn nộp: <b>${U.dmy(fp.dueDate)}</b></span><span class="spacer"></span>
-        ${next ? `<button class="btn primary" data-act="pt-issue">⚙ Phát hành tự động kỳ 10/2026</button>` : '<span class="tag ok">Đã phát hành kỳ 10/2026</span>'}</div></div></div>
+        ${next && canIssue ? `<button class="btn primary" data-act="pt-issue">⚙ Phát hành tự động kỳ 10/2026</button>` : (next ? '' : '<span class="tag ok">Đã phát hành kỳ 10/2026</span>')}</div></div></div>
     <div class="kpis">
       <div class="card kpi"><div class="k-label">Số khoản phải thu</div><div class="k-value">${inv.length}</div><div class="k-sub">Tạo tự động từ hợp đồng, đơn giá, chỉ số điện nước</div></div>
       <div class="card kpi"><div class="k-label">Tổng phải thu</div><div class="k-value">${U.moneyShort(amt)}</div><div class="k-sub">${U.money(amt)}</div></div>
@@ -239,7 +252,10 @@
   A.CH['pt-status'] = el => { f.ptStatus = el.value; A.render(); };
   A.IN['pt-search'] = el => { f.ptSearch = el.value; A.render(); };
   A.ACT['pt-issue'] = () => {
-    const db = A.db, out = [];
+    if (!A.canDo('phai-thu.phat-hanh')) return;
+    const db = A.db;
+    if (db.issuedPeriods.includes('2026-10')) { U.toast('Kỳ 10/2026 đã được phát hành'); A.render(); return; }
+    const out = [];
     db.contracts.filter(c => c.status === 'hieuluc').forEach(c => {
       const st = A.idx.stall.get(c.stallId);
       if (st.status === 'ngung' || st.status === 'trong') return;
@@ -278,12 +294,13 @@
         .concat([`<tr><td><b>Tổng cộng</b></td><td class="num"><b>${U.money(i.amount)}</b></td></tr>`]))}
       ${pays.length ? '<div class="divider"></div><b>Thanh toán</b>' + U.table([{ t: 'Biên lai' }, { t: 'Ngày' }, { t: 'Hình thức' }, { t: 'Số tiền', num: true }], pays.map(p => `<tr class="click" data-act="receipt" data-id="${p.receipt}"><td>${p.receipt}</td><td>${U.dmy(p.date)} ${p.time}</td><td>${D.METHOD[p.method]}</td><td class="num">${U.money(p.amount)}</td></tr>`)) : ''}
       </div><div class="modal-f">
-      ${i.status !== 'paid' && !i.adjust && A.PERM.canAction(ui.role, 'phai-thu.mien-giam') ? `<button class="btn" data-act="inv-adjust" data-id="${i.id}">Miễn giảm / điều chỉnh</button>` : ''}
-      ${i.status !== 'paid' && A.PERM.canAction(ui.role, 'thu-tien.thu') ? `<button class="btn primary" data-act="pay-open" data-id="${i.traderId}" data-inv="${i.id}">💳 Thu tiền</button>` : ''}
+      ${i.status !== 'paid' && !i.adjust && A.canDo('phai-thu.mien-giam', i.market) ? `<button class="btn" data-act="inv-adjust" data-id="${i.id}">Miễn giảm / điều chỉnh</button>` : ''}
+      ${i.status !== 'paid' && A.canDo('thu-tien.thu', i.market) ? `<button class="btn primary" data-act="pay-open" data-id="${i.traderId}" data-inv="${i.id}">💳 Thu tiền</button>` : ''}
       <button class="btn" data-act="close">Đóng</button></div>`, true);
   };
   A.ACT['inv-adjust'] = el => {
     const i = A.idx.invoice.get(el.dataset.id);
+    if (!A.canDo('phai-thu.mien-giam', i.market) || i.status === 'paid' || i.adjust) return;
     A.modal(A.mHead('Miễn giảm ' + i.id) + `<div class="modal-b"><div class="form-grid">
       <div class="field"><label>Mức miễn giảm</label><select class="input" id="adj-pct"><option>10</option><option>30</option><option selected>50</option><option>100</option></select></div>
       <div class="field"><label>Lý do</label><input class="input" id="adj-reason" value="Sửa chữa hạ tầng khu vực, tạm ngừng kinh doanh"></div></div>
@@ -291,7 +308,9 @@
       <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="inv-adjust-save" data-id="${i.id}">Gửi & phê duyệt</button></div>`);
   };
   A.ACT['inv-adjust-save'] = el => {
-    const i = A.idx.invoice.get(el.dataset.id), pctv = Number(A.$('#adj-pct').value), reason = A.$('#adj-reason').value.trim() || 'Không ghi';
+    const i = A.idx.invoice.get(el.dataset.id);
+    if (!A.canDo('phai-thu.mien-giam', i.market) || i.status === 'paid' || i.adjust) return;
+    const pctv = Number(A.$('#adj-pct').value), reason = A.$('#adj-reason').value.trim() || 'Không ghi';
     const base = i.items[0].amount, value = Math.round(base * pctv / 100 / 1000) * 1000;
     i.adjust = { pct: pctv, reason, value }; i.amount = Math.max(i.paid, i.amount - value);
     if (i.paid >= i.amount) i.status = 'paid';
@@ -303,7 +322,7 @@
   // ---------- Thu tiền ----------
   function renderPay() {
     const ps = ui.pay, t = A.idx.trader.get(ps.traderId);
-    const invs = A.db.invoices.filter(i => i.traderId === t.id && i.status !== 'paid').sort((a, b) => a.due.localeCompare(b.due));
+    const invs = A.db.invoices.filter(i => i.traderId === t.id && i.status !== 'paid' && i.market === t.market).sort((a, b) => a.due.localeCompare(b.due));
     const total = U.sum(invs.filter(i => ps.sel.includes(i.id)), U.due);
     const amount = ps.amount == null ? total : Math.min(ps.amount, total);
     const content = 'CHOSO ' + t.id + ' ' + (invs.find(i => ps.sel.includes(i.id)) || { id: '' }).id;
@@ -320,8 +339,10 @@
       <button class="btn primary" data-act="pay-confirm" ${amount > 0 ? '' : 'disabled'}>${ps.method === 'qr' ? 'Giả lập: tiểu thương đã quét mã và chuyển tiền' : 'Xác nhận thu & phát hành biên lai'}</button></div>`, true);
   }
   A.ACT['pay-open'] = el => {
-    const tid = el.dataset.id;
-    const invs = A.db.invoices.filter(i => i.traderId === tid && i.status !== 'paid');
+    const tid = el.dataset.id, t = A.idx.trader.get(tid);
+    if (!t || !A.canDo('thu-tien.thu', t.market)) { U.toast('Bạn không có quyền thu tiền cho tiểu thương này'); return; }
+    const invs = A.db.invoices.filter(i => i.traderId === tid && i.status !== 'paid' && i.market === t.market);
+    if (!invs.length) { U.toast('Tiểu thương không còn khoản nào phải thu'); return; }
     ui.pay = { traderId: tid, sel: el.dataset.inv ? [el.dataset.inv] : invs.map(i => i.id), method: 'qr', amount: null };
     renderPay();
   };
@@ -330,9 +351,14 @@
   A.CH['pay-method'] = el => { ui.pay.method = el.value; renderPay(); };
   A.ACT['pay-confirm'] = () => {
     const ps = ui.pay;
-    const total = U.sum(A.db.invoices.filter(i => ps.sel.includes(i.id)), U.due);
+    const t = ps && A.idx.trader.get(ps.traderId);
+    if (!t || !A.canDo('thu-tien.thu', t.market)) { U.toast('Bạn không có quyền thu tiền cho tiểu thương này'); A.closeModal(); return; }
+    const sel = A.db.invoices.filter(i => ps.sel.includes(i.id) && i.traderId === t.id && i.market === t.market && i.status !== 'paid');
+    if (!sel.length) { U.toast('Khoản phải thu không còn hợp lệ (đã thu hoặc không thuộc phạm vi)'); A.closeModal(); A.render(); return; }
+    const total = U.sum(sel, U.due);
     const amount = ps.amount == null ? total : Math.min(ps.amount, total);
-    const pays = A.applyPayment(ps.sel, amount, ps.method, ps.method === 'tm' ? 'NV03' : 'Hệ thống');
+    if (amount <= 0) { U.toast('Số tiền thu không hợp lệ'); return; }
+    const pays = A.applyPayment(sel.map(i => i.id), amount, ps.method, ps.method === 'tm' ? 'NV03' : 'Hệ thống');
     A.render(); A.showReceipt(pays);
     U.toast('Đã thu ' + U.money(amount) + ' · biên lai điện tử đã gửi tới tiểu thương');
   };
@@ -357,7 +383,7 @@
     return timeBar + `<div class="grid g-main" style="align-items:start">
       <div class="card"><div class="card-h"><h3>Tìm tiểu thương cần thu</h3><input class="input" style="width:260px" placeholder="Tên, SĐT hoặc mã điểm (VD: HS-A05)" data-in="thu-search" value="${U.esc(f.thuSearch || '')}"></div>
         <div class="card-b">${U.table([{ t: 'Tiểu thương' }, { t: 'Điểm KD' }, { t: 'Số khoản', num: true }, { t: 'Còn phải thu', num: true }, { t: 'Quá hạn', num: true }, { t: '' }],
-          list.slice(pg.start, pg.end).map(x => `<tr><td><b>${U.esc(x.t.name)}</b><div class="small muted">${x.t.id} · ${U.maskPhone(x.t.phone)}</div></td><td>${x.t.stalls.map(id => A.idx.stall.get(id).code).join(', ')}</td><td class="num">${x.n}</td><td class="num">${U.money(x.amt)}</td><td class="num" style="${x.over ? 'color:#d6453b;font-weight:600' : ''}">${x.over ? U.money(x.over) : '–'}</td><td><button class="btn sm primary" data-act="pay-open" data-id="${x.t.id}">Thu tiền</button></td></tr>`))}${pg.html}</div></div>
+          list.slice(pg.start, pg.end).map(x => `<tr><td><b>${U.esc(x.t.name)}</b><div class="small muted">${x.t.id} · ${U.maskPhone(x.t.phone)}</div></td><td>${x.t.stalls.map(id => A.idx.stall.get(id).code).join(', ')}</td><td class="num">${x.n}</td><td class="num">${U.money(x.amt)}</td><td class="num" style="${x.over ? 'color:#d6453b;font-weight:600' : ''}">${x.over ? U.money(x.over) : '–'}</td><td>${A.canDo('thu-tien.thu', x.t.market) ? `<button class="btn sm primary" data-act="pay-open" data-id="${x.t.id}">Thu tiền</button>` : ''}</td></tr>`))}${pg.html}</div></div>
       <div class="card"><div class="card-h"><h3>Giao dịch ngày ${U.dmy(payDate)}</h3></div><div class="card-b">
         <div class="row small" style="margin-bottom:8px"><span class="tag">💵 Tiền mặt ${U.moneyShort(cash)}</span><span class="tag info">📱 QR/CK ${U.moneyShort(non)}</span></div>
         ${today.length ? today.slice(0, 14).map(p => `<div class="row small click" style="padding:7px 0;border-bottom:1px solid #eef2f0;cursor:pointer" data-act="receipt" data-id="${p.receipt}"><span class="muted">${p.time}</span><span style="flex:1">${U.esc(A.idx.trader.get(p.traderId).name)}<div class="muted">${p.receipt} · ${D.METHOD[p.method]}</div></span><b>${U.money(p.amount)}</b></div>`).join('') : '<div class="empty">Chưa có giao dịch</div>'}
@@ -686,6 +712,7 @@
         <option value="all" ${origin === 'all' ? 'selected' : ''}>Tất cả</option>
         ${A.db.issuedPeriods.slice().reverse().map(p => `<option value="${p}" ${origin === p ? 'selected' : ''}>${U.per(p)}</option>`).join('')}
       </select></div></div>`;
+    const canRemindAll = A.canDo('cong-no.nhac-no-hang-loat', ui.market);
     return timeBar + `<div class="grid g2">
       <div class="card"><div class="card-h"><h3>Phân loại nợ theo số ngày quá hạn</h3></div><div class="card-b">
         ${buckets.map(b => `<div style="margin:10px 0"><div class="row small"><b style="width:100px">${b.label}</b><span class="muted">${b.n} tiểu thương</span><span class="spacer"></span><b>${U.money(b.amt)}</b></div><div class="bar-mini" style="height:10px"><i style="width:${b.amt * 100 / maxAmt}%;background:#d6453b"></i></div></div>`).join('')}
@@ -696,12 +723,12 @@
         <div class="row" style="padding:6px 0"><span class="tag warn">Ngày 25</span>Nhắc lần 2 kèm mã QR thanh toán</div>
         <div class="row" style="padding:6px 0"><span class="tag danger">Quá 60 ngày</span>Chuyển danh sách cho Trưởng Ban Quản lý xử lý theo hợp đồng</div>
         <div class="muted" style="margin-top:8px">Không gửi lặp trong cùng mốc, cùng kênh. Lưu nhật ký gửi, nhận, đọc.</div></div></div></div>
-    <div class="card"><div class="card-h"><h3>Danh sách tiểu thương nợ quá hạn (${list.length})</h3><button class="btn accent" data-act="cn-remind-all">📣 Gửi nhắc nợ tất cả</button>
+    <div class="card"><div class="card-h"><h3>Danh sách tiểu thương nợ quá hạn (${list.length})</h3>${canRemindAll ? `<button class="btn accent" data-act="cn-remind-all">📣 Gửi nhắc nợ tất cả</button>` : ''}
       <button class="btn" data-act="cn-csv">⬇ Xuất Excel</button></div>
       <div class="card-b">${U.table([{ t: 'Tiểu thương' }, { t: 'Điểm KD' }, { t: 'Số kỳ nợ', num: true }, { t: 'Tổng nợ', num: true }, { t: 'Quá hạn lâu nhất', num: true }, { t: 'Đã nhắc', num: true }, { t: '' }],
         list.slice(pg.start, pg.end).map(x => `<tr><td><b>${U.esc(x.t.name)}</b> <span class="small muted">${x.t.app ? '· có mini app' : '· chưa cài app'}</span></td><td>${x.t.stalls.map(id => A.idx.stall.get(id).code).join(', ')}</td><td class="num">${x.n}</td><td class="num">${U.money(x.amt)}</td>
           <td class="num"><span class="tag ${x.days > 60 ? 'danger' : 'warn'}">${x.days} ngày</span></td><td class="num">${x.rem}</td>
-          <td class="nowrap"><button class="btn sm" data-act="cn-remind" data-id="${x.t.id}">Nhắc nợ</button> <button class="btn sm primary" data-act="pay-open" data-id="${x.t.id}">Thu</button></td></tr>`), { empty: 'Không có nợ quá hạn 🎉' })}${pg.html}</div></div>`;
+          <td class="nowrap">${A.canDo('cong-no.nhac-no', x.t.market) ? `<button class="btn sm" data-act="cn-remind" data-id="${x.t.id}">Nhắc nợ</button>` : ''} ${A.canDo('thu-tien.thu', x.t.market) ? `<button class="btn sm primary" data-act="pay-open" data-id="${x.t.id}">Thu</button>` : ''}</td></tr>`), { empty: 'Không có nợ quá hạn 🎉' })}${pg.html}</div></div>`;
   };
   A.CH['cn-asof'] = el => { f.cnAsOf = el.value || U.today(); A.render(); };
   A.CH['cn-origin'] = el => { f.cnOrigin = el.value; A.render(); };
@@ -710,8 +737,13 @@
     A.db.invoices.filter(i => U.isOver(i) && ids.includes(i.traderId)).forEach(i => { i.reminders = (i.reminders || 0) + 1; n++; });
     return n;
   }
-  A.ACT['cn-remind'] = el => { remind([el.dataset.id]); A.save(); A.render(); U.toast('Đã gửi nhắc nợ qua Mini app, Zalo OA tới ' + A.idx.trader.get(el.dataset.id).name); };
+  A.ACT['cn-remind'] = el => {
+    const t = A.idx.trader.get(el.dataset.id);
+    if (!t || !A.canDo('cong-no.nhac-no', t.market)) return;
+    remind([el.dataset.id]); A.save(); A.render(); U.toast('Đã gửi nhắc nợ qua Mini app, Zalo OA tới ' + t.name);
+  };
   A.ACT['cn-remind-all'] = () => {
+    if (!A.canDo('cong-no.nhac-no-hang-loat', ui.market)) return;
     const ids = Array.from(new Set(A.db.invoices.filter(i => U.inM(i) && U.isOver(i)).map(i => i.traderId)));
     remind(ids);
     A.db.notifications.unshift({ id: 'TB-' + U.pad(32 + A.db.notifications.length, 3), at: U.today(), title: 'Nhắc nộp phí quá hạn', group: 'Danh sách nợ phí', channels: ['Mini app', 'Zalo OA', 'SMS'], sent: ids.length, delivered: 0.95, read: 0, auto: false });

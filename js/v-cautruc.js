@@ -102,17 +102,18 @@
   function treeHtml(mid) {
     const sel = ui.qh.selZone;
     const blocks = blocksOf(mid);
-    if (!blocks.length) return '<div class="empty">Chưa có khối/nhà chợ nào. Bấm "+ Thêm khối/nhà chợ" để bắt đầu.</div>';
+    const canEdit = A.canDo('cau-truc.edit', mid), canDelete = A.canDo('cau-truc.delete', mid);
+    if (!blocks.length) return '<div class="empty">Chưa có khối/nhà chợ nào.' + (canEdit ? ' Bấm "+ Thêm khối/nhà chợ" để bắt đầu.' : '') + '</div>';
     return blocks.map(b => `<div class="qh-block">
       <div class="qh-row"><b>${U.esc(b.name)}</b><span class="spacer"></span>
-        <button class="btn sm" data-act="qh-add-floor" data-block="${b.key}">+ Tầng</button>
-        <button class="btn sm" data-act="qh-edit-block" data-id="${b.key}">Sửa</button>
-        <button class="btn sm danger" data-act="qh-del-block" data-id="${b.key}">Xóa</button></div>
+        ${canEdit ? `<button class="btn sm" data-act="qh-add-floor" data-block="${b.key}">+ Tầng</button>
+        <button class="btn sm" data-act="qh-edit-block" data-id="${b.key}">Sửa</button>` : ''}
+        ${canDelete ? `<button class="btn sm danger" data-act="qh-del-block" data-id="${b.key}">Xóa</button>` : ''}</div>
       ${b.floors.length ? b.floors.map(f => `<div class="qh-floor">
         <div class="qh-row"><span>${U.esc(f.name)}</span><span class="spacer"></span>
-          <button class="btn sm" data-act="qh-add-zone" data-block="${b.key}" data-floor="${f.key}">+ Khu</button>
-          <button class="btn sm" data-act="qh-edit-floor" data-block="${b.key}" data-id="${f.key}">Sửa</button>
-          <button class="btn sm danger" data-act="qh-del-floor" data-block="${b.key}" data-id="${f.key}">Xóa</button></div>
+          ${canEdit ? `<button class="btn sm" data-act="qh-add-zone" data-block="${b.key}" data-floor="${f.key}">+ Khu</button>
+          <button class="btn sm" data-act="qh-edit-floor" data-block="${b.key}" data-id="${f.key}">Sửa</button>` : ''}
+          ${canDelete ? `<button class="btn sm danger" data-act="qh-del-floor" data-block="${b.key}" data-id="${f.key}">Xóa</button>` : ''}</div>
         <div class="qh-zones">${f.zones.length ? f.zones.map(z => `<button class="qh-zone-chip ${sel === z.key ? 'on' : ''}" data-act="qh-sel-zone" data-id="${z.key}">${U.esc(z.name || '(chưa đặt tên)')} <span class="muted">${U.esc(z.code || '')}</span>${z.status === 'nhap' ? ' <span class="tag warn">Nháp</span>' : ''}</button>`).join('') : '<div class="empty small">Chưa có khu</div>'}</div>
       </div>`).join('') : '<div class="empty small">Chưa có tầng</div>'}
     </div>`).join('');
@@ -121,37 +122,39 @@
   function detailHtml(mid) {
     const z = ui.qh.selZone ? findZone(mid, ui.qh.selZone) : null;
     if (!z) return '<div class="empty">Chọn một khu trên cây cấu trúc bên trái để khai báo thông tin, hoặc bấm "+ Khu" tại một tầng để tạo khu mới.</div>';
+    const canEdit = A.canDo('cau-truc.edit', mid), canDelete = A.canDo('cau-truc.delete', mid);
+    const dis = canEdit ? '' : 'disabled';
     const blocks = blocksOf(mid), floors = floorsOfBlock(mid, z.blockId);
     const totalQty = U.sum(z.planned, p => Number(p.qty) || 0);
     const totalArea = U.sum(z.planned, p => (Number(p.std) || 0) * (Number(p.qty) || 0));
     const over = totalArea > Number(z.area || 0);
     return `<div class="row"><h3 style="margin:0">${U.esc(z.name || '(Chưa đặt tên)')}</h3>${z.status === 'nhap' ? '<span class="tag warn">Nháp</span>' : '<span class="tag ok">Chính thức</span>'}</div>
       <div class="form-grid" style="margin-top:10px">
-        <div class="field"><label>Mã khu *</label><input class="input" data-ch="qh-zone-field" data-zone="${z.key}" data-k="code" value="${U.esc(z.code || '')}"></div>
-        <div class="field"><label>Tên khu *</label><input class="input" data-ch="qh-zone-field" data-zone="${z.key}" data-k="name" value="${U.esc(z.name || '')}"></div>
-        <div class="field"><label>Thuộc khối/nhà chợ</label><select class="input" data-ch="qh-zone-field" data-zone="${z.key}" data-k="blockId">${blocks.map(b => `<option value="${b.key}" ${b.key === z.blockId ? 'selected' : ''}>${U.esc(b.name)}</option>`).join('')}</select></div>
-        <div class="field"><label>Tầng</label><select class="input" data-ch="qh-zone-field" data-zone="${z.key}" data-k="floorId">${floors.map(f => `<option value="${f.key}" ${f.key === z.floorId ? 'selected' : ''}>${U.esc(f.name)}</option>`).join('')}</select></div>
-        <div class="field"><label>Ngành hàng chính *</label><select class="input" data-ch="qh-zone-field" data-zone="${z.key}" data-k="catMain"><option value="">— Chọn ngành hàng —</option>${CATS.map(c => `<option ${c === z.catMain ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
-        <div class="field"><label>Ngành hàng phụ</label><input class="input" data-ch="qh-zone-field" data-zone="${z.key}" data-k="catSub" value="${U.esc(z.catSub || '')}"></div>
-        <div class="field"><label>Diện tích khu (m²) *</label><input class="input" type="number" min="0" data-ch="qh-zone-field" data-zone="${z.key}" data-k="area" value="${z.area || 0}"></div>
+        <div class="field"><label>Mã khu *</label><input class="input" ${dis} data-ch="qh-zone-field" data-zone="${z.key}" data-k="code" value="${U.esc(z.code || '')}"></div>
+        <div class="field"><label>Tên khu *</label><input class="input" ${dis} data-ch="qh-zone-field" data-zone="${z.key}" data-k="name" value="${U.esc(z.name || '')}"></div>
+        <div class="field"><label>Thuộc khối/nhà chợ</label><select class="input" ${dis} data-ch="qh-zone-field" data-zone="${z.key}" data-k="blockId">${blocks.map(b => `<option value="${b.key}" ${b.key === z.blockId ? 'selected' : ''}>${U.esc(b.name)}</option>`).join('')}</select></div>
+        <div class="field"><label>Tầng</label><select class="input" ${dis} data-ch="qh-zone-field" data-zone="${z.key}" data-k="floorId">${floors.map(f => `<option value="${f.key}" ${f.key === z.floorId ? 'selected' : ''}>${U.esc(f.name)}</option>`).join('')}</select></div>
+        <div class="field"><label>Ngành hàng chính *</label><select class="input" ${dis} data-ch="qh-zone-field" data-zone="${z.key}" data-k="catMain"><option value="">— Chọn ngành hàng —</option>${CATS.map(c => `<option ${c === z.catMain ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+        <div class="field"><label>Ngành hàng phụ</label><input class="input" ${dis} data-ch="qh-zone-field" data-zone="${z.key}" data-k="catSub" value="${U.esc(z.catSub || '')}"></div>
+        <div class="field"><label>Diện tích khu (m²) *</label><input class="input" ${dis} type="number" min="0" data-ch="qh-zone-field" data-zone="${z.key}" data-k="area" value="${z.area || 0}"></div>
       </div>
-      <div class="field" style="margin-top:10px"><label>Ghi chú</label><textarea class="input" rows="2" data-ch="qh-zone-field" data-zone="${z.key}" data-k="note">${U.esc(z.note || '')}</textarea></div>
+      <div class="field" style="margin-top:10px"><label>Ghi chú</label><textarea class="input" ${dis} rows="2" data-ch="qh-zone-field" data-zone="${z.key}" data-k="note">${U.esc(z.note || '')}</textarea></div>
       <div class="divider"></div>
-      <div class="row"><h4 style="margin:0;font-size:14px">Quy hoạch loại điểm kinh doanh dự kiến</h4><span class="spacer"></span><button class="btn sm primary" data-act="qh-pt-add" data-id="${z.key}">+ Thêm loại điểm</button></div>
+      <div class="row"><h4 style="margin:0;font-size:14px">Quy hoạch loại điểm kinh doanh dự kiến</h4><span class="spacer"></span>${canEdit ? `<button class="btn sm primary" data-act="qh-pt-add" data-id="${z.key}">+ Thêm loại điểm</button>` : ''}</div>
       <div style="margin-top:8px">${U.table([{ t: 'Loại điểm' }, { t: 'DT chuẩn (m²)', num: true }, { t: 'Số lượng', num: true }, { t: 'Diện tích (m²)', num: true }, { t: '' }],
         z.planned.map(p => `<tr>
-          <td><input class="input" data-ch="qh-pt-field" data-zone="${z.key}" data-pt="${p.key}" data-k="name" value="${U.esc(p.name || '')}" placeholder="VD: Sạp nhỏ"></td>
-          <td><input class="input num" style="width:90px" type="number" min="0" data-ch="qh-pt-field" data-zone="${z.key}" data-pt="${p.key}" data-k="std" value="${p.std || 0}"></td>
-          <td><input class="input num" style="width:80px" type="number" min="0" data-ch="qh-pt-field" data-zone="${z.key}" data-pt="${p.key}" data-k="qty" value="${p.qty || 0}"></td>
+          <td><input class="input" ${dis} data-ch="qh-pt-field" data-zone="${z.key}" data-pt="${p.key}" data-k="name" value="${U.esc(p.name || '')}" placeholder="VD: Sạp nhỏ"></td>
+          <td><input class="input num" style="width:90px" ${dis} type="number" min="0" data-ch="qh-pt-field" data-zone="${z.key}" data-pt="${p.key}" data-k="std" value="${p.std || 0}"></td>
+          <td><input class="input num" style="width:80px" ${dis} type="number" min="0" data-ch="qh-pt-field" data-zone="${z.key}" data-pt="${p.key}" data-k="qty" value="${p.qty || 0}"></td>
           <td class="num">${((Number(p.std) || 0) * (Number(p.qty) || 0)).toLocaleString('vi-VN')}</td>
-          <td><button class="btn sm danger" data-act="qh-pt-del" data-id="${z.key}|${p.key}">Xóa</button></td></tr>`), { empty: 'Chưa khai báo loại điểm nào' })}</div>
+          <td>${canDelete ? `<button class="btn sm danger" data-act="qh-pt-del" data-id="${z.key}|${p.key}">Xóa</button>` : ''}</td></tr>`), { empty: 'Chưa khai báo loại điểm nào' })}</div>
       <div class="row" style="padding:8px 2px;font-weight:600"><span>Tổng cộng</span><span class="spacer"></span><span>${totalQty.toLocaleString('vi-VN')} điểm dự kiến · ${totalArea.toLocaleString('vi-VN')} m²</span></div>
       ${over ? `<div class="note">Tổng diện tích điểm kinh doanh dự kiến (${totalArea.toLocaleString('vi-VN')} m²) vượt quá diện tích của khu (${Number(z.area || 0).toLocaleString('vi-VN')} m²).</div>` : ''}
       <div class="row" style="margin-top:14px">
-        <button class="btn" data-act="qh-save-draft" data-id="${z.key}">Lưu nháp</button>
-        <button class="btn primary" data-act="qh-save-final" data-id="${z.key}">Lưu và tiếp tục</button>
+        ${canEdit ? `<button class="btn" data-act="qh-save-draft" data-id="${z.key}">Lưu nháp</button>
+        <button class="btn primary" data-act="qh-save-final" data-id="${z.key}">Lưu và tiếp tục</button>` : ''}
         <span class="spacer"></span>
-        <button class="btn danger" data-act="qh-del-zone" data-id="${z.key}">Xóa khu</button>
+        ${canDelete ? `<button class="btn danger" data-act="qh-del-zone" data-id="${z.key}">Xóa khu</button>` : ''}
       </div>`;
   }
 
@@ -169,6 +172,7 @@
 
   A.VIEWS['cau-truc'] = function () {
     const mid = qhMarket(), m = U.market(mid), s = marketLayoutStats(mid);
+    const canEdit = A.canDo('cau-truc.edit', mid), canReset = A.canDo('cau-truc.reset', mid);
     const k = (l, v, sub) => `<div class="card kpi"><div class="k-label">${l}</div><div class="k-value">${v}</div>${sub ? `<div class="k-sub">${sub}</div>` : ''}</div>`;
     return `
     <div class="note info">Thiết lập khung cấu trúc <b>Khối/Nhà chợ → Tầng → Khu</b> và khai báo ngành hàng, diện tích, loại và số lượng điểm kinh doanh dự kiến cho từng khu. Việc khai báo từng điểm kinh doanh cụ thể (VD: A01, A02…) thực hiện tại màn <b>Điểm kinh doanh</b>.</div>
@@ -176,8 +180,8 @@
       ${ui.market === 'ALL' ? `<div class="seg">${['CL', 'TTD'].map(id => `<button class="${mid === id ? 'on' : ''}" data-act="qh-market" data-id="${id}">${U.mShort(id)}</button>`).join('')}</div>` : ''}
       <span class="small muted">${U.esc(m.name)} · ${U.esc(m.hang)}</span>
       <span class="spacer"></span>
-      <button class="btn" data-act="qh-reset">↺ Khôi phục cấu trúc mặc định</button>
-      <button class="btn primary" data-act="qh-add-block">+ Thêm khối/nhà chợ</button></div></div>
+      ${canReset ? `<button class="btn" data-act="qh-reset">↺ Khôi phục cấu trúc mặc định</button>` : ''}
+      ${canEdit ? `<button class="btn primary" data-act="qh-add-block">+ Thêm khối/nhà chợ</button>` : ''}</div></div>
     <div class="kpis">
       ${k('Khối / nhà chợ', s.blocks)}
       ${k('Tầng', s.floors)}
@@ -197,32 +201,38 @@
     'qh-market': el => { ui.qh.market = el.dataset.id; ui.qh.selZone = null; A.render(); },
     'qh-sel-zone': el => { ui.qh.selZone = el.dataset.id; A.render(); },
     'qh-reset': () => {
+      if (!A.canDo('cau-truc.reset', qhMarket())) return;
       A.modal(A.mHead('Khôi phục cấu trúc mặc định') + `<div class="modal-b">Toàn bộ cấu trúc khối/tầng/khu và quy hoạch điểm đã khai báo cho <b>${U.esc(U.market(qhMarket()).name)}</b> sẽ bị xóa và khôi phục về cấu trúc mẫu ban đầu.</div>
         <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn danger" data-act="qh-reset-ok">Khôi phục</button></div>`);
     },
     'qh-reset-ok': () => {
       const mid = qhMarket();
+      if (!A.canDo('cau-truc.reset', mid)) return;
       LAYOUT[mid] = defaultLayout()[mid];
       ui.qh.selZone = null;
       saveLayout(); A.closeModal(); A.render(); U.toast('Đã khôi phục cấu trúc mặc định cho ' + U.mShort(mid));
     },
     'qh-add-block': () => {
+      if (!A.canDo('cau-truc.edit', qhMarket())) return;
       A.modal(A.mHead('Thêm khối / nhà chợ') + `<div class="modal-b"><div class="field"><label>Tên khối/nhà chợ *</label><input class="input" id="qhb-name" placeholder="VD: Nhà chợ chính"></div></div>
         <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="qh-add-block-save">Thêm</button></div>`);
     },
     'qh-add-block-save': () => {
+      if (!A.canDo('cau-truc.edit', qhMarket())) return;
       const name = A.$('#qhb-name').value.trim();
       if (!name) { U.toast('Vui lòng nhập tên khối/nhà chợ'); return; }
       LAYOUT[qhMarket()].blocks.push({ key: newKey('b'), name: name, floors: [] });
       saveLayout(); A.closeModal(); A.render(); U.toast('Đã thêm khối/nhà chợ "' + name + '"');
     },
     'qh-edit-block': el => {
+      if (!A.canDo('cau-truc.edit', qhMarket())) return;
       const b = findBlock(qhMarket(), el.dataset.id);
       if (!b) return;
       A.modal(A.mHead('Sửa khối / nhà chợ') + `<div class="modal-b"><div class="field"><label>Tên khối/nhà chợ *</label><input class="input" id="qhb-name" value="${U.esc(b.name)}"></div></div>
         <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="qh-edit-block-save" data-id="${b.key}">Lưu</button></div>`);
     },
     'qh-edit-block-save': el => {
+      if (!A.canDo('cau-truc.edit', qhMarket())) return;
       const name = A.$('#qhb-name').value.trim();
       if (!name) { U.toast('Vui lòng nhập tên khối/nhà chợ'); return; }
       const b = findBlock(qhMarket(), el.dataset.id);
@@ -230,6 +240,7 @@
       saveLayout(); A.closeModal(); A.render(); U.toast('Đã cập nhật');
     },
     'qh-del-block': el => {
+      if (!A.canDo('cau-truc.delete', qhMarket())) return;
       const mid = qhMarket(), b = findBlock(mid, el.dataset.id);
       if (!b) return;
       const zoneCount = U.sum(b.floors, f => f.zones.length);
@@ -238,15 +249,23 @@
         <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn danger" data-act="qh-del-block-ok" data-id="${b.key}">Xóa</button></div>`);
     },
     'qh-del-block-ok': el => {
-      const L = LAYOUT[qhMarket()];
-      L.blocks = L.blocks.filter(b => b.key !== el.dataset.id);
+      const mid = qhMarket();
+      if (!A.canDo('cau-truc.delete', mid)) return;
+      const L = LAYOUT[mid];
+      // Phòng thủ lại (business rule): không xoá khối còn khu bên trong, dù nút Xoá ở bước trước
+      // đã tự chặn — đúng theo yêu cầu "preserve existing child/dependency checks" (mục 8).
+      const b = L.blocks.find(x => x.key === el.dataset.id);
+      if (b && U.sum(b.floors, f => f.zones.length)) { U.toast('Khối "' + b.name + '" đang có khu, cần xóa hết các khu trước.'); return; }
+      L.blocks = L.blocks.filter(x => x.key !== el.dataset.id);
       saveLayout(); A.closeModal(); A.render(); U.toast('Đã xóa khối/nhà chợ');
     },
     'qh-add-floor': el => {
+      if (!A.canDo('cau-truc.edit', qhMarket())) return;
       A.modal(A.mHead('Thêm tầng') + `<div class="modal-b"><div class="field"><label>Tên tầng *</label><input class="input" id="qhf-name" placeholder="VD: Tầng 1"></div></div>
         <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="qh-add-floor-save" data-block="${el.dataset.block}">Thêm</button></div>`);
     },
     'qh-add-floor-save': el => {
+      if (!A.canDo('cau-truc.edit', qhMarket())) return;
       const name = A.$('#qhf-name').value.trim();
       if (!name) { U.toast('Vui lòng nhập tên tầng'); return; }
       const b = findBlock(qhMarket(), el.dataset.block);
@@ -255,12 +274,14 @@
       saveLayout(); A.closeModal(); A.render(); U.toast('Đã thêm tầng "' + name + '"');
     },
     'qh-edit-floor': el => {
+      if (!A.canDo('cau-truc.edit', qhMarket())) return;
       const f = findFloor(qhMarket(), el.dataset.block, el.dataset.id);
       if (!f) return;
       A.modal(A.mHead('Sửa tầng') + `<div class="modal-b"><div class="field"><label>Tên tầng *</label><input class="input" id="qhf-name" value="${U.esc(f.name)}"></div></div>
         <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="qh-edit-floor-save" data-block="${el.dataset.block}" data-id="${f.key}">Lưu</button></div>`);
     },
     'qh-edit-floor-save': el => {
+      if (!A.canDo('cau-truc.edit', qhMarket())) return;
       const name = A.$('#qhf-name').value.trim();
       if (!name) { U.toast('Vui lòng nhập tên tầng'); return; }
       const f = findFloor(qhMarket(), el.dataset.block, el.dataset.id);
@@ -268,6 +289,7 @@
       saveLayout(); A.closeModal(); A.render(); U.toast('Đã cập nhật');
     },
     'qh-del-floor': el => {
+      if (!A.canDo('cau-truc.delete', qhMarket())) return;
       const f = findFloor(qhMarket(), el.dataset.block, el.dataset.id);
       if (!f) return;
       if (f.zones.length) { U.toast('Tầng "' + f.name + '" đang có ' + f.zones.length + ' khu, cần xóa hết các khu trước.'); return; }
@@ -275,17 +297,22 @@
         <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn danger" data-act="qh-del-floor-ok" data-block="${el.dataset.block}" data-id="${f.key}">Xóa</button></div>`);
     },
     'qh-del-floor-ok': el => {
+      if (!A.canDo('cau-truc.delete', qhMarket())) return;
       const b = findBlock(qhMarket(), el.dataset.block);
-      if (b) b.floors = b.floors.filter(f => f.key !== el.dataset.id);
+      const f = b && b.floors.find(x => x.key === el.dataset.id);
+      if (f && f.zones.length) { U.toast('Tầng "' + f.name + '" đang có khu, cần xóa hết các khu trước.'); return; }
+      if (b) b.floors = b.floors.filter(x => x.key !== el.dataset.id);
       saveLayout(); A.closeModal(); A.render(); U.toast('Đã xóa tầng');
     },
     'qh-add-zone': el => {
+      if (!A.canDo('cau-truc.edit', qhMarket())) return;
       A.modal(A.mHead('Thêm khu mới') + `<div class="modal-b"><div class="form-grid">
         <div class="field"><label>Mã khu *</label><input class="input" id="qhz-code" placeholder="VD: A"></div>
         <div class="field"><label>Tên khu *</label><input class="input" id="qhz-name" placeholder="VD: Thực phẩm tươi sống"></div></div></div>
         <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="qh-add-zone-save" data-block="${el.dataset.block}" data-floor="${el.dataset.floor}">Thêm</button></div>`);
     },
     'qh-add-zone-save': el => {
+      if (!A.canDo('cau-truc.edit', qhMarket())) return;
       const code = A.$('#qhz-code').value.trim(), name = A.$('#qhz-name').value.trim();
       if (!code || !name) { U.toast('Vui lòng nhập đủ mã khu và tên khu'); return; }
       if (codeTaken(qhMarket(), code, null)) { U.toast('Mã khu "' + code + '" đã tồn tại trong chợ này'); return; }
@@ -297,6 +324,7 @@
       saveLayout(); A.closeModal(); A.render(); U.toast('Đã thêm khu ' + code + '. Vui lòng khai báo thêm thông tin chi tiết.');
     },
     'qh-del-zone': el => {
+      if (!A.canDo('cau-truc.delete', qhMarket())) return;
       const z = findZone(qhMarket(), el.dataset.id);
       if (!z) return;
       if (z.planned.length) {
@@ -308,18 +336,24 @@
         <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn danger" data-act="qh-del-zone-ok" data-id="${z.key}">Xóa khu</button></div>`);
     },
     'qh-del-zone-ok': el => {
-      const f = findFloorOfZone(qhMarket(), el.dataset.id);
-      if (f) f.zones = f.zones.filter(z => z.key !== el.dataset.id);
+      const mid = qhMarket();
+      if (!A.canDo('cau-truc.delete', mid)) return;
+      const z = findZone(mid, el.dataset.id);
+      if (z && z.planned.length) { U.toast('Khu "' + z.name + '" còn quy hoạch loại điểm, cần xóa hết trước.'); return; }
+      const f = findFloorOfZone(mid, el.dataset.id);
+      if (f) f.zones = f.zones.filter(x => x.key !== el.dataset.id);
       if (ui.qh.selZone === el.dataset.id) ui.qh.selZone = null;
       saveLayout(); A.closeModal(); A.render(); U.toast('Đã xóa khu');
     },
     'qh-pt-add': el => {
+      if (!A.canDo('cau-truc.edit', qhMarket())) return;
       const z = findZone(qhMarket(), el.dataset.id);
       if (!z) return;
       z.planned.push({ key: newKey('p'), name: '', std: 0, qty: 0 });
       saveLayout(); A.render();
     },
     'qh-pt-del': el => {
+      if (!A.canDo('cau-truc.delete', qhMarket())) return;
       const parts = el.dataset.id.split('|'), zk = parts[0], pk = parts[1];
       const z = findZone(qhMarket(), zk);
       if (!z) return;
@@ -327,12 +361,14 @@
       saveLayout(); A.render(); U.toast('Đã xóa loại điểm');
     },
     'qh-save-draft': el => {
+      if (!A.canDo('cau-truc.edit', qhMarket())) return;
       const z = findZone(qhMarket(), el.dataset.id);
       if (!z) return;
       z.status = 'nhap';
       saveLayout(); A.render(); U.toast('Đã lưu nháp khu ' + (z.code || z.name));
     },
     'qh-save-final': el => {
+      if (!A.canDo('cau-truc.edit', qhMarket())) return;
       const z = findZone(qhMarket(), el.dataset.id);
       if (!z) return;
       const errs = validateZone(z);
@@ -346,6 +382,7 @@
   });
 
   A.CH['qh-zone-field'] = el => {
+    if (!A.canDo('cau-truc.edit', qhMarket())) { A.render(); return; }
     const z = findZone(qhMarket(), el.dataset.zone);
     if (!z) return;
     const k = el.dataset.k;
@@ -355,6 +392,7 @@
     saveLayout(); A.render();
   };
   A.CH['qh-pt-field'] = el => {
+    if (!A.canDo('cau-truc.edit', qhMarket())) { A.render(); return; }
     const z = findZone(qhMarket(), el.dataset.zone);
     if (!z) return;
     const p = z.planned.find(x => x.key === el.dataset.pt);

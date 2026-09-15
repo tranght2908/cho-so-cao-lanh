@@ -28,8 +28,11 @@
   }
   A.marketStats = marketStats;
 
-  function revenueSeries() {
-    const db = A.db, incCL = ui.market !== 'TTD', incT = ui.market !== 'CL';
+  // xmMkt: kết quả A.xmMarket() — 'CL'/'TTD' cụ thể HOẶC 'ALL' (gộp trong phạm vi account,
+  // xem core.js). Đây là màn cross-market nên dùng xmMkt thay vì selectedMarket (ui.market) toàn
+  // cục cho mọi phép lọc theo chợ trong hàm này.
+  function revenueSeries(xmMkt) {
+    const db = A.db, incCL = xmMkt !== 'TTD', incT = xmMkt !== 'CL';
     const labels = [], cash = [], non = [];
     const ttdBase = 33 * D.SESSION_FEE * 4.3;
     db.months.forEach(m => {
@@ -39,7 +42,7 @@
       non.push((incCL ? m.noncash : 0) + (incT ? ttdBase * share : 0));
     });
     db.issuedPeriods.filter(p => p <= '2026-09').forEach(p => {
-      const ps = db.payments.filter(x => U.inM(x) && A.idx.invoice.get(x.invoiceId).period === p);
+      const ps = db.payments.filter(x => U.inScope(x, xmMkt) && A.idx.invoice.get(x.invoiceId).period === p);
       labels.push(p.slice(5) + '/' + p.slice(2, 4) + (p === '2026-09' ? '*' : ''));
       cash.push(U.sum(ps.filter(x => x.method === 'tm'), x => x.amount));
       non.push(U.sum(ps.filter(x => x.method !== 'tm'), x => x.amount));
@@ -48,27 +51,32 @@
   }
 
   A.VIEWS['tong-quan'] = function () {
-    const s = marketStats(ui.market), db = A.db;
+    // Tổng quan liên chợ = màn cross-market (A.SCREEN_MARKET['tong-quan'] === 'CROSS') — không bị
+    // chặn bởi selectedMarket, dùng bộ lọc nội bộ riêng A.xmMarket()/A.xmScopeBar() (mục 9 Phase 2).
+    const xmMkt = A.xmMarket();
+    const s = marketStats(xmMkt), db = A.db;
     const kpi = (label, value, sub, cls, bar) => `<div class="card kpi"><div class="k-label">${label}</div><div class="k-value">${value}</div>
       ${sub ? `<div class="k-sub ${cls || ''}">${sub}</div>` : ''}${bar != null ? `<div class="bar-mini"><i style="width:${Math.min(100, bar)}%"></i></div>` : ''}</div>`;
-    const rs = revenueSeries();
-    const counts = Object.keys(D.STATUS).map(k => ({ label: D.STATUS[k].label, value: db.stalls.filter(x => U.inM(x) && x.status === k).length, color: D.STATUS[k].color }));
+    const rs = revenueSeries(xmMkt);
+    const counts = Object.keys(D.STATUS).map(k => ({ label: D.STATUS[k].label, value: db.stalls.filter(x => U.inScope(x, xmMkt) && x.status === k).length, color: D.STATUS[k].color }));
     const alerts = [];
-    const exp = db.contracts.filter(c => U.inM(c) && c.status === 'hieuluc' && U.days(U.today(), c.end) <= 30).length;
-    const over60 = new Set(db.invoices.filter(i => U.inM(i) && U.isOver(i) && U.overDays(i) > 60).map(i => i.traderId)).size;
-    const abn = db.readings.filter(r => r.period === '2026-09' && U.inM(A.idx.stall.get(r.stallId)) && r.elecCur != null && (r.elecCur - r.elecPrev) > r.elecAvg * 1.5).length;
+    const exp = db.contracts.filter(c => U.inScope(c, xmMkt) && c.status === 'hieuluc' && U.days(U.today(), c.end) <= 30).length;
+    const over60 = new Set(db.invoices.filter(i => U.inScope(i, xmMkt) && U.isOver(i) && U.overDays(i) > 60).map(i => i.traderId)).size;
+    const abn = db.readings.filter(r => r.period === '2026-09' && U.inScope(A.idx.stall.get(r.stallId), xmMkt) && r.elecCur != null && (r.elecCur - r.elecPrev) > r.elecAvg * 1.5).length;
     const unmatched = db.bank.filter(b => !b.matched).length;
     if (exp) alerts.push(['warn', `${exp} hợp đồng hết hạn trong 30 ngày tới`, 'hop-dong']);
     if (over60) alerts.push(['danger', `${over60} tiểu thương nợ phí quá hạn trên 60 ngày`, 'cong-no']);
     if (s.incLate) alerts.push(['danger', `${s.incLate} phản ánh, sự cố quá thời hạn xử lý`, 'su-co']);
     if (abn) alerts.push(['warn', `${abn} chỉ số điện tăng bất thường so với trung bình`, 'dien-nuoc']);
     if (unmatched) alerts.push(['warn', `${unmatched} giao dịch chuyển khoản chưa khớp khoản thu`, 'doi-soat']);
-    const escal = db.incidents.filter(i => U.inM(i) && i.escalated && i.state !== 'dong');
+    const escal = db.incidents.filter(i => U.inScope(i, xmMkt) && i.escalated && i.state !== 'dong');
 
     const cmp = ['CL', 'TTD'].map(id => [id, marketStats(id)]);
     const cmpRow = (label, f) => `<tr><td>${label}</td>${cmp.map(c => `<td class="num">${f(c[1])}</td>`).join('')}</tr>`;
+    const xmBar = A.xmScopeBar();
 
     return `
+    ${xmBar ? `<div class="card"><div class="card-b row" style="padding-top:14px"><span class="label-sm">Phạm vi xem</span>${xmBar}</div></div>` : ''}
     <div class="kpis">
       ${kpi('Điểm kinh doanh', s.stalls, `Lấp đầy ${U.pctTxt(s.occPct)}`, '', s.occPct)}
       ${kpi('Tiểu thương đang kinh doanh', s.traders, `${U.pctTxt(s.app)} đã dùng mini app`, '', s.app)}
@@ -120,10 +128,10 @@
     const t = st.traderId ? A.idx.trader.get(st.traderId) : null;
     const c = st.contractId ? A.idx.contract.get(st.contractId) : null;
     const unpaid = A.db.invoices.filter(i => i.stallId === st.id && i.status !== 'paid');
-    const canThuTien = A.PERM.canAction(ui.role, 'thu-tien.thu');
-    const canXemHoSo = A.PERM.canAction(ui.role, 'so-do.xem-ho-so');
-    const canTaoHopDong = A.PERM.canAction(ui.role, 'so-do.tao-hop-dong');
-    const canDoiTrangThai = A.PERM.canAction(ui.role, 'so-do.doi-trang-thai');
+    const canThuTien = A.canDo('thu-tien.thu', st.market);
+    const canXemHoSo = A.canDo('so-do.xem-ho-so', st.market);
+    const canTaoHopDong = A.canDo('so-do.tao-hop-dong', st.market) || A.canDo('hop-dong.tao', st.market);
+    const canDoiTrangThai = A.canDo('so-do.doi-trang-thai', st.market);
     const left = c ? U.days(U.today(), c.end) : null;
     return `<div class="row"><h3>${st.code}</h3>${U.statusTag(st.status)}</div>
       <div class="muted small" style="margin:2px 0 12px">${U.esc(st.sectionName)} · ${U.market(st.market).floors.find(f => f.id === st.floor).name} · ${U.mShort(st.market)}</div>
@@ -190,6 +198,7 @@
     stall: el => { ui.sel = el.dataset.id; A.render(); },
     'stall-status': el => {
       const st = A.idx.stall.get(el.dataset.id);
+      if (!A.canDo('so-do.doi-trang-thai', st.market)) return;
       const opts = ['thue', 'ngung', 'tranhchap'].concat(st.traderId ? [] : ['trong']);
       A.modal(A.mHead('Đổi trạng thái điểm ' + st.code) + `<div class="modal-b"><div class="form-grid">
         <div class="field"><label>Trạng thái mới</label><select class="input" id="ss-status">${opts.map(k => `<option value="${k}" ${st.status === k ? 'selected' : ''}>${D.STATUS[k].label}</option>`).join('')}</select></div>
@@ -199,6 +208,7 @@
     },
     'stall-status-save': el => {
       const st = A.idx.stall.get(el.dataset.id);
+      if (!A.canDo('so-do.doi-trang-thai', st.market)) return;
       const ns = A.$('#ss-status').value, reason = A.$('#ss-reason').value.trim();
       st.history = st.history || [];
       st.history.unshift(`${U.dmy(U.today())}: ${D.STATUS[st.status].label} → ${D.STATUS[ns].label}${reason ? ' (' + reason + ')' : ''}`);
@@ -224,7 +234,7 @@
       ${k('Doanh thu tiểu thương (ước)', U.moneyShort(last.revenue), 'tổng hợp tự khai')}
     </div>
     ${pending ? `<div class="card"><div class="card-b row" style="padding-top:16px"><div style="flex:1"><b>Phiên thứ Bảy 12/09/2026 chưa chốt số liệu</b><div class="small muted">Điểm danh quầy tham gia, ghi lượt khách ước tính, hệ thống tự tính phí phiên.</div></div>
-      ${A.PERM.canAction(ui.role, 'phien-cho.chot-phien') ? '<button class="btn primary" data-act="session-open">Điểm danh & chốt phiên 12/09</button>' : ''}</div></div>` : ''}
+      ${A.canDo('phien-cho.chot-phien', ui.market) ? '<button class="btn primary" data-act="session-open">Điểm danh & chốt phiên 12/09</button>' : ''}</div></div>` : ''}
     <div class="grid g2">
       <div class="card"><div class="card-h"><h3>Lượt khách theo phiên</h3></div><div class="card-b">
         ${U.bars(ss.map(s => s.date.slice(8) + '/' + s.date.slice(5, 7)), [{ name: 'Lượt khách (ước)', values: ss.map(s => s.visitors), color: '#c93d6e' }], { fmt: v => Math.round(v).toLocaleString('vi-VN'), stacked: false })}</div></div>
@@ -236,6 +246,7 @@
   };
   Object.assign(A.ACT, {
     'session-open': () => {
+      if (!A.canDo('phien-cho.chot-phien', ui.market)) return;
       const booths = A.db.stalls.filter(s => s.market === 'TTD' && s.traderId);
       A.modal(A.mHead('Điểm danh quầy – phiên 12/09/2026') + `<div class="modal-b">
         <div class="form-grid"><div class="field"><label>Lượt khách ước tính</label><input class="input" id="ses-visitors" type="number" value="2750"></div>
@@ -245,6 +256,7 @@
         <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="session-save">Chốt phiên</button></div>`, true);
     },
     'session-save': () => {
+      if (!A.canDo('phien-cho.chot-phien', ui.market)) return;
       const n = document.querySelectorAll('.ses-b:checked').length;
       A.db.sessions.push({ date: '2026-09-12', booths: n, fee: n * D.SESSION_FEE, visitors: Number(A.$('#ses-visitors').value) || 0, revenue: (Number(A.$('#ses-rev').value) || 0) * 1e6, noncash: 0.41 });
       U.log(`Chốt phiên chợ quê 12/09/2026: ${n} quầy`);

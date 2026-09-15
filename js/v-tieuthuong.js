@@ -53,7 +53,7 @@
     return `<div class="card"><div class="card-h"><h3>${ui.role === 'lanhdao' ? 'Tra cứu tiểu thương' : 'Hồ sơ tiểu thương'}</h3>
       <select class="input" data-ch="tt-app"><option value="">Mini app: tất cả</option><option value="yes" ${f.ttApp === 'yes' ? 'selected' : ''}>Đã cài mini app</option><option value="no" ${f.ttApp === 'no' ? 'selected' : ''}>Chưa cài</option></select>
       <input class="input" placeholder="Tên, SĐT, mã điểm KD" data-in="tt-search" value="${U.esc(f.ttSearch || '')}">
-      ${A.PERM.canAction(ui.role, 'tieu-thuong.them-moi') ? '<button class="btn primary" data-act="tt-new">+ Thêm tiểu thương</button>' : ''}</div>
+      ${A.canDo('tieu-thuong.them-moi', ui.market) ? '<button class="btn primary" data-act="tt-new">+ Thêm tiểu thương</button>' : ''}</div>
       <div class="card-b">${U.table([{ t: 'Mã' }, { t: 'Họ tên' }, { t: 'Điện thoại' }, { t: 'Chợ' }, { t: 'Ngành hàng' }, { t: 'Điểm KD' }, { t: 'Mini app' }, { t: 'Công nợ', num: true }],
         rows.slice(pg.start, pg.end).map(t => {
           const debt = U.traderDebt(t.id), over = U.traderOverdue(t.id);
@@ -84,7 +84,7 @@
       <div class="divider"></div><b>Khoản phải thu gần đây</b>
       ${U.table([{ t: 'Mã' }, { t: 'Kỳ' }, { t: 'Số tiền', num: true }, { t: 'Đã thu', num: true }, { t: 'Trạng thái' }], invs.map(i => `<tr><td>${i.id}</td><td>${U.per(i.period)}</td><td class="num">${U.money(i.amount)}</td><td class="num">${U.money(i.paid)}</td><td>${U.invTag(i)}</td></tr>`))}
       ${pays.length ? `<div class="divider"></div><b>Biên lai gần đây</b>${U.table([{ t: 'Biên lai' }, { t: 'Ngày' }, { t: 'Hình thức' }, { t: 'Số tiền', num: true }], pays.map(p => `<tr class="click" data-act="receipt" data-id="${p.receipt}"><td>${p.receipt}</td><td>${U.dmy(p.date)}</td><td>${D.METHOD[p.method]}</td><td class="num">${U.money(p.amount)}</td></tr>`))}` : ''}
-      </div><div class="modal-f">${A.PERM.canAction(ui.role, 'thu-tien.thu') && U.traderDebt(t.id) ? `<button class="btn primary" data-act="pay-open" data-id="${t.id}">💳 Thu tiền</button>` : ''}<button class="btn" data-act="close">Đóng</button></div>`, true);
+      </div><div class="modal-f">${A.canDo('thu-tien.thu', t.market) && U.traderDebt(t.id) ? `<button class="btn primary" data-act="pay-open" data-id="${t.id}">💳 Thu tiền</button>` : ''}<button class="btn" data-act="close">Đóng</button></div>`, true);
   };
 
   const OCR_SAMPLE = { name: 'Nguyễn Thị Mỹ Duyên', idNo: '087196012345', birth: '1988', gender: 'Nữ', address: 'Khóm 3, phường Cao Lãnh' };
@@ -103,9 +103,10 @@
       </div></div>
       <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="tt-save">Lưu hồ sơ</button></div>`;
   }
-  A.ACT['tt-new'] = () => A.modal(ttForm());
-  A.ACT['tt-ocr'] = () => { A.modal(ttForm(OCR_SAMPLE, true)); U.toast('Đã nhận dạng CCCD (giả lập) – vui lòng kiểm tra lại'); };
+  A.ACT['tt-new'] = () => { if (A.canDo('tieu-thuong.them-moi', ui.market)) A.modal(ttForm()); };
+  A.ACT['tt-ocr'] = () => { if (!A.canDo('tieu-thuong.them-moi', ui.market)) return; A.modal(ttForm(OCR_SAMPLE, true)); U.toast('Đã nhận dạng CCCD (giả lập) – vui lòng kiểm tra lại'); };
   A.ACT['tt-save'] = () => {
+    if (!A.canDo('tieu-thuong.them-moi', ui.market)) return;
     const name = A.$('#nt-name').value.trim(), idNo = A.$('#nt-id').value.trim(), phone = A.$('#nt-phone').value.trim();
     if (!name || !idNo || !phone) { U.toast('Vui lòng nhập đủ họ tên, số CCCD và điện thoại'); return; }
     if (A.db.traders.some(t => t.idNo === idNo)) { U.toast('Số CCCD đã tồn tại trong hệ thống'); return; }
@@ -119,6 +120,9 @@
   // ---------- Hợp đồng ----------
   A.VIEWS['hop-dong'] = function () {
     const q = (f.hdSearch || '').toLowerCase(), tab = ui.contractTab;
+    const canNew = A.canDo('so-do.tao-hop-dong', ui.market) || A.canDo('hop-dong.tao', ui.market);
+    const canExtend = A.canDo('hop-dong.gia-han', ui.market);
+    const canEnd = A.canDo('hop-dong.thanh-ly', ui.market);
     const rows = A.db.contracts.filter(c => U.inM(c)
       && (tab === 'all' ? c.status === 'hieuluc' : tab === 'exp' ? c.status === 'hieuluc' && U.days(U.today(), c.end) <= 30 : c.status === 'thanhly')
       && (!q || c.id.toLowerCase().includes(q) || A.idx.trader.get(c.traderId).name.toLowerCase().includes(q) || A.idx.stall.get(c.stallId).code.toLowerCase().includes(q)))
@@ -128,14 +132,14 @@
     return `<div class="card"><div class="card-h">
       <div class="seg">${[['all', 'Đang hiệu lực'], ['exp', 'Sắp hết hạn ≤ 30 ngày'], ['end', 'Đã thanh lý']].map(x => `<button class="${tab === x[0] ? 'on' : ''}" data-act="hd-tab" data-id="${x[0]}">${x[1]} (${n(x[0])})</button>`).join('')}</div>
       <span class="spacer"></span><input class="input" placeholder="Số HĐ, tiểu thương, mã điểm" data-in="hd-search" value="${U.esc(f.hdSearch || '')}">
-      <button class="btn primary" data-act="ct-new">+ Tạo hợp đồng</button></div>
+      ${canNew ? '<button class="btn primary" data-act="ct-new">+ Tạo hợp đồng</button>' : ''}</div>
       <div class="card-b">${U.table([{ t: 'Số hợp đồng' }, { t: 'Tiểu thương' }, { t: 'Điểm KD' }, { t: 'Loại' }, { t: 'Thời hạn' }, { t: 'Còn lại', num: true }, { t: 'Giá/tháng', num: true }, { t: 'Bản số hóa' }, { t: '' }],
         rows.slice(pg.start, pg.end).map(c => {
           const left = U.days(U.today(), c.end);
           return `<tr><td>${c.id}</td><td><a href="#" data-act="trader" data-id="${c.traderId}">${U.esc(A.idx.trader.get(c.traderId).name)}</a></td><td>${A.idx.stall.get(c.stallId).code}</td><td class="small">${c.kind}</td>
             <td class="nowrap">${U.dmy(c.start)} – ${U.dmy(c.end)}</td><td class="num">${c.status === 'hieuluc' ? (left <= 30 ? `<span class="tag danger">${left} ngày</span>` : left + ' ngày') : '–'}</td>
             <td class="num">${c.monthly ? U.money(c.monthly) : 'Theo phiên'}</td><td>${c.scanned ? '<span class="tag info">PDF</span>' : '<span class="tag warn">Chưa scan</span>'}</td>
-            <td class="nowrap">${c.status === 'hieuluc' ? `<button class="btn sm" data-act="ct-extend" data-id="${c.id}">Gia hạn</button> <button class="btn sm danger" data-act="ct-end" data-id="${c.id}">Thanh lý</button>` : ''}</td></tr>`;
+            <td class="nowrap">${c.status === 'hieuluc' ? `${canExtend ? `<button class="btn sm" data-act="ct-extend" data-id="${c.id}">Gia hạn</button>` : ''} ${canEnd ? `<button class="btn sm danger" data-act="ct-end" data-id="${c.id}">Thanh lý</button>` : ''}` : ''}</td></tr>`;
         }))}${pg.html}
         <div class="small muted" style="margin-top:8px">Hệ thống tự cảnh báo và gửi thông báo cho tiểu thương khi hợp đồng sắp hết hạn.</div></div></div>`;
   };
@@ -143,25 +147,32 @@
   A.IN['hd-search'] = el => { f.hdSearch = el.value; ui.page['hd' + ui.contractTab] = 0; A.render(); };
   A.ACT['ct-extend'] = el => {
     const c = A.idx.contract.get(el.dataset.id);
+    if (!A.canDo('hop-dong.gia-han', c.market)) return;
     A.modal(A.mHead('Gia hạn ' + c.id) + `<div class="modal-b"><p>Hợp đồng hiện hết hạn ngày <b>${U.dmy(c.end)}</b>.</p>
       <div class="field"><label>Gia hạn thêm</label><select class="input" id="ext-m"><option value="12">12 tháng</option><option value="24">24 tháng</option><option value="36" selected>36 tháng</option></select></div></div>
       <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="ct-extend-save" data-id="${c.id}">Gia hạn</button></div>`);
   };
   A.ACT['ct-extend-save'] = el => {
-    const c = A.idx.contract.get(el.dataset.id), m = Number(A.$('#ext-m').value);
+    const c = A.idx.contract.get(el.dataset.id);
+    if (!A.canDo('hop-dong.gia-han', c.market)) return;
+    const m = Number(A.$('#ext-m').value);
     const d = new Date(c.end); d.setMonth(d.getMonth() + m);
     c.end = d.toISOString().slice(0, 10);
     U.log(`Gia hạn hợp đồng ${c.id} thêm ${m} tháng`);
     A.save(); A.closeModal(); A.render(); U.toast(`Đã gia hạn ${c.id} đến ${U.dmy(c.end)}`);
   };
   A.ACT['ct-end'] = el => {
-    const c = A.idx.contract.get(el.dataset.id), debt = U.sum(A.db.invoices.filter(i => i.contractId === c.id && i.status !== 'paid'), U.due);
+    const c = A.idx.contract.get(el.dataset.id);
+    if (!A.canDo('hop-dong.thanh-ly', c.market)) return;
+    const debt = U.sum(A.db.invoices.filter(i => i.contractId === c.id && i.status !== 'paid'), U.due);
     A.modal(A.mHead('Thanh lý ' + c.id) + `<div class="modal-b"><p>Thanh lý hợp đồng với <b>${U.esc(A.idx.trader.get(c.traderId).name)}</b> tại điểm <b>${A.idx.stall.get(c.stallId).code}</b>. Điểm kinh doanh sẽ chuyển sang "Còn trống".</p>
       ${debt ? `<div class="note">Tiểu thương còn nợ ${U.money(debt)}. Cần thu hoặc cấn trừ tiền đặt cọc trước khi thanh lý.</div>` : ''}</div>
       <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn danger" data-act="ct-end-save" data-id="${c.id}">Xác nhận thanh lý</button></div>`);
   };
   A.ACT['ct-end-save'] = el => {
-    const c = A.idx.contract.get(el.dataset.id), st = A.idx.stall.get(c.stallId), t = A.idx.trader.get(c.traderId);
+    const c = A.idx.contract.get(el.dataset.id);
+    if (!A.canDo('hop-dong.thanh-ly', c.market)) return;
+    const st = A.idx.stall.get(c.stallId), t = A.idx.trader.get(c.traderId);
     c.status = 'thanhly'; c.end = U.today();
     st.history = st.history || []; st.history.unshift(`${U.dmy(U.today())}: thanh lý ${c.id} (${t.name})`);
     st.status = 'trong'; st.traderId = null; st.contractId = null;
@@ -170,6 +181,7 @@
     A.save(); A.closeModal(); A.render(); U.toast('Đã thanh lý ' + c.id);
   };
   A.ACT['ct-new'] = el => {
+    if (!A.canDo('so-do.tao-hop-dong', ui.market) && !A.canDo('hop-dong.tao', ui.market)) return;
     const pre = el.dataset.id;
     const empty = A.db.stalls.filter(s => s.status === 'trong' && (pre ? s.id === pre : U.inM(s)));
     if (!empty.length) { U.toast('Không còn điểm kinh doanh trống'); return; }
@@ -184,7 +196,9 @@
       <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="ct-new-save">Tạo hợp đồng</button></div>`);
   };
   A.ACT['ct-new-save'] = () => {
-    const st = A.idx.stall.get(A.$('#nc-stall').value), t = A.idx.trader.get(A.$('#nc-trader').value), term = Number(A.$('#nc-term').value);
+    const st = A.idx.stall.get(A.$('#nc-stall').value);
+    if (!st || st.status !== 'trong' || (!A.canDo('so-do.tao-hop-dong', st.market) && !A.canDo('hop-dong.tao', st.market))) return;
+    const t = A.idx.trader.get(A.$('#nc-trader').value), term = Number(A.$('#nc-term').value);
     const end = new Date(U.today()); end.setMonth(end.getMonth() + term); end.setDate(end.getDate() - 1);
     const unit = st.type === 'phien' ? D.SESSION_FEE : D.UNIT[st.type];
     const monthly = st.type === 'phien' ? 0 : Math.round(st.area * unit * 30 / 1000) * 1000;
