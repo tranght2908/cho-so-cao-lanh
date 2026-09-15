@@ -442,7 +442,7 @@
     const tab = tabs.some(t => t[0] === ui.dsTab) ? ui.dsTab : tabs[0][0];
     const tabBar = tabs.length > 1
       ? `<div class="seg">${tabs.map(t => `<button class="${tab === t[0] ? 'on' : ''}" data-act="ds-tab" data-id="${t[0]}">${t[1]}</button>`).join('')}</div>`
-      : `<h3 style="margin:0">${tabs[0][1]}</h3>`;
+      : `<h3 style="margin:0;font-size:var(--font-size-md)">${tabs[0][1]}</h3>`;
     const timeBar = `<div class="card"><div class="card-b" style="padding-top:14px">${financeTimeBarRow('Kỳ khoản thu')}
       <div class="row small" style="margin-top:8px;flex-wrap:wrap"><span class="label-sm">Ngày giao dịch</span>
         <input type="date" class="input" style="width:150px" data-ch="ds-from" value="${dsTxFrom()}"><span class="muted">→</span>
@@ -508,7 +508,7 @@
       AMOUNT_MISMATCH: ['Tìm thấy khoản phải thu qua mã tham chiếu', 'Số tiền chuyển khoản không khớp số tiền phải thu'],
       NEEDS_REVIEW: ['Nội dung chuyển khoản chưa đủ rõ để xác định khoản phải thu']
     }[b.status] || [];
-    return `<div class="drawer-h"><div><h3 style="margin:0;font-size:16px">Truy vết giao dịch ${b.id}</h3><div class="small muted">${U.mShort(b.market)}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
+    return `<div class="drawer-h"><div><h3>Truy vết giao dịch ${b.id}</h3><div class="small muted">${U.mShort(b.market)}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
       <div class="drawer-b">
         <b class="small">1. Sao kê ngân hàng</b>
         <dl class="kv" style="margin-top:6px"><dt>Mã</dt><dd>${b.id}</dd><dt>Thời gian</dt><dd>${U.dmy(b.date || U.today())} ${b.time}</dd>
@@ -653,7 +653,7 @@
         <div class="small">Người nộp: ${U.esc(U.staffName(d.employeeId))} · Người nhận: ${U.esc(U.staffName(d.receivedBy))}</div>
         ${d.attachment ? `<button class="btn sm" style="margin-top:4px" data-act="ds-cash-att" data-id="${d.id}">📎 Xem chứng từ</button>` : ''}
       </div>`).join('') : '<div class="small muted">Chưa có lần nộp quỹ nào</div>';
-    return `<div class="drawer-h"><div><h3 style="margin:0;font-size:16px">Đối soát tiền mặt · ${U.esc(U.staffName(e.employeeId))}</h3><div class="small muted">${U.mShort(e.market)} · ${U.dmy(U.today())}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
+    return `<div class="drawer-h"><div><h3>Đối soát tiền mặt · ${U.esc(U.staffName(e.employeeId))}</h3><div class="small muted">${U.mShort(e.market)} · ${U.dmy(U.today())}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
       <div class="drawer-b">
         <b class="small">Biên lai tiền mặt</b><div style="margin-top:6px">${receiptRows}</div>
         <div class="row" style="margin-top:6px"><b>Tổng theo biên lai</b><span class="spacer"></span><b>${U.money(e.collected)}</b></div>
@@ -716,7 +716,7 @@
     return timeBar + `<div class="grid g2">
       <div class="card"><div class="card-h"><h3>Phân loại nợ theo số ngày quá hạn</h3></div><div class="card-b">
         ${buckets.map(b => `<div style="margin:10px 0"><div class="row small"><b style="width:100px">${b.label}</b><span class="muted">${b.n} tiểu thương</span><span class="spacer"></span><b>${U.money(b.amt)}</b></div><div class="bar-mini" style="height:10px"><i style="width:${b.amt * 100 / maxAmt}%;background:#d6453b"></i></div></div>`).join('')}
-        <div class="divider"></div><div class="row"><b>Tổng nợ quá hạn</b><span class="spacer"></span><b style="color:#d6453b;font-size:18px">${U.money(U.sum(over, U.due))}</b></div></div></div>
+        <div class="divider"></div><div class="row"><b>Tổng nợ quá hạn</b><span class="spacer"></span><b style="color:#d6453b;font-size:var(--font-size-lg)">${U.money(U.sum(over, U.due))}</b></div></div></div>
       <div class="card"><div class="card-h"><h3>Lịch nhắc nợ tự động</h3></div><div class="card-b small">
         <div class="row" style="padding:6px 0"><span class="tag info">Ngày 12</span>Nhắc trước hạn 3 ngày qua Mini app, Zalo OA</div>
         <div class="row" style="padding:6px 0"><span class="tag warn">Ngày 16</span>Thông báo quá hạn lần 1</div>

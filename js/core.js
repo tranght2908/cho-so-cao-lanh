@@ -240,7 +240,7 @@ window.APP = (function () {
   //              vụ/trader context riêng, không theo selectedMarket).
   A.SCREEN_MARKET = {
     'tong-quan': 'CROSS', 'bao-cao': 'CROSS',
-    'cau-truc': 'BOTH', 'so-do': 'BOTH', 'diem-kd': 'BOTH', 'tieu-thuong': 'BOTH', 'hop-dong': 'BOTH',
+    'mat-bang': 'BOTH', 'diem-kd': 'BOTH', 'tieu-thuong': 'BOTH', 'hop-dong': 'BOTH',
     'cau-hinh-gia': 'BOTH',
     'phai-thu': 'BOTH', 'thu-tien': 'BOTH', 'doi-soat': 'BOTH', 'cong-no': 'BOTH',
     'su-co': 'BOTH', 'thong-bao': 'BOTH',
@@ -396,8 +396,12 @@ window.APP = (function () {
     { group: 'Điều hành', items: [
       { id: 'tong-quan', ico: '📊', label: 'Tổng quan liên chợ' },
       { sub: 'Hạ tầng chợ' },
-      { id: 'cau-truc', ico: '🧱', label: 'Thiết lập mặt bằng chợ' },
-      { id: 'so-do', ico: '🗺️', label: 'Sơ đồ mặt bằng' },
+      // Phase 7: UI "Thiết lập mặt bằng chợ" + "Sơ đồ mặt bằng" đã gộp thành 1 workspace "Mặt bằng
+      // chợ" (MARKET_LAYOUT_UX_HOTFIX_REPORT.md) và nay RBAC cũng chuẩn hóa theo — 2 screen
+      // permission cũ 'so-do'/'cau-truc' gộp thành DUY NHẤT 'mat-bang', route chính #/mat-bang.
+      // Hash cũ #/so-do, #/cau-truc vẫn redirect an toàn về #/mat-bang (xem A.route()). Xem
+      // MARKET_LAYOUT_SCREEN_PERMISSION_AUDIT.md + MARKET_LAYOUT_SCREEN_PERMISSION_IMPLEMENTATION_REPORT.md.
+      { id: 'mat-bang', ico: '🗺️', label: 'Mặt bằng chợ' },
       { id: 'diem-kd', ico: '🏪', label: 'Điểm kinh doanh' },
       { id: 'phien-cho', ico: '🪷', label: 'Phiên chợ quê' }
     ] },
@@ -432,8 +436,12 @@ window.APP = (function () {
     // render menu/route — mỗi lần render đều chạy qua đây.
     A.syncAccountContext();
     $('#nav').innerHTML = A.MENU.map(g => {
-      // "sub" là nhãn phụ nhóm menu con (không phải màn hình), chỉ để hiển thị — không qua U.can
-      const raw = g.items.filter(it => it.sub || U.can(it.id));
+      // "sub" là nhãn phụ nhóm menu con (không phải màn hình), chỉ để hiển thị — không qua U.can.
+      // `hidden` (không còn mục nào dùng sau Phase 7 — trước đó 'cau-truc' từng đánh dấu hidden để
+      // gộp UI với 'so-do', nay cả 2 đã hợp nhất thành đúng 1 entry 'mat-bang'): vẫn giữ lại cơ chế
+      // lọc này (loại khỏi DANH SÁCH LINK hiển thị nhưng KHÔNG ảnh hưởng U.can()/A.menuItem()/route
+      // trực tiếp qua hash) phòng khi cần dùng lại cho 1 màn khác sau này.
+      const raw = g.items.filter(it => it.sub || (U.can(it.id) && !it.hidden));
       const items = raw.filter((it, i) => !it.sub || raw.slice(i + 1).some(x => !x.sub));
       if (!items.some(it => !it.sub)) return '';
       return `<div class="nav-group">${g.group}</div>` + items.map(it => {
@@ -490,6 +498,12 @@ window.APP = (function () {
     // đổi account/market mà chưa qua chrome() lần nào.
     A.syncAccountContext();
     let r = (location.hash || '').replace(/^#\/?/, '');
+    // Phase 7 — tương thích ngược 2 hash cũ trước khi chuẩn hóa screen permission (so-do/cau-truc
+    // → mat-bang, xem MARKET_LAYOUT_SCREEN_PERMISSION_IMPLEMENTATION_REPORT.md): đổi thẳng sang
+    // 'mat-bang' NGAY TẠI ĐÂY, trước khi đánh giá U.can(r) — không cần nhánh xử lý riêng, logic
+    // fallback U.can(r)/A.firstAccessibleScreen() ngay dưới đây tự áp dụng y hệt mọi route khác
+    // (account không có quyền 'mat-bang' thì tự rơi về fallback, không trắng trang/không loop).
+    if (r === 'so-do' || r === 'cau-truc') r = 'mat-bang';
     // NO SCREEN PERMISSION = NO SCREEN RENDER: route yêu cầu (từ hash, kể cả gõ thẳng URL) chỉ
     // được nhận nếu U.can(r) đúng — U.can() đã bao gồm cả permission LẪN market applicability
     // (Phase 2), nên 1 route trước đó hợp lệ (vd. phien-cho khi đang TTD) sẽ tự động bị chặn nếu

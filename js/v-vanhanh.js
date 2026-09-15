@@ -243,7 +243,7 @@
   function accDrawerHtml(a) {
     const canEdit = A.canDo('tai-khoan.sua');
     return `<div class="drawer-h"><span class="avatar lg">${U.esc(accInitials(a.fullName))}</span>
-        <div><h3 style="margin:0;font-size:16px">${U.esc(a.fullName)}</h3><div class="small muted">${U.esc(a.code)} · ${a.status === 'active' ? '<span class="tag ok">Hoạt động</span>' : '<span class="tag danger">Tạm khoá</span>'}</div></div>
+        <div><h3>${U.esc(a.fullName)}</h3><div class="small muted">${U.esc(a.code)} · ${a.status === 'active' ? '<span class="tag ok">Hoạt động</span>' : '<span class="tag danger">Tạm khoá</span>'}</div></div>
         <span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
       <div class="drawer-b">
         <dl class="kv">
@@ -300,7 +300,7 @@
     const k = (l, v) => `<div class="card kpi"><div class="k-label">${l}</div><div class="k-value">${v}</div></div>`;
     return `
     <div class="card"><div class="card-b row" style="padding-top:14px">
-      <div><h3 style="margin:0">Tài khoản người dùng</h3><div class="small muted">Quản lý và tra cứu các tài khoản được phép sử dụng hệ thống.</div></div>
+      <div><h3 style="margin:0;font-size:var(--font-size-md)">Tài khoản người dùng</h3><div class="small muted">Quản lý và tra cứu các tài khoản được phép sử dụng hệ thống.</div></div>
       <span class="spacer"></span>
       ${canCreate ? '<button class="btn primary" data-act="acc-new">+ Thêm tài khoản</button>' : ''}</div></div>
     <div class="kpis">
@@ -560,7 +560,7 @@
   }
   function cfgPriceDrawerHtml(r) {
     const canManage = cfgPriceMutateAllowed('stallPrices', r);
-    return `<div class="drawer-h"><div><h3 style="margin:0;font-size:16px">Đơn giá mặt bằng</h3><div class="small muted">${U.mShort(r.marketId)} · ${cfgStatusTag(r.status)}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
+    return `<div class="drawer-h"><div><h3>Đơn giá mặt bằng</h3><div class="small muted">${U.mShort(r.marketId)} · ${cfgStatusTag(r.status)}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
       <div class="drawer-b">
         <dl class="kv"><dt>Chợ</dt><dd>${U.esc(U.market(r.marketId).name)}</dd><dt>Khu vực</dt><dd>${U.esc(r.area)}</dd>
           <dt>Loại điểm</dt><dd>${U.esc(r.stallType)}</dd><dt>Đơn giá</dt><dd><b>${r.amount.toLocaleString('vi-VN')} ${U.esc(r.unit)}</b></dd>
@@ -607,7 +607,7 @@
   }
   function cfgUtilDrawerHtml(r) {
     const canManage = cfgPriceMutateAllowed('utilities', r);
-    return `<div class="drawer-h"><div><h3 style="margin:0;font-size:16px">Điện & nước</h3><div class="small muted">${U.mShort(r.marketId)} · ${cfgStatusTag(r.status)}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
+    return `<div class="drawer-h"><div><h3>Điện & nước</h3><div class="small muted">${U.mShort(r.marketId)} · ${cfgStatusTag(r.status)}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
       <div class="drawer-b">
         <dl class="kv"><dt>Chợ</dt><dd>${U.esc(U.market(r.marketId).name)}</dd><dt>Giá điện</dt><dd><b>${r.elecPrice.toLocaleString('vi-VN')} đ/kWh</b></dd>
           <dt>Giá nước</dt><dd><b>${r.waterPrice.toLocaleString('vi-VN')} đ/m³</b></dd><dt>Hiệu lực từ</dt><dd>${U.dmy(r.effectiveFrom)}</dd></dl>
@@ -657,7 +657,7 @@
   }
   function cfgSvcDrawerHtml(r) {
     const canManage = cfgPriceMutateAllowed('extraServices', r);
-    return `<div class="drawer-h"><div><h3 style="margin:0;font-size:16px">${U.esc(r.name)}${cfgAllBadge(r)}</h3><div class="small muted">${r.marketId === 'ALL' ? 'Tất cả chợ (cũ)' : U.mShort(r.marketId)} · ${cfgStatusTag(r.status)}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
+    return `<div class="drawer-h"><div><h3>${U.esc(r.name)}${cfgAllBadge(r)}</h3><div class="small muted">${r.marketId === 'ALL' ? 'Tất cả chợ (cũ)' : U.mShort(r.marketId)} · ${cfgStatusTag(r.status)}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
       <div class="drawer-b">
         <dl class="kv"><dt>Tên dịch vụ</dt><dd>${U.esc(r.name)}</dd><dt>Cách tính</dt><dd>${CFG_CALC_LABELS[r.calcMethod] || r.calcMethod}</dd>
           <dt>Đơn giá</dt><dd><b>${r.amount.toLocaleString('vi-VN')} ${U.esc(r.unit)}</b></dd><dt>Hiệu lực từ</dt><dd>${U.dmy(r.effectiveFrom)}</dd></dl>

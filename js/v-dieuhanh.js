@@ -109,14 +109,75 @@
         </tbody></table></div></div></div>
       <div class="card"><div class="card-h"><h3>Cảnh báo cần xử lý</h3></div><div class="card-b">
         ${alerts.length ? alerts.map(a => `<div class="row" style="padding:8px 0;border-bottom:1px solid #eef2f0"><span class="tag ${a[0]}">${a[0] === 'danger' ? 'Khẩn' : 'Lưu ý'}</span><span style="flex:1">${a[1]}</span>${U.can(a[2]) ? `<button class="btn sm" data-act="go" data-to="${a[2]}">Xem</button>` : ''}</div>`).join('') : '<div class="empty">Không có cảnh báo</div>'}
-        <h4 style="margin:16px 0 6px;font-size:13.5px">Phản ánh chuyển vượt cấp lên UBND phường</h4>
+        <h4 style="margin:16px 0 6px;font-size:var(--font-size-sm)">Phản ánh chuyển vượt cấp lên UBND phường</h4>
         ${escal.length ? escal.map(i => `<div class="row small" style="padding:6px 0"><span class="tag purple">${i.id}</span><span style="flex:1">${U.esc(i.title)} · ${U.mShort(i.market)}</span><button class="btn sm" data-act="inc-open" data-id="${i.id}">Mở</button></div>`).join('') : '<div class="small muted">Không có</div>'}
       </div></div>
     </div>`;
   };
 
-  // ---------- Sơ đồ mặt bằng ----------
-  function planMarket() { return ui.market === 'ALL' ? ui.planMarket : ui.market; }
+  // ---------- Mặt bằng chợ (gộp UI "Thiết lập mặt bằng chợ" + "Sơ đồ mặt bằng") ----------
+  // Sau hotfix UX (xem MARKET_LAYOUT_UX_HOTFIX_REPORT.md): KHÔNG còn "edit mode" như 1 route/trang
+  // riêng nữa — action thêm/sửa/xóa cấu trúc hiện NGAY trên cây, permission cho phép tới đâu thì
+  // action tự hiện tới đó (không cần bấm "Thiết lập mặt bằng" trước). Toàn bộ cây + action cấu
+  // trúc chuyển hẳn sang js/v-cautruc.js (nơi giữ model LAYOUT + 26 handler qh-* — KHÔNG đổi logic
+  // 1 dòng nào). File này chỉ còn giữ đúng phần liên quan tới điểm kinh doanh THẬT
+  // (D.MARKETS/A.db.stalls): A.stallPanel (drawer điểm KD, không đổi) + 2 hàm dùng chung
+  // A.mbOverviewHtml/A.mbZoneDiagramHtml render vùng sơ đồ bên phải — js/v-cautruc.js gọi 2 hàm
+  // này, truyền vào (các) khu LAYOUT hiện có; 2 hàm tự đối chiếu với dữ liệu thật qua
+  // `zone.code === section.id` (đúng cách defaultLayout() đã seed — xem js/v-cautruc.js) để hiển
+  // thị đúng trạng thái thực tế cho khu đã triển khai, hoặc thông tin quy hoạch cho khu chưa khớp
+  // dữ liệu thật. Không tạo model/permission mặt bằng thứ hai, không đổi
+  // 'screen:mat-bang' (Phase 7 — screen permission duy nhất, thay 'screen:so-do'/'screen:cau-truc'
+  // cũ)/so-do.*/cau-truc.* (6 action permKey GIỮ NGUYÊN, không đổi ở Phase 7).
+  function mbMatchRealSection(mid, code) {
+    const m = U.market(mid);
+    for (const f of m.floors) { const s = f.sections.find(x => x.id === code); if (s) return { floor: f, section: s }; }
+    return null;
+  }
+  A.mbOverviewHtml = function (mid, zones) {
+    const cards = zones.map(z => {
+      const matched = mbMatchRealSection(mid, z.code);
+      let body;
+      if (matched) {
+        const stalls = A.db.stalls.filter(st => st.market === mid && st.section === z.code);
+        const c = k => stalls.filter(st => st.status === k).length;
+        const parts = Object.keys(D.STATUS).filter(k => c(k)).map(k => `${c(k)} ${D.STATUS[k].label.toLowerCase()}`).join(' · ');
+        body = `<div style="margin-top:8px">${stalls.length} điểm</div><div class="small muted">${parts || 'Chưa có điểm kinh doanh'}</div>`;
+      } else {
+        const planned = U.sum(z.planned, p => Number(p.qty) || 0);
+        body = `<div style="margin-top:8px">${planned} điểm dự kiến</div><div class="small muted">Khu đang quy hoạch — chưa có dữ liệu thực tế</div>`;
+      }
+      return `<div class="card mb-ov-card" data-act="mb-sel-zone" data-id="${z.key}"><div class="card-b" style="padding-top:14px">
+        <b>${U.esc(z.name || '(chưa đặt tên)')}</b><div class="small muted" style="margin-top:2px">${U.esc(z.code || '')}${z.status === 'nhap' ? ' · <span class="tag warn">Nháp</span>' : ''}</div>
+        ${body}</div></div>`;
+    });
+    return `<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">${cards.join('') || '<div class="empty">Chưa có khu vực nào.</div>'}</div>`;
+  };
+  A.mbZoneDiagramHtml = function (mid, z, canEditZone) {
+    const matched = mbMatchRealSection(mid, z.code);
+    const editBtn = canEditZone ? `<button class="btn sm" data-act="qh-zone-edit-open" data-id="${z.key}">✎ Sửa thông tin khu</button>` : '';
+    if (!matched) {
+      const totalQty = U.sum(z.planned, p => Number(p.qty) || 0), totalArea = U.sum(z.planned, p => (Number(p.std) || 0) * (Number(p.qty) || 0));
+      return `<div class="card"><div class="card-h"><h3>${U.esc(z.name || '(chưa đặt tên)')}</h3><span class="small muted">${U.esc(z.code || '')} · quy hoạch</span><span class="spacer"></span>${editBtn}</div>
+        <div class="card-b"><div class="note info">Khu này đang ở giai đoạn quy hoạch, chưa có điểm kinh doanh thực tế tương ứng (mã "${U.esc(z.code || '')}" chưa khớp khu vực nào trong sơ đồ thật).</div>
+        <div class="row" style="margin-top:10px"><span>Số điểm dự kiến</span><span class="spacer"></span><b>${totalQty.toLocaleString('vi-VN')}</b></div>
+        <div class="row"><span>Diện tích dự kiến</span><span class="spacer"></span><b>${totalArea.toLocaleString('vi-VN')} m²</b></div></div></div>`;
+    }
+    const f = matched.floor, sec = matched.section;
+    const stalls = A.db.stalls.filter(st => st.market === mid && st.floor === f.id && st.section === sec.id);
+    const legend = Object.keys(D.STATUS).map(k => `<button class="${ui.hidden[k] ? 'off' : ''}" data-act="legend" data-s="${k}"><span class="sw" style="background:${D.STATUS[k].color}"></span>${D.STATUS[k].label} <b>${stalls.filter(st => st.status === k).length}</b></button>`).join('');
+    const rows = sec.rows.map(r => {
+      const cells = stalls.filter(st => st.row === r);
+      return `<div class="plan-row"><span class="rl">${r}</span><div class="cells" style="--n:${sec.per}">${cells.map(st => {
+        const t = st.traderId ? A.idx.trader.get(st.traderId) : null;
+        return `<button class="cell s-${st.status} ${sec.type === 'kiot' ? 'kiot' : ''} ${stallMatch(st) ? '' : 'dim'} ${ui.sel === st.id ? 'sel' : ''}" data-act="stall" data-id="${st.id}" title="${st.code} · ${D.STATUS[st.status].label}${t ? ' · ' + U.esc(t.name) : ''}">${st.num}</button>`;
+      }).join('')}</div></div>`;
+    }).join('<div class="aisle"></div>');
+    return `<div class="card"><div class="card-h">
+        <h3>${U.esc(sec.name)}</h3><span class="small muted">${stalls.length} điểm · ${U.esc(sec.cat)} · ${f.name}</span>
+        <span class="spacer"></span>${editBtn}<input class="input" style="width:220px" placeholder="Tìm mã điểm hoặc tên tiểu thương" data-in="plan-search" value="${U.esc(ui.planSearch)}"></div>
+      <div class="card-b"><div class="legend" style="margin-bottom:10px">${legend}</div><div class="plan">${rows}</div></div></div>`;
+  };
   function stallMatch(st) {
     const q = ui.planSearch.trim().toLowerCase();
     if (ui.hidden[st.status]) return false;
@@ -151,51 +212,20 @@
       ${st.history && st.history.length ? `<div class="divider"></div><div class="small"><b>Lịch sử thay đổi</b>${st.history.map(h => `<div class="muted">${h}</div>`).join('')}</div>` : ''}`;
   };
 
-  A.VIEWS['so-do'] = function () {
-    const mid = planMarket(), m = U.market(mid);
-    if (!m.floors.find(f => f.id === ui.floor[mid])) ui.floor[mid] = m.floors[0].id;
-    const f = m.floors.find(x => x.id === ui.floor[mid]);
-    const mStalls = A.db.stalls.filter(s => s.market === mid);
-    const legend = Object.keys(D.STATUS).map(k => `<button class="${ui.hidden[k] ? 'off' : ''}" data-act="legend" data-s="${k}"><span class="sw" style="background:${D.STATUS[k].color}"></span>${D.STATUS[k].label} <b>${mStalls.filter(s => s.status === k).length}</b></button>`).join('');
-    let plan;
-    if (f.parking) {
-      plan = `<div class="parking"><div style="font-size:30px">🅿️</div><b>${f.name}</b><div>${f.desc}</div><div class="small" style="margin-top:6px">Công năng theo dự án chợ mới: bãi xe và khu kỹ thuật (số chỗ để xe sẽ cập nhật khi bàn giao).</div></div>`;
-    } else {
-      plan = f.sections.map(sec => {
-        const rows = sec.rows.map(r => {
-          const cells = mStalls.filter(s => s.section === sec.id && s.row === r);
-          return `<div class="plan-row"><span class="rl">${r}</span><div class="cells" style="--n:${sec.per}">${cells.map(st => {
-            const t = st.traderId ? A.idx.trader.get(st.traderId) : null;
-            return `<button class="cell s-${st.status} ${st.type === 'kiot' ? 'kiot' : ''} ${stallMatch(st) ? '' : 'dim'} ${ui.sel === st.id ? 'sel' : ''}" data-act="stall" data-id="${st.id}" title="${st.code} · ${D.STATUS[st.status].label}${t ? ' · ' + U.esc(t.name) : ''}">${st.num}</button>`;
-          }).join('')}</div></div>`;
-        }).join('<div class="aisle"></div>');
-        return `<div class="plan-section"><h4>${sec.name}<span>${sec.cat} · ${U.typeLabel(sec.type)} · ${sec.rows.length * sec.per} điểm</span></h4>${rows}</div>`;
-      }).join('');
-    }
-    const st = ui.sel ? A.idx.stall.get(ui.sel) : null;
-    return `
-    <div class="card"><div class="card-b" style="padding-top:14px">
-      <div class="row">
-        ${ui.market === 'ALL' ? `<div class="seg">${['CL', 'TTD'].map(id => `<button class="${mid === id ? 'on' : ''}" data-act="plan-market" data-id="${id}">${U.mShort(id)}</button>`).join('')}</div>` : ''}
-        <div class="seg">${m.floors.map(x => `<button class="${x.id === f.id ? 'on' : ''}" data-act="plan-floor" data-id="${x.id}">${x.name}</button>`).join('')}</div>
-        <span class="spacer"></span>
-        <input class="input" style="width:230px" placeholder="Tìm mã điểm hoặc tên tiểu thương" data-in="plan-search" value="${U.esc(ui.planSearch)}">
-      </div>
-      <div class="small muted" style="margin:10px 0">${U.esc(m.name)} · ${m.hang} · ${U.esc(m.address)} · ${U.esc(m.note)}</div>
-      <div class="legend">${legend}</div>
-    </div></div>
-    <div class="grid g-main" style="align-items:start">
-      <div class="card"><div class="card-h"><h3>${f.name} – ${U.esc(f.desc)}</h3><span class="small muted">Bấm vào một ô để xem chi tiết</span></div><div class="card-b"><div class="plan">${plan}</div></div></div>
-      <div class="card detail" style="position:sticky;top:70px"><div class="card-b" style="padding-top:16px">${st ? A.stallPanel(st) : '<div class="empty">Chọn một điểm kinh doanh trên sơ đồ để xem tiểu thương, hợp đồng và công nợ.</div>'}</div></div>
-    </div>
-    <div class="note info">${U.esc(m.priceNote)}.</div>`;
-  };
-
+  // A.VIEWS['mat-bang'] giờ định nghĩa ở js/v-cautruc.js (mbWorkspaceHtml) — nơi giữ cây cấu trúc +
+  // model LAYOUT. File này chỉ còn giữ đúng phần thao tác điểm kinh doanh thật (drawer khi click 1
+  // điểm trên sơ đồ) dùng chung cho cả route 'mat-bang' lẫn màn "Điểm kinh doanh" (screen:diem-kd,
+  // độc lập, không đổi).
   Object.assign(A.ACT, {
-    'plan-market': el => { ui.planMarket = el.dataset.id; ui.sel = null; A.render(); },
-    'plan-floor': el => { ui.floor[planMarket()] = el.dataset.id; ui.sel = null; A.render(); },
     legend: el => { ui.hidden[el.dataset.s] = !ui.hidden[el.dataset.s]; A.render(); },
-    stall: el => { ui.sel = el.dataset.id; A.render(); },
+    stall: el => {
+      ui.sel = el.dataset.id;
+      const st = A.idx.stall.get(ui.sel);
+      A.$('#modal-root').innerHTML = `<div class="drawer-overlay" data-act="close"></div><div class="drawer">
+        <div class="drawer-h"><div><h3>${st.code}</h3><div class="small muted" style="margin-top:2px">${U.statusTag(st.status)}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
+        <div class="drawer-b">${A.stallPanel(st)}</div></div>`;
+      A.render();
+    },
     'stall-status': el => {
       const st = A.idx.stall.get(el.dataset.id);
       if (!A.canDo('so-do.doi-trang-thai', st.market)) return;

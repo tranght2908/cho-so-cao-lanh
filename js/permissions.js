@@ -16,9 +16,10 @@
  * handler đều đọc lại `STATE` mới ngay — không có ma trận nào bị hard-code cứng trong view.
  *
  * Nguyên tắc least-privilege đã áp dụng: `technician` KHÔNG có bất kỳ action permission nào ở V1
- * (chỉ có `screen:su-co`/`screen:so-do` — xem được nhưng chưa thao tác được, chờ xác nhận nghiệp vụ
- * ở Phase 5); nhiều mục khác còn NEED_CONFIRMATION (xem PHASE4_ACTION_AUDIT.md mục 9) nên cố tình
- * KHÔNG cấp mặc định cho tới khi có xác nhận nghiệp vụ.
+ * (chỉ có `screen:su-co`/`screen:mat-bang` [tên gọi từ Phase 7, trước đó là `screen:so-do`] — xem
+ * được nhưng chưa thao tác được, chờ xác nhận nghiệp vụ ở Phase 5); nhiều mục khác còn
+ * NEED_CONFIRMATION (xem PHASE4_ACTION_AUDIT.md mục 9) nên cố tình KHÔNG cấp mặc định cho tới khi
+ * có xác nhận nghiệp vụ.
  */
 (function (A) {
   'use strict';
@@ -32,8 +33,13 @@
   // ============================================================
   const CATALOG = [
     { key: 'screen:tong-quan', kind: 'screen', group: 'Điều hành', label: 'Tổng quan liên chợ' },
-    { key: 'screen:cau-truc', kind: 'screen', group: 'Điều hành', label: 'Thiết lập mặt bằng chợ' },
-    { key: 'screen:so-do', kind: 'screen', group: 'Điều hành', label: 'Sơ đồ mặt bằng' },
+    // Phase 7 — chuẩn hóa RBAC theo UI đã gộp "Thiết lập mặt bằng chợ" + "Sơ đồ mặt bằng" thành 1
+    // workspace (MARKET_LAYOUT_UX_HOTFIX_REPORT.md): 2 screen permission cũ 'cau-truc'/'so-do' gộp
+    // thành DUY NHẤT 'mat-bang'. Xem MARKET_LAYOUT_SCREEN_PERMISSION_AUDIT.md +
+    // MARKET_LAYOUT_SCREEN_PERMISSION_IMPLEMENTATION_REPORT.md. 6 action permKey bên dưới
+    // (cau-truc.edit/.delete/.reset, so-do.xem-ho-so/.tao-hop-dong/.doi-trang-thai) GIỮ NGUYÊN —
+    // chỉ đổi field screenId (metadata group UI) sang 'mat-bang'.
+    { key: 'screen:mat-bang', kind: 'screen', group: 'Điều hành', label: 'Mặt bằng chợ' },
     { key: 'screen:phien-cho', kind: 'screen', group: 'Điều hành', label: 'Phiên chợ quê' },
     { key: 'screen:diem-kd', kind: 'screen', group: 'Tiểu thương & hợp đồng', label: 'Điểm kinh doanh' },
     { key: 'screen:tieu-thuong', kind: 'screen', group: 'Tiểu thương & hợp đồng', label: 'Tiểu thương' },
@@ -51,12 +57,12 @@
     { key: 'screen:cai-dat', kind: 'screen', group: 'Vận hành', label: 'Cài đặt & phân quyền' },
     { key: 'screen:mini-app', kind: 'screen', group: 'Dành cho tiểu thương', label: 'Mini app tiểu thương' },
 
-    { key: 'action:cau-truc.edit', kind: 'action', group: 'Điều hành', screenId: 'cau-truc', label: 'Thêm/sửa khối, tầng, khu, loại điểm; lưu nháp/chính thức' },
-    { key: 'action:cau-truc.delete', kind: 'action', group: 'Điều hành', screenId: 'cau-truc', label: 'Xoá khối, tầng, khu, loại điểm' },
-    { key: 'action:cau-truc.reset', kind: 'action', group: 'Điều hành', screenId: 'cau-truc', label: 'Khôi phục cấu trúc mặc định' },
-    { key: 'action:so-do.xem-ho-so', kind: 'action', group: 'Điều hành', screenId: 'so-do', label: 'Xem hồ sơ tiểu thương từ sơ đồ mặt bằng' },
-    { key: 'action:so-do.tao-hop-dong', kind: 'action', group: 'Điều hành', screenId: 'so-do', label: 'Tạo hợp đồng từ sơ đồ mặt bằng' },
-    { key: 'action:so-do.doi-trang-thai', kind: 'action', group: 'Điều hành', screenId: 'so-do', label: 'Đổi trạng thái điểm kinh doanh' },
+    { key: 'action:cau-truc.edit', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Thêm/sửa khối, tầng, khu, loại điểm; lưu nháp/chính thức' },
+    { key: 'action:cau-truc.delete', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Xoá khối, tầng, khu, loại điểm' },
+    { key: 'action:cau-truc.reset', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Khôi phục cấu trúc mặc định' },
+    { key: 'action:so-do.xem-ho-so', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Xem hồ sơ tiểu thương từ sơ đồ mặt bằng' },
+    { key: 'action:so-do.tao-hop-dong', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Tạo hợp đồng từ sơ đồ mặt bằng' },
+    { key: 'action:so-do.doi-trang-thai', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Đổi trạng thái điểm kinh doanh' },
     { key: 'action:phien-cho.chot-phien', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Điểm danh & chốt phiên chợ quê' },
     { key: 'action:tieu-thuong.them-moi', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'tieu-thuong', label: 'Thêm hồ sơ tiểu thương' },
     { key: 'action:hop-dong.tao', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Tạo hợp đồng (từ màn Hợp đồng)' },
@@ -141,8 +147,11 @@
   function defaultRolePermissions() {
     const screenRoles = {
       'tong-quan': ['system_admin', 'ward_leader'],
-      'cau-truc': ['market_manager', 'market_staff'],
-      'so-do': ['system_admin', 'ward_leader', 'market_manager', 'market_staff', 'accountant', 'collector', 'technician'],
+      // Phase 7: 'cau-truc' + 'so-do' gộp thành 'mat-bang' — default = hợp (OR) của 2 ma trận cũ,
+      // đúng bằng tập cũ của 'so-do' (vì 'cau-truc' vốn là tập con). state cũ đã lưu (không rơi vào
+      // fresh state này) được xử lý bằng migration tường minh trong mergeIntoCurrentSeed() bên dưới,
+      // KHÔNG dùng ma trận này để ghi đè tuỳ biến đã có.
+      'mat-bang': ['system_admin', 'ward_leader', 'market_manager', 'market_staff', 'accountant', 'collector', 'technician'],
       'diem-kd': ['system_admin', 'ward_leader', 'market_manager', 'market_staff', 'accountant', 'collector'],
       'phien-cho': ['ward_leader', 'market_manager', 'market_staff', 'collector'],
       'tieu-thuong': ['system_admin', 'ward_leader', 'market_manager', 'market_staff', 'accountant', 'collector'],
@@ -251,7 +260,14 @@
   //   v4 = Phase 6 STEP A (Cấu hình giá dịch vụ tách khỏi Cài đặt sang Tài chính — thêm
   //        screen:cau-hinh-gia + 3 action:cau-hinh-gia.*, xoá 3 action:cai-dat.gia-* cũ. Xem
   //        SERVICE_PRICING_SCREEN_AUDIT.md mục 11/12.)
-  const PERM_SEED_VERSION = 4;
+  //   v5 = Phase 7 (chuẩn hóa RBAC theo UI đã gộp "Thiết lập mặt bằng chợ" + "Sơ đồ mặt bằng":
+  //        xoá screen:cau-truc + screen:so-do, thêm screen:mat-bang DUY NHẤT. KHÔNG đổi 6 action
+  //        permKey cau-truc.*/so-do.* — chỉ đổi field screenId metadata sang 'mat-bang' để group UI.
+  //        Migration screen:mat-bang = OR(screen:so-do, screen:cau-truc) tính từ STORED STATE THỰC
+  //        TẾ của từng role — xử lý TƯỜNG MINH trong mergeIntoCurrentSeed(), KHÔNG dùng default
+  //        matrix mới để suy ra. Xem MARKET_LAYOUT_SCREEN_PERMISSION_AUDIT.md +
+  //        MARKET_LAYOUT_SCREEN_PERMISSION_IMPLEMENTATION_REPORT.md.)
+  const PERM_SEED_VERSION = 5;
   function freshState() { return { schemaVersion: A.RBAC_SCHEMA, seedVersion: PERM_SEED_VERSION, roles: defaultRoles(), rolePerms: defaultRolePermissions() }; }
   // Merge state đã lưu (shape còn đúng — schemaVersion khớp) vào seed hiện tại, THAY VÌ reseed toàn
   // bộ, để không xoá mất grant/revoke tuỳ biến của admin cho các permKey KHÔNG đổi giữa 2 bản seed
@@ -268,13 +284,41 @@
   //      matrix của permKey đó đổi giữa 2 bản seed — 1 thay đổi default cho permKey đã tồn tại từ
   //      trước, nếu thật sự cần ép lại, phải là 1 thao tác migrate TƯỜNG MINH riêng, không phải hệ
   //      quả ngầm của việc bump version).
+  // Phase 7 migration riêng — gộp screen:so-do + screen:cau-truc thành screen:mat-bang. PHẢI chạy
+  // TRƯỚC bước filter/add-default chung bên dưới (đọc rolePerms lúc 2 permKey cũ CÒN NGUYÊN), và
+  // PHẢI tính cho MỌI role hiện có trong stored.roles (builtin lẫn custom, KHÔNG hard-code danh
+  // sách id) dựa trên STORED STATE THỰC TẾ — không phải default matrix mới (MARKET_LAYOUT_
+  // SCREEN_PERMISSION_AUDIT.md mục 10). Đặt cờ `stored.matBangMigratedV5` để 2 vòng "tự bổ sung
+  // permKey hoàn toàn mới theo default" (bước cuối hàm này VÀ vòng tương ứng trong loadState())
+  // không được coi 'screen:mat-bang' là permKey mới rồi tự cấp lại theo default matrix — kể cả khi
+  // kết quả OR-migration là KHÔNG role nào giữ được quyền này (0 dòng rolePerms cho permKey đó vẫn
+  // phải được hiểu là "đã xử lý", không phải "chưa từng thấy").
+  function migrateMatBangScreen(stored) {
+    const hadLegacyKeys = stored.rolePerms.some(r => r.permKey === 'screen:so-do' || r.permKey === 'screen:cau-truc');
+    if (!hadLegacyKeys) return;
+    const matBangRoleIds = [];
+    stored.roles.forEach(r => {
+      const oldSoDo = stored.rolePerms.some(x => x.roleId === r.id && x.permKey === 'screen:so-do');
+      const oldCauTruc = stored.rolePerms.some(x => x.roleId === r.id && x.permKey === 'screen:cau-truc');
+      if (oldSoDo || oldCauTruc) matBangRoleIds.push(r.id);
+    });
+    stored.rolePerms = stored.rolePerms.filter(r => r.permKey !== 'screen:so-do' && r.permKey !== 'screen:cau-truc');
+    matBangRoleIds.forEach(roleId => {
+      stored.rolePerms.push({ roleId: roleId, permKey: 'screen:mat-bang', grantedAt: 'migrate-v5', grantedBy: 'Hệ thống (migrate screen:so-do/screen:cau-truc → screen:mat-bang)' });
+    });
+    stored.matBangMigratedV5 = true;
+  }
   function mergeIntoCurrentSeed(stored) {
     const roleIds = new Set(stored.roles.map(r => r.id));
     defaultRoles().forEach(r => { if (!roleIds.has(r.id)) stored.roles.push(r); });
+    migrateMatBangScreen(stored);
     const validKeys = new Set(CATALOG.map(p => p.key));
     stored.rolePerms = stored.rolePerms.filter(r => validKeys.has(r.permKey));
     const knownKeys = new Set(stored.rolePerms.map(r => r.permKey));
-    defaultRolePermissions().forEach(d => { if (!knownKeys.has(d.permKey)) stored.rolePerms.push(d); });
+    defaultRolePermissions().forEach(d => {
+      if (stored.matBangMigratedV5 && d.permKey === 'screen:mat-bang') return;
+      if (!knownKeys.has(d.permKey)) stored.rolePerms.push(d);
+    });
     stored.seedVersion = PERM_SEED_VERSION;
     return stored;
   }
@@ -313,7 +357,10 @@
     // mergeIntoCurrentSeed() ở nhánh seedVersion lệch — chạy lại ở đây vô hại/idempotent, và vẫn
     // cần cho nhánh seedVersion khớp thẳng để bắt trường hợp CATALOG đổi mà quên bump version.)
     const known = new Set(s.rolePerms.map(r => r.permKey));
-    defaultRolePermissions().forEach(d => { if (!known.has(d.permKey)) s.rolePerms.push(d); });
+    defaultRolePermissions().forEach(d => {
+      if (s.matBangMigratedV5 && d.permKey === 'screen:mat-bang') return;
+      if (!known.has(d.permKey)) s.rolePerms.push(d);
+    });
     // Cùng lý do Hotfix persist migration ở trên: ghi lại NGAY nếu vừa merge (seedVersion đổi),
     // không chờ tới lượt grant/revoke đầu tiên — STATE vẫn đang TDZ nên không gọi saveState().
     if (needSave) { try { localStorage.setItem(PKEY, JSON.stringify(s)); } catch (e) { /* bỏ qua */ } }

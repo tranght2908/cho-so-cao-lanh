@@ -25,8 +25,8 @@
   function screenLogin(t) {
     const m = mini();
     if (m.step === 'login') return `<div class="m-body" style="justify-content:center;text-align:center">
-      <div style="font-size:48px">🪷</div><h3 style="font-size:20px">Chợ số Cao Lãnh</h3><div class="small muted">Ứng dụng dành cho tiểu thương</div>
-      <div class="field" style="text-align:left;margin-top:18px"><label>Số điện thoại</label><input class="input" style="padding:12px;font-size:16px" value="${t.phone}" readonly></div>
+      <div style="font-size:48px">🪷</div><h3 style="font-size:var(--font-size-lg)">Chợ số Cao Lãnh</h3><div class="small muted">Ứng dụng dành cho tiểu thương</div>
+      <div class="field" style="text-align:left;margin-top:18px"><label>Số điện thoại</label><input class="input" style="padding:12px" value="${t.phone}" readonly></div>
       <button class="m-btn solid" data-act="mini-otp">Nhận mã OTP</button>
       <div class="small muted">Đăng nhập bằng số điện thoại đã đăng ký với Ban Quản lý chợ</div></div>`;
     return `<div class="m-body" style="justify-content:center;text-align:center">
@@ -53,7 +53,7 @@
     return `<div class="m-body"><button class="btn sm" style="align-self:flex-start" data-act="mini-home">‹ Quay lại</button>
       <div class="m-card" style="text-align:center"><div class="small muted">Quét mã bằng ứng dụng ngân hàng bất kỳ</div>
         <div style="margin:10px auto;width:190px">${U.qr(content + total, 190)}</div>
-        <div style="font-size:22px;font-weight:800">${U.money(total)}</div><div class="small muted">Nội dung: ${content} · ${list.length} khoản</div></div>
+        <div style="font-size:var(--font-size-kpi);font-weight:800">${U.money(total)}</div><div class="small muted">Nội dung: ${content} · ${list.length} khoản</div></div>
       <div class="m-card small">${list.map(i => `<div class="row" style="padding:3px 0"><span style="flex:1">Kỳ ${U.per(i.period)} · ${A.idx.stall.get(i.stallId).code}</span><b>${U.money(U.due(i))}</b></div>`).join('')}</div>
       <button class="m-btn solid" data-act="mini-paid">Giả lập: đã chuyển khoản thành công</button></div>`;
   }
@@ -75,7 +75,7 @@
     const invs = A.db.invoices.filter(i => i.traderId === t.id).sort((a, b) => b.period.localeCompare(a.period)).slice(0, 8);
     const open = mini().bill;
     return `<div class="m-card"><b>Hóa đơn & biên lai</b><div class="m-list">${invs.map(i => `<div class="it" style="flex-wrap:wrap;cursor:pointer" data-act="mini-bill" data-id="${i.id}"><span>Kỳ ${U.per(i.period)}<div class="small muted">${A.idx.stall.get(i.stallId).code}</div></span><span style="text-align:right"><b>${U.money(i.amount)}</b><div>${U.invTag(i)}</div></span>
-      ${open === i.id ? `<div style="width:100%;font-size:12px;background:#f5f8f7;border-radius:8px;padding:8px;margin-top:6px">${i.items.map(x => `<div class="row"><span style="flex:1">${x.name}</span><span>${U.money(x.amount)}</span></div>`).join('')}
+      ${open === i.id ? `<div style="width:100%;font-size:var(--font-size-sm);background:#f5f8f7;border-radius:8px;padding:8px;margin-top:6px">${i.items.map(x => `<div class="row"><span style="flex:1">${x.name}</span><span>${U.money(x.amount)}</span></div>`).join('')}
         ${A.db.payments.filter(p => p.invoiceId === i.id).map(p => `<div class="muted" style="margin-top:4px">✓ ${p.receipt} · ${D.METHOD[p.method]} · ${U.dmy(p.date)}</div>`).join('')}</div>` : ''}</div>`).join('')}</div></div>`;
   }
   function tabContract(t) {
