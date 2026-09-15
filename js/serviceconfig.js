@@ -1,9 +1,13 @@
-/* Dữ liệu "Cấu hình dịch vụ" (tab trong Cài đặt & phân quyền).
+/* Dữ liệu "Cấu hình dịch vụ". Từ Phase 6 STEP A: 3 collection đơn giá (stallPrices/utilities/
+ * extraServices) được UI hiển thị ở màn "Cấu hình giá dịch vụ" độc lập (js/v-vanhanh.js,
+ * A.VIEWS['cau-hinh-gia'], nhóm Tài chính) — billingCycle/billingRules (Kỳ thu/Quy tắc thu phí)
+ * vẫn hiển thị trong Cài đặt & phân quyền, không đổi. Module dữ liệu này (shape/API) KHÔNG đổi.
  * Module này ĐỘC LẬP với data.js — KHÔNG đọc/ghi D.UNIT, D.SESSION_FEE, D.ELEC, D.WATER.
  * Đây chỉ là kho cấu hình UI prototype (đơn giá, điện nước, dịch vụ khác, kỳ thu, quy tắc
  * thu phí), có căn cứ pháp lý + tài liệu đính kèm (mock, không upload server) + lịch sử thay
  * đổi. Các màn tài chính thật (Khoản phải thu, Thu tiền, Chỉ số điện nước...) KHÔNG đọc từ
- * đây — tránh gây regression cho nghiệp vụ tính tiền đang chạy dựa trên data.js.
+ * đây — tránh gây regression cho nghiệp vụ tính tiền đang chạy dựa trên data.js. STEP A này
+ * KHÔNG nối biểu giá vào thuật toán tính khoản phải thu (xem ghi chú UI trên A.VIEWS['cau-hinh-gia']).
  */
 (function (A) {
   'use strict';

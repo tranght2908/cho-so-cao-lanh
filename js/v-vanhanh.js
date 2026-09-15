@@ -473,14 +473,37 @@
     <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="role-form-save">Lưu</button></div>`);
   }
 
-  const SETTINGS_TABS = [['dongia', 'Cấu hình dịch vụ'], ['vaitro', 'Vai trò & phân quyền'], ['tichhop', 'Tích hợp'], ['nhatky', 'Nhật ký kiểm toán']];
+  // Phase 6 STEP A: 3 tab giá (Đơn giá mặt bằng/Điện & nước/Dịch vụ khác) đã chuyển sang màn
+  // "Cấu hình giá dịch vụ" độc lập trong nhóm Tài chính (A.VIEWS['cau-hinh-gia']) — xem
+  // SERVICE_PRICING_SCREEN_AUDIT.md mục 9/10. Kỳ thu/Quy tắc thu phí GIỮ NGUYÊN trong Cài đặt,
+  // nay lên thẳng tab cấp 1 (trước đây nằm sau 2 cấp: Cài đặt → Cấu hình dịch vụ → Kỳ thu).
+  const SETTINGS_TABS = [['kythu', 'Kỳ thu'], ['quytac', 'Quy tắc thu phí'], ['vaitro', 'Vai trò & phân quyền'], ['tichhop', 'Tích hợp'], ['nhatky', 'Nhật ký kiểm toán']];
   function settingsTabBar(tab) {
     return `<div class="seg">${SETTINGS_TABS.map(t => `<button class="${tab === t[0] ? 'on' : ''}" data-act="settings-tab" data-id="${t[0]}">${t[1]}</button>`).join('')}</div>`;
   }
   // ---- Cấu hình dịch vụ: tiện ích dùng chung ----
   const CFG_CALC_LABELS = { fixed: 'Cố định / kỳ', area: 'Theo diện tích', qty: 'Theo số lượng', session: 'Theo phiên' };
+  // Kỳ thu / Quy tắc thu phí GIỮ NGUYÊN permission cũ (cai-dat.ky-thu/cai-dat.quy-tac-thu-phi) —
+  // không đổi ở Phase 6 STEP A (xem SERVICE_PRICING_SCREEN_AUDIT.md mục 11).
   function cfgCan(action) { return A.PERM.canAction(ui.role, 'cai-dat.' + action); }
   function cfgActor() { return ui.role === 'lanhdao' ? 'Lãnh đạo UBND phường' : 'Trần Minh Khoa'; }
+  // 3 nhóm giá (stallPrices/utilities/extraServices) dùng action key MỚI cau-hinh-gia.* + market
+  // scope thật (Phase 6 STEP A) — khác hẳn cfgCan() ở trên (không có market, dùng cho ky-thu/quy-tac).
+  function cfgGiaActionKey(cat) {
+    return { stallPrices: 'cau-hinh-gia.mat-bang', utilities: 'cau-hinh-gia.dien-nuoc', extraServices: 'cau-hinh-gia.dich-vu-khac' }[cat] || null;
+  }
+  // rec=null nghĩa là đang TẠO MỚI (chưa có bản ghi) — kiểm theo ui.market hiện tại. rec có sẵn
+  // (đang Sửa/Vô hiệu hoá/đính kèm tài liệu) — kiểm theo đúng market của CHÍNH bản ghi đó (không
+  // phải ui.market), để 1 forge handler đổi ui.market không thể lách qua bản ghi thuộc chợ khác.
+  // Bản ghi legacy marketId:'ALL' (chỉ extraServices) LUÔN read-only — không tự suy đoán bản ghi đó
+  // thuộc chợ nào (mục 8 SERVICE_PRICING_SCREEN_AUDIT.md) — admin phải tạo bản ghi mới rõ ràng
+  // theo từng chợ nếu cần tách.
+  function cfgPriceMutateAllowed(cat, rec) {
+    const key = cfgGiaActionKey(cat);
+    if (!key) return false;
+    if (rec && rec.marketId === 'ALL') return false;
+    return A.canDo(key, rec ? rec.marketId : ui.market);
+  }
   function cfgStatusTag(s) { return s === 'active' ? '<span class="tag ok">Đang áp dụng</span>' : '<span class="tag">Đã vô hiệu hoá</span>'; }
   function cfgRecord(cat, id) {
     if (cat === 'billingCycle') return A.SERVICE_CFG.cycle();
@@ -522,20 +545,21 @@
 
   // ---- sub-tab: Đơn giá mặt bằng ----
   function settingsGiaHtml() {
-    const canManage = cfgCan('gia-mat-bang'), rows = A.SERVICE_CFG.list('stallPrices');
-    return `<div class="card"><div class="card-h"><h3>Đơn giá mặt bằng</h3>${canManage ? '<button class="btn sm primary" data-act="cfg-price-new">+ Thêm đơn giá</button>' : ''}</div>
+    const canNew = cfgPriceMutateAllowed('stallPrices', null);
+    const rows = A.SERVICE_CFG.list('stallPrices').filter(r => r.marketId === ui.market);
+    return `<div class="card"><div class="card-h"><h3>Đơn giá mặt bằng · ${U.esc(U.market(ui.market).name)}</h3>${canNew ? '<button class="btn sm primary" data-act="cfg-price-new">+ Thêm đơn giá</button>' : ''}</div>
       <div class="card-b">${U.table([{ t: 'Chợ' }, { t: 'Khu vực / tầng' }, { t: 'Loại điểm KD' }, { t: 'Đơn giá', num: true }, { t: 'Đơn vị tính' }, { t: 'Ngày hiệu lực' }, { t: 'Căn cứ' }, { t: 'Trạng thái' }, { t: '' }],
-        rows.map(r => `<tr>
+        rows.map(r => { const canManage = cfgPriceMutateAllowed('stallPrices', r); return `<tr>
           <td>${U.mShort(r.marketId)}</td><td class="small">${U.esc(r.area)}</td><td class="small">${U.esc(r.stallType)}</td>
           <td class="num">${r.amount.toLocaleString('vi-VN')}</td><td class="small nowrap">${U.esc(r.unit)}</td>
           <td class="nowrap">${U.dmy(r.effectiveFrom)}</td><td class="small">${r.legalBasis && r.legalBasis.docNo ? U.esc(r.legalBasis.docNo) : '<span class="muted">—</span>'}</td>
           <td>${cfgStatusTag(r.status)}</td>
           <td class="nowrap"><button class="btn sm" data-act="cfg-price-view" data-id="${r.id}">Xem</button>
             ${canManage ? `<button class="btn sm" data-act="cfg-price-edit" data-id="${r.id}">Sửa</button><button class="btn sm ${r.status === 'active' ? 'danger' : ''}" data-act="cfg-price-toggle" data-id="${r.id}">${r.status === 'active' ? 'Vô hiệu hoá' : 'Kích hoạt'}</button>` : ''}
-          </td></tr>`), { empty: 'Chưa có đơn giá nào' })}</div></div>`;
+          </td></tr>`; }), { empty: 'Chưa có đơn giá nào cho ' + U.market(ui.market).short })}</div></div>`;
   }
   function cfgPriceDrawerHtml(r) {
-    const canManage = cfgCan('gia-mat-bang');
+    const canManage = cfgPriceMutateAllowed('stallPrices', r);
     return `<div class="drawer-h"><div><h3 style="margin:0;font-size:16px">Đơn giá mặt bằng</h3><div class="small muted">${U.mShort(r.marketId)} · ${cfgStatusTag(r.status)}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
       <div class="drawer-b">
         <dl class="kv"><dt>Chợ</dt><dd>${U.esc(U.market(r.marketId).name)}</dd><dt>Khu vực</dt><dd>${U.esc(r.area)}</dd>
@@ -548,14 +572,20 @@
       <div class="drawer-f">${canManage ? `<button class="btn primary" data-act="cfg-price-edit" data-id="${r.id}">Chỉnh sửa</button>` : ''}<button class="btn" data-act="close">Đóng</button></div>`;
   }
   A.ACT['cfg-price-view'] = el => { const r = A.SERVICE_CFG.get('stallPrices', el.dataset.id); if (!r) return; A.$('#modal-root').innerHTML = `<div class="drawer-overlay" data-act="close"></div><div class="drawer">${cfgPriceDrawerHtml(r)}</div>`; };
-  A.ACT['cfg-price-new'] = () => { ui.cfgForm = { cat: 'stallPrices', id: null, marketId: 'CL', area: '', stallType: '', amount: 0, unit: 'đ/m²/ngày', effectiveFrom: A.db.today, status: 'active', legalBasis: { docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' } }; renderCfgForm(); };
+  A.ACT['cfg-price-new'] = () => {
+    if (!cfgPriceMutateAllowed('stallPrices', null)) return;
+    ui.cfgForm = { cat: 'stallPrices', id: null, marketId: ui.market, area: '', stallType: '', amount: 0, unit: 'đ/m²/ngày', effectiveFrom: A.db.today, status: 'active', legalBasis: { docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' } };
+    renderCfgForm();
+  };
   A.ACT['cfg-price-edit'] = el => {
     const r = A.SERVICE_CFG.get('stallPrices', el.dataset.id); if (!r) return;
+    if (!cfgPriceMutateAllowed('stallPrices', r)) return;
     ui.cfgForm = { cat: 'stallPrices', id: r.id, marketId: r.marketId, area: r.area, stallType: r.stallType, amount: r.amount, unit: r.unit, effectiveFrom: r.effectiveFrom, status: r.status, legalBasis: Object.assign({ docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' }, r.legalBasis) };
     renderCfgForm();
   };
   A.ACT['cfg-price-toggle'] = el => {
     const r = A.SERVICE_CFG.get('stallPrices', el.dataset.id); if (!r) return;
+    if (!cfgPriceMutateAllowed('stallPrices', r)) return;
     const was = r.status;
     A.SERVICE_CFG.setStatus('stallPrices', r.id, was === 'active' ? 'inactive' : 'active', cfgActor());
     A.render(); U.toast(was === 'active' ? 'Đã vô hiệu hoá đơn giá' : 'Đã kích hoạt lại đơn giá');
@@ -563,19 +593,20 @@
 
   // ---- sub-tab: Điện & nước ----
   function settingsDienNuocHtml() {
-    const canManage = cfgCan('gia-dien-nuoc'), rows = A.SERVICE_CFG.list('utilities');
-    return `<div class="card"><div class="card-h"><h3>Điện & nước</h3>${canManage ? '<button class="btn sm primary" data-act="cfg-util-new">+ Thêm cấu hình</button>' : ''}</div>
+    const canNew = cfgPriceMutateAllowed('utilities', null);
+    const rows = A.SERVICE_CFG.list('utilities').filter(r => r.marketId === ui.market);
+    return `<div class="card"><div class="card-h"><h3>Điện & nước · ${U.esc(U.market(ui.market).name)}</h3>${canNew ? '<button class="btn sm primary" data-act="cfg-util-new">+ Thêm cấu hình</button>' : ''}</div>
       <div class="card-b">${U.table([{ t: 'Chợ áp dụng' }, { t: 'Giá điện (đ/kWh)', num: true }, { t: 'Giá nước (đ/m³)', num: true }, { t: 'Ngày hiệu lực' }, { t: 'Căn cứ' }, { t: 'Trạng thái' }, { t: '' }],
-        rows.map(r => `<tr>
+        rows.map(r => { const canManage = cfgPriceMutateAllowed('utilities', r); return `<tr>
           <td>${U.mShort(r.marketId)}</td><td class="num">${r.elecPrice.toLocaleString('vi-VN')}</td><td class="num">${r.waterPrice.toLocaleString('vi-VN')}</td>
           <td class="nowrap">${U.dmy(r.effectiveFrom)}</td><td class="small">${r.legalBasis && r.legalBasis.docNo ? U.esc(r.legalBasis.docNo) : '<span class="muted">—</span>'}</td>
           <td>${cfgStatusTag(r.status)}</td>
           <td class="nowrap"><button class="btn sm" data-act="cfg-util-view" data-id="${r.id}">Xem</button>
             ${canManage ? `<button class="btn sm" data-act="cfg-util-edit" data-id="${r.id}">Sửa</button><button class="btn sm ${r.status === 'active' ? 'danger' : ''}" data-act="cfg-util-toggle" data-id="${r.id}">${r.status === 'active' ? 'Vô hiệu hoá' : 'Kích hoạt'}</button>` : ''}
-          </td></tr>`), { empty: 'Chưa có cấu hình điện nước' })}</div></div>`;
+          </td></tr>`; }), { empty: 'Chưa có cấu hình điện nước cho ' + U.market(ui.market).short })}</div></div>`;
   }
   function cfgUtilDrawerHtml(r) {
-    const canManage = cfgCan('gia-dien-nuoc');
+    const canManage = cfgPriceMutateAllowed('utilities', r);
     return `<div class="drawer-h"><div><h3 style="margin:0;font-size:16px">Điện & nước</h3><div class="small muted">${U.mShort(r.marketId)} · ${cfgStatusTag(r.status)}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
       <div class="drawer-b">
         <dl class="kv"><dt>Chợ</dt><dd>${U.esc(U.market(r.marketId).name)}</dd><dt>Giá điện</dt><dd><b>${r.elecPrice.toLocaleString('vi-VN')} đ/kWh</b></dd>
@@ -587,35 +618,46 @@
       <div class="drawer-f">${canManage ? `<button class="btn primary" data-act="cfg-util-edit" data-id="${r.id}">Chỉnh sửa</button>` : ''}<button class="btn" data-act="close">Đóng</button></div>`;
   }
   A.ACT['cfg-util-view'] = el => { const r = A.SERVICE_CFG.get('utilities', el.dataset.id); if (!r) return; A.$('#modal-root').innerHTML = `<div class="drawer-overlay" data-act="close"></div><div class="drawer">${cfgUtilDrawerHtml(r)}</div>`; };
-  A.ACT['cfg-util-new'] = () => { ui.cfgForm = { cat: 'utilities', id: null, marketId: 'CL', elecPrice: D.ELEC, waterPrice: D.WATER, effectiveFrom: A.db.today, status: 'active', legalBasis: { docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' } }; renderCfgForm(); };
+  A.ACT['cfg-util-new'] = () => {
+    if (!cfgPriceMutateAllowed('utilities', null)) return;
+    ui.cfgForm = { cat: 'utilities', id: null, marketId: ui.market, elecPrice: D.ELEC, waterPrice: D.WATER, effectiveFrom: A.db.today, status: 'active', legalBasis: { docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' } };
+    renderCfgForm();
+  };
   A.ACT['cfg-util-edit'] = el => {
     const r = A.SERVICE_CFG.get('utilities', el.dataset.id); if (!r) return;
+    if (!cfgPriceMutateAllowed('utilities', r)) return;
     ui.cfgForm = { cat: 'utilities', id: r.id, marketId: r.marketId, elecPrice: r.elecPrice, waterPrice: r.waterPrice, effectiveFrom: r.effectiveFrom, status: r.status, legalBasis: Object.assign({ docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' }, r.legalBasis) };
     renderCfgForm();
   };
   A.ACT['cfg-util-toggle'] = el => {
     const r = A.SERVICE_CFG.get('utilities', el.dataset.id); if (!r) return;
+    if (!cfgPriceMutateAllowed('utilities', r)) return;
     const was = r.status;
     A.SERVICE_CFG.setStatus('utilities', r.id, was === 'active' ? 'inactive' : 'active', cfgActor());
     A.render(); U.toast(was === 'active' ? 'Đã vô hiệu hoá cấu hình điện nước' : 'Đã kích hoạt lại');
   };
 
   // ---- sub-tab: Dịch vụ khác ----
+  // Legacy marketId:'ALL' (mục 8 SERVICE_PRICING_SCREEN_AUDIT.md): vẫn hiển thị ở MỌI selectedMarket
+  // (không lọc mất — "không mất dữ liệu"), nhưng LUÔN read-only (cfgPriceMutateAllowed trả false
+  // cho rec.marketId==='ALL') kèm nhãn rõ ràng, không tự suy đoán quy về CL/TTD.
+  function cfgAllBadge(r) { return r.marketId === 'ALL' ? ' <span class="tag warn" title="Bản ghi cũ trước Phase 6, áp dụng nhiều chợ — chỉ xem, tạo bản ghi mới theo từng chợ nếu cần tách">Dữ liệu cũ · nhiều chợ</span>' : ''; }
   function settingsDichVuHtml() {
-    const canManage = cfgCan('dich-vu-khac'), rows = A.SERVICE_CFG.list('extraServices');
-    return `<div class="card"><div class="card-h"><h3>Dịch vụ khác</h3>${canManage ? '<button class="btn sm primary" data-act="cfg-svc-new">+ Thêm dịch vụ</button>' : ''}</div>
+    const canNew = cfgPriceMutateAllowed('extraServices', null);
+    const rows = A.SERVICE_CFG.list('extraServices').filter(r => r.marketId === ui.market || r.marketId === 'ALL');
+    return `<div class="card"><div class="card-h"><h3>Dịch vụ khác · ${U.esc(U.market(ui.market).name)}</h3>${canNew ? '<button class="btn sm primary" data-act="cfg-svc-new">+ Thêm dịch vụ</button>' : ''}</div>
       <div class="card-b">${U.table([{ t: 'Tên dịch vụ' }, { t: 'Chợ áp dụng' }, { t: 'Cách tính' }, { t: 'Đơn giá', num: true }, { t: 'Đơn vị tính' }, { t: 'Ngày hiệu lực' }, { t: 'Trạng thái' }, { t: '' }],
-        rows.map(r => `<tr>
-          <td><b>${U.esc(r.name)}</b></td><td>${r.marketId === 'ALL' ? 'Tất cả chợ' : U.mShort(r.marketId)}</td><td class="small">${CFG_CALC_LABELS[r.calcMethod] || r.calcMethod}</td>
+        rows.map(r => { const canManage = cfgPriceMutateAllowed('extraServices', r); return `<tr>
+          <td><b>${U.esc(r.name)}</b>${cfgAllBadge(r)}</td><td>${r.marketId === 'ALL' ? 'Tất cả chợ (cũ)' : U.mShort(r.marketId)}</td><td class="small">${CFG_CALC_LABELS[r.calcMethod] || r.calcMethod}</td>
           <td class="num">${r.amount.toLocaleString('vi-VN')}</td><td class="small nowrap">${U.esc(r.unit)}</td><td class="nowrap">${U.dmy(r.effectiveFrom)}</td>
           <td>${cfgStatusTag(r.status)}</td>
           <td class="nowrap"><button class="btn sm" data-act="cfg-svc-view" data-id="${r.id}">Xem</button>
             ${canManage ? `<button class="btn sm" data-act="cfg-svc-edit" data-id="${r.id}">Sửa</button><button class="btn sm ${r.status === 'active' ? 'danger' : ''}" data-act="cfg-svc-toggle" data-id="${r.id}">${r.status === 'active' ? 'Vô hiệu hoá' : 'Kích hoạt'}</button>` : ''}
-          </td></tr>`), { empty: 'Chưa có dịch vụ nào' })}</div></div>`;
+          </td></tr>`; }), { empty: 'Chưa có dịch vụ nào cho ' + U.market(ui.market).short })}</div></div>`;
   }
   function cfgSvcDrawerHtml(r) {
-    const canManage = cfgCan('dich-vu-khac');
-    return `<div class="drawer-h"><div><h3 style="margin:0;font-size:16px">${U.esc(r.name)}</h3><div class="small muted">${r.marketId === 'ALL' ? 'Tất cả chợ' : U.mShort(r.marketId)} · ${cfgStatusTag(r.status)}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
+    const canManage = cfgPriceMutateAllowed('extraServices', r);
+    return `<div class="drawer-h"><div><h3 style="margin:0;font-size:16px">${U.esc(r.name)}${cfgAllBadge(r)}</h3><div class="small muted">${r.marketId === 'ALL' ? 'Tất cả chợ (cũ)' : U.mShort(r.marketId)} · ${cfgStatusTag(r.status)}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
       <div class="drawer-b">
         <dl class="kv"><dt>Tên dịch vụ</dt><dd>${U.esc(r.name)}</dd><dt>Cách tính</dt><dd>${CFG_CALC_LABELS[r.calcMethod] || r.calcMethod}</dd>
           <dt>Đơn giá</dt><dd><b>${r.amount.toLocaleString('vi-VN')} ${U.esc(r.unit)}</b></dd><dt>Hiệu lực từ</dt><dd>${U.dmy(r.effectiveFrom)}</dd></dl>
@@ -626,14 +668,22 @@
       <div class="drawer-f">${canManage ? `<button class="btn primary" data-act="cfg-svc-edit" data-id="${r.id}">Chỉnh sửa</button>` : ''}<button class="btn" data-act="close">Đóng</button></div>`;
   }
   A.ACT['cfg-svc-view'] = el => { const r = A.SERVICE_CFG.get('extraServices', el.dataset.id); if (!r) return; A.$('#modal-root').innerHTML = `<div class="drawer-overlay" data-act="close"></div><div class="drawer">${cfgSvcDrawerHtml(r)}</div>`; };
-  A.ACT['cfg-svc-new'] = () => { ui.cfgForm = { cat: 'extraServices', id: null, name: '', marketId: 'ALL', calcMethod: 'fixed', amount: 0, unit: '', effectiveFrom: A.db.today, status: 'active', legalBasis: { docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' } }; renderCfgForm(); };
+  A.ACT['cfg-svc-new'] = () => {
+    if (!cfgPriceMutateAllowed('extraServices', null)) return;
+    // Phase 6 STEP A mục 8 — quyết định đã chốt: bản ghi MỚI không được phép marketId:'ALL' nữa,
+    // luôn pin đúng 1 chợ (ui.market). Nếu 1 dịch vụ áp dụng cả 2 chợ, admin tạo 2 bản ghi riêng.
+    ui.cfgForm = { cat: 'extraServices', id: null, name: '', marketId: ui.market, calcMethod: 'fixed', amount: 0, unit: '', effectiveFrom: A.db.today, status: 'active', legalBasis: { docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' } };
+    renderCfgForm();
+  };
   A.ACT['cfg-svc-edit'] = el => {
     const r = A.SERVICE_CFG.get('extraServices', el.dataset.id); if (!r) return;
+    if (!cfgPriceMutateAllowed('extraServices', r)) return;
     ui.cfgForm = { cat: 'extraServices', id: r.id, name: r.name, marketId: r.marketId, calcMethod: r.calcMethod, amount: r.amount, unit: r.unit, effectiveFrom: r.effectiveFrom, status: r.status, legalBasis: Object.assign({ docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' }, r.legalBasis) };
     renderCfgForm();
   };
   A.ACT['cfg-svc-toggle'] = el => {
     const r = A.SERVICE_CFG.get('extraServices', el.dataset.id); if (!r) return;
+    if (!cfgPriceMutateAllowed('extraServices', r)) return;
     const was = r.status;
     A.SERVICE_CFG.setStatus('extraServices', r.id, was === 'active' ? 'inactive' : 'active', cfgActor());
     A.render(); U.toast(was === 'active' ? 'Đã vô hiệu hoá dịch vụ' : 'Đã kích hoạt lại dịch vụ');
@@ -644,21 +694,26 @@
   function renderCfgForm() {
     const d = ui.cfgForm, isNew = !d.id, lb = d.legalBasis;
     let fields = '';
+    // Phase 6 STEP A mục 9 — chợ áp dụng LUÔN = selectedMarket tại thời điểm thao tác, hiển thị
+    // read-only, KHÔNG cho chọn tự do trong form (kể cả khi Sửa — bản ghi giữ nguyên chợ gốc, xem
+    // cfg-*-edit ở trên: ui.cfgForm.marketId luôn lấy từ ui.market khi tạo mới hoặc từ chính bản
+    // ghi khi sửa, chưa từng đổi qua form). Không còn field select 'Chợ' nào trong form.
+    const marketField = `<div class="field"><label>Chợ áp dụng</label><input class="input" value="${U.esc(U.market(d.marketId).name)}" disabled></div>`;
     if (d.cat === 'stallPrices') {
-      fields = `<div class="field"><label>Chợ</label><select class="input" data-ch="cf-market">${D.MARKETS.map(m => `<option value="${m.id}" ${d.marketId === m.id ? 'selected' : ''}>${m.short}</option>`).join('')}</select></div>
+      fields = `${marketField}
         <div class="field"><label>Khu vực / tầng</label><input class="input" data-ch="cf-area" value="${U.esc(d.area || '')}"></div>
         <div class="field"><label>Loại điểm kinh doanh</label><input class="input" data-ch="cf-stalltype" value="${U.esc(d.stallType || '')}"></div>
         <div class="field"><label>Đơn giá</label><input class="input" type="number" min="0" data-ch="cf-amount" value="${d.amount || 0}"></div>
         <div class="field"><label>Đơn vị tính</label><input class="input" data-ch="cf-unit" value="${U.esc(d.unit || '')}" placeholder="VD: đ/m²/ngày"></div>
         <div class="field"><label>Ngày hiệu lực</label><input class="input" type="date" data-ch="cf-eff" value="${d.effectiveFrom || ''}"></div>`;
     } else if (d.cat === 'utilities') {
-      fields = `<div class="field"><label>Chợ áp dụng</label><select class="input" data-ch="cf-market">${D.MARKETS.map(m => `<option value="${m.id}" ${d.marketId === m.id ? 'selected' : ''}>${m.short}</option>`).join('')}</select></div>
+      fields = `${marketField}
         <div class="field"><label>Giá điện (đ/kWh)</label><input class="input" type="number" min="0" data-ch="cf-elec" value="${d.elecPrice || 0}"></div>
         <div class="field"><label>Giá nước (đ/m³)</label><input class="input" type="number" min="0" data-ch="cf-water" value="${d.waterPrice || 0}"></div>
         <div class="field"><label>Ngày hiệu lực</label><input class="input" type="date" data-ch="cf-eff" value="${d.effectiveFrom || ''}"></div>`;
     } else {
       fields = `<div class="field"><label>Tên dịch vụ</label><input class="input" data-ch="cf-name" value="${U.esc(d.name || '')}"></div>
-        <div class="field"><label>Chợ áp dụng</label><select class="input" data-ch="cf-market"><option value="ALL" ${d.marketId === 'ALL' ? 'selected' : ''}>Tất cả chợ</option>${D.MARKETS.map(m => `<option value="${m.id}" ${d.marketId === m.id ? 'selected' : ''}>${m.short}</option>`).join('')}</select></div>
+        ${marketField}
         <div class="field"><label>Cách tính</label><select class="input" data-ch="cf-calc">${Object.keys(CFG_CALC_LABELS).map(k => `<option value="${k}" ${d.calcMethod === k ? 'selected' : ''}>${CFG_CALC_LABELS[k]}</option>`).join('')}</select></div>
         <div class="field"><label>Đơn giá</label><input class="input" type="number" min="0" data-ch="cf-amount" value="${d.amount || 0}"></div>
         <div class="field"><label>Đơn vị tính</label><input class="input" data-ch="cf-unit" value="${U.esc(d.unit || '')}"></div>
@@ -678,7 +733,6 @@
       </div>
       <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="cfg-form-save">Lưu</button></div>`);
   }
-  A.CH['cf-market'] = el => { ui.cfgForm.marketId = el.value; };
   A.CH['cf-area'] = el => { ui.cfgForm.area = el.value; };
   A.CH['cf-stalltype'] = el => { ui.cfgForm.stallType = el.value; };
   A.CH['cf-amount'] = el => { ui.cfgForm.amount = Math.max(0, Number(el.value) || 0); };
@@ -697,6 +751,13 @@
   A.CH['cf-lb-note'] = el => { ui.cfgForm.legalBasis.note = el.value; };
   A.ACT['cfg-form-save'] = () => {
     const d = ui.cfgForm, lb = d.legalBasis;
+    // Handler-level gate (mục 6 yêu cầu Phase 6 STEP A) — re-check NGAY TRƯỚC khi ghi, không chỉ
+    // dựa vào nút Lưu có hiển thị hay không. Khi Sửa, kiểm theo market của bản ghi ĐÃ LƯU
+    // (`existing`, đọc lại từ storage) chứ không phải `d.marketId` phía client — miễn nhiễm với
+    // mọi forge state phía client.
+    const existing = d.id ? A.SERVICE_CFG.get(d.cat, d.id) : null;
+    if (d.id && !existing) return;
+    if (!cfgPriceMutateAllowed(d.cat, existing)) return;
     let patch, detail;
     if (d.cat === 'stallPrices') {
       if (!d.area.trim() || !d.stallType.trim()) { U.toast('Vui lòng nhập đủ khu vực và loại điểm kinh doanh'); return; }
@@ -718,11 +779,17 @@
   };
 
   // ---- attachment (dùng chung cho mọi hạng mục) ----
+  // Handler dùng chung 5 loại config (stallPrices/utilities/extraServices/billingCycle/billingRules)
+  // qua `cat` — derive đúng actionKey theo TỪNG loại (mục 6 yêu cầu Phase 6 STEP A). 3 nhóm giá
+  // dùng cau-hinh-gia.* + market re-check; billingCycle/billingRules GIỮ NGUYÊN hành vi cũ (không
+  // đổi ở task này — mục 11).
+  function cfgAttachMutateAllowed(cat, rec) { return cfgGiaActionKey(cat) ? cfgPriceMutateAllowed(cat, rec) : true; }
   A.CH['cfg-att-add'] = el => {
     const file = el.files && el.files[0];
     if (!file) return;
     const rec = cfgRecord(el.dataset.cat, el.dataset.id);
     if (!rec) return;
+    if (!cfgAttachMutateAllowed(el.dataset.cat, rec)) return;
     const att = { name: file.name, type: file.type || 'application/octet-stream', note: '', mock: false, url: URL.createObjectURL(file) };
     A.SERVICE_CFG.addAttachment(rec, att, cfgActor());
     reopenCfgDrawer(el.dataset.cat, el.dataset.id);
@@ -744,6 +811,7 @@
   A.ACT['cfg-att-del'] = el => {
     const rec = cfgRecord(el.dataset.cat, el.dataset.id);
     if (!rec) return;
+    if (!cfgAttachMutateAllowed(el.dataset.cat, rec)) return;
     A.SERVICE_CFG.removeAttachment(rec, el.dataset.att, cfgActor());
     reopenCfgDrawer(el.dataset.cat, el.dataset.id);
     U.toast('Đã xoá tài liệu đính kèm');
@@ -845,18 +913,15 @@
   A.CH['br-threshold'] = el => { A.SERVICE_CFG.updateRules({ waiverApprovalThreshold: Math.max(0, Math.min(100, Number(el.value) || 0)) }, cfgActor(), 'Đổi ngưỡng miễn giảm cần phê duyệt'); A.render(); };
   A.CH['br-approver'] = el => { A.SERVICE_CFG.updateRules({ approverRoleId: el.value }, cfgActor(), 'Đổi vai trò phê duyệt'); A.render(); };
 
-  // ---- router "Cấu hình dịch vụ" ----
-  const CFG_TABS = [['gia', 'Đơn giá mặt bằng'], ['dien-nuoc', 'Điện & nước'], ['dich-vu', 'Dịch vụ khác'], ['ky-thu', 'Kỳ thu'], ['quy-tac', 'Quy tắc thu phí']];
-  function settingsDongiaHtml() {
-    const tab = ui.cfgTab;
-    const bar = `<div class="seg" style="margin-bottom:14px">${CFG_TABS.map(t => `<button class="${tab === t[0] ? 'on' : ''}" data-act="cfg-tab" data-id="${t[0]}">${t[1]}</button>`).join('')}</div>`;
-    const body = tab === 'dien-nuoc' ? settingsDienNuocHtml()
-      : tab === 'dich-vu' ? settingsDichVuHtml()
-      : tab === 'ky-thu' ? settingsKyThuHtml()
-      : tab === 'quy-tac' ? settingsQuyTacHtml()
-      : settingsGiaHtml();
-    return bar + body;
-  }
+  // ---- router "Cấu hình giá dịch vụ" (màn Tài chính độc lập, Phase 6 STEP A) ----
+  const PRICE_TABS = [['gia', 'Đơn giá mặt bằng'], ['dien-nuoc', 'Điện & nước'], ['dich-vu', 'Dịch vụ khác']];
+  A.VIEWS['cau-hinh-gia'] = function () {
+    const tab = PRICE_TABS.some(t => t[0] === ui.cfgTab) ? ui.cfgTab : 'gia';
+    const bar = `<div class="seg" style="margin-bottom:14px">${PRICE_TABS.map(t => `<button class="${tab === t[0] ? 'on' : ''}" data-act="cfg-tab" data-id="${t[0]}">${t[1]}</button>`).join('')}</div>`;
+    const note = `<div class="note info" style="margin-bottom:14px">Prototype: biểu giá đang được cấu hình độc lập. Việc áp dụng biểu giá vào tính khoản phải thu sẽ được hoàn thiện ở bước tích hợp nghiệp vụ.</div>`;
+    const body = tab === 'dien-nuoc' ? settingsDienNuocHtml() : tab === 'dich-vu' ? settingsDichVuHtml() : settingsGiaHtml();
+    return note + bar + body;
+  };
   A.ACT['cfg-tab'] = el => { ui.cfgTab = el.dataset.id; A.render(); };
   function settingsTichhopHtml() {
     return `<div class="card"><div class="card-h"><h3>Tích hợp</h3></div><div class="card-b small">
@@ -889,7 +954,8 @@
   }
   A.VIEWS['cai-dat'] = function () {
     const tab = ui.settingsTab;
-    const body = tab === 'dongia' ? settingsDongiaHtml()
+    const body = tab === 'kythu' ? settingsKyThuHtml()
+      : tab === 'quytac' ? settingsQuyTacHtml()
       : tab === 'tichhop' ? settingsTichhopHtml()
       : tab === 'nhatky' ? settingsNhatkyHtml()
       : settingsVaitroHtml();

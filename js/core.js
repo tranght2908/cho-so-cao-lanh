@@ -241,6 +241,7 @@ window.APP = (function () {
   A.SCREEN_MARKET = {
     'tong-quan': 'CROSS', 'bao-cao': 'CROSS',
     'cau-truc': 'BOTH', 'so-do': 'BOTH', 'diem-kd': 'BOTH', 'tieu-thuong': 'BOTH', 'hop-dong': 'BOTH',
+    'cau-hinh-gia': 'BOTH',
     'phai-thu': 'BOTH', 'thu-tien': 'BOTH', 'doi-soat': 'BOTH', 'cong-no': 'BOTH',
     'su-co': 'BOTH', 'thong-bao': 'BOTH',
     'phien-cho': 'TTD',
@@ -405,6 +406,7 @@ window.APP = (function () {
       { id: 'hop-dong', ico: '📄', label: 'Hợp đồng', badge: () => A.db.contracts.filter(c => U.inM(c) && c.status === 'hieuluc' && U.days(U.today(), c.end) <= 30).length }
     ] },
     { group: 'Tài chính', items: [
+      { id: 'cau-hinh-gia', ico: '💰', label: 'Cấu hình giá dịch vụ' },
       { id: 'dien-nuoc', ico: '⚡', label: 'Chỉ số điện, nước' },
       { id: 'phai-thu', ico: '🧾', label: 'Khoản phải thu' },
       { id: 'thu-tien', ico: '💳', label: 'Thu tiền & biên lai' },

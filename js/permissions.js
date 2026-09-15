@@ -38,6 +38,7 @@
     { key: 'screen:diem-kd', kind: 'screen', group: 'Tiểu thương & hợp đồng', label: 'Điểm kinh doanh' },
     { key: 'screen:tieu-thuong', kind: 'screen', group: 'Tiểu thương & hợp đồng', label: 'Tiểu thương' },
     { key: 'screen:hop-dong', kind: 'screen', group: 'Tiểu thương & hợp đồng', label: 'Hợp đồng' },
+    { key: 'screen:cau-hinh-gia', kind: 'screen', group: 'Tài chính', label: 'Cấu hình giá dịch vụ' },
     { key: 'screen:dien-nuoc', kind: 'screen', group: 'Tài chính', label: 'Chỉ số điện, nước' },
     { key: 'screen:phai-thu', kind: 'screen', group: 'Tài chính', label: 'Khoản phải thu' },
     { key: 'screen:thu-tien', kind: 'screen', group: 'Tài chính', label: 'Thu tiền & biên lai' },
@@ -84,9 +85,9 @@
     { key: 'action:tai-khoan.sua', kind: 'action', group: 'Vận hành', screenId: 'tai-khoan', label: 'Sửa thông tin tài khoản' },
     { key: 'action:tai-khoan.khoa-mo-khoa', kind: 'action', group: 'Vận hành', screenId: 'tai-khoan', label: 'Khoá / mở khoá tài khoản' },
     { key: 'action:tai-khoan.gan-quyen', kind: 'action', group: 'Vận hành', screenId: 'tai-khoan', label: 'Gán vai trò / phạm vi chợ cho tài khoản' },
-    { key: 'action:cai-dat.gia-mat-bang', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Quản lý đơn giá mặt bằng (Cấu hình dịch vụ)' },
-    { key: 'action:cai-dat.gia-dien-nuoc', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Quản lý giá điện, nước (Cấu hình dịch vụ)' },
-    { key: 'action:cai-dat.dich-vu-khac', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Quản lý dịch vụ khác (Cấu hình dịch vụ)' },
+    { key: 'action:cau-hinh-gia.mat-bang', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Thêm/sửa/vô hiệu hoá đơn giá mặt bằng' },
+    { key: 'action:cau-hinh-gia.dien-nuoc', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Thêm/sửa/vô hiệu hoá giá điện, nước' },
+    { key: 'action:cau-hinh-gia.dich-vu-khac', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Thêm/sửa/vô hiệu hoá dịch vụ khác' },
     { key: 'action:cai-dat.ky-thu', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Cấu hình kỳ thu' },
     { key: 'action:cai-dat.quy-tac-thu-phi', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Cấu hình quy tắc thu phí' },
     { key: 'action:cai-dat.vai-tro.tao', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Tạo vai trò mới' },
@@ -146,6 +147,7 @@
       'phien-cho': ['ward_leader', 'market_manager', 'market_staff', 'collector'],
       'tieu-thuong': ['system_admin', 'ward_leader', 'market_manager', 'market_staff', 'accountant', 'collector'],
       'hop-dong': ['system_admin', 'ward_leader', 'market_manager', 'market_staff', 'accountant'],
+      'cau-hinh-gia': ['market_manager', 'accountant', 'ward_leader'],
       'dien-nuoc': ['market_manager', 'market_staff', 'accountant'],
       'phai-thu': ['ward_leader', 'market_manager', 'market_staff', 'accountant', 'collector'],
       'thu-tien': ['market_manager', 'accountant', 'collector'],
@@ -201,9 +203,13 @@
       'tai-khoan.sua': ['system_admin'],
       'tai-khoan.khoa-mo-khoa': ['system_admin'],
       'tai-khoan.gan-quyen': ['system_admin'],
-      'cai-dat.gia-mat-bang': ['system_admin'],
-      'cai-dat.gia-dien-nuoc': ['system_admin'],
-      'cai-dat.dich-vu-khac': ['system_admin'],
+      // Phase 6 STEP A: giá dịch vụ chuyển sang màn Tài chính, chủ sở hữu nghiệp vụ là
+      // market_manager (không còn system_admin) — xem SERVICE_PRICING_SCREEN_AUDIT.md mục 11.
+      // accountant/ward_leader có screen:cau-hinh-gia (đọc ở screenRoles) nhưng KHÔNG có 3 action
+      // này => chỉ xem, không sửa. system_admin KHÔNG tự động có (không phải business superuser).
+      'cau-hinh-gia.mat-bang': ['market_manager'],
+      'cau-hinh-gia.dien-nuoc': ['market_manager'],
+      'cau-hinh-gia.dich-vu-khac': ['market_manager'],
       'cai-dat.ky-thu': ['system_admin'],
       'cai-dat.quy-tac-thu-phi': ['system_admin'],
       'cai-dat.vai-tro.tao': ['system_admin'],
@@ -242,27 +248,51 @@
   //   v2 = Phase 3 (Default Screen Permission Matrix V1 chính thức cho cả 8 role)
   //   v3 = Phase 4B (Default Action Permission Matrix V1 chính thức — 45 action key, xem
   //        defaultRolePermissions() mục 3)
-  // Phase 5B (audit only — KHÔNG đổi hành vi migration, KHÔNG bump version nào ở phase này, xem
-  // PHASE5A_ACCOUNT_ROLE_SCOPE_AUDIT.md mục 12): khi 1 phase SAU NÀY thật sự cần thêm/bớt
-  // permission key hoặc đổi actionRoles/screenRoles mặc định (bắt buộc bump PERM_SEED_VERSION),
-  // cân nhắc merge thay vì reseed toàn bộ ở nhánh "seedVersion lệch" bên dưới — hiện tại nhánh đó
-  // xoá sạch MỌI grant/revoke tuỳ biến của admin cho toàn bộ ma trận, kể cả các permKey không hề
-  // đổi giữa 2 version. Gợi ý (KHÔNG áp dụng ở đây): giữ logic merge-permission-key-mới đã có sẵn
-  // bên dưới (dòng ~295, hiện CHỈ chạy khi seedVersion khớp) và áp dụng luôn cho case seedVersion
-  // lệch, chỉ full-reseed khi schemaVersion đổi (đổi SHAPE dữ liệu, không thể merge an toàn).
-  const PERM_SEED_VERSION = 3;
+  //   v4 = Phase 6 STEP A (Cấu hình giá dịch vụ tách khỏi Cài đặt sang Tài chính — thêm
+  //        screen:cau-hinh-gia + 3 action:cau-hinh-gia.*, xoá 3 action:cai-dat.gia-* cũ. Xem
+  //        SERVICE_PRICING_SCREEN_AUDIT.md mục 11/12.)
+  const PERM_SEED_VERSION = 4;
   function freshState() { return { schemaVersion: A.RBAC_SCHEMA, seedVersion: PERM_SEED_VERSION, roles: defaultRoles(), rolePerms: defaultRolePermissions() }; }
+  // Merge state đã lưu (shape còn đúng — schemaVersion khớp) vào seed hiện tại, THAY VÌ reseed toàn
+  // bộ, để không xoá mất grant/revoke tuỳ biến của admin cho các permKey KHÔNG đổi giữa 2 bản seed
+  // (Phase 6 STEP A — trước đây mỗi lần bump PERM_SEED_VERSION đều xoá sạch toàn bộ tuỳ biến, xem
+  // ghi chú lịch sử trong SERVICE_PRICING_SCREEN_AUDIT.md mục 12 / PHASE5A...md mục 12):
+  //   1) Role nào có trong defaultRoles() mà chưa có trong `stored.roles` (theo id) → thêm mới;
+  //      role đã tồn tại giữ NGUYÊN mọi field đã lưu (kể cả name/desc/active đã tuỳ biến).
+  //   2) permKey nào KHÔNG còn trong CATALOG hiện tại (bị gỡ khỏi seed lần này, vd 3
+  //      action:cai-dat.gia-*) → xoá khỏi rolePerms của MỌI role — hành động đã mất ý nghĩa, không
+  //      được để tồn tại song song với permKey mới.
+  //   3) permKey nào HOÀN TOÀN MỚI (không còn dòng nào trong rolePerms sau bước 2) → thêm đúng
+  //      grant mặc định theo defaultRolePermissions() hiện tại.
+  //   4) permKey đã tồn tại VÀ vẫn còn trong CATALOG → giữ NGUYÊN, không đụng tới (kể cả khi default
+  //      matrix của permKey đó đổi giữa 2 bản seed — 1 thay đổi default cho permKey đã tồn tại từ
+  //      trước, nếu thật sự cần ép lại, phải là 1 thao tác migrate TƯỜNG MINH riêng, không phải hệ
+  //      quả ngầm của việc bump version).
+  function mergeIntoCurrentSeed(stored) {
+    const roleIds = new Set(stored.roles.map(r => r.id));
+    defaultRoles().forEach(r => { if (!roleIds.has(r.id)) stored.roles.push(r); });
+    const validKeys = new Set(CATALOG.map(p => p.key));
+    stored.rolePerms = stored.rolePerms.filter(r => validKeys.has(r.permKey));
+    const knownKeys = new Set(stored.rolePerms.map(r => r.permKey));
+    defaultRolePermissions().forEach(d => { if (!knownKeys.has(d.permKey)) stored.rolePerms.push(d); });
+    stored.seedVersion = PERM_SEED_VERSION;
+    return stored;
+  }
   function loadState() {
     let s = null;
+    let needSave = false;
     try {
       const raw = localStorage.getItem(PKEY);
       if (raw) {
         const x = JSON.parse(raw);
-        // RBAC V1 migration: dữ liệu đã lưu từ schema/seed cũ (role id cũ lanhdao/bql/tieuthuong,
-        // HOẶC seedVersion cũ — vd. seed tạm Phase 1 vẫn còn 5 role trống quyền) không tương thích
-        // với ma trận V1 hiện tại — bỏ hẳn phần permission, seed lại từ đầu thay vì cố merge, để
-        // tránh vừa sót role id cũ vừa "nhìn như Phase 3 không hoạt động" vì vẫn giữ seed cũ.
-        if (x && x.roles && x.rolePerms && x.schemaVersion === A.RBAC_SCHEMA && x.seedVersion === PERM_SEED_VERSION) s = x;
+        // RBAC V1 migration: dữ liệu đã lưu từ schema cũ (role id cũ lanhdao/bql/tieuthuong — đổi
+        // SHAPE, không thể merge an toàn) vẫn bị bỏ hẳn, seed lại từ đầu như trước. Nhưng nếu
+        // schemaVersion khớp (shape hợp lệ, chỉ seedVersion lệch — tức NỘI DUNG ma trận đổi), từ
+        // Phase 6 STEP A chuyển sang MERGE thay vì reseed toàn bộ (xem mergeIntoCurrentSeed ở trên).
+        if (x && x.roles && x.rolePerms && x.schemaVersion === A.RBAC_SCHEMA) {
+          if (x.seedVersion === PERM_SEED_VERSION) { s = x; }
+          else { s = mergeIntoCurrentSeed(x); needSave = true; }
+        }
       }
     } catch (e) { /* bỏ qua */ }
     if (!s) {
@@ -279,9 +309,14 @@
     }
     // Tự bổ sung các permission MỚI được thêm ở các phiên bản sau (chưa từng có trong
     // dữ liệu đã lưu của trình duyệt) theo seed mặc định, không đụng vào các quyền
-    // người dùng đã tự cấp/thu hồi cho những permission đã tồn tại từ trước.
+    // người dùng đã tự cấp/thu hồi cho những permission đã tồn tại từ trước. (Đã chạy trong
+    // mergeIntoCurrentSeed() ở nhánh seedVersion lệch — chạy lại ở đây vô hại/idempotent, và vẫn
+    // cần cho nhánh seedVersion khớp thẳng để bắt trường hợp CATALOG đổi mà quên bump version.)
     const known = new Set(s.rolePerms.map(r => r.permKey));
     defaultRolePermissions().forEach(d => { if (!known.has(d.permKey)) s.rolePerms.push(d); });
+    // Cùng lý do Hotfix persist migration ở trên: ghi lại NGAY nếu vừa merge (seedVersion đổi),
+    // không chờ tới lượt grant/revoke đầu tiên — STATE vẫn đang TDZ nên không gọi saveState().
+    if (needSave) { try { localStorage.setItem(PKEY, JSON.stringify(s)); } catch (e) { /* bỏ qua */ } }
     return s;
   }
   let STATE = loadState();
