@@ -424,3 +424,20 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 .cell.s-tranhchap { background: #eee8fb; border-color: #cfc0f0; color: #5b3aa8; }
 .cell.s-trong { background: #fff; border: 1px dashed #c5cfdb; color: #98a3b3; font-weight: 500; }
 .cell.sel { outline: 2px solid #0b4a9e; outline-offset: 1px; }
+
+/* Thẻ tóm tắt Mặt bằng chợ */
+.mb-head-b { padding: 14px 16px 14px; display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.mb-head-info { flex: 1 1 300px; min-width: 0; }
+.mb-head-info h3 { font-size: 16px; margin: 0 0 3px; }
+.mb-head-sub { font-size: 13px; color: var(--ink-2); }
+.mb-summary { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12.5px; }
+.mb-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink-2); white-space: nowrap; }
+.mb-chip i { width: 8px; height: 8px; border-radius: 50%; }
+.mb-chip b { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ink); }
+.mb-chip-total { background: #e3efff; border-color: #bcd6f5; color: #0b4a9e; }
+.mb-chip-total b { color: #0b4a9e; }
+.mb-chip-thue { background: #e6f6ec; border-color: #bfe3cb; color: #167a3c; }
+.mb-chip-no { background: #fde8e8; border-color: #f3c2c2; color: #b01c1e; }
+.mb-chip-ngung { background: #fff1e3; border-color: #f7cfa3; color: #9a4b0c; }
+.mb-chip-tranhchap { background: #eee8fb; border-color: #d5c7f3; color: #5b3aa8; }
+.mb-chip-thue b { color: #167a3c; } .mb-chip-no b { color: #b01c1e; } .mb-chip-ngung b { color: #9a4b0c; } .mb-chip-tranhchap b { color: #5b3aa8; }

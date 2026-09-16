@@ -281,11 +281,11 @@
     const mid = qhMarket(), can = mbCan(mid), m = U.market(mid), open = !!ui.mb.treeOpen;
     const stalls = A.db.stalls.filter(st => st.market === mid);
     const c = k => stalls.filter(st => st.status === k).length;
-    const summary = [[stalls.length + ' điểm KD', ''], [c('thue') + ' đang thuê', 'ok'], [c('trong') + ' còn trống', ''], [c('no') + ' nợ phí', 'danger'], [c('ngung') + ' tạm ngưng', 'warn'], [c('tranhchap') + ' tranh chấp', 'purple']]
-      .map(p => `<b${p[1] ? ` style="color:var(--${p[1]})"` : ''}>${p[0]}</b>`).join('<span class="muted">·</span>');
-    return `<div class="card"><div class="card-b" style="padding-top:14px">
-        <h3 style="margin:0;font-size:var(--font-size-md)">Mặt bằng chợ</h3><div class="small muted" style="margin-top:2px">${U.esc(m.name)} · ${U.esc(m.hang)}</div>
-      </div><div class="card-b" style="padding-top:0"><div class="row mb-summary">${summary}</div></div></div>
+    const chip = (k, label, extra) => `<span class="mb-chip ${k ? 'mb-chip-' + k : 'mb-chip-total'}">${k ? `<i style="background:${D.STATUS[k].color}"></i>` : ''}<b>${extra != null ? extra : c(k)}</b>${label}</span>`;
+    const summary = chip(null, 'điểm kinh doanh', stalls.length) + chip('thue', 'đang thuê') + chip('trong', 'còn trống') + chip('no', 'nợ phí') + chip('ngung', 'tạm ngưng') + chip('tranhchap', 'tranh chấp');
+    return `<div class="card mb-head"><div class="card-b mb-head-b">
+        <div class="mb-head-info"><h3>Mặt bằng chợ</h3><div class="mb-head-sub"><b>${U.esc(m.name)}</b> · ${U.esc(m.hang)}${m.address ? ' · ' + U.esc(m.address) : ''}</div>${m.note ? `<div class="small muted">${U.esc(m.note)}</div>` : ''}</div>
+        <div class="mb-summary">${summary}</div></div></div>
     <button class="btn sm mb-tree-toggle" data-act="mb-toggle-tree">${open ? '✕ Đóng cấu trúc' : '☰ Cấu trúc mặt bằng'}</button>
     <div class="mb-workspace">
       <div class="card mb-tree-card ${open ? 'open' : ''}"><div class="card-h" style="padding-bottom:6px">
