@@ -4,6 +4,33 @@
 (function (A) {
   'use strict';
   const D = A.D, U = A.U, ui = A.ui;
+  const TTD_SESSION_MARKET = 'TTD';
+  const TTD_PENDING_SESSION_DATE = '2026-09-12';
+
+  function ttdPendingSessionLabel() { return U.dmy(TTD_PENDING_SESSION_DATE); }
+  function ttdPendingSessionShortLabel() { return ttdPendingSessionLabel().slice(0, 5); }
+  function hasTtdPendingSession() { return A.db.sessions.some(s => s && s.date === TTD_PENDING_SESSION_DATE); }
+  function ttdBusinessPoints() {
+    if (typeof A.mbBusinessPointsForMarket !== 'function') return null;
+    const points = A.mbBusinessPointsForMarket(TTD_SESSION_MARKET);
+    if (!Array.isArray(points) || points.some(st => !st || st.market !== TTD_SESSION_MARKET)) return null;
+    return points;
+  }
+  function ttdSessionEligiblePoints() {
+    const points = ttdBusinessPoints();
+    return points ? points.filter(st => st.traderId) : null;
+  }
+  function ttdSessionCanMutate(showToast) {
+    if (ui.market !== TTD_SESSION_MARKET) { if (showToast) U.toast('Phiên chợ quê chỉ áp dụng cho Chợ quê Tân Thuận Đông'); return false; }
+    if (!U.can('phien-cho')) { if (showToast) U.toast('Màn Phiên chợ quê không hợp lệ trong ngữ cảnh hiện tại'); return false; }
+    if (!A.canDo('phien-cho.chot-phien', TTD_SESSION_MARKET)) { if (showToast) U.toast('Bạn không có quyền chốt phiên chợ quê'); return false; }
+    return true;
+  }
+  function readNonNegativeNumber(selector, scale) {
+    const v = Number(A.$(selector).value);
+    if (!Number.isFinite(v) || v < 0) return null;
+    return v * (scale || 1);
+  }
 
   function marketStats(mid) {
     const db = A.db, f = x => mid === 'ALL' || x.market === mid;
@@ -289,8 +316,8 @@
   // ---------- Phiên chợ quê ----------
   A.VIEWS['phien-cho'] = function () {
     const ss = A.db.sessions, last = ss[ss.length - 1];
-    const pending = !ss.some(s => s.date === '2026-09-12');
-    const booths = A.db.stalls.filter(s => s.market === 'TTD');
+    const pending = !hasTtdPendingSession();
+    const booths = ttdBusinessPoints() || [];
     const k = (l, v, s) => `<div class="card kpi"><div class="k-label">${l}</div><div class="k-value">${v}</div><div class="k-sub">${s}</div></div>`;
     return `
     <div class="note">Chợ quê Cù lao Tân Thuận Đông là <b>phiên chợ du lịch cộng đồng</b>, họp chiều thứ Bảy 14h–20h, không có trong phụ lục QĐ 480/QĐ-UBND. Vì vậy hệ thống quản lý theo <b>phiên</b>: đăng ký quầy theo năm, điểm danh quầy mỗi phiên, thu phí quầy theo phiên (mức 20.000 đ/quầy/phiên là giả định), thanh toán QR tại quầy. Không quản lý nội dung du lịch.</div>
@@ -300,8 +327,8 @@
       ${k('Lượt khách (ước)', last.visitors.toLocaleString('vi-VN'), 'do tổ quản lý ghi nhận')}
       ${k('Doanh thu tiểu thương (ước)', U.moneyShort(last.revenue), 'tổng hợp tự khai')}
     </div>
-    ${pending ? `<div class="card"><div class="card-b row" style="padding-top:16px"><div style="flex:1"><b>Phiên thứ Bảy 12/09/2026 chưa chốt số liệu</b><div class="small muted">Điểm danh quầy tham gia, ghi lượt khách ước tính, hệ thống tự tính phí phiên.</div></div>
-      ${A.canDo('phien-cho.chot-phien', ui.market) ? '<button class="btn primary" data-act="session-open">Điểm danh & chốt phiên 12/09</button>' : ''}</div></div>` : ''}
+    ${pending ? `<div class="card"><div class="card-b row" style="padding-top:16px"><div style="flex:1"><b>Phiên thứ Bảy ${ttdPendingSessionLabel()} chưa chốt số liệu</b><div class="small muted">Điểm danh quầy tham gia, ghi lượt khách ước tính, hệ thống tự tính phí phiên.</div></div>
+      ${A.canDo('phien-cho.chot-phien', TTD_SESSION_MARKET) ? `<button class="btn primary" data-act="session-open">Điểm danh & chốt phiên ${ttdPendingSessionShortLabel()}</button>` : ''}</div></div>` : ''}
     <div class="grid g2">
       <div class="card"><div class="card-h"><h3>Lượt khách theo phiên</h3></div><div class="card-b">
         ${U.bars(ss.map(s => s.date.slice(8) + '/' + s.date.slice(5, 7)), [{ name: 'Lượt khách (ước)', values: ss.map(s => s.visitors), color: '#c93d6e' }], { fmt: v => Math.round(v).toLocaleString('vi-VN'), stacked: false })}</div></div>
@@ -313,9 +340,11 @@
   };
   Object.assign(A.ACT, {
     'session-open': () => {
-      if (!A.canDo('phien-cho.chot-phien', ui.market)) return;
-      const booths = A.db.stalls.filter(s => s.market === 'TTD' && s.traderId);
-      A.modal(A.mHead('Điểm danh quầy – phiên 12/09/2026') + `<div class="modal-b">
+      if (!ttdSessionCanMutate(true)) return;
+      if (hasTtdPendingSession()) { U.toast('Phiên này đã được chốt'); A.render(); return; }
+      const booths = ttdSessionEligiblePoints();
+      if (!booths) { U.toast('Không đọc được danh sách điểm kinh doanh TTD'); return; }
+      A.modal(A.mHead('Điểm danh quầy – phiên ' + ttdPendingSessionLabel()) + `<div class="modal-b">
         <div class="form-grid"><div class="field"><label>Lượt khách ước tính</label><input class="input" id="ses-visitors" type="number" value="2750"></div>
         <div class="field"><label>Doanh thu tiểu thương tự khai (triệu đồng)</label><input class="input" id="ses-rev" type="number" value="236"></div></div>
         <div class="divider"></div><div class="small muted" style="margin-bottom:8px">Bỏ chọn quầy vắng mặt:</div>
@@ -323,11 +352,39 @@
         <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="session-save">Chốt phiên</button></div>`, true);
     },
     'session-save': () => {
-      if (!A.canDo('phien-cho.chot-phien', ui.market)) return;
-      const n = document.querySelectorAll('.ses-b:checked').length;
-      A.db.sessions.push({ date: '2026-09-12', booths: n, fee: n * D.SESSION_FEE, visitors: Number(A.$('#ses-visitors').value) || 0, revenue: (Number(A.$('#ses-rev').value) || 0) * 1e6, noncash: 0.41 });
-      U.log(`Chốt phiên chợ quê 12/09/2026: ${n} quầy`);
-      A.save(); A.closeModal(); A.render(); U.toast(`Đã chốt phiên 12/09: ${n} quầy, phí phiên ${U.money(n * D.SESSION_FEE)}`);
+      if (!ttdSessionCanMutate(true)) return;
+      const booths = ttdSessionEligiblePoints();
+      if (!booths) { U.toast('Không đọc được danh sách điểm kinh doanh TTD'); return; }
+      const validIds = new Set(booths.map(st => st.id));
+      const checked = Array.from(document.querySelectorAll('.ses-b:checked'));
+      const selectedIds = new Set();
+      let forged = false;
+      checked.forEach(el => {
+        const id = el && el.value;
+        if (!validIds.has(id)) forged = true;
+        else selectedIds.add(id);
+      });
+      if (forged) { U.toast('Dữ liệu điểm danh không hợp lệ, vui lòng mở lại phiên'); return; }
+      const visitors = readNonNegativeNumber('#ses-visitors');
+      const revenue = readNonNegativeNumber('#ses-rev', 1e6);
+      if (visitors == null) { U.toast('Lượt khách ước tính phải là số không âm'); return; }
+      if (revenue == null) { U.toast('Doanh thu tự khai phải là số không âm'); return; }
+      const n = selectedIds.size;
+      if (n > booths.length) { U.toast('Số quầy tham gia không hợp lệ'); return; }
+      if (hasTtdPendingSession()) { U.toast('Phiên này đã được chốt'); A.render(); return; }
+      const session = { date: TTD_PENDING_SESSION_DATE, booths: n, fee: n * D.SESSION_FEE, visitors, revenue, noncash: 0.41 };
+      const logLen = Array.isArray(A.db.extraLog) ? A.db.extraLog.length : null;
+      A.db.sessions.push(session);
+      try {
+        U.log(`Chốt phiên chợ quê ${ttdPendingSessionLabel()}: ${n} quầy`);
+        A.save();
+      } catch (e) {
+        A.db.sessions.pop();
+        if (logLen != null) A.db.extraLog.length = logLen;
+        U.toast('Không lưu được phiên chợ quê, dữ liệu đã được hoàn tác');
+        return;
+      }
+      A.closeModal(); A.render(); U.toast(`Đã chốt phiên ${ttdPendingSessionShortLabel()}: ${n} quầy, phí phiên ${U.money(n * D.SESSION_FEE)}`);
     }
   });
 })(window.APP);
