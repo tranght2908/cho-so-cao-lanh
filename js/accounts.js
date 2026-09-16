@@ -34,8 +34,9 @@
       id: 'AC-' + s.id, code: s.id, fullName: s.name, phone: '',
       accountType: s.role === 'Trưởng Ban Quản lý chợ' ? 'Ban Quản lý chợ' : 'Nhân viên Ban Quản lý chợ',
       title: s.role, roleIds: [STAFF_ROLE_MAP[s.role] || 'market_staff'],
-      organization: 'Ban Quản lý ' + ((D.MARKETS.find(m => m.id === s.market) || {}).short || s.market),
-      marketScopes: [s.market], status: 'active'
+      // Trưởng Ban Quản lý chợ quản lý cả 02 chợ (Chợ Cao Lãnh và Chợ quê); nhân viên gắn với chợ được giao.
+      organization: s.role === 'Trưởng Ban Quản lý chợ' ? 'Ban Quản lý chợ phường Cao Lãnh' : 'Ban Quản lý ' + ((D.MARKETS.find(m => m.id === s.market) || {}).short || s.market),
+      marketScopes: s.role === 'Trưởng Ban Quản lý chợ' ? ['ALL'] : [s.market], status: 'active'
     }));
     list.push(
       { id: 'AC-LD01', code: 'LD01', fullName: 'Nguyễn Văn Phúc', phone: '0909123456', accountType: 'Lãnh đạo UBND phường', title: 'Phó Chủ tịch UBND phường', roleIds: ['ward_leader'], organization: 'UBND phường Cao Lãnh', marketScopes: ['ALL'], status: 'active' },

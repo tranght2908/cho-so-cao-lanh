@@ -10,7 +10,7 @@ window.APP = (function () {
   // luôn phải là 'CL'/'TTD' cụ thể. Bump version để mọi state cũ (kể cả market:'ALL' đã lưu từ
   // Phase 1) bị bỏ qua hoàn toàn thay vì cố vá — A.syncAccountContext() ở A.load() sẽ tự chọn lại
   // market hợp lệ theo đúng account đang dùng.
-  const RBAC_SCHEMA = 2;
+  const RBAC_SCHEMA = 3; // 3: Trưởng BQL chợ có phạm vi cả 02 chợ
   const A = {
     D, db: null, idx: null, current: null, RBAC_SCHEMA,
     VIEWS: {}, ACT: {}, IN: {}, CH: {},
