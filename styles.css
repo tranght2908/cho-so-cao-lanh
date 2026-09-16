@@ -441,3 +441,27 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 .mb-chip-ngung { background: #fff1e3; border-color: #f7cfa3; color: #9a4b0c; }
 .mb-chip-tranhchap { background: #eee8fb; border-color: #d5c7f3; color: #5b3aa8; }
 .mb-chip-thue b { color: #167a3c; } .mb-chip-no b { color: #b01c1e; } .mb-chip-ngung b { color: #9a4b0c; } .mb-chip-tranhchap b { color: #5b3aa8; }
+
+/* Báo cáo thống kê: trình bày theo mẫu văn bản */
+.rp-doc { padding: 22px 28px 26px; }
+.rp-head { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: 12.5px; }
+.rp-org-1 { font-weight: 600; letter-spacing: .02em; }
+.rp-org-2 { font-weight: 800; color: var(--brand); border-bottom: 1.5px solid var(--brand); display: inline-block; padding-bottom: 2px; }
+.rp-no { text-align: right; line-height: 1.6; }
+.rp-title { text-align: center; font-size: 17px; font-weight: 800; margin: 18px 0 6px; letter-spacing: .02em; color: var(--ink); }
+.rp-meta { display: flex; justify-content: center; gap: 8px 22px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink-2); margin-bottom: 16px; }
+.rp-chart { margin-bottom: 14px; }
+.rp-tbl { border: 1px solid #c9d3df; }
+.rp-tbl th { background: #e9f1fb; color: #0b3a78; border: 1px solid #c9d3df; text-align: center; font-size: 12px; padding: 9px 10px; }
+.rp-tbl td { border: 1px solid #dbe2e9; padding: 8px 10px; }
+.rp-tbl tbody tr:nth-child(even) td { background: #f7f9fc; }
+.rp-tbl .rp-stt { width: 44px; text-align: center; color: var(--muted); }
+.rp-tbl .rp-first { font-weight: 600; }
+.rp-tbl .rp-total td { background: #eef3fa; font-weight: 700; border-top: 2px solid #9db4d1; }
+.rp-sign { display: flex; justify-content: space-between; gap: 24px; margin: 28px 40px 10px; text-align: center; font-size: 12.5px; }
+.rp-sign-t { font-weight: 700; }
+.rp-sign-s { font-style: italic; color: var(--muted); margin-bottom: 52px; }
+.rp-sign-n { font-weight: 600; }
+.rp-note { text-align: center; margin-top: 8px; }
+@media (max-width: 860px) { .rp-doc { padding: 16px; } .rp-sign { margin: 20px 0 6px; } }
+@media print { .rp-card { border: 0; box-shadow: none; } .rp-doc { padding: 0; } .rp-tbl th { background: #eef3fa !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }

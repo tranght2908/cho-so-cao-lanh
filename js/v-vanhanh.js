@@ -192,20 +192,58 @@
     };
   }
   const fmtCell = (v, col) => typeof v === 'number' ? (/%/.test(col) ? U.pctTxt(v) : /\(đ\)/.test(col) ? U.money(v) : v.toLocaleString('vi-VN')) : U.esc(v);
+  // Trình bày báo cáo theo mẫu văn bản: đầu đề cơ quan, tiêu đề, kỳ/phạm vi/đơn vị tính, STT, dòng tổng
+  // cộng, khối ký tên khi in. Chỉ là lớp hiển thị — số liệu vẫn lấy nguyên từ reports().
+  const RP_NOTOTAL = /Cuối kỳ|Còn lại|Đánh giá|Mức|Giờ|Ngày|Tháng|Kỳ/i;
+  // Cách tính ô "%" ở dòng tổng cộng cho từng báo cáo: [cột tử, cột mẫu] hoặc hàm(rows) → số
+  const RP_PCT = {
+    lapday: rows => { const t = U.sum(rows, r => r[2]), e = U.sum(rows, r => r[7]); return U.pct(t - e, t); },
+    doanhthu: rows => U.pct(U.sum(rows, r => r[3]), U.sum(rows, r => r[2])),
+    khongtienmat: rows => { const tm = U.sum(rows, r => r[1]), qr = U.sum(rows, r => r[2]), ck = U.sum(rows, r => r[3]); return U.pct(qr + ck, tm + qr + ck); },
+    miniapp: rows => U.pct(U.sum(rows, r => r[3]), U.sum(rows, r => r[2]))
+  };
+  function rpTotals(key, r) {
+    if (!r.rows.length) return null;
+    const cells = r.cols.map((c, k) => {
+      if (k === 0) return 'Tổng cộng';
+      const allNum = r.rows.every(row => typeof row[k] === 'number');
+      if (!allNum) return '';
+      if (/%/.test(c)) return RP_PCT[key] ? RP_PCT[key](r.rows) : '';
+      if (RP_NOTOTAL.test(c)) return '';
+      return U.sum(r.rows, row => row[k]);
+    });
+    if (cells.slice(1).every(v => v === '')) return null;
+    return cells;
+  }
   A.VIEWS['bao-cao'] = function () {
     // Báo cáo thống kê = màn cross-market (A.SCREEN_MARKET['bao-cao'] === 'CROSS') — dùng bộ lọc
     // nội bộ A.xmMarket()/A.xmScopeBar() thay vì bị chặn/giới hạn theo selectedMarket (mục 9 Phase 2).
     const xmMkt = A.xmMarket();
-    const R = reports(xmMkt), r = R[ui.report] || R.lapday;
+    const R = reports(xmMkt), key = R[ui.report] ? ui.report : 'lapday', r = R[key];
     let chart = '';
-    if (r.chart === 'doanhthu') chart = U.bars(r.rows.map(x => x[0]), [{ name: 'Phải thu', values: r.rows.map(x => x[2]), color: '#b9d8cf' }, { name: 'Đã thu', values: r.rows.map(x => x[3]), color: '#1f6fd0' }], { stacked: false });
+    if (r.chart === 'doanhthu') chart = U.bars(r.rows.map(x => x[0]), [{ name: 'Phải thu', values: r.rows.map(x => x[2]), color: '#bcd6f5' }, { name: 'Đã thu', values: r.rows.map(x => x[3]), color: '#1f6fd0' }], { stacked: false });
     if (r.chart === 'khongtienmat') chart = U.bars(r.rows.map(x => x[0]), [{ name: 'Không tiền mặt %', values: r.rows.map(x => x[4]), color: '#0089df' }], { stacked: false, max: 100, fmt: v => Math.round(v) + '%' });
+    const hasMoney = r.cols.some(c => /\(đ\)/.test(c));
+    const cols = r.cols.map(c => c.replace(/ \(đ\)/, ''));
+    const numCol = k => k > 0 && typeof (r.rows[0] || [])[k] === 'number';
+    const tot = rpTotals(key, r);
+    const scope = xmMkt === 'ALL' ? 'Chợ Cao Lãnh và Chợ quê Cù lao Tân Thuận Đông' : U.market(xmMkt).name;
+    const idx = Object.keys(R).indexOf(key) + 1;
+    const who = A.currentAccount ? A.currentAccount() : null;
     return `<div class="grid g-report">
-      <div class="card no-print"><div class="card-b report-list" style="padding-top:10px">${A.xmScopeBar()}${Object.keys(R).map((k, n) => `<button class="${(R[ui.report] ? ui.report : 'lapday') === k ? 'on' : ''}" data-act="rp" data-id="${k}">${n + 1}. ${R[k].t}</button>`).join('')}</div></div>
-      <div class="card"><div class="card-h"><h3>${r.t}</h3><span class="small muted">${xmMkt === 'ALL' ? 'Tất cả chợ' : U.mShort(xmMkt)} · lập ngày ${U.dmy(U.today())}</span>
-        <button class="btn no-print" data-act="rp-csv">⬇ Xuất Excel</button><button class="btn no-print" data-act="print">🖨 In / PDF</button></div>
-        <div class="card-b">${chart}${U.table(r.cols.map((c, k) => ({ t: c, num: k > 0 && typeof (r.rows[0] || [])[k] === 'number' })), r.rows.map(row => `<tr>${row.map((v, k) => `<td class="${typeof v === 'number' ? 'num' : ''}">${fmtCell(v, r.cols[k])}</td>`).join('')}</tr>`))}
-        <div class="small muted" style="margin-top:10px">Báo cáo được sinh tự động từ dữ liệu nghiệp vụ, không tổng hợp thủ công.</div></div></div></div>`;
+      <div class="card no-print"><div class="card-b" style="padding-top:12px;padding-bottom:4px"><div class="label-sm" style="margin-bottom:4px">Phạm vi</div>${A.xmScopeBar() || "<span class=\"small muted\">" + U.esc(scope) + "</span>"}</div><div class="card-b report-list" style="padding-top:6px">${Object.keys(R).map((k, n) => `<button class="${key === k ? 'on' : ''}" data-act="rp" data-id="${k}">${n + 1}. ${R[k].t}</button>`).join('')}</div></div>
+      <div class="card rp-card"><div class="card-h no-print"><h3>Báo cáo ${U.pad(idx)}</h3><span class="spacer"></span><button class="btn" data-act="rp-csv">⬇ Xuất Excel</button><button class="btn primary" data-act="print">🖨 In / PDF</button></div>
+        <div class="card-b rp-doc">
+          <div class="rp-head"><div class="rp-org"><div class="rp-org-1">UBND PHƯỜNG CAO LÃNH</div><div class="rp-org-2">BAN QUẢN LÝ CHỢ</div></div><div class="rp-no">Số: ${U.pad(idx)}/BC-BQLC<br><span class="muted">Cao Lãnh, ngày ${U.dmy(U.today()).replace(/\//g, ' tháng ').replace(/ tháng (\d+)$/, ' năm $1')}</span></div></div>
+          <h2 class="rp-title">${U.esc(r.t.toUpperCase())}</h2>
+          <div class="rp-meta"><span><b>Phạm vi:</b> ${U.esc(scope)}</span><span><b>Kỳ số liệu:</b> tháng 09/2026</span>${hasMoney ? '<span><b>Đơn vị tính:</b> đồng</span>' : ''}<span><b>Số dòng:</b> ${r.rows.length}</span></div>
+          ${chart ? `<div class="rp-chart">${chart}</div>` : ''}
+          <div class="tbl-wrap"><table class="tbl rp-tbl"><thead><tr><th class="num rp-stt">STT</th>${cols.map((c, k) => `<th class="${numCol(k) ? 'num' : ''}">${U.esc(c)}</th>`).join('')}</tr></thead>
+            <tbody>${r.rows.length ? r.rows.map((row, i) => `<tr><td class="num rp-stt">${i + 1}</td>${row.map((v, k) => `<td class="${typeof v === 'number' ? 'num' : ''} ${k === 0 ? 'rp-first' : ''}">${fmtCell(v, r.cols[k])}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length + 1}" class="empty">Không có dữ liệu trong phạm vi đã chọn</td></tr>`}</tbody>
+            ${tot ? `<tfoot><tr class="rp-total"><td></td>${tot.map((v, k) => `<td class="${typeof v === 'number' ? 'num' : ''}">${v === '' ? '' : fmtCell(v, r.cols[k])}</td>`).join('')}</tr></tfoot>` : ''}</table></div>
+          <div class="rp-sign"><div><div class="rp-sign-t">NGƯỜI LẬP BIỂU</div><div class="rp-sign-s">(Ký, ghi rõ họ tên)</div><div class="rp-sign-n">${U.esc(who && (who.accountType === 'Ban Quản lý chợ' || who.accountType === 'Nhân viên Ban Quản lý chợ') ? who.fullName : 'Lê Thị Ngọc Hân')}</div></div><div><div class="rp-sign-t">TRƯỞNG BAN QUẢN LÝ CHỢ</div><div class="rp-sign-s">(Ký, đóng dấu)</div><div class="rp-sign-n">Trần Minh Khoa</div></div></div>
+          <div class="small muted rp-note">Báo cáo được sinh tự động từ dữ liệu nghiệp vụ của hệ thống lúc ${U.nowTime()} ngày ${U.dmy(U.today())}, không tổng hợp thủ công.</div>
+        </div></div></div>`;
   };
   A.ACT.rp = el => { ui.report = el.dataset.id; A.render(); };
   A.ACT['rp-csv'] = () => { const R = reports(A.xmMarket()), r = R[ui.report] || R.lapday; U.csv('bao-cao-' + (R[ui.report] ? ui.report : 'lapday'), r.cols, r.rows); };
