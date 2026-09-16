@@ -268,6 +268,8 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 .session-step.done span { background: var(--brand); border-color: var(--brand); color: #fff; }
 .session-step.current { background: var(--warn-soft); color: #6f4d08; border-color: #f1d99d; }
 .session-step.current span { background: var(--warn); border-color: var(--warn); color: #fff; }
+.session-registrations { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 14px; }
+.session-registrations h4 { font-size: var(--font-size-sm); margin-bottom: 8px; }
 
 @media (max-width: 1180px) {
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }

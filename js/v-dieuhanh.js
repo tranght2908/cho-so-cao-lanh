@@ -90,6 +90,13 @@
     const raw = String(s.registrationDeadline);
     return U.dmy(raw.slice(0, 10)) + (raw.length >= 16 ? ' ' + raw.slice(11, 16) : '');
   }
+  function formatDateTimeValue(value, missingText) {
+    if (!value) return missingText || '—';
+    const raw = String(value);
+    const d = parseLocalDateTime(raw);
+    if (!d) return missingText || '—';
+    return U.dmy(raw.slice(0, 10)) + (raw.length >= 16 ? ' ' + raw.slice(11, 16) : '');
+  }
   function normalizeSession(s) {
     if (!s || !s.date) return s;
     if (!s.id) s.id = sessionIdForDate(s.date);
@@ -120,6 +127,12 @@
     if (!d) return '';
     d.setDate(d.getDate() - 2);
     return dateOnly(d) + 'T17:00';
+  }
+  function registrationStartForDate(date) {
+    const d = parseIsoDate(date);
+    if (!d) return '';
+    d.setDate(d.getDate() - 5);
+    return dateOnly(d) + 'T08:00';
   }
   function dateOnly(d) {
     return d.getFullYear() + '-' + U.pad(d.getMonth() + 1) + '-' + U.pad(d.getDate());
@@ -163,6 +176,76 @@
     if (!session || session.market !== TTD_SESSION_MARKET) { if (showToast) U.toast('Không tìm thấy phiên TTD hợp lệ'); return false; }
     if (!A.canDo(actionKey, session.market)) { if (showToast) U.toast('Bạn không có quyền thao tác phiên này'); return false; }
     return true;
+  }
+  function sessionRegistrations() {
+    return Array.isArray(A.db.sessionRegistrations) ? A.db.sessionRegistrations : [];
+  }
+  function ensureSessionRegistrationCollection() {
+    if (!Array.isArray(A.db.sessionRegistrations)) A.db.sessionRegistrations = [];
+    return A.db.sessionRegistrations;
+  }
+  function registrationKey(r) {
+    return (r && r.sessionId ? r.sessionId : '') + '|' + (r && r.pointId ? r.pointId : '');
+  }
+  function registrationReadModels(session) {
+    if (!session) return [];
+    const points = ttdBusinessPoints() || [];
+    const pointMap = new Map(points.map(p => [p.id, p]));
+    const seen = new Set();
+    return sessionRegistrations().filter(r => {
+      if (!r || r.sessionId !== session.id || r.market !== TTD_SESSION_MARKET) return false;
+      return !!pointMap.get(r.pointId);
+    }).map(r => {
+      const key = registrationKey(r);
+      const dup = seen.has(key);
+      seen.add(key);
+      const point = pointMap.get(r.pointId);
+      const trader = point && point.traderId ? A.idx.trader.get(point.traderId) : null;
+      return Object.assign({}, r, { point, trader, duplicate: dup });
+    }).filter(r => !r.duplicate);
+  }
+  function registrationStatusTag(status) {
+    const labels = { registered: 'Đã đăng ký', approved: 'Đã duyệt', waitlisted: 'Dự bị', rejected: 'Từ chối', withdrawn: 'Rút đăng ký' };
+    const cls = status === 'approved' ? 'ok' : status === 'waitlisted' ? 'warn' : (status === 'rejected' || status === 'withdrawn') ? 'danger' : 'info';
+    return `<span class="tag ${cls}">${labels[status] || U.esc(status || 'Không rõ')}</span>`;
+  }
+  function registrationListHtml(rows, waitlist) {
+    const cols = waitlist
+      ? [{ t: 'Thứ tự', num: true }, { t: 'Hộ/tiểu thương' }, { t: 'Mã điểm' }, { t: 'Khu chức năng' }, { t: 'Mặt hàng' }, { t: 'Điện thoại' }, { t: 'Thời điểm đăng ký' }, { t: 'Trạng thái' }, { t: 'Ghi chú' }]
+      : [{ t: 'STT', num: true }, { t: 'Hộ/tiểu thương' }, { t: 'Mã điểm' }, { t: 'Khu chức năng' }, { t: 'Mặt hàng' }, { t: 'Thời điểm đăng ký' }, { t: 'Trạng thái' }, { t: 'Ghi chú' }];
+    const body = rows.map((r, i) => {
+      const point = r.point, trader = r.trader;
+      const idx = waitlist ? (Number.isFinite(Number(r.waitlistOrder)) ? Number(r.waitlistOrder) : i + 1) : i + 1;
+      const common = [
+        `<td>${U.esc(trader ? trader.name : 'Không tìm thấy tiểu thương')}</td>`,
+        `<td>${U.esc(point ? point.code : (r.pointId || '—'))}</td>`,
+        `<td>${U.esc(point ? point.sectionName : 'Không xác định')}</td>`,
+        `<td>${U.esc(point ? point.cat : '—')}</td>`
+      ];
+      const tail = [
+        `<td>${formatDateTimeValue(r.registeredAt || r.createdAt, '—')}</td>`,
+        `<td>${registrationStatusTag(r.status)}</td>`,
+        `<td>${U.esc(r.note || '') || '—'}</td>`
+      ];
+      if (waitlist) common.push(`<td>${U.maskPhone(trader && trader.phone)}</td>`);
+      return `<tr><td class="num">${idx}</td>${common.concat(tail).join('')}</tr>`;
+    });
+    return U.table(cols, body, { empty: waitlist ? 'Chưa có hộ trong danh sách dự bị.' : 'Chưa có đăng ký chính thức.' });
+  }
+  function sessionRegistrationHtml(session) {
+    const rows = registrationReadModels(session);
+    const official = rows.filter(r => r.listType === 'official' && r.status !== 'rejected' && r.status !== 'withdrawn');
+    const waitlist = rows.filter(r => r.listType === 'waitlist' && r.status !== 'rejected' && r.status !== 'withdrawn')
+      .sort((a, b) => Number(a.waitlistOrder || 9999) - Number(b.waitlistOrder || 9999));
+    const inactive = rows.filter(r => r.status === 'rejected' || r.status === 'withdrawn');
+    return `<div class="session-registrations">
+      <div class="row" style="margin-bottom:10px"><h4>Đăng ký tham gia phiên</h4><span class="spacer"></span>
+        <span class="tag info">Tổng ${rows.length}</span><span class="tag ok">Chính thức ${official.length}</span><span class="tag warn">Dự bị ${waitlist.length}</span>${inactive.length ? `<span class="tag danger">Từ chối/rút ${inactive.length}</span>` : ''}</div>
+      <div class="grid g2">
+        <div><h4>Danh sách chính thức</h4>${registrationListHtml(official, false)}</div>
+        <div><h4>Danh sách dự bị</h4>${registrationListHtml(waitlist, true)}</div>
+      </div>
+    </div>`;
   }
   function applySessionMutation(session, mutate, successLog) {
     const before = JSON.stringify(session);
@@ -514,9 +597,10 @@
       <div class="card-b">
         ${sessionProgressHtml(s)}
         <div class="grid g3">
-          <div><div class="small muted">Ngày phiên</div><b>${sessionLabel(s)}</b></div>
-          <div><div class="small muted">Khung giờ</div><b>${formatTimeRange(s)}</b></div>
+          <div><div class="small muted">Ngày bắt đầu đăng ký</div><b>${formatDateTimeValue(s.registrationStartAt, 'Chưa ghi nhận')}</b></div>
           <div><div class="small muted">Hạn đăng ký</div><b>${formatDeadline(s)}</b></div>
+          <div><div class="small muted">Ngày phiên diễn ra</div><b>${sessionLabel(s)}</b></div>
+          <div><div class="small muted">Giờ bắt đầu - kết thúc phiên chợ</div><b>${formatTimeRange(s)}</b></div>
           <div><div class="small muted">Người tạo</div><b>${U.esc(s.createdBy || 'Dữ liệu lịch sử')}</b></div>
           <div><div class="small muted">Người phụ trách</div><b>${U.esc(s.assignedTo || 'Chưa phân công')}</b></div>
           <div><div class="small muted">Người chốt</div><b>${U.esc(s.closedBy || '—')}</b></div>
@@ -527,6 +611,7 @@
         ${s.note ? `<div class="note info" style="margin-top:12px">${U.esc(s.note)}</div>` : ''}
         ${s.status === 'closed' ? `<div class="small muted" style="margin-top:12px">Đã chốt${s.closedAt ? ' lúc ' + U.esc(s.closedAt) : ''}. Phiên đã chốt chỉ đọc trong PC3A.</div>` : ''}
         <div class="row" style="margin-top:12px">${actions || '<span class="small muted">Không có thao tác phù hợp với quyền và trạng thái hiện tại.</span>'}</div>
+        ${sessionRegistrationHtml(s)}
       </div></div>`;
   }
   A.VIEWS['phien-cho'] = function () {
@@ -563,12 +648,13 @@
     'session-create': () => {
       const fake = { id: 'new', market: TTD_SESSION_MARKET };
       if (!ttdSessionCanMutate('phien-cho.tao-phien', fake, true)) return;
-      const date = TTD_DEMO_SESSION_DATE, deadline = registrationDeadlineForDate(date);
+      const date = TTD_DEMO_SESSION_DATE, regStart = registrationStartForDate(date), deadline = registrationDeadlineForDate(date);
       A.modal(A.mHead('Tạo phiên chợ quê') + `<div class="modal-b"><div class="form-grid">
-        <div class="field"><label>Ngày phiên *</label><input class="input" id="ses-date" type="date" value="${date}"></div>
+        <div class="field"><label>Ngày bắt đầu đăng ký *</label><input class="input" id="ses-reg-start" type="datetime-local" value="${regStart}"></div>
         <div class="field"><label>Hạn đăng ký *</label><input class="input" id="ses-deadline" type="datetime-local" value="${deadline}"></div>
-        <div class="field"><label>Giờ bắt đầu *</label><input class="input" id="ses-start" type="time" value="14:00"></div>
-        <div class="field"><label>Giờ kết thúc *</label><input class="input" id="ses-end" type="time" value="20:00"></div>
+        <div class="field"><label>Ngày phiên diễn ra *</label><input class="input" id="ses-date" type="date" value="${date}"></div>
+        <div class="field"><label>Giờ bắt đầu phiên chợ *</label><input class="input" id="ses-start" type="time" value="14:00"></div>
+        <div class="field"><label>Giờ kết thúc phiên chợ *</label><input class="input" id="ses-end" type="time" value="20:00"></div>
       </div><div class="field" style="margin-top:10px"><label>Ghi chú</label><textarea class="input" id="ses-note" rows="2"></textarea></div></div>
       <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="session-create-save">Tạo phiên</button></div>`);
     },
@@ -576,26 +662,37 @@
       const fake = { id: 'new', market: TTD_SESSION_MARKET };
       if (!ttdSessionCanMutate('phien-cho.tao-phien', fake, true)) return;
       const date = A.$('#ses-date').value, startTime = A.$('#ses-start').value, endTime = A.$('#ses-end').value;
-      const registrationDeadline = A.$('#ses-deadline').value, note = A.$('#ses-note').value.trim();
+      const registrationStartAt = A.$('#ses-reg-start').value, registrationDeadline = A.$('#ses-deadline').value, note = A.$('#ses-note').value.trim();
       const day = parseIsoDate(date);
       if (!day) { U.toast('Ngày phiên không hợp lệ'); return; }
       if (day.getDay() !== 6) { U.toast('Ngày phiên phải là thứ Bảy'); return; }
       if (!/^\d{2}:\d{2}$/.test(startTime) || !/^\d{2}:\d{2}$/.test(endTime) || startTime >= endTime) { U.toast('Giờ bắt đầu phải nhỏ hơn giờ kết thúc'); return; }
-      const startAt = sessionStartDateTime(date, startTime), deadlineAt = parseLocalDateTime(registrationDeadline);
+      const registrationStart = parseLocalDateTime(registrationStartAt), startAt = sessionStartDateTime(date, startTime), deadlineAt = parseLocalDateTime(registrationDeadline);
+      if (!registrationStart) { U.toast('Ngày bắt đầu đăng ký không hợp lệ'); return; }
+      if (!deadlineAt) { U.toast('Hạn đăng ký không hợp lệ'); return; }
+      if (registrationStart >= deadlineAt) { U.toast('Ngày bắt đầu đăng ký phải trước hạn đăng ký'); return; }
       if (!startAt || !deadlineAt || deadlineAt >= startAt) { U.toast('Hạn đăng ký phải trước giờ bắt đầu phiên'); return; }
       if (hasSessionDate(date, null)) { U.toast('Đã có phiên trong ngày này'); return; }
+      const hadRegistrations = Object.prototype.hasOwnProperty.call(A.db, 'sessionRegistrations');
+      const registrationsBefore = A.db.sessionRegistrations;
+      ensureSessionRegistrationCollection();
       const session = {
-        id: sessionIdForDate(date), market: TTD_SESSION_MARKET, date, startTime, endTime, registrationDeadline,
+        id: sessionIdForDate(date), market: TTD_SESSION_MARKET, date, startTime, endTime, registrationStartAt, registrationDeadline,
         status: 'draft', note, createdBy: currentAccountName(), createdAt: nowIso(), updatedBy: currentAccountName(), updatedAt: nowIso()
       };
       A.db.sessions.push(session);
-      const logLen = Array.isArray(A.db.extraLog) ? A.db.extraLog.length : null;
+      const logBefore = Array.isArray(A.db.extraLog) ? A.db.extraLog.slice() : null;
       try {
         U.log('Tạo phiên chợ quê ' + U.dmy(date));
         A.save();
       } catch (e) {
         A.db.sessions = A.db.sessions.filter(s => s !== session);
-        if (logLen != null) A.db.extraLog.length = logLen;
+        if (logBefore) {
+          A.db.extraLog.length = 0;
+          logBefore.forEach(x => A.db.extraLog.push(x));
+        }
+        if (hadRegistrations) A.db.sessionRegistrations = registrationsBefore;
+        else delete A.db.sessionRegistrations;
         U.toast('Không lưu được phiên chợ quê, dữ liệu đã được hoàn tác');
         return;
       }
