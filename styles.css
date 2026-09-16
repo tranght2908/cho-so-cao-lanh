@@ -151,7 +151,11 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 .legend .sw { width: 12px; height: 12px; border-radius: 3px; }
 .plan { display: flex; flex-direction: column; gap: 14px; }
 .plan-section { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px 12px; background: var(--surface-2); }
-.plan-section h4 { font-size: var(--font-size-sm); margin-bottom: 8px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+/* Tên khu = nội dung nhận diện chính của mỗi section (tương đương 1 dòng/nhóm nội dung ở màn khác),
+   nên dùng đúng scale "body/table text" (base) như mọi nơi khác trong hệ thống — KHÔNG hạ xuống sm
+   chỉ vì đây là <h4> lồng trong card (typography audit hotfix mục 6, chỉ sửa đúng selector này,
+   `.plan-section` chỉ dùng riêng cho màn Mặt bằng chợ, không ảnh hưởng màn khác). */
+.plan-section h4 { font-size: var(--font-size-base); margin-bottom: 8px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .plan-section h4 span { font-weight: 400; font-size: var(--font-size-xs); color: var(--muted); }
 .plan-row { display: flex; align-items: center; gap: 6px; margin-top: 5px; }
 .plan-row .rl { width: 18px; font-size: var(--font-size-xs); color: var(--muted); font-weight: 600; flex: none; }
@@ -317,6 +321,9 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 .mb-overview.on { color: var(--brand); }
 .mb-caret-btn { border: 0; background: transparent; cursor: pointer; width: 16px; flex: none; color: var(--muted); font-size: 9px; padding: 6px 0; }
 .mb-node-label { font-weight: 600; }
+/* Khối/Tầng cũng click được để xem (drill-down mục 2/4) — cùng chữ ký .mb-node-label, chỉ đổi tag
+   span → button, giữ nguyên style; .mb-node.on (đã có) tự tô nền khi đang chọn đúng node này. */
+.mb-node-label-btn { border: 0; background: transparent; cursor: pointer; text-align: left; padding: 0; font: inherit; color: inherit; }
 .mb-zone-label { border: 0; background: transparent; cursor: pointer; text-align: left; padding: 3px 0; color: var(--ink-2); flex: 1; min-width: 0; }
 .mb-zone.on .mb-zone-label { color: var(--brand); font-weight: 600; }
 .mb-block + .mb-block { margin-top: 4px; }
@@ -332,8 +339,29 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 .mb-iconbtn.danger:hover { color: var(--danger); background: var(--danger-soft); }
 .mb-more { opacity: .55; }
 .mb-more:hover { opacity: 1; }
-.mb-ov-card { cursor: pointer; text-align: left; border: 1px solid var(--line); }
-.mb-ov-card:hover { border-color: #9fbdb4; box-shadow: var(--shadow); }
+/* Breadcrumb (mục 10) phía trên vùng nội dung bên phải — derived UI state, không lưu dữ liệu. */
+.mb-crumb { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: var(--font-size-sm); color: var(--muted); margin-bottom: 8px; }
+.mb-crumb-link { border: 0; background: transparent; cursor: pointer; padding: 2px 0; font-size: var(--font-size-sm); color: var(--muted); text-decoration: underline; text-decoration-color: transparent; }
+.mb-crumb-link:hover { color: var(--brand); text-decoration-color: currentColor; }
+.mb-crumb-sep { color: var(--line); }
+.mb-crumb-cur { font-weight: 600; color: var(--ink-2); }
+/* Tổng quan/Khối (hotfix mục 1/2/3 — cùng 1 visual language mọi cấp): mỗi khối 1 card, tiêu đề
+   click được → view Khối; bên trong render ĐỦ khu + point grid của mọi tầng, dùng chung đúng 1
+   renderer Khu (mb-zone-jump + .plan-section, xem js/v-dieuhanh.js) với view Tầng — không còn danh
+   sách/chip tóm tắt riêng. */
+.mb-ov { display: flex; flex-direction: column; gap: 12px; }
+.mb-ov-clickable { cursor: pointer; }
+.mb-ov-clickable:hover { background: var(--surface-2); }
+/* Heading nhóm 1 tầng khi 1 card (Khối/Tổng quan) chứa NHIỀU tầng — nhãn phụ (nhỏ, in hoa, mờ,
+   cùng kiểu với nhãn gộp Khối/Tầng ở cây cấu trúc `.mb-flatlabel-row .mb-node-label`) để phân biệt
+   rõ với tên khu bên dưới (nội dung chính, scale base — xem `.plan-section h4`). */
+.mb-floor-heading { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.mb-floor-heading-btn { border: 0; background: transparent; cursor: pointer; padding: 0; font-size: var(--font-size-sm); text-transform: uppercase; letter-spacing: .04em; font-weight: 700; color: var(--ink-2); }
+.mb-floor-heading-btn:hover { color: var(--brand); }
+.mb-floor-heading-meta { font-size: var(--font-size-xs); color: var(--muted); }
+/* Tầng/Khu: mỗi khu 1 .plan-section (đã có style riêng), tên khu click được → view Khu. */
+.mb-zone-jump { border: 0; background: transparent; cursor: pointer; padding: 0; font: inherit; font-weight: 700; color: var(--ink); }
+.mb-zone-jump:hover { color: var(--brand); text-decoration: underline; }
 .mb-tree-toggle { display: none; }
 @media (max-width: 860px) {
   .mb-tree-toggle { display: inline-flex; margin-bottom: 10px; }
