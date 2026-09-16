@@ -235,6 +235,19 @@
   }
   // Biểu đồ tổng hợp: [cột nhãn, cột giá trị, kiểu] cho các báo cáo chưa có biểu đồ riêng
   const RP_CHART = { lapday: [1, 8, '%'], biendong: [0, 3, 'n'], congno: [1, 3, 'đ'], suco: [0, 1, 'n'], nhanvien: [0, 2, 'đ'], miniapp: [1, 4, '%'], hethan: null, doisoat: null, miengiam: null };
+  // Biểu đồ cột ngang: nhãn dài đặt bên trái, không chồng chữ khi có nhiều dòng
+  function hbars(labels, values, o) {
+    const W = 660, L = 230, R = 70, rowH = 26, H = labels.length * rowH + 16;
+    const max = o.max || (Math.max.apply(null, values.concat([1])) * 1.05);
+    const pw = W - L - R;
+    let g = '';
+    labels.forEach((lb, i) => {
+      const y = 8 + i * rowH, w = Math.max(0, pw * (values[i] || 0) / max);
+      const txt = lb.length > 34 ? lb.slice(0, 33) + '…' : lb;
+      g += `<text x="${L - 8}" y="${y + 17}" text-anchor="end" font-size="11.5" fill="#2a3a52"><title>${U.esc(lb)}</title>${U.esc(txt)}</text><rect x="${L}" y="${y + 5}" width="${w}" height="16" rx="3" fill="#0961bb"><title>${U.esc(lb)}: ${o.fmt(values[i])}</title></rect><text x="${L + w + 6}" y="${y + 17}" font-size="11.5" fill="#0f1e32" font-weight="600">${o.fmt(values[i])}</text>`;
+    });
+    return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" style="max-height:${H}px">${g}</svg><div class="chart-legend"><span><i style="background:#0961bb"></i>${U.esc(o.name)}</span></div></div>`;
+  }
   A.VIEWS['bao-cao'] = function () {
     // Báo cáo thống kê = màn cross-market (A.SCREEN_MARKET['bao-cao'] === 'CROSS') — dùng bộ lọc
     // nội bộ A.xmMarket()/A.xmScopeBar() thay vì bị chặn/giới hạn theo selectedMarket (mục 9 Phase 2).
@@ -244,7 +257,7 @@
     let chart = '';
     if (r.chart === 'doanhthu') chart = U.bars(r.rows.map(x => x[0]), [{ name: 'Phải thu', values: r.rows.map(x => x[2]), color: '#bcd6f5' }, { name: 'Đã thu', values: r.rows.map(x => x[3]), color: '#0961bb' }], { stacked: false });
     else if (r.chart === 'khongtienmat') chart = U.bars(r.rows.map(x => x[0]), [{ name: 'Không tiền mặt %', values: r.rows.map(x => x[4]), color: '#0961bb' }], { stacked: false, max: 100, fmt: v => Math.round(v) + '%' });
-    else if (RP_CHART[key] && r.rows.length) { const [lc, vc, kind] = RP_CHART[key]; chart = U.bars(r.rows.map(x => String(x[lc]).replace(/^Khu /, '')), [{ name: r.cols[vc].replace(/ \(đ\)/, ''), values: r.rows.map(x => x[vc]), color: '#0961bb' }], { stacked: false, max: kind === '%' ? 100 : null, fmt: kind === '%' ? v => Math.round(v) + '%' : kind === 'đ' ? U.moneyShort : v => num(v) }); }
+    else if (RP_CHART[key] && r.rows.length) { const [lc, vc, kind] = RP_CHART[key]; const fmt = kind === '%' ? v => Math.round(v) + '%' : kind === 'đ' ? U.moneyShort : v => num(v); const labels = r.rows.map(x => (key === 'lapday' || key === 'congno' ? x[0].replace('Chợ quê Tân Thuận Đông', 'Chợ quê').replace('Chợ Cao Lãnh', 'CL') + ' · ' : '') + String(x[lc]).replace(/^Khu /, '')); chart = key === 'biendong' ? U.bars(labels, [{ name: r.cols[vc], values: r.rows.map(x => x[vc]), color: '#0961bb' }], { stacked: false, fmt }) : hbars(labels, r.rows.map(x => x[vc]), { name: r.cols[vc].replace(/ (đ)/, ''), max: kind === '%' ? 100 : null, fmt }); }
     const hasMoney = r.cols.some(c => /\(đ\)/.test(c));
     const cols = r.cols.map(c => c.replace(/ \(đ\)/, ''));
     const numCol = k => k > 0 && typeof (r.rows[0] || [])[k] === 'number';
