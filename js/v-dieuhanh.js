@@ -7,16 +7,25 @@
   const TTD_SESSION_MARKET = 'TTD';
   const TTD_DEMO_SESSION_DATE = '2026-09-12';
   const SESSION_STATUS = {
-    draft: 'Nháp',
+    draft: 'Bản nháp',
     open: 'Mở đăng ký',
     registration_closed: 'Đã chốt danh sách',
     preparing: 'Đang chuẩn bị',
     live: 'Đang diễn ra',
-    pending_close: 'Chờ chốt',
+    pending_close: 'Chờ chốt phiên',
     closed: 'Đã chốt',
     postponed: 'Tạm hoãn',
     cancelled: 'Đã hủy'
   };
+  const SESSION_PROGRESS_STEPS = [
+    ['draft', 'Tạo phiên'],
+    ['open', 'Mở đăng ký'],
+    ['registration_closed', 'Chốt danh sách'],
+    ['preparing', 'Chuẩn bị'],
+    ['live', 'Đang diễn ra'],
+    ['pending_close', 'Chờ chốt'],
+    ['closed', 'Đã chốt']
+  ];
   const SESSION_TRANSITIONS = {
     draft: { open: 'phien-cho.mo-dang-ky', cancelled: 'phien-cho.huy-phien' },
     open: { registration_closed: 'phien-cho.chot-danh-sach', postponed: 'phien-cho.hoan-phien', cancelled: 'phien-cho.huy-phien' },
@@ -74,10 +83,10 @@
     return Number.isFinite(n) ? U.pctTxt(n * 100) : '—';
   }
   function formatTimeRange(s) {
-    return s && s.startTime && s.endTime ? U.esc(s.startTime) + '–' + U.esc(s.endTime) : '—';
+    return s && s.startTime && s.endTime ? U.esc(s.startTime) + '–' + U.esc(s.endTime) : 'Chưa thiết lập';
   }
   function formatDeadline(s) {
-    if (!s || !s.registrationDeadline) return '—';
+    if (!s || !s.registrationDeadline) return 'Chưa thiết lập';
     const raw = String(s.registrationDeadline);
     return U.dmy(raw.slice(0, 10)) + (raw.length >= 16 ? ' ' + raw.slice(11, 16) : '');
   }
@@ -99,6 +108,9 @@
     const live = ttdSessionReadModels().filter(s => s.status !== 'closed' && s.status !== 'cancelled')
       .sort((a, b) => a.date.localeCompare(b.date));
     return live[0] || null;
+  }
+  function latestClosedSession(list) {
+    return list.filter(s => s.status === 'closed').sort((a, b) => a.date.localeCompare(b.date)).slice(-1)[0] || null;
   }
   function hasSessionDate(date, excludeId) {
     return A.db.sessions.some(s => s && s.date === date && s.id !== excludeId);
@@ -460,6 +472,25 @@
     const cls = s.status === 'closed' ? 'ok' : s.status === 'cancelled' ? 'danger' : s.status === 'postponed' ? 'warn' : 'info';
     return `<span class="tag ${cls}">${SESSION_STATUS[s.status] || s.status}</span>`;
   }
+  function sessionMetricValue(s, key, closedLabel, openLabel) {
+    const value = s && s[key];
+    const has = Number.isFinite(Number(value));
+    return {
+      label: s && s.status === 'closed' ? closedLabel : openLabel,
+      value: has ? (key === 'revenue' ? formatMoneyShort(value) : formatNumber(value)) : 'Chưa ghi nhận'
+    };
+  }
+  function sessionProgressHtml(s) {
+    if (!s) return '';
+    if (s.status === 'postponed' || s.status === 'cancelled') {
+      return `<div class="session-progress special">${sessionStatusTag(s)}<span class="small muted">Phiên không nằm trên tuyến tiến trình vận hành chuẩn.</span></div>`;
+    }
+    const current = SESSION_PROGRESS_STEPS.findIndex(x => x[0] === s.status);
+    return `<div class="session-progress">${SESSION_PROGRESS_STEPS.map((step, i) => {
+      const cls = i < current ? 'done' : i === current ? 'current' : '';
+      return `<div class="session-step ${cls}"><span>${i + 1}</span><b>${step[1]}</b></div>`;
+    }).join('')}</div>`;
+  }
   function sessionActionButtons(s) {
     if (!s || s.market !== TTD_SESSION_MARKET) return '';
     const outs = [];
@@ -475,8 +506,13 @@
   }
   function sessionOpsHtml(s) {
     if (!s) return '<div class="card"><div class="card-h"><h3>Phiên sắp tới/đang vận hành</h3></div><div class="card-b"><div class="muted">Chưa có phiên chợ sắp tới.</div></div></div>';
+    const boothsMetric = sessionMetricValue(s, 'booths', 'Quầy thực tế tham gia', 'Số quầy đã ghi nhận');
+    const visitorsMetric = sessionMetricValue(s, 'visitors', 'Lượt khách ước tính', 'Lượt khách ước tính');
+    const revenueMetric = sessionMetricValue(s, 'revenue', 'Doanh thu tự khai', 'Doanh thu tự khai');
+    const actions = sessionActionButtons(s);
     return `<div class="card"><div class="card-h"><h3>Phiên sắp tới/đang vận hành</h3><span class="spacer"></span>${sessionStatusTag(s)}</div>
       <div class="card-b">
+        ${sessionProgressHtml(s)}
         <div class="grid g3">
           <div><div class="small muted">Ngày phiên</div><b>${sessionLabel(s)}</b></div>
           <div><div class="small muted">Khung giờ</div><b>${formatTimeRange(s)}</b></div>
@@ -484,38 +520,44 @@
           <div><div class="small muted">Người tạo</div><b>${U.esc(s.createdBy || 'Dữ liệu lịch sử')}</b></div>
           <div><div class="small muted">Người phụ trách</div><b>${U.esc(s.assignedTo || 'Chưa phân công')}</b></div>
           <div><div class="small muted">Người chốt</div><b>${U.esc(s.closedBy || '—')}</b></div>
+          <div><div class="small muted">${boothsMetric.label}</div><b>${boothsMetric.value}</b></div>
+          <div><div class="small muted">${visitorsMetric.label}</div><b>${visitorsMetric.value}</b></div>
+          <div><div class="small muted">${revenueMetric.label}</div><b>${revenueMetric.value}</b></div>
         </div>
         ${s.note ? `<div class="note info" style="margin-top:12px">${U.esc(s.note)}</div>` : ''}
         ${s.status === 'closed' ? `<div class="small muted" style="margin-top:12px">Đã chốt${s.closedAt ? ' lúc ' + U.esc(s.closedAt) : ''}. Phiên đã chốt chỉ đọc trong PC3A.</div>` : ''}
-        <div class="row" style="margin-top:12px">${sessionActionButtons(s)}</div>
+        <div class="row" style="margin-top:12px">${actions || '<span class="small muted">Không có thao tác phù hợp với quyền và trạng thái hiện tại.</span>'}</div>
       </div></div>`;
   }
   A.VIEWS['phien-cho'] = function () {
     const ss = ttdSessionReadModels();
     const historical = ss.filter(s => s.status === 'closed').sort((a, b) => a.date.localeCompare(b.date));
     const chartHistory = historical.filter(s => Number.isFinite(Number(s.visitors)));
-    const last = historical[historical.length - 1] || null;
-    const booths = ttdBusinessPoints() || [];
+    const last = latestClosedSession(ss);
     const active = activeTtdSession();
     const k = (l, v, s) => `<div class="card kpi"><div class="k-label">${l}</div><div class="k-value">${v}</div><div class="k-sub">${s}</div></div>`;
+    const canCreate = A.canDo('phien-cho.tao-phien', TTD_SESSION_MARKET);
     return `
-    <div class="note">Chợ quê Cù lao Tân Thuận Đông là <b>phiên chợ du lịch cộng đồng</b>, họp chiều thứ Bảy 14h–20h, không có trong phụ lục QĐ 480/QĐ-UBND. Vì vậy hệ thống quản lý theo <b>phiên</b>: đăng ký quầy theo năm, điểm danh quầy mỗi phiên, thu phí quầy theo phiên (mức 20.000 đ/quầy/phiên là giả định), thanh toán QR tại quầy. Không quản lý nội dung du lịch.</div>
-    <div class="row">${A.canDo('phien-cho.tao-phien', TTD_SESSION_MARKET) ? '<button class="btn primary" data-act="session-create">Tạo phiên mới</button>' : ''}</div>
-    <div class="kpis">
-      ${k('Phiên gần nhất', last ? U.dmy(last.date) : '—', 'phiên đã chốt')}
-      ${k('Quầy tham gia', last ? formatNumber(last.booths) + '/' + booths.length : '—/' + booths.length, 'quầy đăng ký')}
-      ${k('Lượt khách (ước)', last ? formatNumber(last.visitors) : '—', 'do tổ quản lý ghi nhận')}
-      ${k('Doanh thu tiểu thương (ước)', last ? formatMoneyShort(last.revenue) : '—', 'tổng hợp tự khai')}
-    </div>
+    <div class="note info">Phiên chợ quê được quản lý theo từng ngày phiên: đăng ký quầy, vận hành, điểm danh và chốt kết quả.</div>
+    ${canCreate ? '<div class="row"><button class="btn primary" data-act="session-create">Tạo phiên mới</button></div>' : ''}
     ${sessionOpsHtml(active)}
+    <div class="card"><div class="card-h"><h3>Tổng quan phiên gần nhất đã chốt</h3></div><div class="card-b">
+      ${last ? `<div class="kpis">
+        ${k('Phiên gần nhất', U.dmy(last.date), 'phiên đã chốt')}
+        ${k('Quầy thực tế tham gia', formatNumber(last.booths), 'từ dữ liệu chốt phiên')}
+        ${k('Lượt khách ước tính', formatNumber(last.visitors), 'do tổ quản lý ghi nhận')}
+        ${k('Doanh thu tự khai', formatMoneyShort(last.revenue), 'tổng hợp sau khi chốt')}
+      </div>` : '<div class="empty">Chưa có phiên chợ đã chốt.</div>'}
+    </div></div>
+    <div class="card"><div class="card-h"><h3>Báo cáo & lịch sử</h3></div><div class="card-b">
     <div class="grid g2">
       <div class="card"><div class="card-h"><h3>Lượt khách theo phiên</h3></div><div class="card-b">
         ${chartHistory.length ? U.bars(chartHistory.map(s => s.date.slice(8) + '/' + s.date.slice(5, 7)), [{ name: 'Lượt khách (ước)', values: chartHistory.map(s => Number(s.visitors)), color: '#c93d6e' }], { fmt: v => Math.round(v).toLocaleString('vi-VN'), stacked: false }) : '<div class="muted">Chưa có dữ liệu phiên đã chốt.</div>'}</div></div>
       <div class="card"><div class="card-h"><h3>Lịch sử các phiên</h3></div><div class="card-b">
-        ${U.table([{ t: 'Ngày' }, { t: 'Trạng thái' }, { t: 'Quầy', num: true }, { t: 'Phí phiên', num: true }, { t: 'Khách (ước)', num: true }, { t: 'Không tiền mặt', num: true }],
+        ${U.table([{ t: 'Ngày' }, { t: 'Trạng thái' }, { t: 'Quầy thực tế tham gia', num: true }, { t: 'Phí phiên', num: true }, { t: 'Khách (ước)', num: true }, { t: 'Không tiền mặt', num: true }],
           historical.slice().reverse().map(s => `<tr><td>${U.dmy(s.date)}</td><td>${sessionStatusTag(s)}</td><td class="num">${formatNumber(s.booths)}</td><td class="num">${formatMoney(s.fee)}</td><td class="num">${formatNumber(s.visitors)}</td><td class="num">${formatPct(s.noncash)}</td></tr>`))}
       </div></div>
-    </div>`;
+    </div></div></div>`;
   };
   Object.assign(A.ACT, {
     'session-create': () => {
