@@ -410,7 +410,10 @@ window.APP = (function () {
       { id: 'hop-dong', ico: '📄', label: 'Hợp đồng', badge: () => A.db.contracts.filter(c => U.inM(c) && c.status === 'hieuluc' && U.days(U.today(), c.end) <= 30).length }
     ] },
     { group: 'Tài chính', items: [
-      { id: 'cau-hinh-gia', ico: '💰', label: 'Cấu hình giá dịch vụ' },
+      { sub: 'Quản lý khai báo' },
+      { id: 'cau-hinh-gia', ico: '💰', label: 'Chính sách thu và biểu phí' },
+      { id: 'tai-khoan-ngan-hang', ico: '🏦', label: 'Danh sách tài khoản ngân hàng' },
+      { sub: 'Nghiệp vụ tài chính' },
       { id: 'dien-nuoc', ico: '⚡', label: 'Chỉ số điện, nước' },
       { id: 'phai-thu', ico: '🧾', label: 'Khoản phải thu' },
       { id: 'thu-tien', ico: '💳', label: 'Thu tiền & biên lai' },

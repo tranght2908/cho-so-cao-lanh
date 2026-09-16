@@ -1,8 +1,7 @@
-/* Dữ liệu "Cấu hình dịch vụ". Từ Phase 6 STEP A: 3 collection đơn giá (stallPrices/utilities/
- * extraServices) được UI hiển thị ở màn "Cấu hình giá dịch vụ" độc lập (js/v-vanhanh.js,
- * A.VIEWS['cau-hinh-gia'], nhóm Tài chính) — billingCycle/billingRules (Kỳ thu/Quy tắc thu phí)
- * vẫn hiển thị trong Cài đặt & phân quyền, không đổi. Module dữ liệu này (shape/API) KHÔNG đổi.
- * Module này ĐỘC LẬP với data.js — KHÔNG đọc/ghi D.UNIT, D.SESSION_FEE, D.ELEC, D.WATER.
+/* Dữ liệu "Chính sách thu và biểu phí". Ba collection đơn giá (stallPrices/utilities/
+ * extraServices) lấy seed cố định từ data.js và được UI hiển thị tại Tài chính > Quản lý khai báo.
+ * billingCycle/billingRules (Kỳ thu/Quy tắc thu phí) vẫn ở Cài đặt & phân quyền, không đổi.
+ * Module tiếp tục dùng đúng localStorage hiện có để lưu thao tác demo; không tạo storage mới.
  * Đây chỉ là kho cấu hình UI prototype (đơn giá, điện nước, dịch vụ khác, kỳ thu, quy tắc
  * thu phí), có căn cứ pháp lý + tài liệu đính kèm (mock, không upload server) + lịch sử thay
  * đổi. Các màn tài chính thật (Khoản phải thu, Thu tiền, Chỉ số điện nước...) KHÔNG đọc từ
@@ -11,29 +10,40 @@
  */
 (function (A) {
   'use strict';
+  const D = window.DATA;
   const SKEY = 'choso-caolanh-serviceconfig';
   let seq = 0;
   const newId = p => p + '_' + Date.now().toString(36) + (++seq);
 
   function emptyLegal() { return { docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' }; }
+  function clone(value) { return JSON.parse(JSON.stringify(value)); }
+  function marketModelFor(marketId) { return marketId === 'TTD' ? 'MARKET_SESSION' : 'FIXED_MONTHLY'; }
+  function cycleFor(marketId) { return marketId === 'TTD' ? 'SESSION' : 'MONTH'; }
+  function normalizeRecord(cat, rec) {
+    rec.marketModel = rec.marketModel || marketModelFor(rec.marketId);
+    rec.collectionCycle = rec.collectionCycle || cycleFor(rec.marketId);
+    rec.taxClass = rec.taxClass || (cat === 'utilities' ? 'PASS_THROUGH_NON_TAX' : 'TAXABLE_REVENUE');
+    if (rec.waiverTypeId === undefined) rec.waiverTypeId = null;
+    if (rec.effectiveTo === undefined) rec.effectiveTo = null;
+    if (cat === 'utilities') {
+      rec.elecUnit = rec.elecUnit || 'đ/kWh';
+      rec.waterUnit = rec.waterUnit || 'đ/m³';
+    }
+    return rec;
+  }
+  function normalizeConfig(cfg) {
+    cfg.waiverTypes = Array.isArray(cfg.waiverTypes) ? cfg.waiverTypes : clone(D.WAIVER_TYPES || []);
+    ['stallPrices', 'utilities', 'extraServices'].forEach(cat => {
+      cfg[cat] = Array.isArray(cfg[cat]) ? cfg[cat] : [];
+      cfg[cat].forEach(rec => normalizeRecord(cat, rec));
+    });
+    return cfg;
+  }
 
   function defaultConfig() {
-    const legal480 = { docNo: '480/QĐ-UBND', docDate: '2026-02-14', issuer: 'UBND tỉnh Đồng Tháp', summary: 'Quy định đơn giá dịch vụ chợ', effectiveDate: '2026-02-14', note: '' };
-    return {
-      stallPrices: [
-        { id: newId('sp'), marketId: 'CL', area: 'Toàn chợ (hạng 1)', stallType: 'Ki-ốt', amount: 2000, unit: 'đ/m²/ngày', effectiveFrom: '2026-02-14', effectiveTo: null, status: 'active', legalBasis: Object.assign({}, legal480), attachments: [{ id: 'att-001', name: 'QD_480_2026.pdf', type: 'application/pdf', note: 'Văn bản căn cứ', mock: true }], history: [{ time: '14/02/2026 09:30', user: 'Trần Minh Khoa', action: 'Tạo đơn giá', detail: '2.000 đ/m²/ngày' }] },
-        { id: newId('sp'), marketId: 'CL', area: 'Toàn chợ (hạng 1)', stallType: 'Trong nhà lồng chợ', amount: 2000, unit: 'đ/m²/ngày', effectiveFrom: '2026-02-14', effectiveTo: null, status: 'active', legalBasis: Object.assign({}, legal480), attachments: [], history: [{ time: '14/02/2026 09:30', user: 'Trần Minh Khoa', action: 'Tạo đơn giá', detail: '2.000 đ/m²/ngày' }] },
-        { id: newId('sp'), marketId: 'CL', area: 'Ngoài nhà lồng', stallType: 'Tự sản tự tiêu', amount: 800, unit: 'đ/m²/ngày', effectiveFrom: '2026-02-14', effectiveTo: null, status: 'active', legalBasis: Object.assign({}, legal480), attachments: [{ id: 'att-002', name: 'bang_gia_trang_3.png', type: 'image/png', note: 'Trang có bảng đơn giá', mock: true }], history: [{ time: '14/02/2026 09:30', user: 'Trần Minh Khoa', action: 'Tạo đơn giá', detail: '800 đ/m²/ngày' }, { time: '01/03/2026 10:15', user: 'Trần Minh Khoa', action: 'Cập nhật căn cứ', detail: 'Bổ sung QĐ 480/QĐ-UBND' }] },
-        { id: newId('sp'), marketId: 'TTD', area: 'Khu chợ quê', stallType: 'Quầy theo phiên', amount: 20000, unit: 'đ/quầy/phiên', effectiveFrom: '2026-01-01', effectiveTo: null, status: 'active', legalBasis: { docNo: '', docDate: '', issuer: 'UBND phường Cao Lãnh', summary: 'Mức thu giả định, chưa có trong phụ lục QĐ 480', effectiveDate: '2026-01-01', note: 'Giả định, chờ văn bản chính thức' }, attachments: [], history: [{ time: '01/01/2026 08:00', user: 'Trần Minh Khoa', action: 'Tạo đơn giá', detail: '20.000 đ/quầy/phiên' }] }
-      ],
-      utilities: [
-        { id: newId('ut'), marketId: 'CL', elecPrice: 3200, waterPrice: 12000, effectiveFrom: '2026-01-01', status: 'active', legalBasis: { docNo: '', docDate: '', issuer: 'Theo giá bán lẻ hiện hành', summary: 'Đơn giá điện, nước áp dụng cho điểm kinh doanh có đồng hồ riêng', effectiveDate: '2026-01-01', note: '' }, attachments: [], history: [{ time: '01/01/2026 08:00', user: 'Võ Hoàng Tuấn', action: 'Tạo cấu hình', detail: 'Điện 3.200 đ/kWh · Nước 12.000 đ/m³' }] }
-      ],
-      extraServices: [
-        { id: newId('es'), name: 'Vệ sinh', marketId: 'CL', calcMethod: 'area', amount: 2000, unit: 'đ/m²/tháng', effectiveFrom: '2026-01-01', status: 'active', legalBasis: emptyLegal(), attachments: [], history: [{ time: '01/01/2026 08:00', user: 'Trần Minh Khoa', action: 'Tạo dịch vụ', detail: '2.000 đ/m²/tháng' }] },
-        { id: newId('es'), name: 'Bảo vệ', marketId: 'CL', calcMethod: 'fixed', amount: 50000, unit: 'đ/điểm/tháng', effectiveFrom: '2026-01-01', status: 'active', legalBasis: emptyLegal(), attachments: [], history: [{ time: '01/01/2026 08:00', user: 'Trần Minh Khoa', action: 'Tạo dịch vụ', detail: '50.000 đ/điểm/tháng' }] },
-        { id: newId('es'), name: 'Gửi xe', marketId: 'ALL', calcMethod: 'qty', amount: 3000, unit: 'đ/lượt', effectiveFrom: '2026-01-01', status: 'inactive', legalBasis: Object.assign(emptyLegal(), { note: 'Chưa triển khai, đang chờ bố trí bãi xe' }), attachments: [], history: [{ time: '01/01/2026 08:00', user: 'Trần Minh Khoa', action: 'Tạo dịch vụ', detail: '3.000 đ/lượt (tạm chưa áp dụng)' }] }
-      ],
+    const rateSeed = clone(D.RATE_POLICY_SEED || { stallPrices: [], utilities: [], extraServices: [] });
+    return normalizeConfig(Object.assign(rateSeed, {
+      waiverTypes: clone(D.WAIVER_TYPES || []),
       billingCycle: {
         cycle: 'monthly', meterCutoffDay: 28, issueDay: 1, dueDay: 15, reminder1Days: 3, reminder2Days: 7,
         autoIssue: true, autoRemind: true,
@@ -46,13 +56,13 @@
         legalBasis: { docNo: '', docDate: '', issuer: 'Ban Quản lý chợ', summary: 'Quy tắc điều chỉnh, miễn giảm khoản phải thu', effectiveDate: '2026-01-01', note: '' },
         attachments: [], history: [{ time: '01/01/2026 08:00', user: 'Trần Minh Khoa', action: 'Tạo cấu hình', detail: 'Ngưỡng phê duyệt miễn giảm 10%' }]
       }
-    };
+    }));
   }
 
   function loadConfig() {
     try {
       const s = localStorage.getItem(SKEY);
-      if (s) { const x = JSON.parse(s); if (x && x.stallPrices && x.billingCycle && x.billingRules) return x; }
+      if (s) { const x = JSON.parse(s); if (x && x.stallPrices && x.billingCycle && x.billingRules) return normalizeConfig(x); }
     } catch (e) { /* bỏ qua */ }
     return defaultConfig();
   }
@@ -64,6 +74,7 @@
     KEY: SKEY,
     data: () => CFG,
     list: cat => CFG[cat],
+    waiverTypes: () => CFG.waiverTypes || [],
     get: (cat, id) => CFG[cat].find(x => x.id === id),
     add: (cat, rec, user) => {
       rec.id = newId(cat);
@@ -79,11 +90,36 @@
       Object.assign(r, patch);
       SC.log(r, user, action || 'Cập nhật cấu hình', detail || '');
     },
+    // Không ghi đè một bản ghi đang active. Đóng phiên bản cũ và tạo bản ghi mới có liên kết
+    // previousVersionId; dữ liệu cũ vẫn được giữ để tra cứu lịch sử.
+    createVersion: (cat, id, next, user, detail) => {
+      const current = SC.get(cat, id);
+      if (!current || current.status !== 'active') return null;
+      const eff = next.effectiveFrom;
+      const end = eff ? new Date(eff + 'T00:00:00') : null;
+      if (end && !isNaN(end.getTime())) { end.setDate(end.getDate() - 1); current.effectiveTo = end.toISOString().slice(0, 10); }
+      else current.effectiveTo = eff || current.effectiveFrom;
+      current.status = 'expired';
+      SC.log(current, user, 'Kết thúc hiệu lực', 'Được thay thế bởi phiên bản có hiệu lực từ ' + (eff || '—'));
+      const rec = normalizeRecord(cat, Object.assign({}, next));
+      rec.id = newId(cat);
+      rec.previousVersionId = current.id;
+      rec.status = 'active';
+      rec.effectiveTo = null;
+      rec.attachments = clone(current.attachments || []);
+      rec.history = [];
+      delete rec.__detail;
+      CFG[cat].push(rec);
+      SC.log(rec, user, 'Tạo phiên bản mới', detail || '');
+      return rec;
+    },
     setStatus: (cat, id, status, user) => {
       const r = SC.get(cat, id);
       if (!r) return;
+      if (r.status === 'expired' && status === 'active') return false;
       r.status = status;
       SC.log(r, user, status === 'active' ? 'Kích hoạt lại' : 'Vô hiệu hoá', '');
+      return true;
     },
     cycle: () => CFG.billingCycle,
     updateCycle: (patch, user, detail) => { Object.assign(CFG.billingCycle, patch); SC.log(CFG.billingCycle, user, 'Cập nhật kỳ thu', detail || ''); },
