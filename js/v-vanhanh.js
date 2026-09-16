@@ -239,7 +239,7 @@
     // Báo cáo thống kê = màn cross-market (A.SCREEN_MARKET['bao-cao'] === 'CROSS') — dùng bộ lọc
     // nội bộ A.xmMarket()/A.xmScopeBar() thay vì bị chặn/giới hạn theo selectedMarket (mục 9 Phase 2).
     const xmMkt = A.xmMarket();
-    const R = reports(xmMkt), key = R[ui.report] ? ui.report : 'lapday', r = R[key];
+    const R = reports(xmMkt), SF = A.STATE_FORMS || {}, stateKey = SF[ui.report] ? ui.report : null, key = stateKey ? 'lapday' : (R[ui.report] ? ui.report : 'lapday'), r = R[key];
     const rp = ui.rp || (ui.rp = { from: '2026-09-01', to: U.today() });
     let chart = '';
     if (r.chart === 'doanhthu') chart = U.bars(r.rows.map(x => x[0]), [{ name: 'Phải thu', values: r.rows.map(x => x[2]), color: '#bcd6f5' }, { name: 'Đã thu', values: r.rows.map(x => x[3]), color: '#0961bb' }], { stacked: false });
@@ -255,7 +255,7 @@
     const who = A.currentAccount ? A.currentAccount() : null;
     return `<div class="rp-page-h"><h2>Báo cáo thống kê</h2><div class="muted">Tạo, xem trước và xuất các báo cáo quản lý chợ</div></div>
     <div class="grid g-report rp-grid">
-      <div class="card no-print"><div class="card-h"><h3>Mẫu báo cáo</h3></div><div class="card-b rp-list">${Object.keys(R).map(k => `<button class="rp-item ${key === k ? 'on' : ''}" data-act="rp" data-id="${k}"><span class="rp-ico">📄</span><span><b>${R[k].t}</b><small>${RP_SUB[k] || ''}</small></span></button>`).join('')}</div></div>
+      <div class="card no-print"><div class="card-h"><h3>Mẫu báo cáo</h3></div><div class="card-b rp-list"><div class="rp-group">Báo cáo theo mẫu Nhà nước</div>${(A.STATE_FORM_ORDER || []).map(k => `<button class="rp-item ${stateKey === k ? 'on' : ''}" data-act="rp" data-id="${k}"><span class="rp-ico">🏛️</span><span><b>${SF[k].mau} – ${SF[k].t}</b><small>${SF[k].vb} · ${SF[k].ky}</small></span></button>`).join('')}<div class="rp-group">Báo cáo điều hành</div>${Object.keys(R).map(k => `<button class="rp-item ${!stateKey && key === k ? 'on' : ''}" data-act="rp" data-id="${k}"><span class="rp-ico">📄</span><span><b>${R[k].t}</b><small>${RP_SUB[k] || ''}</small></span></button>`).join('')}</div></div>
       <div class="rp-right">
         <div class="card no-print"><div class="card-h"><h3>Cấu hình báo cáo</h3></div><div class="card-b rp-cfg">
           <div class="field"><label>Từ ngày</label><input type="date" class="input" data-ch="rp-cfg" data-k="from" value="${rp.from}"></div>
@@ -263,8 +263,8 @@
           <div class="field"><label>Chợ</label><select class="input" data-ch="rp-scope" ${allowed.length <= 1 ? 'disabled' : ''}>${allowed.length > 1 ? `<option value="ALL" ${xmMkt === 'ALL' ? 'selected' : ''}>Tất cả chợ</option>` : ''}${allowed.map(id => `<option value="${id}" ${xmMkt === id ? 'selected' : ''}>${U.esc(U.market(id).name)}</option>`).join('')}</select></div>
           <div class="field"><label>Đơn vị lập</label><select class="input"><option>Ban Quản lý chợ</option><option>UBND phường Cao Lãnh</option></select></div>
         </div></div>
-        <div class="card rp-card"><div class="card-h no-print"><h3>👁 Xem trước: ${U.esc(r.t)}</h3><span class="spacer"></span><button class="btn" data-act="print">⬇ Xuất PDF</button><button class="btn" data-act="rp-csv">📊 Excel</button><button class="btn" data-act="print">🖨 In</button><button class="btn" data-act="rp-save">💾 Lưu mẫu</button></div>
-          <div class="card-b"><div class="rp-preview">
+        <div class="card rp-card"><div class="card-h no-print"><h3>👁 Xem trước: ${U.esc(stateKey ? SF[stateKey].mau + ' – ' + SF[stateKey].t : r.t)}</h3><span class="spacer"></span><button class="btn" data-act="print">⬇ Xuất PDF</button><button class="btn" data-act="rp-csv">📊 Excel</button><button class="btn" data-act="print">🖨 In</button><button class="btn" data-act="rp-save">💾 Lưu mẫu</button></div>
+          <div class="card-b">${stateKey ? A.stateFormHtml(stateKey, xmMkt) : `<div class="rp-preview">
             <div class="rp-org">UBND PHƯỜNG CAO LÃNH · BAN QUẢN LÝ CHỢ</div>
             <h2 class="rp-title">${U.esc(r.t.toUpperCase())}</h2>
             <div class="rp-period">Kỳ báo cáo: ${U.dmy(rp.from)} – ${U.dmy(rp.to)} · Phạm vi: ${U.esc(scopeName)}${hasMoney ? ' · Đơn vị tính: đồng' : ''}</div>
@@ -276,14 +276,14 @@
               ${tot ? `<tfoot><tr class="rp-total"><td></td>${tot.map((v, k) => `<td class="${typeof v === 'number' ? 'num' : ''}">${v === '' ? '' : fmtCell(v, r.cols[k])}</td>`).join('')}</tr></tfoot>` : ''}</table></div></div>
             <div class="rp-sign print-only"><div><div class="rp-sign-t">NGƯỜI LẬP BIỂU</div><div class="rp-sign-s">(Ký, ghi rõ họ tên)</div><div class="rp-sign-n">${U.esc(who && (who.accountType === 'Ban Quản lý chợ' || who.accountType === 'Nhân viên Ban Quản lý chợ') ? who.fullName : 'Lê Thị Ngọc Hân')}</div></div><div><div class="rp-sign-t">TRƯỞNG BAN QUẢN LÝ CHỢ</div><div class="rp-sign-s">(Ký, đóng dấu)</div><div class="rp-sign-n">Trần Minh Khoa</div></div></div>
             <div class="small muted rp-note">Số liệu sinh tự động từ dữ liệu nghiệp vụ của hệ thống lúc ${U.nowTime()} ngày ${U.dmy(U.today())}.</div>
-          </div></div></div>
+          </div>`}</div></div>
       </div></div>`;
   };
   A.CH['rp-cfg'] = el => { ui.rp[el.dataset.k] = el.value; A.render(); };
   A.CH['rp-scope'] = el => { A.ACT['xm-scope']({ dataset: { id: el.value } }); };
   A.ACT['rp-save'] = () => U.toast('Đã lưu mẫu báo cáo (mô phỏng)');
   A.ACT.rp = el => { ui.report = el.dataset.id; A.render(); };
-  A.ACT['rp-csv'] = () => { const R = reports(A.xmMarket()), r = R[ui.report] || R.lapday; U.csv('bao-cao-' + (R[ui.report] ? ui.report : 'lapday'), r.cols, r.rows); };
+  A.ACT['rp-csv'] = () => { if (A.STATE_FORMS && A.STATE_FORMS[ui.report]) { A.stateFormCsv(ui.report, A.xmMarket()); return; } const R = reports(A.xmMarket()), r = R[ui.report] || R.lapday; U.csv('bao-cao-' + (R[ui.report] ? ui.report : 'lapday'), r.cols, r.rows); };
 
   // ---------- Tài khoản người dùng ----------
   function accInitials(name) {

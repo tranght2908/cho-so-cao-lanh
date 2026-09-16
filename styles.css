@@ -499,3 +499,14 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 @media (max-width: 1180px) { .rp-cfg { grid-template-columns: 1fr 1fr; } .rp-kpis { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 860px) { .rp-grid { grid-template-columns: 1fr; } .rp-preview { padding: 14px; } .rp-kpi .v { font-size: 18px; } }
 @media print { .print-only { display: flex; } .rp-preview { border: 0; padding: 0; } .rp-page-h { display: none; } }
+
+/* Báo cáo theo mẫu Nhà nước */
+.rp-group { font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 6px 2px 2px; }
+.rp-state-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.rp-state-head .rp-org { text-align: left; font-weight: 600; }
+.rp-state-head .rp-org-b { font-weight: 800; color: var(--brand); }
+.rp-mau { text-align: right; font-size: 13px; }
+.rp-form th { text-align: center; vertical-align: middle; border: 1px solid #c9d3df; background: #eef3fa; font-size: 11.5px; padding: 6px 6px; }
+.rp-form td { border: 1px solid #dbe2e9; font-size: 12.5px; }
+.rp-form .rp-colno th { background: #f7f9fc; color: var(--muted); font-weight: 500; font-size: 11px; padding: 3px; }
+.rp-form .rp-total td { background: #eef3fa; font-weight: 700; }
