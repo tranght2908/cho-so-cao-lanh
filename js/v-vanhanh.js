@@ -192,10 +192,11 @@
     };
   }
   const fmtCell = (v, col) => typeof v === 'number' ? (/%/.test(col) ? U.pctTxt(v) : /\(đ\)/.test(col) ? U.money(v) : v.toLocaleString('vi-VN')) : U.esc(v);
-  // Trình bày báo cáo theo mẫu văn bản: đầu đề cơ quan, tiêu đề, kỳ/phạm vi/đơn vị tính, STT, dòng tổng
-  // cộng, khối ký tên khi in. Chỉ là lớp hiển thị — số liệu vẫn lấy nguyên từ reports().
+  // Trình bày báo cáo theo bố cục của hệ thống điều hành phường (IOC): danh sách mẫu báo cáo → cấu
+  // hình → khung xem trước (cơ quan, tiêu đề, kỳ; 4 ô chỉ số; biểu đồ tổng hợp; bảng dữ liệu tổng hợp).
+  // Chỉ là lớp hiển thị — số liệu vẫn lấy nguyên từ reports().
+  const RP_SUB = { lapday: 'Tình trạng từng khu vực, tỷ lệ lấp đầy', biendong: 'Đăng ký mới, chấm dứt theo tháng', hethan: 'Hợp đồng cần gia hạn trong 60 ngày', doanhthu: 'Phải thu, đã thu, tỷ lệ thu theo kỳ', congno: 'Nợ quá hạn, chưa đến hạn theo khu vực', khongtienmat: 'Tiền mặt, QR, chuyển khoản theo kỳ', doisoat: 'Sao kê ngân hàng và kết quả khớp', suco: 'Phản ánh, sự cố và kết quả xử lý', nhanvien: 'Biên lai và số tiền theo người thu', miengiam: 'Các khoản được miễn giảm, điều chỉnh', miniapp: 'Tiểu thương đã cài mini app theo ngành hàng' };
   const RP_NOTOTAL = /Cuối kỳ|Còn lại|Đánh giá|Mức|Giờ|Ngày|Tháng|Kỳ/i;
-  // Cách tính ô "%" ở dòng tổng cộng cho từng báo cáo: [cột tử, cột mẫu] hoặc hàm(rows) → số
   const RP_PCT = {
     lapday: rows => { const t = U.sum(rows, r => r[2]), e = U.sum(rows, r => r[7]); return U.pct(t - e, t); },
     doanhthu: rows => U.pct(U.sum(rows, r => r[3]), U.sum(rows, r => r[2])),
@@ -206,45 +207,81 @@
     if (!r.rows.length) return null;
     const cells = r.cols.map((c, k) => {
       if (k === 0) return 'Tổng cộng';
-      const allNum = r.rows.every(row => typeof row[k] === 'number');
-      if (!allNum) return '';
+      if (!r.rows.every(row => typeof row[k] === 'number')) return '';
       if (/%/.test(c)) return RP_PCT[key] ? RP_PCT[key](r.rows) : '';
       if (RP_NOTOTAL.test(c)) return '';
       return U.sum(r.rows, row => row[k]);
     });
-    if (cells.slice(1).every(v => v === '')) return null;
-    return cells;
+    return cells.slice(1).every(v => v === '') ? null : cells;
   }
+  // 4 ô chỉ số của từng báo cáo, tính từ rows
+  const num = v => Math.round(v || 0).toLocaleString('vi-VN');
+  function rpKpis(key, rows) {
+    const S = k => U.sum(rows, r => r[k]), n = rows.length, last = rows[n - 1] || [];
+    switch (key) {
+      case 'lapday': return [['Tổng điểm KD', num(S(2))], ['Đang thuê', num(S(3))], ['Còn trống', num(S(7))], ['Lấp đầy', U.pctTxt(RP_PCT.lapday(rows))]];
+      case 'biendong': return [['Đăng ký mới', num(S(1))], ['Chấm dứt', num(S(2))], ['Tiểu thương cuối kỳ', num(last[3] || 0)], ['Biến động ròng', (S(1) - S(2) >= 0 ? '+' : '') + num(S(1) - S(2))]];
+      case 'hethan': return [['Hợp đồng sắp hết hạn', num(n)], ['Trong 30 ngày', num(rows.filter(r => r[4] <= 30).length)], ['Từ 31–60 ngày', num(rows.filter(r => r[4] > 30).length)], ['Gần nhất', n ? rows[0][4] + ' ngày' : '—']];
+      case 'doanhthu': return [['Phải thu', U.moneyShort(S(2))], ['Đã thu', U.moneyShort(S(3))], ['Tỷ lệ thu', U.pctTxt(RP_PCT.doanhthu(rows))], ['Còn phải thu', U.moneyShort(S(2) - S(3))]];
+      case 'congno': return [['Tiểu thương nợ', num(S(2))], ['Nợ quá hạn', U.moneyShort(S(3))], ['Nợ chưa đến hạn', U.moneyShort(S(4))], ['Tổng công nợ', U.moneyShort(S(3) + S(4))]];
+      case 'khongtienmat': return [['Tiền mặt', U.moneyShort(S(1))], ['Quét QR', U.moneyShort(S(2))], ['Chuyển khoản', U.moneyShort(S(3))], ['Không tiền mặt', U.pctTxt(RP_PCT.khongtienmat(rows))]];
+      case 'doisoat': return [['Giao dịch sao kê', num(n)], ['Đã khớp', num(rows.filter(r => r[4] === 'Đã khớp').length)], ['Chưa khớp', num(rows.filter(r => r[4] !== 'Đã khớp').length)], ['Tổng tiền', U.moneyShort(S(3))]];
+      case 'suco': return [['Tổng phản ánh', num(S(1))], ['Đã xử lý xong', num(S(2))], ['Đang xử lý', num(S(3))], ['Quá hạn', num(S(4))]];
+      case 'nhanvien': return [['Người thu', num(n)], ['Số biên lai', num(S(1))], ['Số tiền', U.moneyShort(S(2))], ['Bình quân / biên lai', U.moneyShort(S(1) ? S(2) / S(1) : 0)]];
+      case 'miengiam': return [['Khoản miễn giảm', num(n)], ['Tổng tiền giảm', U.moneyShort(S(4))], ['Mức giảm bình quân', n ? U.pctTxt(S(3) / n) : '—'], ['Tiểu thương', num(new Set(rows.map(r => r[1])).size)]];
+      case 'miniapp': return [['Tiểu thương', num(S(2))], ['Đã cài mini app', num(S(3))], ['Tỷ lệ', U.pctTxt(RP_PCT.miniapp(rows))], ['Chưa cài', num(S(2) - S(3))]];
+    }
+    return [];
+  }
+  // Biểu đồ tổng hợp: [cột nhãn, cột giá trị, kiểu] cho các báo cáo chưa có biểu đồ riêng
+  const RP_CHART = { lapday: [1, 8, '%'], biendong: [0, 3, 'n'], congno: [1, 3, 'đ'], suco: [0, 1, 'n'], nhanvien: [0, 2, 'đ'], miniapp: [1, 4, '%'], hethan: null, doisoat: null, miengiam: null };
   A.VIEWS['bao-cao'] = function () {
     // Báo cáo thống kê = màn cross-market (A.SCREEN_MARKET['bao-cao'] === 'CROSS') — dùng bộ lọc
     // nội bộ A.xmMarket()/A.xmScopeBar() thay vì bị chặn/giới hạn theo selectedMarket (mục 9 Phase 2).
     const xmMkt = A.xmMarket();
     const R = reports(xmMkt), key = R[ui.report] ? ui.report : 'lapday', r = R[key];
+    const rp = ui.rp || (ui.rp = { from: '2026-09-01', to: U.today() });
     let chart = '';
-    if (r.chart === 'doanhthu') chart = U.bars(r.rows.map(x => x[0]), [{ name: 'Phải thu', values: r.rows.map(x => x[2]), color: '#bcd6f5' }, { name: 'Đã thu', values: r.rows.map(x => x[3]), color: '#1f6fd0' }], { stacked: false });
-    if (r.chart === 'khongtienmat') chart = U.bars(r.rows.map(x => x[0]), [{ name: 'Không tiền mặt %', values: r.rows.map(x => x[4]), color: '#0089df' }], { stacked: false, max: 100, fmt: v => Math.round(v) + '%' });
+    if (r.chart === 'doanhthu') chart = U.bars(r.rows.map(x => x[0]), [{ name: 'Phải thu', values: r.rows.map(x => x[2]), color: '#bcd6f5' }, { name: 'Đã thu', values: r.rows.map(x => x[3]), color: '#0961bb' }], { stacked: false });
+    else if (r.chart === 'khongtienmat') chart = U.bars(r.rows.map(x => x[0]), [{ name: 'Không tiền mặt %', values: r.rows.map(x => x[4]), color: '#0961bb' }], { stacked: false, max: 100, fmt: v => Math.round(v) + '%' });
+    else if (RP_CHART[key] && r.rows.length) { const [lc, vc, kind] = RP_CHART[key]; chart = U.bars(r.rows.map(x => String(x[lc]).replace(/^Khu /, '')), [{ name: r.cols[vc].replace(/ \(đ\)/, ''), values: r.rows.map(x => x[vc]), color: '#0961bb' }], { stacked: false, max: kind === '%' ? 100 : null, fmt: kind === '%' ? v => Math.round(v) + '%' : kind === 'đ' ? U.moneyShort : v => num(v) }); }
     const hasMoney = r.cols.some(c => /\(đ\)/.test(c));
     const cols = r.cols.map(c => c.replace(/ \(đ\)/, ''));
     const numCol = k => k > 0 && typeof (r.rows[0] || [])[k] === 'number';
     const tot = rpTotals(key, r);
-    const scope = xmMkt === 'ALL' ? 'Chợ Cao Lãnh và Chợ quê Cù lao Tân Thuận Đông' : U.market(xmMkt).name;
-    const idx = Object.keys(R).indexOf(key) + 1;
+    const kpis = rpKpis(key, r.rows);
+    const scopeName = xmMkt === 'ALL' ? 'Chợ Cao Lãnh và Chợ quê Cù lao Tân Thuận Đông' : U.market(xmMkt).name;
+    const allowed = A.allowedMarkets(A.currentAccount());
     const who = A.currentAccount ? A.currentAccount() : null;
-    return `<div class="grid g-report">
-      <div class="card no-print"><div class="card-b" style="padding-top:12px;padding-bottom:4px"><div class="label-sm" style="margin-bottom:4px">Phạm vi</div>${A.xmScopeBar() || "<span class=\"small muted\">" + U.esc(scope) + "</span>"}</div><div class="card-b report-list" style="padding-top:6px">${Object.keys(R).map((k, n) => `<button class="${key === k ? 'on' : ''}" data-act="rp" data-id="${k}">${n + 1}. ${R[k].t}</button>`).join('')}</div></div>
-      <div class="card rp-card"><div class="card-h no-print"><h3>Báo cáo ${U.pad(idx)}</h3><span class="spacer"></span><button class="btn" data-act="rp-csv">⬇ Xuất Excel</button><button class="btn primary" data-act="print">🖨 In / PDF</button></div>
-        <div class="card-b rp-doc">
-          <div class="rp-head"><div class="rp-org"><div class="rp-org-1">UBND PHƯỜNG CAO LÃNH</div><div class="rp-org-2">BAN QUẢN LÝ CHỢ</div></div><div class="rp-no">Số: ${U.pad(idx)}/BC-BQLC<br><span class="muted">Cao Lãnh, ngày ${U.dmy(U.today()).replace(/\//g, ' tháng ').replace(/ tháng (\d+)$/, ' năm $1')}</span></div></div>
-          <h2 class="rp-title">${U.esc(r.t.toUpperCase())}</h2>
-          <div class="rp-meta"><span><b>Phạm vi:</b> ${U.esc(scope)}</span><span><b>Kỳ số liệu:</b> tháng 09/2026</span>${hasMoney ? '<span><b>Đơn vị tính:</b> đồng</span>' : ''}<span><b>Số dòng:</b> ${r.rows.length}</span></div>
-          ${chart ? `<div class="rp-chart">${chart}</div>` : ''}
-          <div class="tbl-wrap"><table class="tbl rp-tbl"><thead><tr><th class="num rp-stt">STT</th>${cols.map((c, k) => `<th class="${numCol(k) ? 'num' : ''}">${U.esc(c)}</th>`).join('')}</tr></thead>
-            <tbody>${r.rows.length ? r.rows.map((row, i) => `<tr><td class="num rp-stt">${i + 1}</td>${row.map((v, k) => `<td class="${typeof v === 'number' ? 'num' : ''} ${k === 0 ? 'rp-first' : ''}">${fmtCell(v, r.cols[k])}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length + 1}" class="empty">Không có dữ liệu trong phạm vi đã chọn</td></tr>`}</tbody>
-            ${tot ? `<tfoot><tr class="rp-total"><td></td>${tot.map((v, k) => `<td class="${typeof v === 'number' ? 'num' : ''}">${v === '' ? '' : fmtCell(v, r.cols[k])}</td>`).join('')}</tr></tfoot>` : ''}</table></div>
-          <div class="rp-sign"><div><div class="rp-sign-t">NGƯỜI LẬP BIỂU</div><div class="rp-sign-s">(Ký, ghi rõ họ tên)</div><div class="rp-sign-n">${U.esc(who && (who.accountType === 'Ban Quản lý chợ' || who.accountType === 'Nhân viên Ban Quản lý chợ') ? who.fullName : 'Lê Thị Ngọc Hân')}</div></div><div><div class="rp-sign-t">TRƯỞNG BAN QUẢN LÝ CHỢ</div><div class="rp-sign-s">(Ký, đóng dấu)</div><div class="rp-sign-n">Trần Minh Khoa</div></div></div>
-          <div class="small muted rp-note">Báo cáo được sinh tự động từ dữ liệu nghiệp vụ của hệ thống lúc ${U.nowTime()} ngày ${U.dmy(U.today())}, không tổng hợp thủ công.</div>
-        </div></div></div>`;
+    return `<div class="rp-page-h"><h2>Báo cáo thống kê</h2><div class="muted">Tạo, xem trước và xuất các báo cáo quản lý chợ</div></div>
+    <div class="grid g-report rp-grid">
+      <div class="card no-print"><div class="card-h"><h3>Mẫu báo cáo</h3></div><div class="card-b rp-list">${Object.keys(R).map(k => `<button class="rp-item ${key === k ? 'on' : ''}" data-act="rp" data-id="${k}"><span class="rp-ico">📄</span><span><b>${R[k].t}</b><small>${RP_SUB[k] || ''}</small></span></button>`).join('')}</div></div>
+      <div class="rp-right">
+        <div class="card no-print"><div class="card-h"><h3>Cấu hình báo cáo</h3></div><div class="card-b rp-cfg">
+          <div class="field"><label>Từ ngày</label><input type="date" class="input" data-ch="rp-cfg" data-k="from" value="${rp.from}"></div>
+          <div class="field"><label>Đến ngày</label><input type="date" class="input" data-ch="rp-cfg" data-k="to" value="${rp.to}"></div>
+          <div class="field"><label>Chợ</label><select class="input" data-ch="rp-scope" ${allowed.length <= 1 ? 'disabled' : ''}>${allowed.length > 1 ? `<option value="ALL" ${xmMkt === 'ALL' ? 'selected' : ''}>Tất cả chợ</option>` : ''}${allowed.map(id => `<option value="${id}" ${xmMkt === id ? 'selected' : ''}>${U.esc(U.market(id).name)}</option>`).join('')}</select></div>
+          <div class="field"><label>Đơn vị lập</label><select class="input"><option>Ban Quản lý chợ</option><option>UBND phường Cao Lãnh</option></select></div>
+        </div></div>
+        <div class="card rp-card"><div class="card-h no-print"><h3>👁 Xem trước: ${U.esc(r.t)}</h3><span class="spacer"></span><button class="btn" data-act="print">⬇ Xuất PDF</button><button class="btn" data-act="rp-csv">📊 Excel</button><button class="btn" data-act="print">🖨 In</button><button class="btn" data-act="rp-save">💾 Lưu mẫu</button></div>
+          <div class="card-b"><div class="rp-preview">
+            <div class="rp-org">UBND PHƯỜNG CAO LÃNH · BAN QUẢN LÝ CHỢ</div>
+            <h2 class="rp-title">${U.esc(r.t.toUpperCase())}</h2>
+            <div class="rp-period">Kỳ báo cáo: ${U.dmy(rp.from)} – ${U.dmy(rp.to)} · Phạm vi: ${U.esc(scopeName)}${hasMoney ? ' · Đơn vị tính: đồng' : ''}</div>
+            <div class="rp-kpis">${kpis.map(k => `<div class="rp-kpi"><div class="l">${k[0]}</div><div class="v">${k[1]}</div></div>`).join('')}</div>
+            ${chart ? `<div class="rp-block"><div class="rp-block-h">📊 Biểu đồ tổng hợp</div>${chart}</div>` : ''}
+            <div class="rp-block"><div class="rp-block-h">📋 Bảng dữ liệu tổng hợp</div>
+              <div class="tbl-wrap"><table class="tbl rp-tbl"><thead><tr><th class="num rp-stt">STT</th>${cols.map((c, k) => `<th class="${numCol(k) ? 'num' : ''}">${U.esc(c)}</th>`).join('')}</tr></thead>
+              <tbody>${r.rows.length ? r.rows.map((row, i) => `<tr><td class="num rp-stt">${i + 1}</td>${row.map((v, k) => `<td class="${typeof v === 'number' ? 'num' : ''} ${k === 0 ? 'rp-first' : ''}">${fmtCell(v, r.cols[k])}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length + 1}" class="empty">Không có dữ liệu trong phạm vi đã chọn</td></tr>`}</tbody>
+              ${tot ? `<tfoot><tr class="rp-total"><td></td>${tot.map((v, k) => `<td class="${typeof v === 'number' ? 'num' : ''}">${v === '' ? '' : fmtCell(v, r.cols[k])}</td>`).join('')}</tr></tfoot>` : ''}</table></div></div>
+            <div class="rp-sign print-only"><div><div class="rp-sign-t">NGƯỜI LẬP BIỂU</div><div class="rp-sign-s">(Ký, ghi rõ họ tên)</div><div class="rp-sign-n">${U.esc(who && (who.accountType === 'Ban Quản lý chợ' || who.accountType === 'Nhân viên Ban Quản lý chợ') ? who.fullName : 'Lê Thị Ngọc Hân')}</div></div><div><div class="rp-sign-t">TRƯỞNG BAN QUẢN LÝ CHỢ</div><div class="rp-sign-s">(Ký, đóng dấu)</div><div class="rp-sign-n">Trần Minh Khoa</div></div></div>
+            <div class="small muted rp-note">Số liệu sinh tự động từ dữ liệu nghiệp vụ của hệ thống lúc ${U.nowTime()} ngày ${U.dmy(U.today())}.</div>
+          </div></div></div>
+      </div></div>`;
   };
+  A.CH['rp-cfg'] = el => { ui.rp[el.dataset.k] = el.value; A.render(); };
+  A.CH['rp-scope'] = el => { A.ACT['xm-scope']({ dataset: { id: el.value } }); };
+  A.ACT['rp-save'] = () => U.toast('Đã lưu mẫu báo cáo (mô phỏng)');
   A.ACT.rp = el => { ui.report = el.dataset.id; A.render(); };
   A.ACT['rp-csv'] = () => { const R = reports(A.xmMarket()), r = R[ui.report] || R.lapday; U.csv('bao-cao-' + (R[ui.report] ? ui.report : 'lapday'), r.cols, r.rows); };
 
