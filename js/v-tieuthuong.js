@@ -109,7 +109,7 @@
     return st.history.map(h => {
       const i = h.indexOf(': ');
       const date = i === -1 ? '' : h.slice(0, i), desc = i === -1 ? h : h.slice(i + 2);
-      return `<div style="padding:6px 0;border-bottom:1px solid #eef2f0">${date ? `<div class="small muted">${U.esc(date)}</div>` : ''}<div>${U.esc(desc)}</div></div>`;
+      return `<div style="padding:6px 0;border-bottom:1px solid #eef2f7">${date ? `<div class="small muted">${U.esc(date)}</div>` : ''}<div>${U.esc(desc)}</div></div>`;
     }).join('');
   }
   function dkDetailHtmlCL(st) {
@@ -148,7 +148,7 @@
           <dt>Người thuê</dt><dd>${t ? `${U.esc(t.name)} · ${t.id}` : 'Chưa có'}</dd>
           <dt>Người bán thực tế</dt><dd>${!t ? 'Chưa ghi nhận' : !seller ? 'Chưa ghi nhận' : sameSellerRenter ? `${U.esc(seller.name)} <span class="small muted">(người thuê trực tiếp kinh doanh)</span>` : U.esc(seller.name)}</dd>
           <dt>Hợp đồng hiện hành</dt><dd>${c ? c.id : 'Chưa có hợp đồng hiệu lực'}</dd>
-          ${c ? `<dt>Thời hạn</dt><dd>${U.dmy(c.start)} – ${U.dmy(c.end)} <span class="small muted">(${left <= 30 ? `<b style="color:#d6453b">còn ${left} ngày</b>` : 'còn ' + left + ' ngày'})</span></dd>` : ''}
+          ${c ? `<dt>Thời hạn</dt><dd>${U.dmy(c.start)} – ${U.dmy(c.end)} <span class="small muted">(${left <= 30 ? `<b style="color:#df2225">còn ${left} ngày</b>` : 'còn ' + left + ' ngày'})</span></dd>` : ''}
         </dl>
         <div class="divider"></div>
         <div class="row"><b style="font-size:var(--font-size-sm)">Lịch sử thay đổi</b></div>
@@ -338,7 +338,7 @@
       <td>${U.esc(ttCatsOf(t).join(', '))}</td>
       <td>${t.stalls.map(id => A.idx.stall.get(id).code).join(', ') || '–'}</td>
       <td>${t.app ? '<span class="tag ok">Đã cài</span>' : '<span class="tag">Chưa</span>'}</td>
-      <td class="num" style="${over ? 'color:#d6453b;font-weight:600' : ''}">${debt ? U.money(debt) : '–'}</td>
+      <td class="num" style="${over ? 'color:#df2225;font-weight:600' : ''}">${debt ? U.money(debt) : '–'}</td>
       <td class="nowrap"><button class="btn sm" data-act="trader" data-id="${t.id}">Xem</button></td></tr>`;
   }
   function ttViewCL() {
@@ -386,7 +386,7 @@
           const debt = U.traderDebt(t.id), over = U.traderOverdue(t.id);
           return `<tr class="click" data-act="trader" data-id="${t.id}"><td>${t.id}</td><td><b>${U.esc(t.name)}</b></td><td>${U.maskPhone(t.phone)}</td><td>${U.mShort(t.market)}</td><td>${U.esc(t.cat)}</td>
             <td>${t.stalls.map(id => A.idx.stall.get(id).code).join(', ') || '–'}</td><td>${t.app ? '<span class="tag ok">Đã cài</span>' : '<span class="tag">Chưa</span>'}</td>
-            <td class="num" style="${over ? 'color:#d6453b;font-weight:600' : ''}">${debt ? U.money(debt) : '–'}</td></tr>`;
+            <td class="num" style="${over ? 'color:#df2225;font-weight:600' : ''}">${debt ? U.money(debt) : '–'}</td></tr>`;
         }))}${pg.html}
         <div class="small muted" style="margin-top:8px">Số điện thoại, số giấy tờ được che trên danh sách theo Nghị định 356/2025/NĐ-CP về bảo vệ dữ liệu cá nhân.</div></div></div>`;
   }
@@ -397,7 +397,7 @@
   // ---- Drawer hồ sơ tiểu thương — Chợ Cao Lãnh (bố cục A-E theo yêu cầu, xem báo cáo) ----
   // TTĐ/market khác: GIỮ NGUYÊN modal cũ (nhánh else trong A.ACT.trader bên dưới), không đổi 1 dòng.
   function ttDocRow(label, has) {
-    return `<div class="row" style="padding:7px 0;border-bottom:1px solid #eef2f0"><span style="flex:1">${label}</span>
+    return `<div class="row" style="padding:7px 0;border-bottom:1px solid #eef2f7"><span style="flex:1">${label}</span>
       ${has ? '<span class="tag ok">Đã có</span>' : '<span class="tag">Chưa có</span>'}
       ${has ? `<button class="btn sm" style="margin-left:8px" data-act="tt-doc-view" data-label="${U.esc(label)}">Xem</button>` : ''}</div>`;
   }
@@ -470,7 +470,7 @@
         <div class="divider"></div>
         <div class="small muted" style="margin-bottom:8px">E. Tóm tắt nghiệp vụ tài chính</div>
         <dl class="kv">
-          <dt>Công nợ hiện tại</dt><dd>${debt ? `<b style="color:#d6453b">${U.money(debt)}</b>` : '<span class="tag ok">Không nợ</span>'}</dd>
+          <dt>Công nợ hiện tại</dt><dd>${debt ? `<b style="color:#df2225">${U.money(debt)}</b>` : '<span class="tag ok">Không nợ</span>'}</dd>
           <dt>Số khoản chưa thanh toán</dt><dd>${unpaidCount}</dd>
         </dl>
         ${canCongNo ? `<div class="row" style="margin-top:8px"><button class="btn sm" data-act="tt-open-congno">Xem công nợ</button></div>` : ''}

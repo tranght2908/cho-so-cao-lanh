@@ -91,8 +91,8 @@
     return header + `<div class="kpis">
       <div class="card kpi"><div class="k-label">Kỳ ghi chỉ số</div><div class="k-value">${U.per(p.id)}</div><div class="k-sub">${periodStatusBadge(p)}</div></div>
       <div class="card kpi"><div class="k-label">Đã ghi</div><div class="k-value">${done}/${all.length}</div><div class="bar-mini"><i style="width:${U.pct(done, all.length)}%"></i></div></div>
-      <div class="card kpi"><div class="k-label">Chưa ghi</div><div class="k-value" style="${todo ? 'color:#d6453b' : ''}">${todo}</div><div class="k-sub">điểm kinh doanh</div></div>
-      <div class="card kpi"><div class="k-label">Tăng bất thường</div><div class="k-value" style="color:#d6453b">${abn}</div><div class="k-sub">> 150% trung bình 3 kỳ</div></div></div>
+      <div class="card kpi"><div class="k-label">Chưa ghi</div><div class="k-value" style="${todo ? 'color:#df2225' : ''}">${todo}</div><div class="k-sub">điểm kinh doanh</div></div>
+      <div class="card kpi"><div class="k-label">Tăng bất thường</div><div class="k-value" style="color:#df2225">${abn}</div><div class="k-sub">> 150% trung bình 3 kỳ</div></div></div>
     <div class="card"><div class="card-h"><h3>Ghi chỉ số điện, nước</h3>
       <div class="seg">${[['all', 'Tất cả'], ['todo', 'Chưa ghi'], ['abn', 'Bất thường']].map(x => `<button class="${ui.readingsFilter === x[0] ? 'on' : ''}" data-act="dn-filter" data-id="${x[0]}">${x[1]}</button>`).join('')}</div>
       <span class="spacer"></span>
@@ -157,7 +157,7 @@
     const rows = A.db.readings.filter(r => r.period === p.id && U.inM(A.idx.stall.get(r.stallId)));
     const done = rows.filter(r => r.status === 'RECORDED').length, todo = rows.length - done, abn = rows.filter(abnormal).length;
     A.modal(A.mHead('Chốt kỳ ghi chỉ số ' + U.per(p.id) + '?') + `<div class="modal-b">
-      <dl class="kv"><dt>Đã ghi</dt><dd>${done}/${rows.length}</dd><dt>Chưa ghi</dt><dd style="${todo ? 'color:#d6453b;font-weight:600' : ''}">${todo}</dd><dt>Tăng bất thường</dt><dd>${abn}</dd></dl>
+      <dl class="kv"><dt>Đã ghi</dt><dd>${done}/${rows.length}</dd><dt>Chưa ghi</dt><dd style="${todo ? 'color:#df2225;font-weight:600' : ''}">${todo}</dd><dt>Tăng bất thường</dt><dd>${abn}</dd></dl>
       ${todo ? `<div class="note" style="margin-top:12px">Còn ${todo} điểm kinh doanh chưa ghi chỉ số. Vui lòng ghi đủ trước khi chốt kỳ.</div>` : '<div class="note info" style="margin-top:12px">Sau khi chốt, dữ liệu kỳ này sẽ chuyển sang chế độ chỉ xem.</div>'}
       </div><div class="modal-f"><button class="btn" data-act="close">Hủy</button>
       <button class="btn primary" data-act="dn-close-confirm" data-id="${p.id}" ${todo ? 'disabled' : ''}>Xác nhận chốt kỳ</button></div>`);
@@ -241,7 +241,7 @@
       <div class="card kpi"><div class="k-label">Số khoản phải thu</div><div class="k-value">${inv.length}</div><div class="k-sub">Tạo tự động từ hợp đồng, đơn giá, chỉ số điện nước</div></div>
       <div class="card kpi"><div class="k-label">Tổng phải thu</div><div class="k-value">${U.moneyShort(amt)}</div><div class="k-sub">${U.money(amt)}</div></div>
       <div class="card kpi"><div class="k-label">Đã thu</div><div class="k-value">${U.moneyShort(paid)}</div><div class="bar-mini"><i style="width:${U.pct(paid, amt)}%"></i></div></div>
-      <div class="card kpi"><div class="k-label">Còn phải thu</div><div class="k-value" style="color:#d6453b">${U.moneyShort(amt - paid)}</div><div class="k-sub">Tỷ lệ thu ${U.pctTxt(U.pct(paid, amt))}</div></div></div>
+      <div class="card kpi"><div class="k-label">Còn phải thu</div><div class="k-value" style="color:#df2225">${U.moneyShort(amt - paid)}</div><div class="k-sub">Tỷ lệ thu ${U.pctTxt(U.pct(paid, amt))}</div></div></div>
     <div class="card"><div class="card-h"><h3>Danh sách khoản phải thu kỳ ${fp.label}</h3>
       <select class="input" data-ch="pt-status"><option value="">Mọi trạng thái</option><option value="paid" ${f.ptStatus === 'paid' ? 'selected' : ''}>Đã thu</option><option value="unpaid" ${f.ptStatus === 'unpaid' ? 'selected' : ''}>Chưa thu</option><option value="partial" ${f.ptStatus === 'partial' ? 'selected' : ''}>Thu một phần</option><option value="over" ${f.ptStatus === 'over' ? 'selected' : ''}>Quá hạn</option></select>
       <input class="input" placeholder="Mã khoản, tiểu thương, mã điểm" data-in="pt-search" value="${U.esc(f.ptSearch || '')}"></div>
@@ -383,10 +383,10 @@
     return timeBar + `<div class="grid g-main" style="align-items:start">
       <div class="card"><div class="card-h"><h3>Tìm tiểu thương cần thu</h3><input class="input" style="width:260px" placeholder="Tên, SĐT hoặc mã điểm (VD: HS-A05)" data-in="thu-search" value="${U.esc(f.thuSearch || '')}"></div>
         <div class="card-b">${U.table([{ t: 'Tiểu thương' }, { t: 'Điểm KD' }, { t: 'Số khoản', num: true }, { t: 'Còn phải thu', num: true }, { t: 'Quá hạn', num: true }, { t: '' }],
-          list.slice(pg.start, pg.end).map(x => `<tr><td><b>${U.esc(x.t.name)}</b><div class="small muted">${x.t.id} · ${U.maskPhone(x.t.phone)}</div></td><td>${x.t.stalls.map(id => A.idx.stall.get(id).code).join(', ')}</td><td class="num">${x.n}</td><td class="num">${U.money(x.amt)}</td><td class="num" style="${x.over ? 'color:#d6453b;font-weight:600' : ''}">${x.over ? U.money(x.over) : '–'}</td><td>${A.canDo('thu-tien.thu', x.t.market) ? `<button class="btn sm primary" data-act="pay-open" data-id="${x.t.id}">Thu tiền</button>` : ''}</td></tr>`))}${pg.html}</div></div>
+          list.slice(pg.start, pg.end).map(x => `<tr><td><b>${U.esc(x.t.name)}</b><div class="small muted">${x.t.id} · ${U.maskPhone(x.t.phone)}</div></td><td>${x.t.stalls.map(id => A.idx.stall.get(id).code).join(', ')}</td><td class="num">${x.n}</td><td class="num">${U.money(x.amt)}</td><td class="num" style="${x.over ? 'color:#df2225;font-weight:600' : ''}">${x.over ? U.money(x.over) : '–'}</td><td>${A.canDo('thu-tien.thu', x.t.market) ? `<button class="btn sm primary" data-act="pay-open" data-id="${x.t.id}">Thu tiền</button>` : ''}</td></tr>`))}${pg.html}</div></div>
       <div class="card"><div class="card-h"><h3>Giao dịch ngày ${U.dmy(payDate)}</h3></div><div class="card-b">
         <div class="row small" style="margin-bottom:8px"><span class="tag">💵 Tiền mặt ${U.moneyShort(cash)}</span><span class="tag info">📱 QR/CK ${U.moneyShort(non)}</span></div>
-        ${today.length ? today.slice(0, 14).map(p => `<div class="row small click" style="padding:7px 0;border-bottom:1px solid #eef2f0;cursor:pointer" data-act="receipt" data-id="${p.receipt}"><span class="muted">${p.time}</span><span style="flex:1">${U.esc(A.idx.trader.get(p.traderId).name)}<div class="muted">${p.receipt} · ${D.METHOD[p.method]}</div></span><b>${U.money(p.amount)}</b></div>`).join('') : '<div class="empty">Chưa có giao dịch</div>'}
+        ${today.length ? today.slice(0, 14).map(p => `<div class="row small click" style="padding:7px 0;border-bottom:1px solid #eef2f7;cursor:pointer" data-act="receipt" data-id="${p.receipt}"><span class="muted">${p.time}</span><span style="flex:1">${U.esc(A.idx.trader.get(p.traderId).name)}<div class="muted">${p.receipt} · ${D.METHOD[p.method]}</div></span><b>${U.money(p.amount)}</b></div>`).join('') : '<div class="empty">Chưa có giao dịch</div>'}
       </div></div></div>`;
   };
   A.IN['thu-search'] = el => { f.thuSearch = el.value; ui.page.thu = 0; A.render(); };
@@ -466,8 +466,8 @@
     return `<div class="kpis">
       <div class="card kpi"><div class="k-label">Tổng giao dịch ngân hàng</div><div class="k-value">${total}</div><div class="k-sub">${U.money(totalAmt)}</div></div>
       <div class="card kpi"><div class="k-label">Khớp tự động</div><div class="k-value">${autoMatched}/${total}</div><div class="k-sub">${U.pctTxt(U.pct(autoMatched, total))}</div></div>
-      <div class="card kpi"><div class="k-label">Cần xử lý</div><div class="k-value" style="color:${needsWork.length ? '#d6453b' : '#2e9e6a'}">${needsWork.length}</div><div class="k-sub">${U.money(U.sum(needsWork, b => b.amount))}</div></div>
-      <div class="card kpi"><div class="k-label">Lệch số tiền</div><div class="k-value" style="color:${mismatch.length ? '#d6453b' : '#2e9e6a'}">${mismatch.length}</div><div class="k-sub">Cần Kế toán kiểm tra</div></div></div>
+      <div class="card kpi"><div class="k-label">Cần xử lý</div><div class="k-value" style="color:${needsWork.length ? '#df2225' : '#20a04e'}">${needsWork.length}</div><div class="k-sub">${U.money(U.sum(needsWork, b => b.amount))}</div></div>
+      <div class="card kpi"><div class="k-label">Lệch số tiền</div><div class="k-value" style="color:${mismatch.length ? '#df2225' : '#20a04e'}">${mismatch.length}</div><div class="k-sub">Cần Kế toán kiểm tra</div></div></div>
     <div class="card"><div class="card-h"><h3>Sao kê ngân hàng / QR</h3>
       <div class="seg">${[['all', 'Tất cả'], ['matched', 'Đã khớp'], ['unmatched', 'Chưa khớp'], ['mismatch', 'Lệch số tiền'], ['review', 'Cần xử lý']].map(x => `<button class="${ui.dsBankFilter === x[0] ? 'on' : ''}" data-act="ds-bank-filter" data-id="${x[0]}">${x[1]}</button>`).join('')}</div>
       <span class="spacer"></span>
@@ -524,7 +524,7 @@
         <div style="margin-top:6px">${dsBankTag(b)}</div>
         <ul class="small muted" style="margin:6px 0 0 18px;padding:0">${reasons.map(r => `<li>${U.esc(r)}</li>`).join('')}</ul>
         ${b.status === 'MATCHED_MANUAL' && b.matchedBy ? `<div class="small muted" style="margin-top:6px">Gắn bởi ${U.esc(b.matchedBy)} · ${U.esc(b.matchedAt)}</div>` : ''}
-        ${canAudit ? `<div class="divider"></div><b class="small">Lịch sử xử lý</b>${(b.log || []).map(l => `<div class="small" style="padding:4px 0;border-bottom:1px solid #eef2f0"><span class="muted">${U.dmy(b.date || U.today())} ${l.at}</span> · ${U.esc(l.actor)}: ${U.esc(l.text)}</div>`).join('')}` : ''}
+        ${canAudit ? `<div class="divider"></div><b class="small">Lịch sử xử lý</b>${(b.log || []).map(l => `<div class="small" style="padding:4px 0;border-bottom:1px solid #eef2f7"><span class="muted">${U.dmy(b.date || U.today())} ${l.at}</span> · ${U.esc(l.actor)}: ${U.esc(l.text)}</div>`).join('')}` : ''}
       </div>
       <div class="drawer-f">${canMatch ? `<button class="btn primary" data-act="ds-bank-match" data-id="${b.id}">Gắn khoản thu thủ công</button>` : ''}<button class="btn" data-act="close">Đóng</button></div>`;
   }
@@ -612,14 +612,14 @@
     return `<div class="kpis">
       <div class="card kpi"><div class="k-label">Tổng biên lai tiền mặt</div><div class="k-value">${totalReceipts}</div><div class="k-sub">${U.money(totalCollected)}</div></div>
       <div class="card kpi"><div class="k-label">Đã nộp quỹ</div><div class="k-value">${U.money(totalDeposited)}</div></div>
-      <div class="card kpi"><div class="k-label">Còn phải nộp</div><div class="k-value" style="color:${totalRemaining ? '#d6453b' : '#2e9e6a'}">${U.money(totalRemaining)}</div></div>
-      <div class="card kpi"><div class="k-label">Nhân viên chưa hoàn tất</div><div class="k-value" style="color:${notDone ? '#d6453b' : '#2e9e6a'}">${notDone}</div></div></div>
+      <div class="card kpi"><div class="k-label">Còn phải nộp</div><div class="k-value" style="color:${totalRemaining ? '#df2225' : '#20a04e'}">${U.money(totalRemaining)}</div></div>
+      <div class="card kpi"><div class="k-label">Nhân viên chưa hoàn tất</div><div class="k-value" style="color:${notDone ? '#df2225' : '#20a04e'}">${notDone}</div></div></div>
     <div class="card"><div class="card-h"><h3>Đối soát tiền mặt theo nhân viên thu · ${U.dmy(U.today())}</h3><button class="btn" data-act="ds-cash-csv">⬇ Xuất Excel</button></div>
       <div class="card-b">${U.table([{ t: 'Nhân viên thu' }, { t: 'Số biên lai', num: true }, { t: 'Tổng tiền đã thu', num: true }, { t: 'Đã nộp quỹ', num: true }, { t: 'Còn phải nộp / Chênh lệch', num: true }, { t: 'Trạng thái' }, { t: '' }],
         rows.map(e => {
           const s = dsCashStatusOf(e);
           return `<tr><td>${U.esc(U.staffName(e.employeeId))}</td><td class="num">${e.payments.length}</td><td class="num">${U.money(e.collected)}</td><td class="num">${U.money(e.deposited)}</td>
-            <td class="num" style="${e.remaining ? 'color:#d6453b;font-weight:600' : ''}">${U.money(Math.abs(e.remaining))}</td><td><span class="tag ${s.cls}">${s.ico} ${s.label}</span></td>
+            <td class="num" style="${e.remaining ? 'color:#df2225;font-weight:600' : ''}">${U.money(Math.abs(e.remaining))}</td><td><span class="tag ${s.cls}">${s.ico} ${s.label}</span></td>
             <td><button class="btn sm" data-act="ds-cash-view" data-id="${e.employeeId}">Xem chi tiết</button></td></tr>`;
         }), { empty: 'Hôm nay chưa thu tiền mặt' })}</div></div>`;
   }
@@ -635,7 +635,7 @@
     e.deposits.forEach(d => items.push({ at: d.depositedAt.slice(-5), text: U.esc(U.staffName(d.employeeId)) + ' nộp quỹ ' + d.id + ' (' + U.money(d.amount) + ') cho ' + U.esc(U.staffName(d.receivedBy)) }));
     if (e.confirm) items.push({ at: e.confirm.confirmedAt.slice(-5), text: U.esc(e.confirm.confirmedBy) + ' xác nhận đối soát hoàn tất' });
     items.sort((a, b) => a.at.localeCompare(b.at));
-    return items.length ? items.map(i => `<div class="small" style="padding:4px 0;border-bottom:1px solid #eef2f0"><span class="muted">${U.dmy(U.today())} ${i.at}</span> · ${i.text}</div>`).join('') : '<div class="small muted">Chưa có lịch sử</div>';
+    return items.length ? items.map(i => `<div class="small" style="padding:4px 0;border-bottom:1px solid #eef2f7"><span class="muted">${U.dmy(U.today())} ${i.at}</span> · ${i.text}</div>`).join('') : '<div class="small muted">Chưa có lịch sử</div>';
   }
   function dsCashDrawerHtml(employeeId) {
     const e = dsCashRows().find(x => x.employeeId === employeeId);
@@ -645,9 +645,9 @@
     const canAudit = dsCanAudit();
     const receiptRows = e.payments.map(p => {
       const inv = A.idx.invoice.get(p.invoiceId);
-      return `<div class="row small" style="padding:5px 0;border-bottom:1px solid #eef2f0"><span>${p.receipt}</span><span>${inv ? A.idx.stall.get(inv.stallId).code : ''}</span><span class="spacer"></span><b>${U.money(p.amount)}</b></div>`;
+      return `<div class="row small" style="padding:5px 0;border-bottom:1px solid #eef2f7"><span>${p.receipt}</span><span>${inv ? A.idx.stall.get(inv.stallId).code : ''}</span><span class="spacer"></span><b>${U.money(p.amount)}</b></div>`;
     }).join('');
-    const depositRows = e.deposits.length ? e.deposits.map(d => `<div style="padding:8px 0;border-bottom:1px solid #eef2f0">
+    const depositRows = e.deposits.length ? e.deposits.map(d => `<div style="padding:8px 0;border-bottom:1px solid #eef2f7">
         <div class="row small"><b>${d.id}</b><span class="spacer"></span><b>${U.money(d.amount)}</b></div>
         <div class="small muted">${d.depositedAt}</div>
         <div class="small">Người nộp: ${U.esc(U.staffName(d.employeeId))} · Người nhận: ${U.esc(U.staffName(d.receivedBy))}</div>
@@ -715,8 +715,8 @@
     const canRemindAll = A.canDo('cong-no.nhac-no-hang-loat', ui.market);
     return timeBar + `<div class="grid g2">
       <div class="card"><div class="card-h"><h3>Phân loại nợ theo số ngày quá hạn</h3></div><div class="card-b">
-        ${buckets.map(b => `<div style="margin:10px 0"><div class="row small"><b style="width:100px">${b.label}</b><span class="muted">${b.n} tiểu thương</span><span class="spacer"></span><b>${U.money(b.amt)}</b></div><div class="bar-mini" style="height:10px"><i style="width:${b.amt * 100 / maxAmt}%;background:#d6453b"></i></div></div>`).join('')}
-        <div class="divider"></div><div class="row"><b>Tổng nợ quá hạn</b><span class="spacer"></span><b style="color:#d6453b;font-size:var(--font-size-lg)">${U.money(U.sum(over, U.due))}</b></div></div></div>
+        ${buckets.map(b => `<div style="margin:10px 0"><div class="row small"><b style="width:100px">${b.label}</b><span class="muted">${b.n} tiểu thương</span><span class="spacer"></span><b>${U.money(b.amt)}</b></div><div class="bar-mini" style="height:10px"><i style="width:${b.amt * 100 / maxAmt}%;background:#df2225"></i></div></div>`).join('')}
+        <div class="divider"></div><div class="row"><b>Tổng nợ quá hạn</b><span class="spacer"></span><b style="color:#df2225;font-size:var(--font-size-lg)">${U.money(U.sum(over, U.due))}</b></div></div></div>
       <div class="card"><div class="card-h"><h3>Lịch nhắc nợ tự động</h3></div><div class="card-b small">
         <div class="row" style="padding:6px 0"><span class="tag info">Ngày 12</span>Nhắc trước hạn 3 ngày qua Mini app, Zalo OA</div>
         <div class="row" style="padding:6px 0"><span class="tag warn">Ngày 16</span>Thông báo quá hạn lần 1</div>
