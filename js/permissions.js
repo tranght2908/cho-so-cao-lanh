@@ -63,7 +63,16 @@
     { key: 'action:so-do.xem-ho-so', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Xem hồ sơ tiểu thương từ sơ đồ mặt bằng' },
     { key: 'action:so-do.tao-hop-dong', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Tạo hợp đồng từ sơ đồ mặt bằng' },
     { key: 'action:so-do.doi-trang-thai', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Đổi trạng thái điểm kinh doanh' },
+    { key: 'action:phien-cho.tao-phien', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Tạo phiên chợ quê' },
+    { key: 'action:phien-cho.mo-dang-ky', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Mở đăng ký phiên chợ quê' },
+    { key: 'action:phien-cho.chot-danh-sach', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Chốt danh sách đăng ký phiên chợ quê' },
+    { key: 'action:phien-cho.bat-dau-chuan-bi', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Bắt đầu chuẩn bị phiên chợ quê' },
+    { key: 'action:phien-cho.bat-dau-phien', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Bắt đầu phiên chợ quê' },
+    { key: 'action:phien-cho.cho-chot', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Chuyển phiên chợ quê sang chờ chốt' },
     { key: 'action:phien-cho.chot-phien', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Điểm danh & chốt phiên chợ quê' },
+    { key: 'action:phien-cho.hoan-phien', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Tạm hoãn phiên chợ quê' },
+    { key: 'action:phien-cho.huy-phien', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Hủy phiên chợ quê' },
+    { key: 'action:phien-cho.xem-bao-cao', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Xem báo cáo phiên chợ quê' },
     { key: 'action:tieu-thuong.them-moi', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'tieu-thuong', label: 'Thêm hồ sơ tiểu thương' },
     { key: 'action:hop-dong.tao', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Tạo hợp đồng (từ màn Hợp đồng)' },
     { key: 'action:hop-dong.gia-han', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Gia hạn hợp đồng' },
@@ -180,7 +189,16 @@
       'so-do.xem-ho-so': ['ward_leader', 'market_manager', 'market_staff', 'accountant', 'collector'],
       'so-do.tao-hop-dong': ['market_manager', 'market_staff'],
       'so-do.doi-trang-thai': ['market_manager', 'market_staff'],
-      'phien-cho.chot-phien': ['market_manager', 'market_staff'],
+      'phien-cho.tao-phien': ['market_manager'],
+      'phien-cho.mo-dang-ky': ['market_manager'],
+      'phien-cho.chot-danh-sach': ['market_manager'],
+      'phien-cho.bat-dau-chuan-bi': ['market_staff'],
+      'phien-cho.bat-dau-phien': ['market_staff'],
+      'phien-cho.cho-chot': ['market_staff'],
+      'phien-cho.chot-phien': ['market_staff'],
+      'phien-cho.hoan-phien': ['market_manager'],
+      'phien-cho.huy-phien': ['market_manager'],
+      'phien-cho.xem-bao-cao': ['ward_leader', 'market_manager', 'market_staff', 'collector'],
       'tieu-thuong.them-moi': ['market_manager', 'market_staff'],
       'hop-dong.tao': ['market_manager', 'market_staff'],
       'hop-dong.gia-han': ['market_manager', 'market_staff'],
@@ -267,8 +285,23 @@
   //        TẾ của từng role — xử lý TƯỜNG MINH trong mergeIntoCurrentSeed(), KHÔNG dùng default
   //        matrix mới để suy ra. Xem MARKET_LAYOUT_SCREEN_PERMISSION_AUDIT.md +
   //        MARKET_LAYOUT_SCREEN_PERMISSION_IMPLEMENTATION_REPORT.md.)
-  const PERM_SEED_VERSION = 5;
-  function freshState() { return { schemaVersion: A.RBAC_SCHEMA, seedVersion: PERM_SEED_VERSION, roles: defaultRoles(), rolePerms: defaultRolePermissions() }; }
+  //   v6 = PC3A (vòng đời phiên chợ quê): thêm action phien-cho.* mới. Riêng action đã tồn tại
+  //        phien-cho.chot-phien không bị migrate lại assignment vì state hiện chưa có metadata phân biệt
+  //        seed/custom revoke/custom grant an toàn.
+  const PERM_SEED_VERSION = 6;
+  const PC3A_SESSION_PERM_VERSION = 1;
+  function freshState() { return { schemaVersion: A.RBAC_SCHEMA, seedVersion: PERM_SEED_VERSION, pc3aSessionPermVersion: PC3A_SESSION_PERM_VERSION, roles: defaultRoles(), rolePerms: defaultRolePermissions() }; }
+  function migratePc3aSessionPerms(stored) {
+    if (stored.pc3aSessionPermVersion >= PC3A_SESSION_PERM_VERSION) return false;
+    const knownKeys = new Set(stored.rolePerms.map(r => r.permKey));
+    const sessionDefaults = defaultRolePermissions().filter(r => r.permKey.indexOf('action:phien-cho.') === 0);
+    sessionDefaults.forEach(r => {
+      if (r.permKey === 'action:phien-cho.chot-phien') return;
+      if (!knownKeys.has(r.permKey)) stored.rolePerms.push(r);
+    });
+    stored.pc3aSessionPermVersion = PC3A_SESSION_PERM_VERSION;
+    return true;
+  }
   // Merge state đã lưu (shape còn đúng — schemaVersion khớp) vào seed hiện tại, THAY VÌ reseed toàn
   // bộ, để không xoá mất grant/revoke tuỳ biến của admin cho các permKey KHÔNG đổi giữa 2 bản seed
   // (Phase 6 STEP A — trước đây mỗi lần bump PERM_SEED_VERSION đều xoá sạch toàn bộ tuỳ biến, xem
@@ -319,6 +352,7 @@
       if (stored.matBangMigratedV5 && d.permKey === 'screen:mat-bang') return;
       if (!knownKeys.has(d.permKey)) stored.rolePerms.push(d);
     });
+    migratePc3aSessionPerms(stored);
     stored.seedVersion = PERM_SEED_VERSION;
     return stored;
   }
@@ -359,8 +393,10 @@
     const known = new Set(s.rolePerms.map(r => r.permKey));
     defaultRolePermissions().forEach(d => {
       if (s.matBangMigratedV5 && d.permKey === 'screen:mat-bang') return;
+      if (s.pc3aSessionPermVersion >= PC3A_SESSION_PERM_VERSION && d.permKey.indexOf('action:phien-cho.') === 0) return;
       if (!known.has(d.permKey)) s.rolePerms.push(d);
     });
+    if (migratePc3aSessionPerms(s)) needSave = true;
     // Cùng lý do Hotfix persist migration ở trên: ghi lại NGAY nếu vừa merge (seedVersion đổi),
     // không chờ tới lượt grant/revoke đầu tiên — STATE vẫn đang TDZ nên không gọi saveState().
     if (needSave) { try { localStorage.setItem(PKEY, JSON.stringify(s)); } catch (e) { /* bỏ qua */ } }

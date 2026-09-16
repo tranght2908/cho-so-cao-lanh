@@ -5,11 +5,136 @@
   'use strict';
   const D = A.D, U = A.U, ui = A.ui;
   const TTD_SESSION_MARKET = 'TTD';
-  const TTD_PENDING_SESSION_DATE = '2026-09-12';
+  const TTD_DEMO_SESSION_DATE = '2026-09-12';
+  const SESSION_STATUS = {
+    draft: 'Nháp',
+    open: 'Mở đăng ký',
+    registration_closed: 'Đã chốt danh sách',
+    preparing: 'Đang chuẩn bị',
+    live: 'Đang diễn ra',
+    pending_close: 'Chờ chốt',
+    closed: 'Đã chốt',
+    postponed: 'Tạm hoãn',
+    cancelled: 'Đã hủy'
+  };
+  const SESSION_TRANSITIONS = {
+    draft: { open: 'phien-cho.mo-dang-ky', cancelled: 'phien-cho.huy-phien' },
+    open: { registration_closed: 'phien-cho.chot-danh-sach', postponed: 'phien-cho.hoan-phien', cancelled: 'phien-cho.huy-phien' },
+    registration_closed: { preparing: 'phien-cho.bat-dau-chuan-bi', postponed: 'phien-cho.hoan-phien', cancelled: 'phien-cho.huy-phien' },
+    preparing: { live: 'phien-cho.bat-dau-phien', postponed: 'phien-cho.hoan-phien', cancelled: 'phien-cho.huy-phien' },
+    live: { pending_close: 'phien-cho.cho-chot' },
+    pending_close: { closed: 'phien-cho.chot-phien' },
+    postponed: { open: 'phien-cho.mo-dang-ky', cancelled: 'phien-cho.huy-phien' }
+  };
+  const SESSION_ACTION_LABEL = {
+    open: 'Mở đăng ký',
+    registration_closed: 'Chốt danh sách',
+    preparing: 'Bắt đầu chuẩn bị',
+    live: 'Bắt đầu phiên',
+    pending_close: 'Chuyển chờ chốt',
+    postponed: 'Tạm hoãn',
+    cancelled: 'Hủy phiên'
+  };
 
-  function ttdPendingSessionLabel() { return U.dmy(TTD_PENDING_SESSION_DATE); }
-  function ttdPendingSessionShortLabel() { return ttdPendingSessionLabel().slice(0, 5); }
-  function hasTtdPendingSession() { return A.db.sessions.some(s => s && s.date === TTD_PENDING_SESSION_DATE); }
+  function nowIso() { return new Date().toISOString(); }
+  function currentAccountId() { const a = A.currentAccount && A.currentAccount(); return a ? a.id : null; }
+  function currentAccountName() { const a = A.currentAccount && A.currentAccount(); return a ? a.fullName : 'Không rõ'; }
+  function sessionIdForDate(date) { return 'PC-TTD-' + String(date || '').replace(/-/g, ''); }
+  function sessionLabel(s) { return U.dmy(s && s.date); }
+  function sessionShortLabel(s) { return sessionLabel(s).slice(0, 5); }
+  function hasClosingMetrics(s) {
+    return !!(s && (s.booths != null || s.fee != null || s.visitors != null || s.revenue != null || s.noncash != null));
+  }
+  function sessionReadModel(s) {
+    if (!s || !s.date) return null;
+    const status = s.status || (hasClosingMetrics(s) ? 'closed' : 'draft');
+    return Object.assign({}, s, {
+      id: s.id || sessionIdForDate(s.date),
+      market: s.market || TTD_SESSION_MARKET,
+      status
+    });
+  }
+  function ttdSessionReadModels() {
+    return A.db.sessions.map(sessionReadModel).filter(s => s && s.market === TTD_SESSION_MARKET);
+  }
+  function formatNumber(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n.toLocaleString('vi-VN') : '—';
+  }
+  function formatMoney(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? U.money(n) : '—';
+  }
+  function formatMoneyShort(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? U.moneyShort(n) : '—';
+  }
+  function formatPct(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? U.pctTxt(n * 100) : '—';
+  }
+  function formatTimeRange(s) {
+    return s && s.startTime && s.endTime ? U.esc(s.startTime) + '–' + U.esc(s.endTime) : '—';
+  }
+  function formatDeadline(s) {
+    if (!s || !s.registrationDeadline) return '—';
+    const raw = String(s.registrationDeadline);
+    return U.dmy(raw.slice(0, 10)) + (raw.length >= 16 ? ' ' + raw.slice(11, 16) : '');
+  }
+  function normalizeSession(s) {
+    if (!s || !s.date) return s;
+    if (!s.id) s.id = sessionIdForDate(s.date);
+    if (!s.market) s.market = TTD_SESSION_MARKET;
+    if (!s.status) s.status = (s.booths != null || s.fee != null || s.visitors != null || s.revenue != null || s.noncash != null) ? 'closed' : 'draft';
+    if (!s.startTime) s.startTime = '14:00';
+    if (!s.endTime) s.endTime = '20:00';
+    if (!s.registrationDeadline) s.registrationDeadline = registrationDeadlineForDate(s.date);
+    return s;
+  }
+  function ensureTtdSessions() { A.db.sessions.forEach(normalizeSession); }
+  function sessionById(id) {
+    return A.db.sessions.find(s => s && (s.id === id || (!s.id && s.date && sessionIdForDate(s.date) === id)));
+  }
+  function activeTtdSession() {
+    const live = ttdSessionReadModels().filter(s => s.status !== 'closed' && s.status !== 'cancelled')
+      .sort((a, b) => a.date.localeCompare(b.date));
+    return live[0] || null;
+  }
+  function hasSessionDate(date, excludeId) {
+    return A.db.sessions.some(s => s && s.date === date && s.id !== excludeId);
+  }
+  function registrationDeadlineForDate(date) {
+    const d = parseIsoDate(date);
+    if (!d) return '';
+    d.setDate(d.getDate() - 2);
+    return dateOnly(d) + 'T17:00';
+  }
+  function dateOnly(d) {
+    return d.getFullYear() + '-' + U.pad(d.getMonth() + 1) + '-' + U.pad(d.getDate());
+  }
+  function parseIsoDate(s) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(s || ''))) return null;
+    const d = new Date(s + 'T00:00:00');
+    return Number.isNaN(d.getTime()) || dateOnly(d) !== s ? null : d;
+  }
+  function parseLocalDateTime(s) {
+    const d = new Date(String(s || ''));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  function sessionStartDateTime(date, time) {
+    const d = parseLocalDateTime(date + 'T' + time);
+    return d;
+  }
+  function canTransition(from, to) {
+    return !!(SESSION_TRANSITIONS[from] && SESSION_TRANSITIONS[from][to]);
+  }
+  function actionForTransition(from, to) {
+    return canTransition(from, to) ? SESSION_TRANSITIONS[from][to] : null;
+  }
+  function canDoSessionAction(actionKey, session) {
+    if (!session || session.market !== TTD_SESSION_MARKET || ui.market !== TTD_SESSION_MARKET) return false;
+    return A.canDo(actionKey, session.market);
+  }
   function ttdBusinessPoints() {
     if (typeof A.mbBusinessPointsForMarket !== 'function') return null;
     const points = A.mbBusinessPointsForMarket(TTD_SESSION_MARKET);
@@ -20,10 +145,27 @@
     const points = ttdBusinessPoints();
     return points ? points.filter(st => st.traderId) : null;
   }
-  function ttdSessionCanMutate(showToast) {
+  function ttdSessionCanMutate(actionKey, session, showToast) {
     if (ui.market !== TTD_SESSION_MARKET) { if (showToast) U.toast('Phiên chợ quê chỉ áp dụng cho Chợ quê Tân Thuận Đông'); return false; }
     if (!U.can('phien-cho')) { if (showToast) U.toast('Màn Phiên chợ quê không hợp lệ trong ngữ cảnh hiện tại'); return false; }
-    if (!A.canDo('phien-cho.chot-phien', TTD_SESSION_MARKET)) { if (showToast) U.toast('Bạn không có quyền chốt phiên chợ quê'); return false; }
+    if (!session || session.market !== TTD_SESSION_MARKET) { if (showToast) U.toast('Không tìm thấy phiên TTD hợp lệ'); return false; }
+    if (!A.canDo(actionKey, session.market)) { if (showToast) U.toast('Bạn không có quyền thao tác phiên này'); return false; }
+    return true;
+  }
+  function applySessionMutation(session, mutate, successLog) {
+    const before = JSON.stringify(session);
+    const logLen = Array.isArray(A.db.extraLog) ? A.db.extraLog.length : null;
+    mutate();
+    try {
+      if (successLog) U.log(successLog);
+      A.save();
+    } catch (e) {
+      Object.keys(session).forEach(k => delete session[k]);
+      Object.assign(session, JSON.parse(before));
+      if (logLen != null) A.db.extraLog.length = logLen;
+      U.toast('Không lưu được phiên chợ quê, dữ liệu đã được hoàn tác');
+      return false;
+    }
     return true;
   }
   function readNonNegativeNumber(selector, scale) {
@@ -314,45 +456,141 @@
   A.IN['plan-search'] = el => { ui.planSearch = el.value; A.render(); };
 
   // ---------- Phiên chợ quê ----------
+  function sessionStatusTag(s) {
+    const cls = s.status === 'closed' ? 'ok' : s.status === 'cancelled' ? 'danger' : s.status === 'postponed' ? 'warn' : 'info';
+    return `<span class="tag ${cls}">${SESSION_STATUS[s.status] || s.status}</span>`;
+  }
+  function sessionActionButtons(s) {
+    if (!s || s.market !== TTD_SESSION_MARKET) return '';
+    const outs = [];
+    Object.keys(SESSION_TRANSITIONS[s.status] || {}).forEach(to => {
+      const action = actionForTransition(s.status, to);
+      if (action === 'phien-cho.chot-phien') return;
+      if (canDoSessionAction(action, s)) outs.push(`<button class="btn sm" data-act="session-transition" data-id="${s.id}" data-to="${to}">${SESSION_ACTION_LABEL[to] || SESSION_STATUS[to]}</button>`);
+    });
+    if (s.status === 'pending_close' && canDoSessionAction('phien-cho.chot-phien', s)) {
+      outs.push(`<button class="btn sm primary" data-act="session-open" data-id="${s.id}">Điểm danh & chốt phiên</button>`);
+    }
+    return outs.join('');
+  }
+  function sessionOpsHtml(s) {
+    if (!s) return '<div class="card"><div class="card-h"><h3>Phiên sắp tới/đang vận hành</h3></div><div class="card-b"><div class="muted">Chưa có phiên chợ sắp tới.</div></div></div>';
+    return `<div class="card"><div class="card-h"><h3>Phiên sắp tới/đang vận hành</h3><span class="spacer"></span>${sessionStatusTag(s)}</div>
+      <div class="card-b">
+        <div class="grid g3">
+          <div><div class="small muted">Ngày phiên</div><b>${sessionLabel(s)}</b></div>
+          <div><div class="small muted">Khung giờ</div><b>${formatTimeRange(s)}</b></div>
+          <div><div class="small muted">Hạn đăng ký</div><b>${formatDeadline(s)}</b></div>
+          <div><div class="small muted">Người tạo</div><b>${U.esc(s.createdBy || 'Dữ liệu lịch sử')}</b></div>
+          <div><div class="small muted">Người phụ trách</div><b>${U.esc(s.assignedTo || 'Chưa phân công')}</b></div>
+          <div><div class="small muted">Người chốt</div><b>${U.esc(s.closedBy || '—')}</b></div>
+        </div>
+        ${s.note ? `<div class="note info" style="margin-top:12px">${U.esc(s.note)}</div>` : ''}
+        ${s.status === 'closed' ? `<div class="small muted" style="margin-top:12px">Đã chốt${s.closedAt ? ' lúc ' + U.esc(s.closedAt) : ''}. Phiên đã chốt chỉ đọc trong PC3A.</div>` : ''}
+        <div class="row" style="margin-top:12px">${sessionActionButtons(s)}</div>
+      </div></div>`;
+  }
   A.VIEWS['phien-cho'] = function () {
-    const ss = A.db.sessions, last = ss[ss.length - 1];
-    const pending = !hasTtdPendingSession();
+    const ss = ttdSessionReadModels();
+    const historical = ss.filter(s => s.status === 'closed').sort((a, b) => a.date.localeCompare(b.date));
+    const chartHistory = historical.filter(s => Number.isFinite(Number(s.visitors)));
+    const last = historical[historical.length - 1] || null;
     const booths = ttdBusinessPoints() || [];
+    const active = activeTtdSession();
     const k = (l, v, s) => `<div class="card kpi"><div class="k-label">${l}</div><div class="k-value">${v}</div><div class="k-sub">${s}</div></div>`;
     return `
     <div class="note">Chợ quê Cù lao Tân Thuận Đông là <b>phiên chợ du lịch cộng đồng</b>, họp chiều thứ Bảy 14h–20h, không có trong phụ lục QĐ 480/QĐ-UBND. Vì vậy hệ thống quản lý theo <b>phiên</b>: đăng ký quầy theo năm, điểm danh quầy mỗi phiên, thu phí quầy theo phiên (mức 20.000 đ/quầy/phiên là giả định), thanh toán QR tại quầy. Không quản lý nội dung du lịch.</div>
+    <div class="row">${A.canDo('phien-cho.tao-phien', TTD_SESSION_MARKET) ? '<button class="btn primary" data-act="session-create">Tạo phiên mới</button>' : ''}</div>
     <div class="kpis">
-      ${k('Phiên gần nhất', U.dmy(last.date), 'Thứ Bảy · 14h–20h')}
-      ${k('Quầy tham gia', last.booths + '/' + booths.length, 'quầy đăng ký')}
-      ${k('Lượt khách (ước)', last.visitors.toLocaleString('vi-VN'), 'do tổ quản lý ghi nhận')}
-      ${k('Doanh thu tiểu thương (ước)', U.moneyShort(last.revenue), 'tổng hợp tự khai')}
+      ${k('Phiên gần nhất', last ? U.dmy(last.date) : '—', 'phiên đã chốt')}
+      ${k('Quầy tham gia', last ? formatNumber(last.booths) + '/' + booths.length : '—/' + booths.length, 'quầy đăng ký')}
+      ${k('Lượt khách (ước)', last ? formatNumber(last.visitors) : '—', 'do tổ quản lý ghi nhận')}
+      ${k('Doanh thu tiểu thương (ước)', last ? formatMoneyShort(last.revenue) : '—', 'tổng hợp tự khai')}
     </div>
-    ${pending ? `<div class="card"><div class="card-b row" style="padding-top:16px"><div style="flex:1"><b>Phiên thứ Bảy ${ttdPendingSessionLabel()} chưa chốt số liệu</b><div class="small muted">Điểm danh quầy tham gia, ghi lượt khách ước tính, hệ thống tự tính phí phiên.</div></div>
-      ${A.canDo('phien-cho.chot-phien', TTD_SESSION_MARKET) ? `<button class="btn primary" data-act="session-open">Điểm danh & chốt phiên ${ttdPendingSessionShortLabel()}</button>` : ''}</div></div>` : ''}
+    ${sessionOpsHtml(active)}
     <div class="grid g2">
       <div class="card"><div class="card-h"><h3>Lượt khách theo phiên</h3></div><div class="card-b">
-        ${U.bars(ss.map(s => s.date.slice(8) + '/' + s.date.slice(5, 7)), [{ name: 'Lượt khách (ước)', values: ss.map(s => s.visitors), color: '#c93d6e' }], { fmt: v => Math.round(v).toLocaleString('vi-VN'), stacked: false })}</div></div>
+        ${chartHistory.length ? U.bars(chartHistory.map(s => s.date.slice(8) + '/' + s.date.slice(5, 7)), [{ name: 'Lượt khách (ước)', values: chartHistory.map(s => Number(s.visitors)), color: '#c93d6e' }], { fmt: v => Math.round(v).toLocaleString('vi-VN'), stacked: false }) : '<div class="muted">Chưa có dữ liệu phiên đã chốt.</div>'}</div></div>
       <div class="card"><div class="card-h"><h3>Lịch sử các phiên</h3></div><div class="card-b">
-        ${U.table([{ t: 'Ngày' }, { t: 'Quầy', num: true }, { t: 'Phí phiên', num: true }, { t: 'Khách (ước)', num: true }, { t: 'Không tiền mặt', num: true }],
-          ss.slice().reverse().map(s => `<tr><td>${U.dmy(s.date)}</td><td class="num">${s.booths}</td><td class="num">${U.money(s.fee)}</td><td class="num">${s.visitors.toLocaleString('vi-VN')}</td><td class="num">${U.pctTxt(s.noncash * 100)}</td></tr>`))}
+        ${U.table([{ t: 'Ngày' }, { t: 'Trạng thái' }, { t: 'Quầy', num: true }, { t: 'Phí phiên', num: true }, { t: 'Khách (ước)', num: true }, { t: 'Không tiền mặt', num: true }],
+          historical.slice().reverse().map(s => `<tr><td>${U.dmy(s.date)}</td><td>${sessionStatusTag(s)}</td><td class="num">${formatNumber(s.booths)}</td><td class="num">${formatMoney(s.fee)}</td><td class="num">${formatNumber(s.visitors)}</td><td class="num">${formatPct(s.noncash)}</td></tr>`))}
       </div></div>
     </div>`;
   };
   Object.assign(A.ACT, {
-    'session-open': () => {
-      if (!ttdSessionCanMutate(true)) return;
-      if (hasTtdPendingSession()) { U.toast('Phiên này đã được chốt'); A.render(); return; }
+    'session-create': () => {
+      const fake = { id: 'new', market: TTD_SESSION_MARKET };
+      if (!ttdSessionCanMutate('phien-cho.tao-phien', fake, true)) return;
+      const date = TTD_DEMO_SESSION_DATE, deadline = registrationDeadlineForDate(date);
+      A.modal(A.mHead('Tạo phiên chợ quê') + `<div class="modal-b"><div class="form-grid">
+        <div class="field"><label>Ngày phiên *</label><input class="input" id="ses-date" type="date" value="${date}"></div>
+        <div class="field"><label>Hạn đăng ký *</label><input class="input" id="ses-deadline" type="datetime-local" value="${deadline}"></div>
+        <div class="field"><label>Giờ bắt đầu *</label><input class="input" id="ses-start" type="time" value="14:00"></div>
+        <div class="field"><label>Giờ kết thúc *</label><input class="input" id="ses-end" type="time" value="20:00"></div>
+      </div><div class="field" style="margin-top:10px"><label>Ghi chú</label><textarea class="input" id="ses-note" rows="2"></textarea></div></div>
+      <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="session-create-save">Tạo phiên</button></div>`);
+    },
+    'session-create-save': () => {
+      const fake = { id: 'new', market: TTD_SESSION_MARKET };
+      if (!ttdSessionCanMutate('phien-cho.tao-phien', fake, true)) return;
+      const date = A.$('#ses-date').value, startTime = A.$('#ses-start').value, endTime = A.$('#ses-end').value;
+      const registrationDeadline = A.$('#ses-deadline').value, note = A.$('#ses-note').value.trim();
+      const day = parseIsoDate(date);
+      if (!day) { U.toast('Ngày phiên không hợp lệ'); return; }
+      if (day.getDay() !== 6) { U.toast('Ngày phiên phải là thứ Bảy'); return; }
+      if (!/^\d{2}:\d{2}$/.test(startTime) || !/^\d{2}:\d{2}$/.test(endTime) || startTime >= endTime) { U.toast('Giờ bắt đầu phải nhỏ hơn giờ kết thúc'); return; }
+      const startAt = sessionStartDateTime(date, startTime), deadlineAt = parseLocalDateTime(registrationDeadline);
+      if (!startAt || !deadlineAt || deadlineAt >= startAt) { U.toast('Hạn đăng ký phải trước giờ bắt đầu phiên'); return; }
+      if (hasSessionDate(date, null)) { U.toast('Đã có phiên trong ngày này'); return; }
+      const session = {
+        id: sessionIdForDate(date), market: TTD_SESSION_MARKET, date, startTime, endTime, registrationDeadline,
+        status: 'draft', note, createdBy: currentAccountName(), createdAt: nowIso(), updatedBy: currentAccountName(), updatedAt: nowIso()
+      };
+      A.db.sessions.push(session);
+      const logLen = Array.isArray(A.db.extraLog) ? A.db.extraLog.length : null;
+      try {
+        U.log('Tạo phiên chợ quê ' + U.dmy(date));
+        A.save();
+      } catch (e) {
+        A.db.sessions = A.db.sessions.filter(s => s !== session);
+        if (logLen != null) A.db.extraLog.length = logLen;
+        U.toast('Không lưu được phiên chợ quê, dữ liệu đã được hoàn tác');
+        return;
+      }
+      A.closeModal(); A.render(); U.toast('Đã tạo phiên chợ quê ' + U.dmy(date));
+    },
+    'session-transition': el => {
+      const s = sessionById(el.dataset.id), to = el.dataset.to;
+      if (!s || s.market !== TTD_SESSION_MARKET) { U.toast('Không tìm thấy phiên TTD hợp lệ'); return; }
+      const action = actionForTransition(s.status, to);
+      if (!action || !ttdSessionCanMutate(action, s, true)) return;
+      if (!canTransition(s.status, to)) { U.toast('Không thể chuyển trạng thái phiên theo yêu cầu'); return; }
+      const from = s.status;
+      const ok = applySessionMutation(s, () => {
+        s.status = to;
+        s.updatedBy = currentAccountName();
+        s.updatedAt = nowIso();
+        if (to === 'preparing' && !s.assignedTo) s.assignedTo = currentAccountName();
+      }, `Chuyển phiên chợ quê ${sessionLabel(s)}: ${SESSION_STATUS[from]} → ${SESSION_STATUS[to]}`);
+      if (ok) { A.render(); U.toast('Đã cập nhật trạng thái phiên'); }
+    },
+    'session-open': el => {
+      const s = sessionById(el.dataset.id);
+      if (!ttdSessionCanMutate('phien-cho.chot-phien', s, true)) return;
+      if (s.status !== 'pending_close') { U.toast('Chỉ chốt phiên ở trạng thái Chờ chốt'); return; }
       const booths = ttdSessionEligiblePoints();
       if (!booths) { U.toast('Không đọc được danh sách điểm kinh doanh TTD'); return; }
-      A.modal(A.mHead('Điểm danh quầy – phiên ' + ttdPendingSessionLabel()) + `<div class="modal-b">
+      A.modal(A.mHead('Điểm danh quầy – phiên ' + sessionLabel(s)) + `<div class="modal-b">
         <div class="form-grid"><div class="field"><label>Lượt khách ước tính</label><input class="input" id="ses-visitors" type="number" value="2750"></div>
         <div class="field"><label>Doanh thu tiểu thương tự khai (triệu đồng)</label><input class="input" id="ses-rev" type="number" value="236"></div></div>
         <div class="divider"></div><div class="small muted" style="margin-bottom:8px">Bỏ chọn quầy vắng mặt:</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px">${booths.map(s => `<label class="small"><input type="checkbox" class="ses-b" value="${s.id}" ${s.status === 'thue' ? 'checked' : ''}> ${s.code} · ${U.esc(A.idx.trader.get(s.traderId).name)}</label>`).join('')}</div></div>
-        <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="session-save">Chốt phiên</button></div>`, true);
+        <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="session-save" data-id="${s.id}">Chốt phiên</button></div>`, true);
     },
-    'session-save': () => {
-      if (!ttdSessionCanMutate(true)) return;
+    'session-save': el => {
+      const s = sessionById(el.dataset.id);
+      if (!ttdSessionCanMutate('phien-cho.chot-phien', s, true)) return;
+      if (s.status !== 'pending_close') { U.toast('Chỉ chốt phiên ở trạng thái Chờ chốt'); return; }
       const booths = ttdSessionEligiblePoints();
       if (!booths) { U.toast('Không đọc được danh sách điểm kinh doanh TTD'); return; }
       const validIds = new Set(booths.map(st => st.id));
@@ -371,20 +609,19 @@
       if (revenue == null) { U.toast('Doanh thu tự khai phải là số không âm'); return; }
       const n = selectedIds.size;
       if (n > booths.length) { U.toast('Số quầy tham gia không hợp lệ'); return; }
-      if (hasTtdPendingSession()) { U.toast('Phiên này đã được chốt'); A.render(); return; }
-      const session = { date: TTD_PENDING_SESSION_DATE, booths: n, fee: n * D.SESSION_FEE, visitors, revenue, noncash: 0.41 };
-      const logLen = Array.isArray(A.db.extraLog) ? A.db.extraLog.length : null;
-      A.db.sessions.push(session);
-      try {
-        U.log(`Chốt phiên chợ quê ${ttdPendingSessionLabel()}: ${n} quầy`);
-        A.save();
-      } catch (e) {
-        A.db.sessions.pop();
-        if (logLen != null) A.db.extraLog.length = logLen;
-        U.toast('Không lưu được phiên chợ quê, dữ liệu đã được hoàn tác');
-        return;
-      }
-      A.closeModal(); A.render(); U.toast(`Đã chốt phiên ${ttdPendingSessionShortLabel()}: ${n} quầy, phí phiên ${U.money(n * D.SESSION_FEE)}`);
+      const ok = applySessionMutation(s, () => {
+        s.booths = n;
+        s.fee = n * D.SESSION_FEE;
+        s.visitors = visitors;
+        s.revenue = revenue;
+        s.noncash = 0.41;
+        s.status = 'closed';
+        s.closedBy = currentAccountName();
+        s.closedAt = nowIso();
+        s.updatedBy = currentAccountName();
+        s.updatedAt = nowIso();
+      }, `Chốt phiên chợ quê ${sessionLabel(s)}: ${n} quầy`);
+      if (ok) { A.closeModal(); A.render(); U.toast(`Đã chốt phiên ${sessionShortLabel(s)}: ${n} quầy, phí phiên ${U.money(n * D.SESSION_FEE)}`); }
     }
   });
 })(window.APP);

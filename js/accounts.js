@@ -35,9 +35,10 @@
       accountType: s.role === 'Trưởng Ban Quản lý chợ' ? 'Ban Quản lý chợ' : 'Nhân viên Ban Quản lý chợ',
       title: s.role, roleIds: [STAFF_ROLE_MAP[s.role] || 'market_staff'],
       organization: 'Ban Quản lý ' + ((D.MARKETS.find(m => m.id === s.market) || {}).short || s.market),
-      marketScopes: [s.market], status: 'active'
+      marketScopes: s.role === 'Trưởng Ban Quản lý chợ' ? ['CL', 'TTD'] : [s.market], status: 'active'
     }));
     list.push(
+      { id: 'AC-NV08', code: 'BQL-CL-01', fullName: 'Nguyễn Thanh Bình', phone: '', accountType: 'Nhân viên Ban Quản lý chợ', title: 'Nhân viên Ban Quản lý Chợ Cao Lãnh', roleIds: ['market_staff'], organization: 'Ban Quản lý Chợ Cao Lãnh', marketScopes: ['CL'], status: 'active' },
       { id: 'AC-LD01', code: 'LD01', fullName: 'Nguyễn Văn Phúc', phone: '0909123456', accountType: 'Lãnh đạo UBND phường', title: 'Phó Chủ tịch UBND phường', roleIds: ['ward_leader'], organization: 'UBND phường Cao Lãnh', marketScopes: ['ALL'], status: 'active' },
       { id: 'AC-QT01', code: 'QT01', fullName: 'Đặng Thị Thu', phone: '0909234567', accountType: 'Quản trị hệ thống', title: 'Quản trị hệ thống', roleIds: ['system_admin'], organization: 'UBND phường Cao Lãnh', marketScopes: ['ALL'], status: 'active' },
       { id: 'AC-TT01', code: 'TT-DEMO1', fullName: 'Nguyễn Thị Hoa', phone: '0909345678', accountType: 'Tiểu thương', title: 'Tiểu thương mẫu', roleIds: ['trader'], organization: 'Chợ Cao Lãnh', marketScopes: ['CL'], status: 'active' },
@@ -59,6 +60,25 @@
     return defaultAccounts();
   }
   let ACCOUNTS = loadAccounts();
+  function normalizePc3aAccounts() {
+    let changed = false;
+    const manager = ACCOUNTS.find(a => a.id === 'AC-NV01');
+    if (manager && manager.roleIds && manager.roleIds[0] === 'market_manager') {
+      manager.marketScopes = Array.isArray(manager.marketScopes) ? manager.marketScopes : [];
+      if (manager.marketScopes.indexOf('TTD') === -1) {
+        manager.marketScopes.push('TTD');
+        changed = true;
+      }
+    }
+    const clStaff = ACCOUNTS.find(a => a.id === 'AC-NV08');
+    const sameName = ACCOUNTS.find(a => a.id !== 'AC-NV08' && a.fullName === 'Nguyễn Thanh Bình');
+    if (!clStaff && !sameName) {
+      ACCOUNTS.push({ id: 'AC-NV08', code: 'BQL-CL-01', fullName: 'Nguyễn Thanh Bình', phone: '', accountType: 'Nhân viên Ban Quản lý chợ', title: 'Nhân viên Ban Quản lý Chợ Cao Lãnh', roleIds: ['market_staff'], organization: 'Ban Quản lý Chợ Cao Lãnh', marketScopes: ['CL'], status: 'active' });
+      changed = true;
+    }
+    if (changed) saveAccounts();
+  }
+  normalizePc3aAccounts();
   function saveAccounts() {
     try {
       localStorage.setItem(AKEY, JSON.stringify(ACCOUNTS));
