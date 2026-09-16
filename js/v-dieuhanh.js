@@ -134,15 +134,49 @@
     for (const f of m.floors) { const s = f.sections.find(x => x.id === code); if (s) return { floor: f, section: s }; }
     return null;
   }
+  A.mbResolveZoneContext = function (mid, zone) {
+    const market = U.market(mid);
+    if (!market) return { market: mid, floor: null, section: null, matched: false, reason: 'market-not-found' };
+    if (!zone) return { market: mid, floor: null, section: null, matched: false, reason: 'zone-not-found' };
+    if (!zone.code) return { market: mid, floor: null, section: null, matched: false, reason: 'zone-code-empty' };
+    const matched = mbMatchRealSection(mid, zone.code);
+    if (!matched) return { market: mid, floor: null, section: null, matched: false, reason: 'section-not-found' };
+    return { market: mid, floor: matched.floor, section: matched.section, matched: true, reason: 'matched-zone-code' };
+  };
+  A.mbBusinessPointsForZone = function (mid, zone) {
+    const resolved = A.mbResolveZoneContext(mid, zone);
+    if (!resolved.matched) return [];
+    return A.db.stalls.filter(st => st.market === mid && st.floor === resolved.floor.id && st.section === resolved.section.id);
+  };
+  A.mbBusinessPointById = function (mid, pointId) {
+    const st = A.idx && A.idx.stall ? A.idx.stall.get(pointId) : null;
+    return st && st.market === mid ? st : null;
+  };
+  A.mbBusinessPointsForMarket = function (mid) {
+    if (!U.market(mid)) return [];
+    return A.db.stalls.filter(st => st.market === mid);
+  };
+  A.mbMarketStats = function (mid) {
+    const points = A.mbBusinessPointsForMarket(mid);
+    const byStatus = {};
+    Object.keys(D.STATUS).forEach(k => { byStatus[k] = points.filter(st => st.status === k).length; });
+    return { total: points.length, byStatus: byStatus, points: points };
+  };
+  A.mbZoneStats = function (mid, zone) {
+    const points = A.mbBusinessPointsForZone(mid, zone);
+    const byStatus = {};
+    Object.keys(D.STATUS).forEach(k => { byStatus[k] = points.filter(st => st.status === k).length; });
+    return { total: points.length, byStatus: byStatus, points: points };
+  };
   A.mbOverviewHtml = function (mid, zones) {
     const cards = zones.map(z => {
-      const matched = mbMatchRealSection(mid, z.code);
+      const resolved = A.mbResolveZoneContext(mid, z);
       let body;
-      if (matched) {
-        const stalls = A.db.stalls.filter(st => st.market === mid && st.section === z.code);
-        const c = k => stalls.filter(st => st.status === k).length;
+      if (resolved.matched) {
+        const stats = A.mbZoneStats(mid, z);
+        const c = k => stats.byStatus[k] || 0;
         const parts = Object.keys(D.STATUS).filter(k => c(k)).map(k => `${c(k)} ${D.STATUS[k].label.toLowerCase()}`).join(' · ');
-        body = `<div style="margin-top:8px">${stalls.length} điểm</div><div class="small muted">${parts || 'Chưa có điểm kinh doanh'}</div>`;
+        body = `<div style="margin-top:8px">${stats.total} điểm</div><div class="small muted">${parts || 'Chưa có điểm kinh doanh'}</div>`;
       } else {
         const planned = U.sum(z.planned, p => Number(p.qty) || 0);
         body = `<div style="margin-top:8px">${planned} điểm dự kiến</div><div class="small muted">Khu đang quy hoạch — chưa có dữ liệu thực tế</div>`;
@@ -154,17 +188,17 @@
     return `<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">${cards.join('') || '<div class="empty">Chưa có khu vực nào.</div>'}</div>`;
   };
   A.mbZoneDiagramHtml = function (mid, z, canEditZone) {
-    const matched = mbMatchRealSection(mid, z.code);
+    const resolved = A.mbResolveZoneContext(mid, z);
     const editBtn = canEditZone ? `<button class="btn sm" data-act="qh-zone-edit-open" data-id="${z.key}">✎ Sửa thông tin khu</button>` : '';
-    if (!matched) {
+    if (!resolved.matched) {
       const totalQty = U.sum(z.planned, p => Number(p.qty) || 0), totalArea = U.sum(z.planned, p => (Number(p.std) || 0) * (Number(p.qty) || 0));
       return `<div class="card"><div class="card-h"><h3>${U.esc(z.name || '(chưa đặt tên)')}</h3><span class="small muted">${U.esc(z.code || '')} · quy hoạch</span><span class="spacer"></span>${editBtn}</div>
         <div class="card-b"><div class="note info">Khu này đang ở giai đoạn quy hoạch, chưa có điểm kinh doanh thực tế tương ứng (mã "${U.esc(z.code || '')}" chưa khớp khu vực nào trong sơ đồ thật).</div>
         <div class="row" style="margin-top:10px"><span>Số điểm dự kiến</span><span class="spacer"></span><b>${totalQty.toLocaleString('vi-VN')}</b></div>
         <div class="row"><span>Diện tích dự kiến</span><span class="spacer"></span><b>${totalArea.toLocaleString('vi-VN')} m²</b></div></div></div>`;
     }
-    const f = matched.floor, sec = matched.section;
-    const stalls = A.db.stalls.filter(st => st.market === mid && st.floor === f.id && st.section === sec.id);
+    const f = resolved.floor, sec = resolved.section;
+    const stalls = A.mbBusinessPointsForZone(mid, z);
     const legend = Object.keys(D.STATUS).map(k => `<button class="${ui.hidden[k] ? 'off' : ''}" data-act="legend" data-s="${k}"><span class="sw" style="background:${D.STATUS[k].color}"></span>${D.STATUS[k].label} <b>${stalls.filter(st => st.status === k).length}</b></button>`).join('');
     const rows = sec.rows.map(r => {
       const cells = stalls.filter(st => st.row === r);
@@ -220,14 +254,16 @@
     legend: el => { ui.hidden[el.dataset.s] = !ui.hidden[el.dataset.s]; A.render(); },
     stall: el => {
       ui.sel = el.dataset.id;
-      const st = A.idx.stall.get(ui.sel);
+      const st = A.mbBusinessPointById(ui.market, ui.sel);
+      if (!st) { U.toast('Không tìm thấy điểm kinh doanh trong chợ hiện tại'); return; }
       A.$('#modal-root').innerHTML = `<div class="drawer-overlay" data-act="close"></div><div class="drawer">
         <div class="drawer-h"><div><h3>${st.code}</h3><div class="small muted" style="margin-top:2px">${U.statusTag(st.status)}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
         <div class="drawer-b">${A.stallPanel(st)}</div></div>`;
       A.render();
     },
     'stall-status': el => {
-      const st = A.idx.stall.get(el.dataset.id);
+      const st = A.mbBusinessPointById(ui.market, el.dataset.id);
+      if (!st) { U.toast('Không tìm thấy điểm kinh doanh trong chợ hiện tại'); return; }
       if (!A.canDo('so-do.doi-trang-thai', st.market)) return;
       const opts = ['thue', 'ngung', 'tranhchap'].concat(st.traderId ? [] : ['trong']);
       A.modal(A.mHead('Đổi trạng thái điểm ' + st.code) + `<div class="modal-b"><div class="form-grid">
@@ -237,7 +273,8 @@
         <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="stall-status-save" data-id="${st.id}">Lưu</button></div>`);
     },
     'stall-status-save': el => {
-      const st = A.idx.stall.get(el.dataset.id);
+      const st = A.mbBusinessPointById(ui.market, el.dataset.id);
+      if (!st) { U.toast('Không tìm thấy điểm kinh doanh trong chợ hiện tại'); return; }
       if (!A.canDo('so-do.doi-trang-thai', st.market)) return;
       const ns = A.$('#ss-status').value, reason = A.$('#ss-reason').value.trim();
       st.history = st.history || [];

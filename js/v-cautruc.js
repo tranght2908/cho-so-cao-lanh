@@ -225,9 +225,9 @@
   // trúc (action inline) + 1 vùng nội dung bên phải (Tổng quan hoặc sơ đồ đúng 1 khu).
   function mbWorkspaceHtml() {
     const mid = qhMarket(), can = mbCan(mid), m = U.market(mid), open = !!ui.mb.treeOpen;
-    const stalls = A.db.stalls.filter(st => st.market === mid);
-    const c = k => stalls.filter(st => st.status === k).length;
-    const summary = [[stalls.length + ' điểm KD', ''], [c('thue') + ' đang thuê', 'ok'], [c('trong') + ' còn trống', ''], [c('no') + ' nợ phí', 'danger'], [c('ngung') + ' tạm ngưng', 'warn'], [c('tranhchap') + ' tranh chấp', 'purple']]
+    const stats = A.mbMarketStats(mid);
+    const c = k => stats.byStatus[k] || 0;
+    const summary = [[stats.total + ' điểm KD', ''], [c('thue') + ' đang thuê', 'ok'], [c('trong') + ' còn trống', ''], [c('no') + ' nợ phí', 'danger'], [c('ngung') + ' tạm ngưng', 'warn'], [c('tranhchap') + ' tranh chấp', 'purple']]
       .map(p => `<b${p[1] ? ` style="color:var(--${p[1]})"` : ''}>${p[0]}</b>`).join('<span class="muted">·</span>');
     return `<div class="card"><div class="card-b" style="padding-top:14px">
         <h3 style="margin:0;font-size:var(--font-size-md)">Mặt bằng chợ</h3><div class="small muted" style="margin-top:2px">${U.esc(m.name)} · ${U.esc(m.hang)}</div>
