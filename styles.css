@@ -414,3 +414,13 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 .tag.info { background: #e3efff; border-color: #bcd6f5; color: #0b4a9e; }
 .toast { background: #0d2e55; }
 .script li::before { background: #e3efff; color: #0b4a9e; }
+
+/* Sơ đồ mặt bằng: ô điểm kinh doanh tông nhạt, chữ đậm màu — bớt chói, đồng bộ IOC */
+.cell { border-width: 1px; border-style: solid; font-weight: 600; }
+.cell:hover { box-shadow: 0 2px 6px rgba(15, 30, 50, .15); }
+.cell.s-thue { background: #e6f6ec; border-color: #a7dcb9; color: #167a3c; }
+.cell.s-no { background: #fde8e8; border-color: #f0aaaa; color: #b01c1e; }
+.cell.s-ngung { background: #fff1e3; border-color: #f5cf9f; color: #9a4b0c; }
+.cell.s-tranhchap { background: #eee8fb; border-color: #cfc0f0; color: #5b3aa8; }
+.cell.s-trong { background: #fff; border: 1px dashed #c5cfdb; color: #98a3b3; font-weight: 500; }
+.cell.sel { outline: 2px solid #0b4a9e; outline-offset: 1px; }

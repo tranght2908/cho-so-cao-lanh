@@ -140,9 +140,9 @@ window.DATA = (function () {
   ];
 
   const STATUS = {
-    thue: { label: 'Đang thuê', color: '#20a04e' },
-    no: { label: 'Nợ phí', color: '#df2225' },
-    ngung: { label: 'Tạm ngừng', color: '#e0a526' },
+    thue: { label: 'Đang thuê', color: '#3aa85b' },
+    no: { label: 'Nợ phí', color: '#de3b3d' },
+    ngung: { label: 'Tạm ngừng', color: '#ef852e' },
     tranhchap: { label: 'Đang tranh chấp', color: '#7c54cd' },
     trong: { label: 'Còn trống', color: '#c9d3cf' }
   };
