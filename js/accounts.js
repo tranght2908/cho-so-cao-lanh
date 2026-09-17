@@ -34,7 +34,8 @@
       id: 'AC-' + s.id, code: s.id, fullName: s.name, phone: '',
       accountType: s.role === 'Trưởng Ban Quản lý chợ' ? 'Ban Quản lý chợ' : 'Nhân viên Ban Quản lý chợ',
       title: s.role, roleIds: [STAFF_ROLE_MAP[s.role] || 'market_staff'],
-      organization: 'Ban Quản lý ' + ((D.MARKETS.find(m => m.id === s.market) || {}).short || s.market),
+      // Trưởng Ban Quản lý chợ quản lý cả 02 chợ; nhân viên gắn với chợ được giao.
+      organization: s.role === 'Trưởng Ban Quản lý chợ' ? 'Ban Quản lý chợ phường Cao Lãnh' : 'Ban Quản lý ' + ((D.MARKETS.find(m => m.id === s.market) || {}).short || s.market),
       marketScopes: s.role === 'Trưởng Ban Quản lý chợ' ? ['CL', 'TTD'] : [s.market], status: 'active'
     }));
     list.push(
@@ -65,6 +66,14 @@
     const manager = ACCOUNTS.find(a => a.id === 'AC-NV01');
     if (manager && manager.roleIds && manager.roleIds[0] === 'market_manager') {
       manager.marketScopes = Array.isArray(manager.marketScopes) ? manager.marketScopes : [];
+      if (manager.marketScopes.indexOf('ALL') !== -1) {
+        manager.marketScopes = ['CL', 'TTD'];
+        changed = true;
+      }
+      if (manager.marketScopes.indexOf('CL') === -1) {
+        manager.marketScopes.push('CL');
+        changed = true;
+      }
       if (manager.marketScopes.indexOf('TTD') === -1) {
         manager.marketScopes.push('TTD');
         changed = true;

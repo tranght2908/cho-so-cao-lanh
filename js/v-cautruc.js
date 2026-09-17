@@ -110,11 +110,49 @@
   // NHẤT #/mat-bang (screen permission 'mat-bang' DUY NHẤT, xem js/permissions.js) render workspace
   // này — hash cũ #/so-do/#/cau-truc redirect ở A.route() (js/core.js), không còn 2 screen permission
   // riêng như trước.
-  // ui.mb: state hiển thị dùng chung — 'sel' = khu (LAYOUT key) đang xem ở panel phải (null =
-  // Tổng quan), 'collapsed' = khối/tầng nào đang thu gọn trên cây, 'treeOpen' = hiện cây trên mobile.
+  // ui.mb: state hiển thị dùng chung (thuần UI, KHÔNG persist — không lưu localStorage, tự derive
+  // lại từ LAYOUT mỗi lần render). Drill-down nhiều cấp (MARKET_LAYOUT_DRILLDOWN_UX_REPORT.md):
+  // 'sel' = node đang xem ở panel phải — null (Tổng quan), {k:'block',id} (Khối/Nhà chợ),
+  // {k:'floor',id} (Tầng) hoặc {k:'zone',id} (Khu); mọi cấp đều click được (mục 2/13 yêu cầu — xem
+  // là navigation, KHÔNG cần cau-truc.edit). 'collapsed' = khối/tầng nào đang thu gọn trên cây,
+  // 'treeOpen' = hiện cây trên mobile.
   if (!ui.mb) ui.mb = { sel: null, collapsed: {}, treeOpen: false };
   function mbCan(mid) { return { edit: A.canDo('cau-truc.edit', mid), del: A.canDo('cau-truc.delete', mid), reset: A.canDo('cau-truc.reset', mid) }; }
   function mbActions(list) { list = list.filter(Boolean); return list.length ? `<span class="mb-actions">${list.join('')}</span>` : ''; }
+  // Chợ chỉ có đúng 1 khối + 1 tầng (vd. chợ quê TTĐ — xem defaultLayout()): cây gộp 2 cấp Khối/Tầng
+  // thành 1 hàng (mục 11 — suy ra từ CHÍNH cấu trúc dữ liệu, không hard-code theo market id), nên
+  // cấp "Khối" không tồn tại như 1 điểm chọn riêng trong trường hợp này — dùng chung ở cả cây LẪN
+  // breadcrumb để 2 nơi luôn nhất quán.
+  function mbFlatMode(mid) { const bs = blocksOf(mid); return bs.length === 1 && bs[0].floors.length === 1; }
+  function mbIsSelZone(zk) { return !!ui.mb.sel && ui.mb.sel.k === 'zone' && ui.mb.sel.id === zk; }
+  function mbIsSelBlock(bk) { return !!ui.mb.sel && ui.mb.sel.k === 'block' && ui.mb.sel.id === bk; }
+  function mbIsSelFloor(fk) { return !!ui.mb.sel && ui.mb.sel.k === 'floor' && ui.mb.sel.id === fk; }
+  function findFloorAny(mid, fk) { for (const b of blocksOf(mid)) { const f = b.floors.find(x => x.key === fk); if (f) return { block: b, floor: f }; } return null; }
+  // Breadcrumb (mục 10): derived UI state THUẦN TÚY từ cấu trúc LAYOUT hiện tại — không lưu vào
+  // localStorage/database. segs: mảng {label, act?, id?} — segment cuối luôn là vị trí hiện tại
+  // (không click được), các segment trước đó click được để nhảy thẳng lên cấp cha.
+  function mbCrumbHtml(segs) {
+    return `<div class="mb-crumb">${segs.map((s, i) => i === segs.length - 1
+      ? `<span class="mb-crumb-cur">${U.esc(s.label)}</span>`
+      : `<button class="mb-crumb-link" data-act="${s.act}" ${s.id ? `data-id="${s.id}"` : ''}>${U.esc(s.label)}</button><span class="mb-crumb-sep">›</span>`).join('')}</div>`;
+  }
+  function mbCrumbsForBlock(mid, b) {
+    return [{ label: U.market(mid).name, act: 'mb-sel-overview' }, { label: b.name }];
+  }
+  function mbCrumbsForFloor(mid, block, floor) {
+    const segs = [{ label: U.market(mid).name, act: 'mb-sel-overview' }];
+    if (!mbFlatMode(mid)) segs.push({ label: block.name, act: 'mb-sel-block', id: block.key });
+    segs.push({ label: floor.name });
+    return segs;
+  }
+  function mbCrumbsForZone(mid, z) {
+    const block = findBlock(mid, z.blockId), floor = findFloor(mid, z.blockId, z.floorId);
+    const segs = [{ label: U.market(mid).name, act: 'mb-sel-overview' }];
+    if (block && !mbFlatMode(mid)) segs.push({ label: block.name, act: 'mb-sel-block', id: block.key });
+    if (floor) segs.push({ label: floor.name, act: 'mb-sel-floor', id: floor.key });
+    segs.push({ label: z.name || z.code || '(chưa đặt tên)' });
+    return segs;
+  }
 
   // ---- drawer "Sửa khu" (thay cho panel chi tiết lớn/cố định cũ — hotfix mục 4/8) ----
   // Cùng field/handler với bản cũ (qh-zone-field, qh-pt-field, qh-save-draft, qh-save-final,
@@ -156,7 +194,7 @@
   function qhOpenZoneDrawer(mid, zk) {
     const z = findZone(mid, zk);
     if (!z) return;
-    ui.qh.selZone = zk; ui.mb.sel = zk; // đồng bộ để panel phải cũng đang xem đúng khu này
+    ui.qh.selZone = zk; ui.mb.sel = { k: 'zone', id: zk }; // đồng bộ để panel phải cũng đang xem đúng khu này
     A.$('#modal-root').innerHTML = `<div class="drawer-overlay" data-act="close"></div><div class="drawer">${qhZoneDrawerHtml(mid, z)}</div>`;
   }
   // Gọi thêm (additive) sau các mutation field-level để giữ drawer đang mở luôn khớp dữ liệu mới
@@ -168,9 +206,11 @@
     A.$('#modal-root').innerHTML = `<div class="drawer-overlay" data-act="close"></div><div class="drawer">${qhZoneDrawerHtml(mid, z)}</div>`;
   }
 
-  // ---- cây cấu trúc: action Thêm/Sửa/Xóa NGAY cạnh node, permission-gated (hotfix mục 5/6/7) ----
+  // ---- cây cấu trúc: MỌI node (Tổng quan/Khối/Tầng/Khu) đều click được để xem (mục 2/4/13 — pure
+  // navigation, không cần permission), action Thêm/Sửa/Xóa hiện NGAY cạnh node, permission-gated
+  // riêng (hotfix mục 5/6/7). Nút caret chỉ thu gọn/mở rộng cây — tách biệt khỏi việc chọn xem.
   function mbZonesHtml(f, can) {
-    return `<div class="mb-zones">${f.zones.length ? f.zones.map(z => `<div class="mb-node mb-zone ${ui.mb.sel === z.key ? 'on' : ''}">
+    return `<div class="mb-zones">${f.zones.length ? f.zones.map(z => `<div class="mb-node mb-zone ${mbIsSelZone(z.key) ? 'on' : ''}">
         <button class="mb-zone-label" data-act="mb-sel-zone" data-id="${z.key}">${U.esc(z.name || '(chưa đặt tên)')} <span class="muted small">${U.esc(z.code || '')}</span>${z.status === 'nhap' ? ' <span class="tag warn">Nháp</span>' : ''}</button>
         ${mbActions([can.edit ? `<button class="mb-iconbtn" data-act="qh-zone-edit-open" data-id="${z.key}" title="Sửa khu">✎ Sửa</button>` : '', can.del ? `<button class="mb-iconbtn danger" data-act="qh-del-zone" data-id="${z.key}" title="Xóa khu">🗑 Xóa</button>` : ''])}
       </div>`).join('') : '<div class="empty small">Chưa có khu</div>'}</div>`;
@@ -183,15 +223,17 @@
     if (!blocks.length) return overviewBtn + `<div class="empty small">${isTtd ? 'Chưa có phân khu chợ nào.' : `Chưa có khối/nhà chợ nào.${can.edit ? ' Bấm "+ Khối/Nhà chợ" ở trên để bắt đầu.' : ''}`}</div>`;
     // Chợ chỉ có đúng 1 khối + 1 tầng (vd. chợ quê TTĐ — xem defaultLayout()): gộp 2 cấp này lại
     // thành 1 hàng, tránh hiển thị 1 node "Tầng" trùng tên khối không mang giá trị (hotfix mục 14) —
-    // suy ra từ CHÍNH cấu trúc dữ liệu, không hard-code theo market id.
-    if (blocks.length === 1 && blocks[0].floors.length === 1) {
+    // suy ra từ CHÍNH cấu trúc dữ liệu, không hard-code theo market id. Hàng gộp chọn được, xem như
+    // đang chọn "Tầng" duy nhất bên dưới (mbFlatMode()) — nội dung Khối/Tầng ở đây vốn giống hệt
+    // nhau (chỉ 1 tầng trong khối) nên không cần phân biệt 2 điểm chọn.
+    if (mbFlatMode(mid)) {
       const b = blocks[0], f = b.floors[0];
       const rowBtns = mbActions([
         can.edit ? `<button class="mb-iconbtn" data-act="qh-add-zone" data-block="${b.key}" data-floor="${f.key}" title="Thêm khu">${addZoneLabel}</button>` : '',
         !isTtd && can.edit ? `<button class="mb-iconbtn" data-act="qh-edit-block" data-id="${b.key}" title="Sửa">✎ Sửa</button>` : '',
         !isTtd && can.del ? `<button class="mb-iconbtn danger" data-act="qh-del-block" data-id="${b.key}" title="Xóa">🗑 Xóa</button>` : ''
       ]);
-      return overviewBtn + `<div class="mb-node mb-block-h mb-flatlabel-row"><span class="mb-node-label">${U.esc(b.name)}</span><span class="spacer"></span>${rowBtns}</div>${mbZonesHtml(f, can)}`;
+      return overviewBtn + `<div class="mb-node mb-block-h mb-flatlabel-row ${mbIsSelFloor(f.key) ? 'on' : ''}"><button class="mb-node-label mb-node-label-btn" data-act="mb-sel-floor" data-id="${f.key}">${U.esc(b.name)}</button><span class="spacer"></span>${rowBtns}</div>${mbZonesHtml(f, can)}`;
     }
     return overviewBtn + blocks.map(b => {
       const bKey = 'b:' + b.key, bOpen = !ui.mb.collapsed[bKey];
@@ -201,7 +243,7 @@
         !isTtd && can.del ? `<button class="mb-iconbtn danger" data-act="qh-del-block" data-id="${b.key}" title="Xóa">🗑</button>` : ''
       ]);
       return `<div class="mb-block">
-        <div class="mb-node mb-block-h"><button class="mb-caret-btn" data-act="mb-toggle-node" data-key="${bKey}">${bOpen ? '▼' : '▶'}</button><span class="mb-node-label">${U.esc(b.name)}</span><span class="spacer"></span>${bBtns}</div>
+        <div class="mb-node mb-block-h ${mbIsSelBlock(b.key) ? 'on' : ''}"><button class="mb-caret-btn" data-act="mb-toggle-node" data-key="${bKey}">${bOpen ? '▼' : '▶'}</button><button class="mb-node-label mb-node-label-btn" data-act="mb-sel-block" data-id="${b.key}">${U.esc(b.name)}</button><span class="spacer"></span>${bBtns}</div>
         ${bOpen ? (b.floors.length ? b.floors.map(f => {
           const fKey = 'f:' + f.key, fOpen = !ui.mb.collapsed[fKey];
           const fBtns = mbActions([
@@ -210,21 +252,33 @@
             !isTtd && can.del ? `<button class="mb-iconbtn danger" data-act="qh-del-floor" data-block="${b.key}" data-id="${f.key}" title="Xóa">🗑</button>` : ''
           ]);
           return `<div class="mb-floor">
-            <div class="mb-node mb-floor-h"><button class="mb-caret-btn" data-act="mb-toggle-node" data-key="${fKey}">${fOpen ? '▼' : '▶'}</button><span class="mb-node-label">${U.esc(f.name)}</span><span class="spacer"></span>${fBtns}</div>
+            <div class="mb-node mb-floor-h ${mbIsSelFloor(f.key) ? 'on' : ''}"><button class="mb-caret-btn" data-act="mb-toggle-node" data-key="${fKey}">${fOpen ? '▼' : '▶'}</button><button class="mb-node-label mb-node-label-btn" data-act="mb-sel-floor" data-id="${f.key}">${U.esc(f.name)}</button><span class="spacer"></span>${fBtns}</div>
             ${fOpen ? mbZonesHtml(f, can) : ''}
           </div>`;
         }).join('') : '<div class="empty small">Chưa có tầng</div>') : ''}
       </div>`;
     }).join('');
   }
+  // Vùng nội dung bên phải: render đúng 1 trong 4 view theo cấp đang chọn (Tổng quan/Khối/Tầng/Khu),
+  // luôn kèm breadcrumb derive từ LAYOUT hiện tại (mục 10). Node đã bị xóa (key không còn hợp lệ —
+  // vd. vừa xóa khối/tầng/khu đang chọn, hoặc vừa đổi market/account) tự "heal" về Tổng quan, không
+  // vỡ trang.
   function mbRightHtml(mid) {
-    const can = mbCan(mid);
-    if (ui.mb.sel) {
-      const z = findZone(mid, ui.mb.sel);
-      if (z) return A.mbZoneDiagramHtml(mid, z, can.edit);
+    const can = mbCan(mid), sel = ui.mb.sel;
+    if (sel && sel.k === 'zone') {
+      const z = findZone(mid, sel.id);
+      if (z) return mbCrumbHtml(mbCrumbsForZone(mid, z)) + A.mbZoneDiagramHtml(mid, z, can.edit);
+      ui.mb.sel = null;
+    } else if (sel && sel.k === 'floor') {
+      const found = findFloorAny(mid, sel.id);
+      if (found) return mbCrumbHtml(mbCrumbsForFloor(mid, found.block, found.floor)) + A.mbFloorHtml(mid, found.floor);
+      ui.mb.sel = null;
+    } else if (sel && sel.k === 'block') {
+      const b = findBlock(mid, sel.id);
+      if (b) return mbCrumbHtml(mbCrumbsForBlock(mid, b)) + A.mbBlockHtml(mid, b);
       ui.mb.sel = null;
     }
-    return A.mbOverviewHtml(mid, flatZones(mid));
+    return mbCrumbHtml([{ label: U.market(mid).name }]) + A.mbOverviewHtml(mid, blocksOf(mid));
   }
 
   // Workspace "Mặt bằng chợ" DUY NHẤT — #/mat-bang (screen permission 'mat-bang' DUY NHẤT) trỏ vào
@@ -236,11 +290,11 @@
     const isTtd = mid === 'TTD';
     const stats = A.mbMarketStats(mid);
     const c = k => stats.byStatus[k] || 0;
-    const summary = [[stats.total + ' điểm KD', ''], [c('thue') + ' đang thuê', 'ok'], [c('trong') + ' còn trống', ''], [c('no') + ' nợ phí', 'danger'], [c('ngung') + ' tạm ngưng', 'warn'], [c('tranhchap') + ' tranh chấp', 'purple']]
-      .map(p => `<b${p[1] ? ` style="color:var(--${p[1]})"` : ''}>${p[0]}</b>`).join('<span class="muted">·</span>');
-    return `<div class="card"><div class="card-b" style="padding-top:14px">
-        <h3 style="margin:0;font-size:var(--font-size-md)">Mặt bằng chợ</h3><div class="small muted" style="margin-top:2px">${U.esc(m.name)} · ${U.esc(m.hang)}</div>
-      </div><div class="card-b" style="padding-top:0"><div class="row mb-summary">${summary}</div></div></div>
+    const chip = (k, label, extra) => `<span class="mb-chip ${k ? 'mb-chip-' + k : 'mb-chip-total'}">${k ? `<i style="background:${D.STATUS[k].color}"></i>` : ''}<b>${extra != null ? extra : c(k)}</b>${label}</span>`;
+    const summary = chip(null, 'điểm kinh doanh', stats.total) + chip('thue', 'đang thuê') + chip('trong', 'còn trống') + chip('no', 'nợ phí') + chip('ngung', 'tạm ngưng') + chip('tranhchap', 'tranh chấp');
+    return `<div class="card mb-head"><div class="card-b mb-head-b">
+        <div class="mb-head-info"><h3>Mặt bằng chợ</h3><div class="mb-head-sub"><b>${U.esc(m.name)}</b> · ${U.esc(m.hang)}${m.address ? ' · ' + U.esc(m.address) : ''}</div>${m.note ? `<div class="small muted">${U.esc(m.note)}</div>` : ''}</div>
+        <div class="mb-summary">${summary}</div></div></div>
     <button class="btn sm mb-tree-toggle" data-act="mb-toggle-tree">${open ? '✕ Đóng cấu trúc' : '☰ Cấu trúc mặt bằng'}</button>
     <div class="mb-workspace">
       <div class="card mb-tree-card ${open ? 'open' : ''}"><div class="card-h" style="padding-bottom:6px">
@@ -253,7 +307,9 @@
   }
 
   Object.assign(A.ACT, {
-    'mb-sel-zone': el => { ui.mb.sel = el.dataset.id; A.render(); },
+    'mb-sel-zone': el => { ui.mb.sel = { k: 'zone', id: el.dataset.id }; A.render(); },
+    'mb-sel-block': el => { ui.mb.sel = { k: 'block', id: el.dataset.id }; A.render(); },
+    'mb-sel-floor': el => { ui.mb.sel = { k: 'floor', id: el.dataset.id }; A.render(); },
     'mb-sel-overview': () => { ui.mb.sel = null; A.render(); },
     'mb-toggle-node': el => { const k = el.dataset.key; ui.mb.collapsed[k] = !ui.mb.collapsed[k]; A.render(); },
     'mb-toggle-tree': () => { ui.mb.treeOpen = !ui.mb.treeOpen; A.render(); },
@@ -421,7 +477,7 @@
       const f = findFloorOfZone(mid, el.dataset.id);
       if (f) f.zones = f.zones.filter(x => x.key !== el.dataset.id);
       if (ui.qh.selZone === el.dataset.id) ui.qh.selZone = null;
-      if (ui.mb.sel === el.dataset.id) ui.mb.sel = null;
+      if (mbIsSelZone(el.dataset.id)) ui.mb.sel = null;
       saveLayout(); A.closeModal(); A.render(); U.toast('Đã xóa khu');
     },
     'qh-pt-add': el => {

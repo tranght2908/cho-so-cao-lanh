@@ -10,6 +10,8 @@
   if (!ui.settingsTab) ui.settingsTab = 'vaitro';
   if (!ui.cfgTab) ui.cfgTab = 'gia';
   if (!ui.acc) ui.acc = { search: '', type: '', role: '', market: '', status: '' };
+  if (!ui.bankAcc) ui.bankAcc = { search: '', status: '', sortKey: null, sortDir: 'asc' };
+  if (!ui.baSel) ui.baSel = [];
 
   // ---------- Phản ánh & sự cố ----------
   A.VIEWS['su-co'] = function () {
@@ -18,7 +20,7 @@
     const done = A.db.incidents.filter(i => U.inM(i) && i.rating);
     return `<div class="kpis">
       <div class="card kpi"><div class="k-label">Đang xử lý</div><div class="k-value">${all.filter(isOpen).length}</div><div class="k-sub">trên tổng ${all.length} phản ánh</div></div>
-      <div class="card kpi"><div class="k-label">Quá hạn</div><div class="k-value" style="color:#d6453b">${all.filter(late).length}</div><div class="k-sub">Điện, PCCC: 24 giờ · khác: 3 ngày</div></div>
+      <div class="card kpi"><div class="k-label">Quá hạn</div><div class="k-value" style="color:#df2225">${all.filter(late).length}</div><div class="k-sub">Điện, PCCC: 24 giờ · khác: 3 ngày</div></div>
       <div class="card kpi"><div class="k-label">Vượt cấp lên phường</div><div class="k-value">${all.filter(i => i.escalated).length}</div><div class="k-sub">Lãnh đạo phường theo dõi</div></div>
       <div class="card kpi"><div class="k-label">Hài lòng của tiểu thương</div><div class="k-value">${done.length ? (U.sum(done, i => i.rating) / done.length).toFixed(1) : '–'}/5</div><div class="k-sub">${done.length} lượt đánh giá</div></div></div>
     <div class="card"><div class="card-h"><h3>Bảng theo dõi xử lý (6 trạng thái)</h3>
@@ -139,7 +141,7 @@
         <div class="field" style="margin-top:10px"><label>Nội dung</label><textarea class="input" id="tb-content" rows="4">Ban Quản lý chợ thông báo: sáng Chủ nhật 20/9/2026 tổ chức tổng vệ sinh, khử khuẩn. Đề nghị tiểu thương thu dọn hàng hóa trước 6h00.</textarea></div>
         <div class="row" style="margin-top:12px"><span class="spacer"></span>${A.canDo('thong-bao.gui', ui.market) ? '<button class="btn primary" data-act="tb-send">📣 Gửi ngay</button>' : ''}</div></div></div>
       <div class="card"><div class="card-h"><h3>Thông báo tự động theo sự kiện</h3></div><div class="card-b small">
-        ${[['Phát hành khoản phải thu', 'Mini app, Zalo OA'], ['Trước hạn nộp 3 ngày', 'Mini app, Zalo OA'], ['Khoản phải thu quá hạn', 'Mini app, Zalo OA, SMS'], ['Hợp đồng còn 30 ngày hết hạn', 'Mini app, Zalo OA'], ['Phản ánh được xử lý xong', 'Mini app'], ['Biên lai điện tử sau khi thanh toán', 'Mini app, Zalo OA']].map(r => `<div class="row" style="padding:7px 0;border-bottom:1px solid #eef2f0"><span class="tag ok">Bật</span><span style="flex:1">${r[0]}</span><span class="muted">${r[1]}</span></div>`).join('')}</div></div></div>
+        ${[['Phát hành khoản phải thu', 'Mini app, Zalo OA'], ['Trước hạn nộp 3 ngày', 'Mini app, Zalo OA'], ['Khoản phải thu quá hạn', 'Mini app, Zalo OA, SMS'], ['Hợp đồng còn 30 ngày hết hạn', 'Mini app, Zalo OA'], ['Phản ánh được xử lý xong', 'Mini app'], ['Biên lai điện tử sau khi thanh toán', 'Mini app, Zalo OA']].map(r => `<div class="row" style="padding:7px 0;border-bottom:1px solid #eef2f7"><span class="tag ok">Bật</span><span style="flex:1">${r[0]}</span><span class="muted">${r[1]}</span></div>`).join('')}</div></div></div>
     <div class="card"><div class="card-h"><h3>Lịch sử thông báo</h3></div><div class="card-b">
       ${U.table([{ t: 'Mã' }, { t: 'Ngày' }, { t: 'Tiêu đề' }, { t: 'Đối tượng' }, { t: 'Kênh' }, { t: 'Người nhận', num: true }, { t: 'Đã nhận', num: true }, { t: 'Đã đọc', num: true }, { t: 'Loại' }],
         A.db.notifications.map(n => `<tr><td>${n.id}</td><td>${U.dmy(n.at)}</td><td>${U.esc(n.title)}</td><td>${U.esc(n.group)}</td><td class="small">${n.channels.join(', ')}</td><td class="num">${n.sent}</td><td class="num">${U.pctTxt(n.delivered * 100)}</td><td class="num">${n.read ? U.pctTxt(n.read * 100) : '<span class="muted">đang cập nhật</span>'}</td><td>${n.auto ? '<span class="tag info">Tự động</span>' : '<span class="tag">Thủ công</span>'}</td></tr>`))}</div></div>`;
@@ -190,23 +192,111 @@
     };
   }
   const fmtCell = (v, col) => typeof v === 'number' ? (/%/.test(col) ? U.pctTxt(v) : /\(đ\)/.test(col) ? U.money(v) : v.toLocaleString('vi-VN')) : U.esc(v);
+  // Trình bày báo cáo theo bố cục của hệ thống điều hành phường (IOC): danh sách mẫu báo cáo → cấu
+  // hình → khung xem trước (cơ quan, tiêu đề, kỳ; 4 ô chỉ số; biểu đồ tổng hợp; bảng dữ liệu tổng hợp).
+  // Chỉ là lớp hiển thị — số liệu vẫn lấy nguyên từ reports().
+  const RP_SUB = { lapday: 'Tình trạng từng khu vực, tỷ lệ lấp đầy', biendong: 'Đăng ký mới, chấm dứt theo tháng', hethan: 'Hợp đồng cần gia hạn trong 60 ngày', doanhthu: 'Phải thu, đã thu, tỷ lệ thu theo kỳ', congno: 'Nợ quá hạn, chưa đến hạn theo khu vực', khongtienmat: 'Tiền mặt, QR, chuyển khoản theo kỳ', doisoat: 'Sao kê ngân hàng và kết quả khớp', suco: 'Phản ánh, sự cố và kết quả xử lý', nhanvien: 'Biên lai và số tiền theo người thu', miengiam: 'Các khoản được miễn giảm, điều chỉnh', miniapp: 'Tiểu thương đã cài mini app theo ngành hàng' };
+  const RP_NOTOTAL = /Cuối kỳ|Còn lại|Đánh giá|Mức|Giờ|Ngày|Tháng|Kỳ/i;
+  const RP_PCT = {
+    lapday: rows => { const t = U.sum(rows, r => r[2]), e = U.sum(rows, r => r[7]); return U.pct(t - e, t); },
+    doanhthu: rows => U.pct(U.sum(rows, r => r[3]), U.sum(rows, r => r[2])),
+    khongtienmat: rows => { const tm = U.sum(rows, r => r[1]), qr = U.sum(rows, r => r[2]), ck = U.sum(rows, r => r[3]); return U.pct(qr + ck, tm + qr + ck); },
+    miniapp: rows => U.pct(U.sum(rows, r => r[3]), U.sum(rows, r => r[2]))
+  };
+  function rpTotals(key, r) {
+    if (!r.rows.length) return null;
+    const cells = r.cols.map((c, k) => {
+      if (k === 0) return 'Tổng cộng';
+      if (!r.rows.every(row => typeof row[k] === 'number')) return '';
+      if (/%/.test(c)) return RP_PCT[key] ? RP_PCT[key](r.rows) : '';
+      if (RP_NOTOTAL.test(c)) return '';
+      return U.sum(r.rows, row => row[k]);
+    });
+    return cells.slice(1).every(v => v === '') ? null : cells;
+  }
+  // 4 ô chỉ số của từng báo cáo, tính từ rows
+  const num = v => Math.round(v || 0).toLocaleString('vi-VN');
+  function rpKpis(key, rows) {
+    const S = k => U.sum(rows, r => r[k]), n = rows.length, last = rows[n - 1] || [];
+    switch (key) {
+      case 'lapday': return [['Tổng điểm KD', num(S(2))], ['Đang thuê', num(S(3))], ['Còn trống', num(S(7))], ['Lấp đầy', U.pctTxt(RP_PCT.lapday(rows))]];
+      case 'biendong': return [['Đăng ký mới', num(S(1))], ['Chấm dứt', num(S(2))], ['Tiểu thương cuối kỳ', num(last[3] || 0)], ['Biến động ròng', (S(1) - S(2) >= 0 ? '+' : '') + num(S(1) - S(2))]];
+      case 'hethan': return [['Hợp đồng sắp hết hạn', num(n)], ['Trong 30 ngày', num(rows.filter(r => r[4] <= 30).length)], ['Từ 31–60 ngày', num(rows.filter(r => r[4] > 30).length)], ['Gần nhất', n ? rows[0][4] + ' ngày' : '—']];
+      case 'doanhthu': return [['Phải thu', U.moneyShort(S(2))], ['Đã thu', U.moneyShort(S(3))], ['Tỷ lệ thu', U.pctTxt(RP_PCT.doanhthu(rows))], ['Còn phải thu', U.moneyShort(S(2) - S(3))]];
+      case 'congno': return [['Tiểu thương nợ', num(S(2))], ['Nợ quá hạn', U.moneyShort(S(3))], ['Nợ chưa đến hạn', U.moneyShort(S(4))], ['Tổng công nợ', U.moneyShort(S(3) + S(4))]];
+      case 'khongtienmat': return [['Tiền mặt', U.moneyShort(S(1))], ['Quét QR', U.moneyShort(S(2))], ['Chuyển khoản', U.moneyShort(S(3))], ['Không tiền mặt', U.pctTxt(RP_PCT.khongtienmat(rows))]];
+      case 'doisoat': return [['Giao dịch sao kê', num(n)], ['Đã khớp', num(rows.filter(r => r[4] === 'Đã khớp').length)], ['Chưa khớp', num(rows.filter(r => r[4] !== 'Đã khớp').length)], ['Tổng tiền', U.moneyShort(S(3))]];
+      case 'suco': return [['Tổng phản ánh', num(S(1))], ['Đã xử lý xong', num(S(2))], ['Đang xử lý', num(S(3))], ['Quá hạn', num(S(4))]];
+      case 'nhanvien': return [['Người thu', num(n)], ['Số biên lai', num(S(1))], ['Số tiền', U.moneyShort(S(2))], ['Bình quân / biên lai', U.moneyShort(S(1) ? S(2) / S(1) : 0)]];
+      case 'miengiam': return [['Khoản miễn giảm', num(n)], ['Tổng tiền giảm', U.moneyShort(S(4))], ['Mức giảm bình quân', n ? U.pctTxt(S(3) / n) : '—'], ['Tiểu thương', num(new Set(rows.map(r => r[1])).size)]];
+      case 'miniapp': return [['Tiểu thương', num(S(2))], ['Đã cài mini app', num(S(3))], ['Tỷ lệ', U.pctTxt(RP_PCT.miniapp(rows))], ['Chưa cài', num(S(2) - S(3))]];
+    }
+    return [];
+  }
+  // Biểu đồ tổng hợp: [cột nhãn, cột giá trị, kiểu] cho các báo cáo chưa có biểu đồ riêng
+  const RP_CHART = { lapday: [1, 8, '%'], biendong: [0, 3, 'n'], congno: [1, 3, 'đ'], suco: [0, 1, 'n'], nhanvien: [0, 2, 'đ'], miniapp: [1, 4, '%'], hethan: null, doisoat: null, miengiam: null };
+  // Biểu đồ cột ngang: nhãn dài đặt bên trái, không chồng chữ khi có nhiều dòng
+  function hbars(labels, values, o) {
+    const W = 660, L = 230, R = 70, rowH = 26, H = labels.length * rowH + 16;
+    const max = o.max || (Math.max.apply(null, values.concat([1])) * 1.05);
+    const pw = W - L - R;
+    let g = '';
+    labels.forEach((lb, i) => {
+      const y = 8 + i * rowH, w = Math.max(0, pw * (values[i] || 0) / max);
+      const txt = lb.length > 34 ? lb.slice(0, 33) + '…' : lb;
+      g += `<text x="${L - 8}" y="${y + 17}" text-anchor="end" font-size="11.5" fill="#2a3a52"><title>${U.esc(lb)}</title>${U.esc(txt)}</text><rect x="${L}" y="${y + 5}" width="${w}" height="16" rx="3" fill="#0961bb"><title>${U.esc(lb)}: ${o.fmt(values[i])}</title></rect><text x="${L + w + 6}" y="${y + 17}" font-size="11.5" fill="#0f1e32" font-weight="600">${o.fmt(values[i])}</text>`;
+    });
+    return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" style="max-height:${H}px">${g}</svg><div class="chart-legend"><span><i style="background:#0961bb"></i>${U.esc(o.name)}</span></div></div>`;
+  }
   A.VIEWS['bao-cao'] = function () {
     // Báo cáo thống kê = màn cross-market (A.SCREEN_MARKET['bao-cao'] === 'CROSS') — dùng bộ lọc
     // nội bộ A.xmMarket()/A.xmScopeBar() thay vì bị chặn/giới hạn theo selectedMarket (mục 9 Phase 2).
     const xmMkt = A.xmMarket();
-    const R = reports(xmMkt), r = R[ui.report] || R.lapday;
+    const R = reports(xmMkt), SF = A.STATE_FORMS || {}, stateKey = SF[ui.report] ? ui.report : null, key = stateKey ? 'lapday' : (R[ui.report] ? ui.report : 'lapday'), r = R[key];
+    const rp = ui.rp || (ui.rp = { from: '2026-09-01', to: U.today() });
     let chart = '';
-    if (r.chart === 'doanhthu') chart = U.bars(r.rows.map(x => x[0]), [{ name: 'Phải thu', values: r.rows.map(x => x[2]), color: '#b9d8cf' }, { name: 'Đã thu', values: r.rows.map(x => x[3]), color: '#13806b' }], { stacked: false });
-    if (r.chart === 'khongtienmat') chart = U.bars(r.rows.map(x => x[0]), [{ name: 'Không tiền mặt %', values: r.rows.map(x => x[4]), color: '#c93d6e' }], { stacked: false, max: 100, fmt: v => Math.round(v) + '%' });
-    return `<div class="grid g-report">
-      <div class="card no-print"><div class="card-b report-list" style="padding-top:10px">${A.xmScopeBar()}${Object.keys(R).map((k, n) => `<button class="${(R[ui.report] ? ui.report : 'lapday') === k ? 'on' : ''}" data-act="rp" data-id="${k}">${n + 1}. ${R[k].t}</button>`).join('')}</div></div>
-      <div class="card"><div class="card-h"><h3>${r.t}</h3><span class="small muted">${xmMkt === 'ALL' ? 'Tất cả chợ' : U.mShort(xmMkt)} · lập ngày ${U.dmy(U.today())}</span>
-        <button class="btn no-print" data-act="rp-csv">⬇ Xuất Excel</button><button class="btn no-print" data-act="print">🖨 In / PDF</button></div>
-        <div class="card-b">${chart}${U.table(r.cols.map((c, k) => ({ t: c, num: k > 0 && typeof (r.rows[0] || [])[k] === 'number' })), r.rows.map(row => `<tr>${row.map((v, k) => `<td class="${typeof v === 'number' ? 'num' : ''}">${fmtCell(v, r.cols[k])}</td>`).join('')}</tr>`))}
-        <div class="small muted" style="margin-top:10px">Báo cáo được sinh tự động từ dữ liệu nghiệp vụ, không tổng hợp thủ công.</div></div></div></div>`;
+    if (r.chart === 'doanhthu') chart = U.bars(r.rows.map(x => x[0]), [{ name: 'Phải thu', values: r.rows.map(x => x[2]), color: '#bcd6f5' }, { name: 'Đã thu', values: r.rows.map(x => x[3]), color: '#0961bb' }], { stacked: false });
+    else if (r.chart === 'khongtienmat') chart = U.bars(r.rows.map(x => x[0]), [{ name: 'Không tiền mặt %', values: r.rows.map(x => x[4]), color: '#0961bb' }], { stacked: false, max: 100, fmt: v => Math.round(v) + '%' });
+    else if (RP_CHART[key] && r.rows.length) { const [lc, vc, kind] = RP_CHART[key]; const fmt = kind === '%' ? v => Math.round(v) + '%' : kind === 'đ' ? U.moneyShort : v => num(v); const labels = r.rows.map(x => (key === 'lapday' || key === 'congno' ? x[0].replace('Chợ quê Tân Thuận Đông', 'Chợ quê').replace('Chợ Cao Lãnh', 'CL') + ' · ' : '') + String(x[lc]).replace(/^Khu /, '')); chart = key === 'biendong' ? U.bars(labels, [{ name: r.cols[vc], values: r.rows.map(x => x[vc]), color: '#0961bb' }], { stacked: false, fmt }) : hbars(labels, r.rows.map(x => x[vc]), { name: r.cols[vc].replace(/ (đ)/, ''), max: kind === '%' ? 100 : null, fmt }); }
+    const hasMoney = r.cols.some(c => /\(đ\)/.test(c));
+    const cols = r.cols.map(c => c.replace(/ \(đ\)/, ''));
+    const numCol = k => k > 0 && typeof (r.rows[0] || [])[k] === 'number';
+    const tot = rpTotals(key, r);
+    const kpis = rpKpis(key, r.rows);
+    const scopeName = xmMkt === 'ALL' ? 'Chợ Cao Lãnh và Chợ quê Cù lao Tân Thuận Đông' : U.market(xmMkt).name;
+    const allowed = A.allowedMarkets(A.currentAccount());
+    const who = A.currentAccount ? A.currentAccount() : null;
+    return `<div class="rp-page-h"><h2>Báo cáo thống kê</h2><div class="muted">Tạo, xem trước và xuất các báo cáo quản lý chợ</div></div>
+    <div class="grid g-report rp-grid">
+      <div class="card no-print"><div class="card-h"><h3>Mẫu báo cáo</h3></div><div class="card-b rp-list"><div class="rp-group">Báo cáo theo mẫu Nhà nước</div>${(A.STATE_FORM_ORDER || []).map(k => `<button class="rp-item ${stateKey === k ? 'on' : ''}" data-act="rp" data-id="${k}"><span class="rp-ico">🏛️</span><span><b>${SF[k].mau} – ${SF[k].t}</b><small>${SF[k].vb} · ${SF[k].ky}</small></span></button>`).join('')}<div class="rp-group">Báo cáo điều hành</div>${Object.keys(R).map(k => `<button class="rp-item ${!stateKey && key === k ? 'on' : ''}" data-act="rp" data-id="${k}"><span class="rp-ico">📄</span><span><b>${R[k].t}</b><small>${RP_SUB[k] || ''}</small></span></button>`).join('')}</div></div>
+      <div class="rp-right">
+        <div class="card no-print"><div class="card-h"><h3>Cấu hình báo cáo</h3></div><div class="card-b rp-cfg">
+          <div class="field"><label>Từ ngày</label><input type="date" class="input" data-ch="rp-cfg" data-k="from" value="${rp.from}"></div>
+          <div class="field"><label>Đến ngày</label><input type="date" class="input" data-ch="rp-cfg" data-k="to" value="${rp.to}"></div>
+          <div class="field"><label>Chợ</label><select class="input" data-ch="rp-scope" ${allowed.length <= 1 ? 'disabled' : ''}>${allowed.length > 1 ? `<option value="ALL" ${xmMkt === 'ALL' ? 'selected' : ''}>Tất cả chợ</option>` : ''}${allowed.map(id => `<option value="${id}" ${xmMkt === id ? 'selected' : ''}>${U.esc(U.market(id).name)}</option>`).join('')}</select></div>
+          <div class="field"><label>Đơn vị lập</label><select class="input"><option>Ban Quản lý chợ</option><option>UBND phường Cao Lãnh</option></select></div>
+        </div></div>
+        <div class="card rp-card"><div class="card-h no-print"><h3>👁 Xem trước: ${U.esc(stateKey ? SF[stateKey].mau + ' – ' + SF[stateKey].t : r.t)}</h3><span class="spacer"></span><button class="btn" data-act="print">⬇ Xuất PDF</button><button class="btn" data-act="rp-csv">📊 Excel</button><button class="btn" data-act="print">🖨 In</button><button class="btn" data-act="rp-save">💾 Lưu mẫu</button></div>
+          <div class="card-b">${stateKey ? A.stateFormHtml(stateKey, xmMkt) : `<div class="rp-preview">
+            <div class="rp-org">UBND PHƯỜNG CAO LÃNH · BAN QUẢN LÝ CHỢ</div>
+            <h2 class="rp-title">${U.esc(r.t.toUpperCase())}</h2>
+            <div class="rp-period">Kỳ báo cáo: ${U.dmy(rp.from)} – ${U.dmy(rp.to)} · Phạm vi: ${U.esc(scopeName)}${hasMoney ? ' · Đơn vị tính: đồng' : ''}</div>
+            <div class="rp-kpis">${kpis.map(k => `<div class="rp-kpi"><div class="l">${k[0]}</div><div class="v">${k[1]}</div></div>`).join('')}</div>
+            ${chart ? `<div class="rp-block"><div class="rp-block-h">📊 Biểu đồ tổng hợp</div>${chart}</div>` : ''}
+            <div class="rp-block"><div class="rp-block-h">📋 Bảng dữ liệu tổng hợp</div>
+              <div class="tbl-wrap"><table class="tbl rp-tbl"><thead><tr><th class="num rp-stt">STT</th>${cols.map((c, k) => `<th class="${numCol(k) ? 'num' : ''}">${U.esc(c)}</th>`).join('')}</tr></thead>
+              <tbody>${r.rows.length ? r.rows.map((row, i) => `<tr><td class="num rp-stt">${i + 1}</td>${row.map((v, k) => `<td class="${typeof v === 'number' ? 'num' : ''} ${k === 0 ? 'rp-first' : ''}">${fmtCell(v, r.cols[k])}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length + 1}" class="empty">Không có dữ liệu trong phạm vi đã chọn</td></tr>`}</tbody>
+              ${tot ? `<tfoot><tr class="rp-total"><td></td>${tot.map((v, k) => `<td class="${typeof v === 'number' ? 'num' : ''}">${v === '' ? '' : fmtCell(v, r.cols[k])}</td>`).join('')}</tr></tfoot>` : ''}</table></div></div>
+            <div class="rp-sign print-only"><div><div class="rp-sign-t">NGƯỜI LẬP BIỂU</div><div class="rp-sign-s">(Ký, ghi rõ họ tên)</div><div class="rp-sign-n">${U.esc(who && (who.accountType === 'Ban Quản lý chợ' || who.accountType === 'Nhân viên Ban Quản lý chợ') ? who.fullName : 'Lê Thị Ngọc Hân')}</div></div><div><div class="rp-sign-t">TRƯỞNG BAN QUẢN LÝ CHỢ</div><div class="rp-sign-s">(Ký, đóng dấu)</div><div class="rp-sign-n">Trần Minh Khoa</div></div></div>
+            <div class="small muted rp-note">Số liệu sinh tự động từ dữ liệu nghiệp vụ của hệ thống lúc ${U.nowTime()} ngày ${U.dmy(U.today())}.</div>
+          </div>`}</div></div>
+      </div></div>`;
   };
+  A.CH['rp-cfg'] = el => { ui.rp[el.dataset.k] = el.value; A.render(); };
+  A.CH['rp-scope'] = el => { A.ACT['xm-scope']({ dataset: { id: el.value } }); };
+  A.ACT['rp-save'] = () => U.toast('Đã lưu mẫu báo cáo (mô phỏng)');
   A.ACT.rp = el => { ui.report = el.dataset.id; A.render(); };
-  A.ACT['rp-csv'] = () => { const R = reports(A.xmMarket()), r = R[ui.report] || R.lapday; U.csv('bao-cao-' + (R[ui.report] ? ui.report : 'lapday'), r.cols, r.rows); };
+  A.ACT['rp-csv'] = () => { if (A.STATE_FORMS && A.STATE_FORMS[ui.report]) { A.stateFormCsv(ui.report, A.xmMarket()); return; } const R = reports(A.xmMarket()), r = R[ui.report] || R.lapday; U.csv('bao-cao-' + (R[ui.report] ? ui.report : 'lapday'), r.cols, r.rows); };
 
   // ---------- Tài khoản người dùng ----------
   function accInitials(name) {
@@ -474,19 +564,29 @@
   }
 
   // Phase 6 STEP A: 3 tab giá (Đơn giá mặt bằng/Điện & nước/Dịch vụ khác) đã chuyển sang màn
-  // "Cấu hình giá dịch vụ" độc lập trong nhóm Tài chính (A.VIEWS['cau-hinh-gia']) — xem
+  // "Chính sách thu và biểu phí" độc lập trong nhóm Tài chính (A.VIEWS['cau-hinh-gia']) — xem
   // SERVICE_PRICING_SCREEN_AUDIT.md mục 9/10. Kỳ thu/Quy tắc thu phí GIỮ NGUYÊN trong Cài đặt,
   // nay lên thẳng tab cấp 1 (trước đây nằm sau 2 cấp: Cài đặt → Cấu hình dịch vụ → Kỳ thu).
   const SETTINGS_TABS = [['kythu', 'Kỳ thu'], ['quytac', 'Quy tắc thu phí'], ['vaitro', 'Vai trò & phân quyền'], ['tichhop', 'Tích hợp'], ['nhatky', 'Nhật ký kiểm toán']];
   function settingsTabBar(tab) {
     return `<div class="seg">${SETTINGS_TABS.map(t => `<button class="${tab === t[0] ? 'on' : ''}" data-act="settings-tab" data-id="${t[0]}">${t[1]}</button>`).join('')}</div>`;
   }
-  // ---- Cấu hình dịch vụ: tiện ích dùng chung ----
+  // ---- Chính sách thu và biểu phí: tiện ích dùng chung ----
   const CFG_CALC_LABELS = { fixed: 'Cố định / kỳ', area: 'Theo diện tích', qty: 'Theo số lượng', session: 'Theo phiên' };
+  const CFG_MARKET_MODEL_LABELS = { FIXED_MONTHLY: 'Chợ cố định · thu theo tháng', MARKET_SESSION: 'Chợ phiên · thu theo phiên họp chợ' };
+  const CFG_CYCLE_LABELS = { MONTH: 'Tháng', SESSION: 'Phiên', DAY: 'Ngày' };
+  const CFG_TAX_LABELS = { TAXABLE_REVENUE: 'Doanh thu chịu thuế', PASS_THROUGH_NON_TAX: 'Thu hộ, không chịu thuế' };
   // Kỳ thu / Quy tắc thu phí GIỮ NGUYÊN permission cũ (cai-dat.ky-thu/cai-dat.quy-tac-thu-phi) —
   // không đổi ở Phase 6 STEP A (xem SERVICE_PRICING_SCREEN_AUDIT.md mục 11).
   function cfgCan(action) { return A.PERM.canAction(ui.role, 'cai-dat.' + action); }
-  function cfgActor() { return ui.role === 'lanhdao' ? 'Lãnh đạo UBND phường' : 'Trần Minh Khoa'; }
+  function cfgActor() { const acc = A.currentAccount(); return acc ? acc.fullName : 'Không rõ'; }
+  function cfgDefaultMarketModel(marketId) { return marketId === 'TTD' ? 'MARKET_SESSION' : 'FIXED_MONTHLY'; }
+  function cfgDefaultCycle(marketId) { return marketId === 'TTD' ? 'SESSION' : 'MONTH'; }
+  function cfgWaiverName(id) {
+    if (!id) return 'Không áp dụng';
+    const item = A.SERVICE_CFG.waiverTypes().find(x => x.id === id);
+    return item ? item.name : 'Tham chiếu không còn tồn tại';
+  }
   // 3 nhóm giá (stallPrices/utilities/extraServices) dùng action key MỚI cau-hinh-gia.* + market
   // scope thật (Phase 6 STEP A) — khác hẳn cfgCan() ở trên (không có market, dùng cho ky-thu/quy-tac).
   function cfgGiaActionKey(cat) {
@@ -501,10 +601,20 @@
   function cfgPriceMutateAllowed(cat, rec) {
     const key = cfgGiaActionKey(cat);
     if (!key) return false;
-    if (rec && rec.marketId === 'ALL') return false;
+    if (rec && (rec.marketId === 'ALL' || rec.status === 'expired')) return false;
     return A.canDo(key, rec ? rec.marketId : ui.market);
   }
-  function cfgStatusTag(s) { return s === 'active' ? '<span class="tag ok">Đang áp dụng</span>' : '<span class="tag">Đã vô hiệu hoá</span>'; }
+  function cfgStatusTag(s) {
+    if (s === 'active') return '<span class="tag ok">Đang áp dụng</span>';
+    if (s === 'expired') return '<span class="tag info">Đã hết hiệu lực</span>';
+    return '<span class="tag">Đã vô hiệu hoá</span>';
+  }
+  function cfgPolicyDetailHtml(r) {
+    return `<dt>Mô hình áp dụng</dt><dd>${U.esc(CFG_MARKET_MODEL_LABELS[r.marketModel] || r.marketModel || '—')}</dd>
+      <dt>Chu kỳ thu</dt><dd>${U.esc(CFG_CYCLE_LABELS[r.collectionCycle] || r.collectionCycle || '—')}</dd>
+      <dt>Phân loại thuế</dt><dd>${U.esc(CFG_TAX_LABELS[r.taxClass] || r.taxClass || '—')}</dd>
+      <dt>Loại miễn giảm</dt><dd>${U.esc(cfgWaiverName(r.waiverTypeId))}</dd>`;
+  }
   function cfgRecord(cat, id) {
     if (cat === 'billingCycle') return A.SERVICE_CFG.cycle();
     if (cat === 'billingRules') return A.SERVICE_CFG.rules();
@@ -522,7 +632,7 @@
   function cfgAttachHtml(rec, cat, id, canManage) {
     const list = rec.attachments || [];
     return `<div class="small muted" style="margin-bottom:6px">Tài liệu / hình ảnh / chứng từ đính kèm</div>
-      ${list.length ? list.map(a => `<div class="row" style="padding:5px 0;border-bottom:1px solid #eef2f0">
+      ${list.length ? list.map(a => `<div class="row" style="padding:5px 0;border-bottom:1px solid #eef2f7">
         <span>${cfgAttachIcon(a.type)}</span><span style="flex:1">${U.esc(a.name)}${a.note ? `<div class="small muted">${U.esc(a.note)}</div>` : ''}</span>
         <button class="btn sm" data-act="cfg-att-view" data-cat="${cat}" data-id="${id}" data-att="${a.id}">Xem</button>
         ${canManage ? `<button class="btn sm danger" data-act="cfg-att-del" data-cat="${cat}" data-id="${id}" data-att="${a.id}">Xoá</button>` : ''}
@@ -548,11 +658,14 @@
     const canNew = cfgPriceMutateAllowed('stallPrices', null);
     const rows = A.SERVICE_CFG.list('stallPrices').filter(r => r.marketId === ui.market);
     return `<div class="card"><div class="card-h"><h3>Đơn giá mặt bằng · ${U.esc(U.market(ui.market).name)}</h3>${canNew ? '<button class="btn sm primary" data-act="cfg-price-new">+ Thêm đơn giá</button>' : ''}</div>
-      <div class="card-b">${U.table([{ t: 'Chợ' }, { t: 'Khu vực / tầng' }, { t: 'Loại điểm KD' }, { t: 'Đơn giá', num: true }, { t: 'Đơn vị tính' }, { t: 'Ngày hiệu lực' }, { t: 'Căn cứ' }, { t: 'Trạng thái' }, { t: '' }],
+      <div class="card-b">${U.table([{ t: 'Chợ / mô hình' }, { t: 'Khu vực / loại điểm' }, { t: 'Mức giá', num: true }, { t: 'Đơn vị / chu kỳ' }, { t: 'Phân loại thuế' }, { t: 'Hiệu lực / căn cứ' }, { t: 'Miễn giảm' }, { t: 'Trạng thái' }, { t: '' }],
         rows.map(r => { const canManage = cfgPriceMutateAllowed('stallPrices', r); return `<tr>
-          <td>${U.mShort(r.marketId)}</td><td class="small">${U.esc(r.area)}</td><td class="small">${U.esc(r.stallType)}</td>
-          <td class="num">${r.amount.toLocaleString('vi-VN')}</td><td class="small nowrap">${U.esc(r.unit)}</td>
-          <td class="nowrap">${U.dmy(r.effectiveFrom)}</td><td class="small">${r.legalBasis && r.legalBasis.docNo ? U.esc(r.legalBasis.docNo) : '<span class="muted">—</span>'}</td>
+          <td>${U.mShort(r.marketId)}<div class="small muted">${U.esc(CFG_MARKET_MODEL_LABELS[r.marketModel] || '—')}</div></td>
+          <td class="small">${U.esc(r.area)}<div class="muted">${U.esc(r.stallType)}</div></td>
+          <td class="num">${r.amount.toLocaleString('vi-VN')}</td><td class="small nowrap">${U.esc(r.unit)}<div class="muted">Chu kỳ: ${U.esc(CFG_CYCLE_LABELS[r.collectionCycle] || '—')}</div></td>
+          <td class="small">${U.esc(CFG_TAX_LABELS[r.taxClass] || '—')}</td>
+          <td class="nowrap">${U.dmy(r.effectiveFrom)}${r.effectiveTo ? `<div class="small muted">đến ${U.dmy(r.effectiveTo)}</div>` : ''}<div class="small">${r.legalBasis && r.legalBasis.docNo ? U.esc(r.legalBasis.docNo) : '<span class="muted">—</span>'}</div></td>
+          <td class="small">${U.esc(cfgWaiverName(r.waiverTypeId))}</td>
           <td>${cfgStatusTag(r.status)}</td>
           <td class="nowrap"><button class="btn sm" data-act="cfg-price-view" data-id="${r.id}">Xem</button>
             ${canManage ? `<button class="btn sm" data-act="cfg-price-edit" data-id="${r.id}">Sửa</button><button class="btn sm ${r.status === 'active' ? 'danger' : ''}" data-act="cfg-price-toggle" data-id="${r.id}">${r.status === 'active' ? 'Vô hiệu hoá' : 'Kích hoạt'}</button>` : ''}
@@ -563,7 +676,7 @@
     return `<div class="drawer-h"><div><h3>Đơn giá mặt bằng</h3><div class="small muted">${U.mShort(r.marketId)} · ${cfgStatusTag(r.status)}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
       <div class="drawer-b">
         <dl class="kv"><dt>Chợ</dt><dd>${U.esc(U.market(r.marketId).name)}</dd><dt>Khu vực</dt><dd>${U.esc(r.area)}</dd>
-          <dt>Loại điểm</dt><dd>${U.esc(r.stallType)}</dd><dt>Đơn giá</dt><dd><b>${r.amount.toLocaleString('vi-VN')} ${U.esc(r.unit)}</b></dd>
+          <dt>Loại điểm</dt><dd>${U.esc(r.stallType)}</dd>${cfgPolicyDetailHtml(r)}<dt>Mức giá</dt><dd><b>${r.amount.toLocaleString('vi-VN')} ${U.esc(r.unit)}</b></dd>
           <dt>Hiệu lực từ</dt><dd>${U.dmy(r.effectiveFrom)}</dd>${r.effectiveTo ? `<dt>Hết hiệu lực</dt><dd>${U.dmy(r.effectiveTo)}</dd>` : ''}</dl>
         <div class="divider"></div><b class="small">CĂN CỨ</b><div style="margin-top:6px">${cfgLegalHtml(r.legalBasis)}</div>
         <div class="divider"></div><b class="small">TÀI LIỆU</b><div style="margin-top:6px">${cfgAttachHtml(r, 'stallPrices', r.id, canManage)}</div>
@@ -574,13 +687,13 @@
   A.ACT['cfg-price-view'] = el => { const r = A.SERVICE_CFG.get('stallPrices', el.dataset.id); if (!r) return; A.$('#modal-root').innerHTML = `<div class="drawer-overlay" data-act="close"></div><div class="drawer">${cfgPriceDrawerHtml(r)}</div>`; };
   A.ACT['cfg-price-new'] = () => {
     if (!cfgPriceMutateAllowed('stallPrices', null)) return;
-    ui.cfgForm = { cat: 'stallPrices', id: null, marketId: ui.market, area: '', stallType: '', amount: 0, unit: 'đ/m²/ngày', effectiveFrom: A.db.today, status: 'active', legalBasis: { docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' } };
+    ui.cfgForm = { cat: 'stallPrices', id: null, marketId: ui.market, area: '', stallType: '', marketModel: cfgDefaultMarketModel(ui.market), collectionCycle: cfgDefaultCycle(ui.market), amount: 0, unit: ui.market === 'TTD' ? 'đ/phiên' : 'đ/m²/tháng', taxClass: 'TAXABLE_REVENUE', waiverTypeId: null, effectiveFrom: A.db.today, status: 'active', legalBasis: { docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' } };
     renderCfgForm();
   };
   A.ACT['cfg-price-edit'] = el => {
     const r = A.SERVICE_CFG.get('stallPrices', el.dataset.id); if (!r) return;
     if (!cfgPriceMutateAllowed('stallPrices', r)) return;
-    ui.cfgForm = { cat: 'stallPrices', id: r.id, marketId: r.marketId, area: r.area, stallType: r.stallType, amount: r.amount, unit: r.unit, effectiveFrom: r.effectiveFrom, status: r.status, legalBasis: Object.assign({ docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' }, r.legalBasis) };
+    ui.cfgForm = { cat: 'stallPrices', id: r.id, marketId: r.marketId, area: r.area, stallType: r.stallType, marketModel: r.marketModel, collectionCycle: r.collectionCycle, amount: r.amount, unit: r.unit, taxClass: r.taxClass, waiverTypeId: r.waiverTypeId || null, effectiveFrom: r.effectiveFrom, status: r.status, legalBasis: Object.assign({ docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' }, r.legalBasis) };
     renderCfgForm();
   };
   A.ACT['cfg-price-toggle'] = el => {
@@ -596,10 +709,10 @@
     const canNew = cfgPriceMutateAllowed('utilities', null);
     const rows = A.SERVICE_CFG.list('utilities').filter(r => r.marketId === ui.market);
     return `<div class="card"><div class="card-h"><h3>Điện & nước · ${U.esc(U.market(ui.market).name)}</h3>${canNew ? '<button class="btn sm primary" data-act="cfg-util-new">+ Thêm cấu hình</button>' : ''}</div>
-      <div class="card-b">${U.table([{ t: 'Chợ áp dụng' }, { t: 'Giá điện (đ/kWh)', num: true }, { t: 'Giá nước (đ/m³)', num: true }, { t: 'Ngày hiệu lực' }, { t: 'Căn cứ' }, { t: 'Trạng thái' }, { t: '' }],
+      <div class="card-b">${U.table([{ t: 'Chợ / mô hình' }, { t: 'Mức giá điện', num: true }, { t: 'Mức giá nước', num: true }, { t: 'Chu kỳ thu' }, { t: 'Phân loại thuế' }, { t: 'Hiệu lực / căn cứ' }, { t: 'Miễn giảm' }, { t: 'Trạng thái' }, { t: '' }],
         rows.map(r => { const canManage = cfgPriceMutateAllowed('utilities', r); return `<tr>
-          <td>${U.mShort(r.marketId)}</td><td class="num">${r.elecPrice.toLocaleString('vi-VN')}</td><td class="num">${r.waterPrice.toLocaleString('vi-VN')}</td>
-          <td class="nowrap">${U.dmy(r.effectiveFrom)}</td><td class="small">${r.legalBasis && r.legalBasis.docNo ? U.esc(r.legalBasis.docNo) : '<span class="muted">—</span>'}</td>
+          <td>${U.mShort(r.marketId)}<div class="small muted">${U.esc(CFG_MARKET_MODEL_LABELS[r.marketModel] || '—')}</div></td><td class="num">${r.elecPrice.toLocaleString('vi-VN')}<div class="small muted">${U.esc(r.elecUnit || 'đ/kWh')}</div></td><td class="num">${r.waterPrice.toLocaleString('vi-VN')}<div class="small muted">${U.esc(r.waterUnit || 'đ/m³')}</div></td>
+          <td class="small">${U.esc(CFG_CYCLE_LABELS[r.collectionCycle] || '—')}</td><td class="small">${U.esc(CFG_TAX_LABELS[r.taxClass] || '—')}</td><td class="nowrap">${U.dmy(r.effectiveFrom)}${r.effectiveTo ? `<div class="small muted">đến ${U.dmy(r.effectiveTo)}</div>` : ''}<div class="small">${r.legalBasis && r.legalBasis.docNo ? U.esc(r.legalBasis.docNo) : '<span class="muted">—</span>'}</div></td><td class="small">${U.esc(cfgWaiverName(r.waiverTypeId))}</td>
           <td>${cfgStatusTag(r.status)}</td>
           <td class="nowrap"><button class="btn sm" data-act="cfg-util-view" data-id="${r.id}">Xem</button>
             ${canManage ? `<button class="btn sm" data-act="cfg-util-edit" data-id="${r.id}">Sửa</button><button class="btn sm ${r.status === 'active' ? 'danger' : ''}" data-act="cfg-util-toggle" data-id="${r.id}">${r.status === 'active' ? 'Vô hiệu hoá' : 'Kích hoạt'}</button>` : ''}
@@ -609,8 +722,8 @@
     const canManage = cfgPriceMutateAllowed('utilities', r);
     return `<div class="drawer-h"><div><h3>Điện & nước</h3><div class="small muted">${U.mShort(r.marketId)} · ${cfgStatusTag(r.status)}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
       <div class="drawer-b">
-        <dl class="kv"><dt>Chợ</dt><dd>${U.esc(U.market(r.marketId).name)}</dd><dt>Giá điện</dt><dd><b>${r.elecPrice.toLocaleString('vi-VN')} đ/kWh</b></dd>
-          <dt>Giá nước</dt><dd><b>${r.waterPrice.toLocaleString('vi-VN')} đ/m³</b></dd><dt>Hiệu lực từ</dt><dd>${U.dmy(r.effectiveFrom)}</dd></dl>
+        <dl class="kv"><dt>Chợ</dt><dd>${U.esc(U.market(r.marketId).name)}</dd>${cfgPolicyDetailHtml(r)}<dt>Giá điện</dt><dd><b>${r.elecPrice.toLocaleString('vi-VN')} ${U.esc(r.elecUnit || 'đ/kWh')}</b></dd>
+          <dt>Giá nước</dt><dd><b>${r.waterPrice.toLocaleString('vi-VN')} ${U.esc(r.waterUnit || 'đ/m³')}</b></dd><dt>Hiệu lực từ</dt><dd>${U.dmy(r.effectiveFrom)}</dd>${r.effectiveTo ? `<dt>Hết hiệu lực</dt><dd>${U.dmy(r.effectiveTo)}</dd>` : ''}</dl>
         <div class="divider"></div><b class="small">CĂN CỨ</b><div style="margin-top:6px">${cfgLegalHtml(r.legalBasis)}</div>
         <div class="divider"></div><b class="small">TÀI LIỆU</b><div style="margin-top:6px">${cfgAttachHtml(r, 'utilities', r.id, canManage)}</div>
         <div class="divider"></div><b class="small">LỊCH SỬ</b><div style="margin-top:6px">${cfgHistoryHtml(r)}</div>
@@ -620,13 +733,13 @@
   A.ACT['cfg-util-view'] = el => { const r = A.SERVICE_CFG.get('utilities', el.dataset.id); if (!r) return; A.$('#modal-root').innerHTML = `<div class="drawer-overlay" data-act="close"></div><div class="drawer">${cfgUtilDrawerHtml(r)}</div>`; };
   A.ACT['cfg-util-new'] = () => {
     if (!cfgPriceMutateAllowed('utilities', null)) return;
-    ui.cfgForm = { cat: 'utilities', id: null, marketId: ui.market, elecPrice: D.ELEC, waterPrice: D.WATER, effectiveFrom: A.db.today, status: 'active', legalBasis: { docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' } };
+    ui.cfgForm = { cat: 'utilities', id: null, marketId: ui.market, marketModel: cfgDefaultMarketModel(ui.market), collectionCycle: cfgDefaultCycle(ui.market), elecPrice: D.ELEC, elecUnit: 'đ/kWh', waterPrice: D.WATER, waterUnit: 'đ/m³', taxClass: 'PASS_THROUGH_NON_TAX', waiverTypeId: null, effectiveFrom: A.db.today, status: 'active', legalBasis: { docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' } };
     renderCfgForm();
   };
   A.ACT['cfg-util-edit'] = el => {
     const r = A.SERVICE_CFG.get('utilities', el.dataset.id); if (!r) return;
     if (!cfgPriceMutateAllowed('utilities', r)) return;
-    ui.cfgForm = { cat: 'utilities', id: r.id, marketId: r.marketId, elecPrice: r.elecPrice, waterPrice: r.waterPrice, effectiveFrom: r.effectiveFrom, status: r.status, legalBasis: Object.assign({ docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' }, r.legalBasis) };
+    ui.cfgForm = { cat: 'utilities', id: r.id, marketId: r.marketId, marketModel: r.marketModel, collectionCycle: r.collectionCycle, elecPrice: r.elecPrice, elecUnit: r.elecUnit || 'đ/kWh', waterPrice: r.waterPrice, waterUnit: r.waterUnit || 'đ/m³', taxClass: r.taxClass, waiverTypeId: r.waiverTypeId || null, effectiveFrom: r.effectiveFrom, status: r.status, legalBasis: Object.assign({ docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' }, r.legalBasis) };
     renderCfgForm();
   };
   A.ACT['cfg-util-toggle'] = el => {
@@ -646,10 +759,10 @@
     const canNew = cfgPriceMutateAllowed('extraServices', null);
     const rows = A.SERVICE_CFG.list('extraServices').filter(r => r.marketId === ui.market || r.marketId === 'ALL');
     return `<div class="card"><div class="card-h"><h3>Dịch vụ khác · ${U.esc(U.market(ui.market).name)}</h3>${canNew ? '<button class="btn sm primary" data-act="cfg-svc-new">+ Thêm dịch vụ</button>' : ''}</div>
-      <div class="card-b">${U.table([{ t: 'Tên dịch vụ' }, { t: 'Chợ áp dụng' }, { t: 'Cách tính' }, { t: 'Đơn giá', num: true }, { t: 'Đơn vị tính' }, { t: 'Ngày hiệu lực' }, { t: 'Trạng thái' }, { t: '' }],
+      <div class="card-b">${U.table([{ t: 'Tên dịch vụ' }, { t: 'Chợ / mô hình' }, { t: 'Cách tính' }, { t: 'Mức giá', num: true }, { t: 'Đơn vị / chu kỳ' }, { t: 'Phân loại thuế' }, { t: 'Hiệu lực / căn cứ' }, { t: 'Miễn giảm' }, { t: 'Trạng thái' }, { t: '' }],
         rows.map(r => { const canManage = cfgPriceMutateAllowed('extraServices', r); return `<tr>
-          <td><b>${U.esc(r.name)}</b>${cfgAllBadge(r)}</td><td>${r.marketId === 'ALL' ? 'Tất cả chợ (cũ)' : U.mShort(r.marketId)}</td><td class="small">${CFG_CALC_LABELS[r.calcMethod] || r.calcMethod}</td>
-          <td class="num">${r.amount.toLocaleString('vi-VN')}</td><td class="small nowrap">${U.esc(r.unit)}</td><td class="nowrap">${U.dmy(r.effectiveFrom)}</td>
+          <td><b>${U.esc(r.name)}</b>${cfgAllBadge(r)}</td><td>${r.marketId === 'ALL' ? 'Tất cả chợ (cũ)' : U.mShort(r.marketId)}<div class="small muted">${U.esc(CFG_MARKET_MODEL_LABELS[r.marketModel] || '—')}</div></td><td class="small">${CFG_CALC_LABELS[r.calcMethod] || r.calcMethod}</td>
+          <td class="num">${r.amount.toLocaleString('vi-VN')}</td><td class="small nowrap">${U.esc(r.unit)}<div class="muted">Chu kỳ: ${U.esc(CFG_CYCLE_LABELS[r.collectionCycle] || '—')}</div></td><td class="small">${U.esc(CFG_TAX_LABELS[r.taxClass] || '—')}</td><td class="nowrap">${U.dmy(r.effectiveFrom)}${r.effectiveTo ? `<div class="small muted">đến ${U.dmy(r.effectiveTo)}</div>` : ''}<div class="small">${r.legalBasis && r.legalBasis.docNo ? U.esc(r.legalBasis.docNo) : '<span class="muted">—</span>'}</div></td><td class="small">${U.esc(cfgWaiverName(r.waiverTypeId))}</td>
           <td>${cfgStatusTag(r.status)}</td>
           <td class="nowrap"><button class="btn sm" data-act="cfg-svc-view" data-id="${r.id}">Xem</button>
             ${canManage ? `<button class="btn sm" data-act="cfg-svc-edit" data-id="${r.id}">Sửa</button><button class="btn sm ${r.status === 'active' ? 'danger' : ''}" data-act="cfg-svc-toggle" data-id="${r.id}">${r.status === 'active' ? 'Vô hiệu hoá' : 'Kích hoạt'}</button>` : ''}
@@ -659,8 +772,8 @@
     const canManage = cfgPriceMutateAllowed('extraServices', r);
     return `<div class="drawer-h"><div><h3>${U.esc(r.name)}${cfgAllBadge(r)}</h3><div class="small muted">${r.marketId === 'ALL' ? 'Tất cả chợ (cũ)' : U.mShort(r.marketId)} · ${cfgStatusTag(r.status)}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
       <div class="drawer-b">
-        <dl class="kv"><dt>Tên dịch vụ</dt><dd>${U.esc(r.name)}</dd><dt>Cách tính</dt><dd>${CFG_CALC_LABELS[r.calcMethod] || r.calcMethod}</dd>
-          <dt>Đơn giá</dt><dd><b>${r.amount.toLocaleString('vi-VN')} ${U.esc(r.unit)}</b></dd><dt>Hiệu lực từ</dt><dd>${U.dmy(r.effectiveFrom)}</dd></dl>
+        <dl class="kv"><dt>Tên dịch vụ</dt><dd>${U.esc(r.name)}</dd><dt>Cách tính</dt><dd>${CFG_CALC_LABELS[r.calcMethod] || r.calcMethod}</dd>${cfgPolicyDetailHtml(r)}
+          <dt>Mức giá</dt><dd><b>${r.amount.toLocaleString('vi-VN')} ${U.esc(r.unit)}</b></dd><dt>Hiệu lực từ</dt><dd>${U.dmy(r.effectiveFrom)}</dd>${r.effectiveTo ? `<dt>Hết hiệu lực</dt><dd>${U.dmy(r.effectiveTo)}</dd>` : ''}</dl>
         <div class="divider"></div><b class="small">CĂN CỨ</b><div style="margin-top:6px">${cfgLegalHtml(r.legalBasis)}</div>
         <div class="divider"></div><b class="small">TÀI LIỆU</b><div style="margin-top:6px">${cfgAttachHtml(r, 'extraServices', r.id, canManage)}</div>
         <div class="divider"></div><b class="small">LỊCH SỬ</b><div style="margin-top:6px">${cfgHistoryHtml(r)}</div>
@@ -672,13 +785,13 @@
     if (!cfgPriceMutateAllowed('extraServices', null)) return;
     // Phase 6 STEP A mục 8 — quyết định đã chốt: bản ghi MỚI không được phép marketId:'ALL' nữa,
     // luôn pin đúng 1 chợ (ui.market). Nếu 1 dịch vụ áp dụng cả 2 chợ, admin tạo 2 bản ghi riêng.
-    ui.cfgForm = { cat: 'extraServices', id: null, name: '', marketId: ui.market, calcMethod: 'fixed', amount: 0, unit: '', effectiveFrom: A.db.today, status: 'active', legalBasis: { docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' } };
+    ui.cfgForm = { cat: 'extraServices', id: null, name: '', marketId: ui.market, marketModel: cfgDefaultMarketModel(ui.market), collectionCycle: cfgDefaultCycle(ui.market), calcMethod: 'fixed', amount: 0, unit: ui.market === 'TTD' ? 'đ/phiên' : 'đ/tháng', taxClass: 'TAXABLE_REVENUE', waiverTypeId: null, effectiveFrom: A.db.today, status: 'active', legalBasis: { docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' } };
     renderCfgForm();
   };
   A.ACT['cfg-svc-edit'] = el => {
     const r = A.SERVICE_CFG.get('extraServices', el.dataset.id); if (!r) return;
     if (!cfgPriceMutateAllowed('extraServices', r)) return;
-    ui.cfgForm = { cat: 'extraServices', id: r.id, name: r.name, marketId: r.marketId, calcMethod: r.calcMethod, amount: r.amount, unit: r.unit, effectiveFrom: r.effectiveFrom, status: r.status, legalBasis: Object.assign({ docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' }, r.legalBasis) };
+    ui.cfgForm = { cat: 'extraServices', id: r.id, name: r.name, marketId: r.marketId, marketModel: r.marketModel, collectionCycle: r.collectionCycle, calcMethod: r.calcMethod, amount: r.amount, unit: r.unit, taxClass: r.taxClass, waiverTypeId: r.waiverTypeId || null, effectiveFrom: r.effectiveFrom, status: r.status, legalBasis: Object.assign({ docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' }, r.legalBasis) };
     renderCfgForm();
   };
   A.ACT['cfg-svc-toggle'] = el => {
@@ -699,28 +812,35 @@
     // cfg-*-edit ở trên: ui.cfgForm.marketId luôn lấy từ ui.market khi tạo mới hoặc từ chính bản
     // ghi khi sửa, chưa từng đổi qua form). Không còn field select 'Chợ' nào trong form.
     const marketField = `<div class="field"><label>Chợ áp dụng</label><input class="input" value="${U.esc(U.market(d.marketId).name)}" disabled></div>`;
+    const policyFields = `<div class="field"><label>Loại chợ / mô hình thu phí</label><select class="input" data-ch="cf-market-model">${Object.keys(CFG_MARKET_MODEL_LABELS).map(k => `<option value="${k}" ${d.marketModel === k ? 'selected' : ''}>${CFG_MARKET_MODEL_LABELS[k]}</option>`).join('')}</select></div>
+      <div class="field"><label>Chu kỳ thu</label><select class="input" data-ch="cf-cycle">${Object.keys(CFG_CYCLE_LABELS).map(k => `<option value="${k}" ${d.collectionCycle === k ? 'selected' : ''}>${CFG_CYCLE_LABELS[k]}</option>`).join('')}</select></div>
+      <div class="field"><label>Phân loại thuế</label><select class="input" data-ch="cf-tax">${Object.keys(CFG_TAX_LABELS).map(k => `<option value="${k}" ${d.taxClass === k ? 'selected' : ''}>${CFG_TAX_LABELS[k]}</option>`).join('')}</select></div>
+      <div class="field"><label>Loại miễn giảm áp dụng</label><select class="input" data-ch="cf-waiver"><option value="">Không áp dụng</option>${A.SERVICE_CFG.waiverTypes().filter(x => x.active).map(x => `<option value="${x.id}" ${d.waiverTypeId === x.id ? 'selected' : ''}>${U.esc(x.name)}</option>`).join('')}</select></div>`;
     if (d.cat === 'stallPrices') {
-      fields = `${marketField}
+      fields = `${marketField}${policyFields}
         <div class="field"><label>Khu vực / tầng</label><input class="input" data-ch="cf-area" value="${U.esc(d.area || '')}"></div>
         <div class="field"><label>Loại điểm kinh doanh</label><input class="input" data-ch="cf-stalltype" value="${U.esc(d.stallType || '')}"></div>
         <div class="field"><label>Đơn giá</label><input class="input" type="number" min="0" data-ch="cf-amount" value="${d.amount || 0}"></div>
         <div class="field"><label>Đơn vị tính</label><input class="input" data-ch="cf-unit" value="${U.esc(d.unit || '')}" placeholder="VD: đ/m²/ngày"></div>
         <div class="field"><label>Ngày hiệu lực</label><input class="input" type="date" data-ch="cf-eff" value="${d.effectiveFrom || ''}"></div>`;
     } else if (d.cat === 'utilities') {
-      fields = `${marketField}
-        <div class="field"><label>Giá điện (đ/kWh)</label><input class="input" type="number" min="0" data-ch="cf-elec" value="${d.elecPrice || 0}"></div>
-        <div class="field"><label>Giá nước (đ/m³)</label><input class="input" type="number" min="0" data-ch="cf-water" value="${d.waterPrice || 0}"></div>
+      fields = `${marketField}${policyFields}
+        <div class="field"><label>Mức giá điện</label><input class="input" type="number" min="0" data-ch="cf-elec" value="${d.elecPrice || 0}"></div>
+        <div class="field"><label>Đơn vị điện</label><input class="input" data-ch="cf-elec-unit" value="${U.esc(d.elecUnit || 'đ/kWh')}"></div>
+        <div class="field"><label>Mức giá nước</label><input class="input" type="number" min="0" data-ch="cf-water" value="${d.waterPrice || 0}"></div>
+        <div class="field"><label>Đơn vị nước</label><input class="input" data-ch="cf-water-unit" value="${U.esc(d.waterUnit || 'đ/m³')}"></div>
         <div class="field"><label>Ngày hiệu lực</label><input class="input" type="date" data-ch="cf-eff" value="${d.effectiveFrom || ''}"></div>`;
     } else {
       fields = `<div class="field"><label>Tên dịch vụ</label><input class="input" data-ch="cf-name" value="${U.esc(d.name || '')}"></div>
-        ${marketField}
+        ${marketField}${policyFields}
         <div class="field"><label>Cách tính</label><select class="input" data-ch="cf-calc">${Object.keys(CFG_CALC_LABELS).map(k => `<option value="${k}" ${d.calcMethod === k ? 'selected' : ''}>${CFG_CALC_LABELS[k]}</option>`).join('')}</select></div>
         <div class="field"><label>Đơn giá</label><input class="input" type="number" min="0" data-ch="cf-amount" value="${d.amount || 0}"></div>
         <div class="field"><label>Đơn vị tính</label><input class="input" data-ch="cf-unit" value="${U.esc(d.unit || '')}"></div>
         <div class="field"><label>Ngày hiệu lực</label><input class="input" type="date" data-ch="cf-eff" value="${d.effectiveFrom || ''}"></div>`;
     }
     A.modal(A.mHead((isNew ? 'Thêm ' : 'Sửa ') + cfgCategoryLabel(d.cat)) + `<div class="modal-b">
-      <div class="form-grid">${fields}${!isNew ? `<div class="field"><label>Trạng thái</label><select class="input" data-ch="cf-status"><option value="active" ${d.status === 'active' ? 'selected' : ''}>Đang áp dụng</option><option value="inactive" ${d.status === 'inactive' ? 'selected' : ''}>Vô hiệu hoá</option></select></div>` : ''}</div>
+      ${!isNew && d.status === 'active' ? '<div class="note info" style="margin-bottom:10px">Bản ghi đang áp dụng sẽ không bị ghi đè. Khi lưu, hệ thống kết thúc hiệu lực bản cũ và tạo một phiên bản mới.</div>' : ''}
+      <div class="form-grid">${fields}</div>
       <div class="divider"></div><b class="small">Căn cứ</b>
       <div class="form-grid" style="margin-top:8px">
         <div class="field"><label>Số văn bản</label><input class="input" data-ch="cf-lb-docno" value="${U.esc(lb.docNo || '')}"></div>
@@ -738,11 +858,16 @@
   A.CH['cf-amount'] = el => { ui.cfgForm.amount = Math.max(0, Number(el.value) || 0); };
   A.CH['cf-unit'] = el => { ui.cfgForm.unit = el.value; };
   A.CH['cf-eff'] = el => { ui.cfgForm.effectiveFrom = el.value; };
-  A.CH['cf-status'] = el => { ui.cfgForm.status = el.value; };
+  A.CH['cf-market-model'] = el => { ui.cfgForm.marketModel = el.value; };
+  A.CH['cf-cycle'] = el => { ui.cfgForm.collectionCycle = el.value; };
+  A.CH['cf-tax'] = el => { ui.cfgForm.taxClass = el.value; };
+  A.CH['cf-waiver'] = el => { ui.cfgForm.waiverTypeId = el.value || null; };
   A.CH['cf-name'] = el => { ui.cfgForm.name = el.value; };
   A.CH['cf-calc'] = el => { ui.cfgForm.calcMethod = el.value; };
   A.CH['cf-elec'] = el => { ui.cfgForm.elecPrice = Math.max(0, Number(el.value) || 0); };
+  A.CH['cf-elec-unit'] = el => { ui.cfgForm.elecUnit = el.value; };
   A.CH['cf-water'] = el => { ui.cfgForm.waterPrice = Math.max(0, Number(el.value) || 0); };
+  A.CH['cf-water-unit'] = el => { ui.cfgForm.waterUnit = el.value; };
   A.CH['cf-lb-docno'] = el => { ui.cfgForm.legalBasis.docNo = el.value; };
   A.CH['cf-lb-docdate'] = el => { ui.cfgForm.legalBasis.docDate = el.value; };
   A.CH['cf-lb-issuer'] = el => { ui.cfgForm.legalBasis.issuer = el.value; };
@@ -758,21 +883,35 @@
     const existing = d.id ? A.SERVICE_CFG.get(d.cat, d.id) : null;
     if (d.id && !existing) return;
     if (!cfgPriceMutateAllowed(d.cat, existing)) return;
+    const targetMarket = existing ? existing.marketId : ui.market;
+    if (d.marketId !== targetMarket || (targetMarket !== 'CL' && targetMarket !== 'TTD')) return;
+    if (!Object.prototype.hasOwnProperty.call(CFG_MARKET_MODEL_LABELS, d.marketModel)
+      || !Object.prototype.hasOwnProperty.call(CFG_CYCLE_LABELS, d.collectionCycle)
+      || !Object.prototype.hasOwnProperty.call(CFG_TAX_LABELS, d.taxClass)) return;
+    if (d.waiverTypeId && !A.SERVICE_CFG.waiverTypes().some(x => x.id === d.waiverTypeId && x.active)) return;
+    if (!d.effectiveFrom) { U.toast('Vui lòng nhập ngày hiệu lực'); return; }
+    if (existing && existing.status === 'active' && d.effectiveFrom <= existing.effectiveFrom) {
+      U.toast('Phiên bản mới phải có ngày hiệu lực sau phiên bản đang áp dụng'); return;
+    }
+    const common = { marketId: targetMarket, marketModel: d.marketModel, collectionCycle: d.collectionCycle, taxClass: d.taxClass, waiverTypeId: d.waiverTypeId || null, effectiveFrom: d.effectiveFrom, effectiveTo: null, status: d.status, legalBasis: lb };
     let patch, detail;
     if (d.cat === 'stallPrices') {
       if (!d.area.trim() || !d.stallType.trim()) { U.toast('Vui lòng nhập đủ khu vực và loại điểm kinh doanh'); return; }
-      patch = { marketId: d.marketId, area: d.area.trim(), stallType: d.stallType.trim(), amount: d.amount, unit: d.unit.trim(), effectiveFrom: d.effectiveFrom, status: d.status, legalBasis: lb };
+      patch = Object.assign({}, common, { area: d.area.trim(), stallType: d.stallType.trim(), amount: d.amount, unit: d.unit.trim() });
       detail = patch.amount.toLocaleString('vi-VN') + ' ' + patch.unit;
     } else if (d.cat === 'utilities') {
-      patch = { marketId: d.marketId, elecPrice: d.elecPrice, waterPrice: d.waterPrice, effectiveFrom: d.effectiveFrom, status: d.status, legalBasis: lb };
-      detail = 'Điện ' + patch.elecPrice.toLocaleString('vi-VN') + ' đ/kWh · Nước ' + patch.waterPrice.toLocaleString('vi-VN') + ' đ/m³';
+      patch = Object.assign({}, common, { elecPrice: d.elecPrice, elecUnit: d.elecUnit.trim(), waterPrice: d.waterPrice, waterUnit: d.waterUnit.trim() });
+      detail = 'Điện ' + patch.elecPrice.toLocaleString('vi-VN') + ' ' + patch.elecUnit + ' · Nước ' + patch.waterPrice.toLocaleString('vi-VN') + ' ' + patch.waterUnit;
     } else {
       if (!d.name.trim()) { U.toast('Vui lòng nhập tên dịch vụ'); return; }
-      patch = { name: d.name.trim(), marketId: d.marketId, calcMethod: d.calcMethod, amount: d.amount, unit: d.unit.trim(), effectiveFrom: d.effectiveFrom, status: d.status, legalBasis: lb };
+      patch = Object.assign({}, common, { name: d.name.trim(), calcMethod: d.calcMethod, amount: d.amount, unit: d.unit.trim() });
       detail = patch.amount.toLocaleString('vi-VN') + ' ' + patch.unit;
     }
     const actor = cfgActor();
-    if (d.id) { A.SERVICE_CFG.update(d.cat, d.id, patch, actor, 'Cập nhật cấu hình', detail); U.toast('Đã cập nhật'); }
+    if (d.id && existing.status === 'active') {
+      A.SERVICE_CFG.createVersion(d.cat, d.id, patch, actor, detail);
+      U.toast('Đã tạo phiên bản biểu phí mới; phiên bản cũ được lưu ở trạng thái hết hiệu lực');
+    } else if (d.id) { A.SERVICE_CFG.update(d.cat, d.id, patch, actor, 'Cập nhật cấu hình', detail); U.toast('Đã cập nhật'); }
     else { patch.__detail = detail; A.SERVICE_CFG.add(d.cat, patch, actor); U.toast('Đã thêm cấu hình mới'); }
     ui.cfgForm = null;
     A.closeModal(); A.render();
@@ -833,6 +972,7 @@
   }
   A.ACT['cfg-editlegal'] = el => {
     const rec = cfgRecord(el.dataset.cat, el.dataset.id); if (!rec) return;
+    if (cfgGiaActionKey(el.dataset.cat) && !cfgPriceMutateAllowed(el.dataset.cat, rec)) return;
     ui.legalForm = { cat: el.dataset.cat, id: el.dataset.id, legalBasis: Object.assign({ docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' }, rec.legalBasis) };
     renderLegalForm();
   };
@@ -845,6 +985,7 @@
   A.ACT['cfg-legal-save'] = () => {
     const d = ui.legalForm, rec = cfgRecord(d.cat, d.id);
     if (!rec) return;
+    if (cfgGiaActionKey(d.cat) && !cfgPriceMutateAllowed(d.cat, rec)) return;
     rec.legalBasis = d.legalBasis;
     A.SERVICE_CFG.log(rec, cfgActor(), 'Cập nhật căn cứ', d.legalBasis.docNo || '');
     ui.legalForm = null;
@@ -913,19 +1054,222 @@
   A.CH['br-threshold'] = el => { A.SERVICE_CFG.updateRules({ waiverApprovalThreshold: Math.max(0, Math.min(100, Number(el.value) || 0)) }, cfgActor(), 'Đổi ngưỡng miễn giảm cần phê duyệt'); A.render(); };
   A.CH['br-approver'] = el => { A.SERVICE_CFG.updateRules({ approverRoleId: el.value }, cfgActor(), 'Đổi vai trò phê duyệt'); A.render(); };
 
-  // ---- router "Cấu hình giá dịch vụ" (màn Tài chính độc lập, Phase 6 STEP A) ----
+  // ---- router "Chính sách thu và biểu phí" (Tài chính > Quản lý khai báo) ----
   const PRICE_TABS = [['gia', 'Đơn giá mặt bằng'], ['dien-nuoc', 'Điện & nước'], ['dich-vu', 'Dịch vụ khác']];
   A.VIEWS['cau-hinh-gia'] = function () {
     const tab = PRICE_TABS.some(t => t[0] === ui.cfgTab) ? ui.cfgTab : 'gia';
     const bar = `<div class="seg" style="margin-bottom:14px">${PRICE_TABS.map(t => `<button class="${tab === t[0] ? 'on' : ''}" data-act="cfg-tab" data-id="${t[0]}">${t[1]}</button>`).join('')}</div>`;
-    const note = `<div class="note info" style="margin-bottom:14px">Prototype: biểu giá đang được cấu hình độc lập. Việc áp dụng biểu giá vào tính khoản phải thu sẽ được hoàn thiện ở bước tích hợp nghiệp vụ.</div>`;
+    const note = `<div class="note info" style="margin-bottom:14px"><b>${U.esc(U.market(ui.market).name)}</b> · Mỗi chợ có mô hình thu phí riêng. Khi sửa một biểu phí đang áp dụng, hệ thống tạo phiên bản mới theo ngày hiệu lực và giữ nguyên phiên bản cũ. Prototype chưa nối biểu phí này vào thuật toán lập khoản phải thu.</div>`;
     const body = tab === 'dien-nuoc' ? settingsDienNuocHtml() : tab === 'dich-vu' ? settingsDichVuHtml() : settingsGiaHtml();
     return note + bar + body;
   };
   A.ACT['cfg-tab'] = el => { ui.cfgTab = el.dataset.id; A.render(); };
+
+  // ---- Danh sách tài khoản ngân hàng (Tài chính > Quản lý khai báo, ngang hàng cau-hinh-gia) ----
+  // Tách theo từng chợ (marketId) như các màn Tài chính khác — lọc theo ui.market topbar (U.inM),
+  // KHÔNG có bộ lọc chợ riêng của màn (đã xác nhận với người yêu cầu trước khi implement). Quyền:
+  // screen:tai-khoan-ngan-hang cho xem; action:tai-khoan-ngan-hang.quan-ly cho MỌI thao tác ghi
+  // (Thêm/Sửa/Xoá/đổi trạng thái) — kiểm tra ở nơi build nút (ẩn nút) VÀ lại một lần nữa ngay trong
+  // từng handler ghi dữ liệu, không chỉ ẩn nút. rec (khi có) dùng đúng marketId của CHÍNH bản ghi đó
+  // (không phải ui.market) để 1 handler bị ép đổi ui.market không thể lách qua bản ghi chợ khác —
+  // cùng nguyên tắc với cfgPriceMutateAllowed().
+  function baCan(rec) { return A.canDo('tai-khoan-ngan-hang.quan-ly', rec ? rec.marketId : ui.market); }
+  function baRows() {
+    // Bản ghi dùng field `marketId` (giống stallPrices/utilities/extraServices ở serviceconfig.js),
+    // KHÔNG phải `market` — U.inM() kiểm tra đúng field `market` (dùng cho stalls/contracts/
+    // invoices...) nên không áp dụng được ở đây; so sánh trực tiếp marketId với ui.market.
+    const f = ui.bankAcc, q = (f.search || '').toLowerCase();
+    const rows = A.BANK_ACCOUNTS.list().filter(a => a.marketId === ui.market &&
+      (!f.status || a.status === f.status) &&
+      (!q || a.accountHolderName.toLowerCase().includes(q)));
+    const key = f.sortKey, dir = f.sortDir === 'desc' ? -1 : 1;
+    if (!key) return rows;
+    return rows.slice().sort((x, y) => (x[key] > y[key] ? 1 : x[key] < y[key] ? -1 : 0) * dir);
+  }
+  function baStatusTag(s) { return s === 'active' ? '<span class="tag ok">Hoạt động</span>' : '<span class="tag">Ngừng hoạt động</span>'; }
+  // Tự UPPERCASE + bỏ dấu tiếng Việt cho Tên chủ tài khoản (đúng chuẩn ghi trên thẻ/sao kê ngân hàng).
+  function baUpperNoAccent(s) {
+    return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toUpperCase();
+  }
+  function baActor() { const acc = A.currentAccount(); return acc ? acc.fullName : 'Không rõ'; }
+  function baSortHead(label, key) {
+    const f = ui.bankAcc, on = f.sortKey === key;
+    return `<button class="btn sm ${on ? 'primary' : ''}" data-act="ba-sort" data-key="${key}" style="padding:2px 8px">${label}${on ? (f.sortDir === 'desc' ? ' ▼' : ' ▲') : ''}</button>`;
+  }
+  function renderBankAcctForm() {
+    const d = ui.baForm, isNew = !d.id;
+    const banks = A.BANK_ACCOUNTS.BANKS;
+    A.modal(A.mHead(isNew ? 'Thêm tài khoản ngân hàng' : 'Sửa tài khoản ngân hàng') + `<div class="modal-b"><div class="form-grid">
+      <div class="field"><label>Ngân hàng *</label><select class="input" data-ch="baf-bank">
+        <option value="">— Chọn ngân hàng —</option>
+        ${banks.map(b => `<option value="${b.code}" ${d.bankCode === b.code ? 'selected' : ''}>${U.esc(b.name)}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Tên chủ tài khoản *</label><input class="input" data-ch="baf-holder" value="${U.esc(d.accountHolderName || '')}" placeholder="Tự in hoa, không dấu"></div>
+      <div class="field"><label>Số tài khoản *</label><input class="input" data-ch="baf-number" value="${U.esc(d.accountNumber || '')}" placeholder="Chỉ gồm số"></div>
+      <div class="field"><label>Trạng thái</label><select class="input" data-ch="baf-status">
+        <option value="active" ${d.status === 'active' ? 'selected' : ''}>Hoạt động</option>
+        <option value="inactive" ${d.status === 'inactive' ? 'selected' : ''}>Ngừng hoạt động</option>
+      </select></div>
+    </div>
+    <div class="field" style="margin-top:10px"><label>Ghi chú</label><textarea class="input" data-ch="baf-note" rows="2">${U.esc(d.note || '')}</textarea></div>
+    <label class="small" style="display:flex;align-items:center;gap:6px;margin-top:12px;cursor:${d.status === 'inactive' ? 'not-allowed' : 'pointer'}">
+      <input type="checkbox" data-ch="baf-collect" ${d.isCollectionAccount ? 'checked' : ''} ${d.status === 'inactive' ? 'disabled' : ''}> Là tài khoản thu tiền
+    </label>
+    ${d.status === 'inactive' ? '<div class="note" style="margin-top:8px">Tài khoản "Ngừng hoạt động" không thể chọn làm tài khoản thu tiền.</div>' : ''}
+    ${isNew ? `<label class="small" style="display:flex;align-items:center;gap:6px;margin-top:12px;cursor:pointer"><input type="checkbox" data-ch="baf-continue" ${d.saveAndContinue ? 'checked' : ''}> Lưu và thêm tiếp</label>` : ''}
+    </div>
+    <div class="modal-f"><button class="btn" data-act="close">Hủy bỏ</button><button class="btn primary" data-act="ba-form-save">Lưu</button></div>`);
+  }
+  A.VIEWS['tai-khoan-ngan-hang'] = function () {
+    const canManage = baCan();
+    const rows = baRows(), f = ui.bankAcc;
+    const pg = U.pager('bankAcc', rows.length, 15);
+    return `
+    <div class="card"><div class="card-b row" style="padding-top:14px">
+      <div><h3 style="margin:0;font-size:var(--font-size-md)">Danh sách tài khoản ngân hàng</h3><div class="small muted">Tài khoản ngân hàng của Ban Quản lý chợ dùng nhận tiền qua QR/chuyển khoản từ tiểu thương, phục vụ đối soát giao dịch — ${U.esc(U.market(ui.market).name)}.</div></div>
+      <span class="spacer"></span>
+      <button class="btn" data-act="ba-csv">⬇ Xuất excel</button>
+      ${canManage ? '<button class="btn primary" data-act="ba-new">+ Thêm mới</button>' : ''}
+    </div></div>
+    <div class="card"><div class="card-b row" style="padding-top:14px;flex-wrap:wrap">
+      <input class="input" style="min-width:220px;flex:1" placeholder="Tìm theo tên chủ tài khoản..." data-in="ba-search" value="${U.esc(f.search || '')}">
+      <select class="input" data-ch="ba-status"><option value="">Chọn trạng thái: Tất cả</option>
+        <option value="active" ${f.status === 'active' ? 'selected' : ''}>Hoạt động</option>
+        <option value="inactive" ${f.status === 'inactive' ? 'selected' : ''}>Ngừng hoạt động</option>
+      </select>
+      <button class="btn" data-act="ba-clear">Đặt lại</button>
+    </div></div>
+    <div class="card"><div class="card-b">
+      ${U.table([{ t: '<input type="checkbox" data-ch="ba-select-all">' }, { t: 'STT' }, { t: baSortHead('Số tài khoản', 'accountNumber') }, { t: baSortHead('Tên chủ tài khoản', 'accountHolderName') }, { t: 'Ngân hàng' }, { t: 'Ghi chú' }, { t: 'Tài khoản thu tiền' }, { t: 'Trạng thái' }, { t: '' }],
+        rows.slice(pg.start, pg.end).map((a, i) => `<tr>
+          <td><input type="checkbox" data-ch="ba-select" data-id="${a.id}" ${(ui.baSel || []).includes(a.id) ? 'checked' : ''}></td>
+          <td>${pg.start + i + 1}</td>
+          <td>${U.esc(a.accountNumber)}</td>
+          <td>${U.esc(a.accountHolderName)}</td>
+          <td><span class="tag info">${U.esc(A.BANK_ACCOUNTS.bankName(a.bankCode))}</span></td>
+          <td class="small">${U.esc(a.note || '')}</td>
+          <td>${a.isCollectionAccount ? '<span class="tag ok">✓</span>' : ''}</td>
+          <td>${baStatusTag(a.status)}</td>
+          <td class="nowrap">
+            ${baCan(a) ? `<button class="btn sm" data-act="ba-edit" data-id="${a.id}">Sửa</button>` : ''}
+            ${baCan(a) ? `<button class="btn sm danger" data-act="ba-del" data-id="${a.id}">Xoá</button>` : ''}
+          </td></tr>`), { empty: 'Không tìm thấy tài khoản ngân hàng phù hợp' })}${pg.html}</div></div>`;
+  };
+  A.IN['ba-search'] = el => { ui.bankAcc.search = el.value; ui.page.bankAcc = 0; A.render(); };
+  A.CH['ba-status'] = el => { ui.bankAcc.status = el.value; ui.page.bankAcc = 0; A.render(); };
+  A.ACT['ba-clear'] = () => { ui.bankAcc = { search: '', status: '', sortKey: null, sortDir: 'asc' }; ui.page.bankAcc = 0; A.render(); };
+  A.ACT['ba-sort'] = el => {
+    const k = el.dataset.key, f = ui.bankAcc;
+    f.sortDir = f.sortKey === k && f.sortDir === 'asc' ? 'desc' : 'asc';
+    f.sortKey = k;
+    A.render();
+  };
+  A.CH['ba-select-all'] = el => { ui.baSel = el.checked ? baRows().map(a => a.id) : []; A.render(); };
+  A.CH['ba-select'] = el => {
+    const id = el.dataset.id, sel = new Set(ui.baSel || []);
+    if (el.checked) sel.add(id); else sel.delete(id);
+    ui.baSel = Array.from(sel);
+    A.render();
+  };
+  A.ACT['ba-csv'] = () => {
+    const sel = new Set(ui.baSel || []);
+    const rows = baRows().filter(a => !sel.size || sel.has(a.id));
+    U.csv('tai-khoan-ngan-hang', ['Số tài khoản', 'Tên chủ tài khoản', 'Ngân hàng', 'Ghi chú', 'Tài khoản thu tiền', 'Trạng thái'],
+      rows.map(a => [a.accountNumber, a.accountHolderName, A.BANK_ACCOUNTS.bankName(a.bankCode), a.note || '', a.isCollectionAccount ? 'Có' : '', a.status === 'active' ? 'Hoạt động' : 'Ngừng hoạt động']));
+  };
+  A.ACT['ba-new'] = () => {
+    if (!baCan()) return;
+    ui.baForm = { id: null, bankCode: '', accountHolderName: '', accountNumber: '', isCollectionAccount: false, note: '', status: 'active', saveAndContinue: false };
+    renderBankAcctForm();
+  };
+  A.ACT['ba-edit'] = el => {
+    const a = A.BANK_ACCOUNTS.get(el.dataset.id);
+    if (!a || !baCan(a)) return;
+    ui.baForm = { id: a.id, bankCode: a.bankCode, accountHolderName: a.accountHolderName, accountNumber: a.accountNumber, isCollectionAccount: a.isCollectionAccount, note: a.note, status: a.status, saveAndContinue: false };
+    renderBankAcctForm();
+  };
+  // A.render() KHÔNG vẽ lại modal (chỉ vẽ lại #nav/#view, xem A.render() ở core.js), và gọi lại
+  // renderBankAcctForm() (thay hẳn innerHTML #modal-root) NGAY trong handler 'change'/'input' của
+  // 1 phần tử CON của modal đó có thể ném lỗi DOM ("node to be removed is no longer a child") do
+  // gỡ phần tử đang dispatch sự kiện giữa lúc sự kiện chưa kết thúc. Vì vậy 3 handler dưới đây chỉ
+  // sửa trực tiếp DOM phần tử liên quan (giữ nguyên phần tử đang có), không vẽ lại toàn modal.
+  A.CH['baf-bank'] = el => { ui.baForm.bankCode = el.value; };
+  A.CH['baf-holder'] = el => { const v = baUpperNoAccent(el.value); ui.baForm.accountHolderName = v; el.value = v; };
+  A.CH['baf-number'] = el => { const v = el.value.replace(/\D/g, ''); ui.baForm.accountNumber = v; el.value = v; };
+  A.CH['baf-note'] = el => { ui.baForm.note = el.value; };
+  A.CH['baf-status'] = el => {
+    ui.baForm.status = el.value;
+    if (el.value === 'inactive') ui.baForm.isCollectionAccount = false;
+    const cb = A.$('input[data-ch="baf-collect"]');
+    if (cb) { cb.checked = ui.baForm.isCollectionAccount; cb.disabled = el.value === 'inactive'; }
+  };
+  A.CH['baf-collect'] = el => { if (ui.baForm.status !== 'inactive') ui.baForm.isCollectionAccount = el.checked; };
+  A.CH['baf-continue'] = el => { ui.baForm.saveAndContinue = el.checked; };
+  A.ACT['ba-form-save'] = () => {
+    const d = ui.baForm, isNew = !d.id;
+    const existing = d.id ? A.BANK_ACCOUNTS.get(d.id) : null;
+    if (!baCan(existing)) return;
+    const bank = A.BANK_ACCOUNTS.BANKS.find(b => b.code === d.bankCode);
+    if (!bank) { U.toast('Vui lòng chọn ngân hàng'); return; }
+    const holder = baUpperNoAccent((d.accountHolderName || '').trim());
+    if (!holder) { U.toast('Vui lòng nhập tên chủ tài khoản'); return; }
+    const number = (d.accountNumber || '').replace(/\D/g, '');
+    if (!number) { U.toast('Vui lòng nhập số tài khoản (chỉ gồm số)'); return; }
+    if (A.BANK_ACCOUNTS.numberTaken(number, d.id)) { U.toast('Số tài khoản "' + number + '" đã tồn tại trong hệ thống'); return; }
+    const status = d.status === 'inactive' ? 'inactive' : 'active';
+    const patch = {
+      marketId: existing ? existing.marketId : ui.market, bankCode: bank.code, bankName: bank.name,
+      accountHolderName: holder, accountNumber: number,
+      isCollectionAccount: status === 'inactive' ? false : !!d.isCollectionAccount,
+      note: (d.note || '').trim(), status: status
+    };
+    if (isNew) {
+      A.BANK_ACCOUNTS.add(patch, baActor());
+      U.log('Thêm tài khoản ngân hàng mới "' + patch.accountHolderName + '" (' + patch.accountNumber + ')');
+      U.toast('Đã thêm tài khoản ' + patch.accountNumber);
+      if (d.saveAndContinue) {
+        ui.baForm = { id: null, bankCode: '', accountHolderName: '', accountNumber: '', isCollectionAccount: false, note: '', status: 'active', saveAndContinue: true };
+        renderBankAcctForm();
+        return;
+      }
+    } else {
+      A.BANK_ACCOUNTS.update(d.id, patch, baActor());
+      U.log('Cập nhật tài khoản ngân hàng "' + patch.accountHolderName + '" (' + patch.accountNumber + ')');
+      U.toast('Đã cập nhật tài khoản ' + patch.accountNumber);
+    }
+    A.closeModal(); A.render();
+  };
+  A.ACT['ba-del'] = el => {
+    const a = A.BANK_ACCOUNTS.get(el.dataset.id);
+    if (!a || !baCan(a)) return;
+    if (a.hasTransactions) {
+      A.modal(A.mHead('Không thể xoá tài khoản') + `<div class="modal-b">Tài khoản <b>${U.esc(a.accountNumber)}</b> (${U.esc(a.accountHolderName)}) đã có giao dịch tham chiếu (đối soát) — không thể xoá cứng. Chỉ có thể chuyển sang "Ngừng hoạt động".</div>
+        <div class="modal-f"><button class="btn" data-act="close">Đóng</button>${a.status === 'active' ? `<button class="btn danger" data-act="ba-deactivate-ok" data-id="${a.id}">Chuyển Ngừng hoạt động</button>` : ''}</div>`);
+      return;
+    }
+    A.modal(A.mHead('Xoá tài khoản ngân hàng') + `<div class="modal-b">Xoá tài khoản <b>${U.esc(a.accountNumber)}</b> (${U.esc(a.accountHolderName)})? Thao tác này không thể hoàn tác.</div>
+      <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn danger" data-act="ba-del-ok" data-id="${a.id}">Xoá</button></div>`);
+  };
+  A.ACT['ba-del-ok'] = el => {
+    const a = A.BANK_ACCOUNTS.get(el.dataset.id);
+    if (!a || !baCan(a)) return;
+    if (!A.BANK_ACCOUNTS.remove(a.id)) { U.toast('Không thể xoá — tài khoản đã có giao dịch tham chiếu.'); A.closeModal(); A.render(); return; }
+    U.log('Xoá tài khoản ngân hàng "' + a.accountHolderName + '" (' + a.accountNumber + ')');
+    U.toast('Đã xoá tài khoản ' + a.accountNumber);
+    A.closeModal(); A.render();
+  };
+  A.ACT['ba-deactivate-ok'] = el => {
+    const a = A.BANK_ACCOUNTS.get(el.dataset.id);
+    if (!a || !baCan(a)) return;
+    A.BANK_ACCOUNTS.setStatus(a.id, 'inactive', baActor());
+    U.log('Chuyển "Ngừng hoạt động" tài khoản ngân hàng "' + a.accountHolderName + '" (' + a.accountNumber + ')');
+    U.toast('Đã chuyển tài khoản ' + a.accountNumber + ' sang Ngừng hoạt động');
+    A.closeModal(); A.render();
+  };
+
   function settingsTichhopHtml() {
     return `<div class="card"><div class="card-h"><h3>Tích hợp</h3></div><div class="card-b small">
-      ${[['Ngân hàng – mã QR động (VietQR), nhận báo có', 'Mô phỏng'], ['Zalo OA – gửi thông báo, biên lai', 'Mô phỏng'], ['SMS brandname', 'Mô phỏng'], ['Biên lai điện tử', 'Mô phỏng'], ['Nền tảng tích hợp, chia sẻ dữ liệu của tỉnh (LGSP)', 'Khi triển khai'], ['Trung tâm điều hành thông minh (IOC)', 'Khi triển khai'], ['Đăng nhập một lần (SSO) dùng chung với các hệ thống của phường', 'Khi triển khai']].map(r => `<div class="row" style="padding:7px 0;border-bottom:1px solid #eef2f0"><span style="flex:1">${r[0]}</span><span class="tag ${r[1] === 'Mô phỏng' ? 'ok' : ''}">${r[1]}</span></div>`).join('')}</div></div>`;
+      ${[['Ngân hàng – mã QR động (VietQR), nhận báo có', 'Mô phỏng'], ['Zalo OA – gửi thông báo, biên lai', 'Mô phỏng'], ['SMS brandname', 'Mô phỏng'], ['Biên lai điện tử', 'Mô phỏng'], ['Nền tảng tích hợp, chia sẻ dữ liệu của tỉnh (LGSP)', 'Khi triển khai'], ['Trung tâm điều hành thông minh (IOC)', 'Khi triển khai'], ['Đăng nhập một lần (SSO) dùng chung với các hệ thống của phường', 'Khi triển khai']].map(r => `<div class="row" style="padding:7px 0;border-bottom:1px solid #eef2f7"><span style="flex:1">${r[0]}</span><span class="tag ${r[1] === 'Mô phỏng' ? 'ok' : ''}">${r[1]}</span></div>`).join('')}</div></div>`;
   }
   function settingsVaitroHtml() {
     const selRole = A.PERM.role(ui.permRole) || A.PERM.role('market_manager') || A.PERM.roles()[0];

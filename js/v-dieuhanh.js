@@ -783,7 +783,7 @@
     </div>
     <div class="grid g-main">
       <div class="card"><div class="card-h"><h3>Số thu theo tháng</h3><span class="small muted">* kỳ 09/2026 tính đến ngày ${U.dmy(U.today())} · trước 05/2026 là số mô phỏng</span></div>
-        <div class="card-b">${U.bars(rs.labels, [{ name: 'Tiền mặt', values: rs.cash, color: '#c9a45c' }, { name: 'QR / chuyển khoản', values: rs.non, color: '#13806b' }])}</div></div>
+        <div class="card-b">${U.bars(rs.labels, [{ name: 'Tiền mặt', values: rs.cash, color: '#c9a45c' }, { name: 'QR / chuyển khoản', values: rs.non, color: '#1f6fd0' }])}</div></div>
       <div class="card"><div class="card-h"><h3>Trạng thái điểm kinh doanh</h3></div>
         <div class="card-b">${U.donut(counts, [U.pctTxt(s.occPct), 'lấp đầy'])}</div></div>
     </div>
@@ -802,31 +802,44 @@
         ${cmpRow('Cài đặt mini app', x => U.pctTxt(x.app))}
         </tbody></table></div></div></div>
       <div class="card"><div class="card-h"><h3>Cảnh báo cần xử lý</h3></div><div class="card-b">
-        ${alerts.length ? alerts.map(a => `<div class="row" style="padding:8px 0;border-bottom:1px solid #eef2f0"><span class="tag ${a[0]}">${a[0] === 'danger' ? 'Khẩn' : 'Lưu ý'}</span><span style="flex:1">${a[1]}</span>${U.can(a[2]) ? `<button class="btn sm" data-act="go" data-to="${a[2]}">Xem</button>` : ''}</div>`).join('') : '<div class="empty">Không có cảnh báo</div>'}
+        ${alerts.length ? alerts.map(a => `<div class="row" style="padding:8px 0;border-bottom:1px solid #eef2f7"><span class="tag ${a[0]}">${a[0] === 'danger' ? 'Khẩn' : 'Lưu ý'}</span><span style="flex:1">${a[1]}</span>${U.can(a[2]) ? `<button class="btn sm" data-act="go" data-to="${a[2]}">Xem</button>` : ''}</div>`).join('') : '<div class="empty">Không có cảnh báo</div>'}
         <h4 style="margin:16px 0 6px;font-size:var(--font-size-sm)">Phản ánh chuyển vượt cấp lên UBND phường</h4>
         ${escal.length ? escal.map(i => `<div class="row small" style="padding:6px 0"><span class="tag purple">${i.id}</span><span style="flex:1">${U.esc(i.title)} · ${U.mShort(i.market)}</span><button class="btn sm" data-act="inc-open" data-id="${i.id}">Mở</button></div>`).join('') : '<div class="small muted">Không có</div>'}
       </div></div>
     </div>`;
   };
 
-  // ---------- Mặt bằng chợ (gộp UI "Thiết lập mặt bằng chợ" + "Sơ đồ mặt bằng") ----------
-  // Sau hotfix UX (xem MARKET_LAYOUT_UX_HOTFIX_REPORT.md): KHÔNG còn "edit mode" như 1 route/trang
-  // riêng nữa — action thêm/sửa/xóa cấu trúc hiện NGAY trên cây, permission cho phép tới đâu thì
-  // action tự hiện tới đó (không cần bấm "Thiết lập mặt bằng" trước). Toàn bộ cây + action cấu
-  // trúc chuyển hẳn sang js/v-cautruc.js (nơi giữ model LAYOUT + 26 handler qh-* — KHÔNG đổi logic
-  // 1 dòng nào). File này chỉ còn giữ đúng phần liên quan tới điểm kinh doanh THẬT
-  // (D.MARKETS/A.db.stalls): A.stallPanel (drawer điểm KD, không đổi) + 2 hàm dùng chung
-  // A.mbOverviewHtml/A.mbZoneDiagramHtml render vùng sơ đồ bên phải — js/v-cautruc.js gọi 2 hàm
-  // này, truyền vào (các) khu LAYOUT hiện có; 2 hàm tự đối chiếu với dữ liệu thật qua
-  // `zone.code === section.id` (đúng cách defaultLayout() đã seed — xem js/v-cautruc.js) để hiển
-  // thị đúng trạng thái thực tế cho khu đã triển khai, hoặc thông tin quy hoạch cho khu chưa khớp
-  // dữ liệu thật. Không tạo model/permission mặt bằng thứ hai, không đổi
-  // 'screen:mat-bang' (Phase 7 — screen permission duy nhất, thay 'screen:so-do'/'screen:cau-truc'
-  // cũ)/so-do.*/cau-truc.* (6 action permKey GIỮ NGUYÊN, không đổi ở Phase 7).
+  // ---------- Mặt bằng chợ (gộp UI "Thiết lập mặt bằng chợ" + "Sơ đồ mặt bằng", nay là workspace
+  // drill-down nhiều cấp — MARKET_LAYOUT_DRILLDOWN_UX_REPORT.md) ----------
+  // KHÔNG còn "edit mode" như 1 route/trang riêng nữa — action thêm/sửa/xóa cấu trúc hiện NGAY trên
+  // cây, permission cho phép tới đâu thì action tự hiện tới đó. Toàn bộ cây + action cấu trúc + điều
+  // hướng chọn node (Tổng quan/Khối/Tầng/Khu) nằm ở js/v-cautruc.js (nơi giữ model LAYOUT). File
+  // này chỉ còn giữ đúng phần liên quan tới điểm kinh doanh THẬT (D.MARKETS/A.db.stalls):
+  // A.stallPanel (drawer điểm KD, không đổi) + các hàm dùng chung A.mbOverviewHtml/A.mbBlockHtml/
+  // A.mbFloorHtml/A.mbZoneDiagramHtml render vùng nội dung bên phải theo đúng cấp đang chọn —
+  // js/v-cautruc.js gọi các hàm này, truyền vào (các) khối/tầng/khu LAYOUT hiện có; các hàm tự đối
+  // chiếu với dữ liệu thật qua `zone.code === section.id` (đúng cách defaultLayout() đã seed — xem
+  // js/v-cautruc.js) để hiển thị đúng trạng thái thực tế cho khu đã triển khai, hoặc thông tin quy
+  // hoạch cho khu chưa khớp dữ liệu thật. Mọi số liệu tổng hợp (tổng điểm, số theo trạng thái) đều
+  // TÍNH TỪ A.db.stalls/LAYOUT ngay tại thời điểm render — không persist thêm field nào. Không tạo
+  // model/permission mặt bằng thứ hai, không đổi 'screen:mat-bang'/so-do.*/cau-truc.* (6 action
+  // permKey GIỮ NGUYÊN).
   function mbMatchRealSection(mid, code) {
     const m = U.market(mid);
     for (const f of m.floors) { const s = f.sections.find(x => x.id === code); if (s) return { floor: f, section: s }; }
     return null;
+  }
+  // Điểm KD thật của 1 khu LAYOUT (mảng rỗng nếu khu còn ở giai đoạn quy hoạch, chưa khớp dữ liệu
+  // thật — KHÔNG lẫn với "chưa có điểm nào dù đã khớp", 2 trường hợp này phân biệt bằng
+  // mbMatchRealSection, không dựa vào độ dài mảng ở đây).
+  function mbZoneStalls(mid, z) {
+    const matched = mbMatchRealSection(mid, z.code);
+    return matched ? A.db.stalls.filter(st => st.market === mid && st.floor === matched.floor.id && st.section === matched.section.id) : [];
+  }
+  function mbStatusLine(stalls) {
+    const c = k => stalls.filter(st => st.status === k).length;
+    const parts = Object.keys(D.STATUS).filter(k => c(k)).map(k => `${c(k)} ${D.STATUS[k].label.toLowerCase()}`);
+    return parts.length ? parts.join(' · ') : 'Chưa có điểm kinh doanh';
   }
   A.mbResolveZoneContext = function (mid, zone) {
     const market = U.market(mid);
@@ -838,9 +851,7 @@
     return { market: mid, floor: matched.floor, section: matched.section, matched: true, reason: 'matched-zone-code' };
   };
   A.mbBusinessPointsForZone = function (mid, zone) {
-    const resolved = A.mbResolveZoneContext(mid, zone);
-    if (!resolved.matched) return [];
-    return A.db.stalls.filter(st => st.market === mid && st.floor === resolved.floor.id && st.section === resolved.section.id);
+    return mbZoneStalls(mid, zone);
   };
   A.mbBusinessPointById = function (mid, pointId) {
     const st = A.idx && A.idx.stall ? A.idx.stall.get(pointId) : null;
@@ -862,25 +873,80 @@
     Object.keys(D.STATUS).forEach(k => { byStatus[k] = points.filter(st => st.status === k).length; });
     return { total: points.length, byStatus: byStatus, points: points };
   };
-  A.mbOverviewHtml = function (mid, zones) {
-    const cards = zones.map(z => {
-      const resolved = A.mbResolveZoneContext(mid, z);
-      let body;
-      if (resolved.matched) {
-        const stats = A.mbZoneStats(mid, z);
-        const c = k => stats.byStatus[k] || 0;
-        const parts = Object.keys(D.STATUS).filter(k => c(k)).map(k => `${c(k)} ${D.STATUS[k].label.toLowerCase()}`).join(' · ');
-        body = `<div style="margin-top:8px">${stats.total} điểm</div><div class="small muted">${parts || 'Chưa có điểm kinh doanh'}</div>`;
-      } else {
-        const planned = U.sum(z.planned, p => Number(p.qty) || 0);
-        body = `<div style="margin-top:8px">${planned} điểm dự kiến</div><div class="small muted">Khu đang quy hoạch — chưa có dữ liệu thực tế</div>`;
-      }
-      return `<div class="card mb-ov-card" data-act="mb-sel-zone" data-id="${z.key}"><div class="card-b" style="padding-top:14px">
-        <b>${U.esc(z.name || '(chưa đặt tên)')}</b><div class="small muted" style="margin-top:2px">${U.esc(z.code || '')}${z.status === 'nhap' ? ' · <span class="tag warn">Nháp</span>' : ''}</div>
-        ${body}</div></div>`;
-    });
-    return `<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">${cards.join('') || '<div class="empty">Chưa có khu vực nào.</div>'}</div>`;
+  // Danh sách khu của 1 tầng, MỖI khu render bằng ĐÚNG 1 renderer dùng chung (mbZoneSectionHtml —
+  // tên khu + thống kê ngắn + point grid) — dùng lại nguyên vẹn ở cả Tầng/Khối/Tổng quan (hotfix
+  // "cùng 1 visual language": không tạo renderer khác nhau cho từng cấp).
+  function mbFloorZonesHtml(mid, floor) {
+    return floor.zones.length ? floor.zones.map(z => mbZoneSectionHtml(mid, z)).join('') : '<div class="empty small">Chưa có khu nào.</div>';
+  }
+  // 1 tầng lồng bên trong Khối/Tổng quan (nơi 1 card có thể chứa NHIỀU tầng): thêm 1 heading nhỏ,
+  // click được (→ view Tầng), phía trên danh sách khu của tầng đó — chỉ hiện khi phạm vi đang xem có
+  // hơn 1 tầng (`showHeading`); khối chỉ có đúng 1 tầng thì heading thừa (trùng ý khối/tầng, giống
+  // logic gộp `mbFlatMode` ở cây cấu trúc — xem js/v-cautruc.js), hiển thị thẳng danh sách khu.
+  function mbFloorGroupHtml(mid, floor, showHeading) {
+    const zonesHtml = mbFloorZonesHtml(mid, floor);
+    if (!showHeading) return zonesHtml;
+    const stalls = [];
+    floor.zones.forEach(z => stalls.push.apply(stalls, mbZoneStalls(mid, z)));
+    return `<div class="mb-floor-heading">
+        <button class="mb-floor-heading-btn" data-act="mb-sel-floor" data-id="${floor.key}">${U.esc(floor.name)}</button>
+        <span class="spacer"></span><span class="mb-floor-heading-meta">${stalls.length} điểm KD · ${mbStatusLine(stalls)}</span>
+      </div>${zonesHtml}`;
+  }
+  // ---- Tổng quan toàn chợ (mục 1/2/3 hotfix — cùng visual language mọi cấp): mỗi khối 1 card,
+  // trong đó liệt kê ĐỦ các tầng (nếu >1 tầng, có heading tầng) và ĐỦ các khu + point grid của từng
+  // tầng — KHÔNG còn rút gọn thành danh sách/chip như trước. Thống kê tối thiểu toàn chợ đã có sẵn ở
+  // thanh tổng hợp phía trên workspace (không lặp lại ở đây — xem mbWorkspaceHtml ở v-cautruc.js).
+  A.mbOverviewHtml = function (mid, blocks) {
+    if (!blocks.length) return '<div class="empty">Chưa có khối/nhà chợ nào.</div>';
+    return `<div class="mb-ov">${blocks.map(b => {
+      const stalls = [];
+      b.floors.forEach(f => f.zones.forEach(z => stalls.push.apply(stalls, mbZoneStalls(mid, z))));
+      const multi = b.floors.length > 1;
+      const body = b.floors.length ? b.floors.map(f => mbFloorGroupHtml(mid, f, multi)).join('') : '<div class="empty small">Chưa có tầng</div>';
+      return `<div class="card"><div class="card-h mb-ov-clickable" data-act="mb-sel-block" data-id="${b.key}"><h3>${U.esc(b.name)}</h3><span class="small muted">${stalls.length} điểm KD</span></div>
+        <div class="card-b"><div class="plan">${body}</div></div></div>`;
+    }).join('')}</div>`;
   };
+  // ---- Khối/Nhà chợ (mục 2 hotfix): TOÀN BỘ tầng thuộc khối, mỗi tầng TOÀN BỘ khu + point grid —
+  // cùng cấu trúc với Tổng quan, chỉ khác phạm vi (đúng 1 khối thay vì mọi khối).
+  A.mbBlockHtml = function (mid, block) {
+    const stalls = [];
+    block.floors.forEach(f => f.zones.forEach(z => stalls.push.apply(stalls, mbZoneStalls(mid, z))));
+    const multi = block.floors.length > 1;
+    const body = block.floors.length ? block.floors.map(f => mbFloorGroupHtml(mid, f, multi)).join('') : '<div class="empty small">Chưa có tầng</div>';
+    return `<div class="card"><div class="card-h"><h3>${U.esc(block.name)}</h3><span class="small muted">${stalls.length} điểm KD</span></div>
+      <div class="card-b"><div class="plan">${body}</div></div></div>`;
+  };
+  // ---- Tầng: sơ đồ TOÀN BỘ điểm KD của TẤT CẢ khu thuộc tầng, mỗi khu tách thành 1 .plan-section
+  // riêng (KHÔNG trộn chung 1 grid), giữ màu trạng thái hiện tại — không có heading tầng thừa vì
+  // card-h h3 ở đây đã chính là tên tầng.
+  A.mbFloorHtml = function (mid, floor) {
+    const stalls = [];
+    floor.zones.forEach(z => stalls.push.apply(stalls, mbZoneStalls(mid, z)));
+    return `<div class="card"><div class="card-h"><h3>${U.esc(floor.name)}</h3><span class="small muted">${stalls.length} điểm KD · ${mbStatusLine(stalls)}</span></div>
+      <div class="card-b"><div class="plan">${mbFloorZonesHtml(mid, floor)}</div></div></div>`;
+  };
+  // 1 khu, dạng compact (không bọc .card riêng) để nhúng nhiều khu liên tiếp trong view Tầng —
+  // click tên khu → drill-down tiếp sang view Khu (mục 7: "Click tên Khu → chuyển sang view Khu").
+  function mbZoneSectionHtml(mid, z) {
+    const matched = mbMatchRealSection(mid, z.code);
+    const head = `<h4><button class="mb-zone-jump" data-act="mb-sel-zone" data-id="${z.key}">${U.esc(z.name || '(chưa đặt tên)')}</button><span>${U.esc(z.code || '')}${z.status === 'nhap' ? ' · <span class="tag warn">Nháp</span>' : ''}</span></h4>`;
+    if (!matched) {
+      const planned = U.sum(z.planned, p => Number(p.qty) || 0);
+      return `<div class="plan-section">${head}<div class="small muted">${planned} điểm dự kiến · khu đang quy hoạch, chưa có dữ liệu thực tế</div></div>`;
+    }
+    const sec = matched.section, stalls = A.db.stalls.filter(st => st.market === mid && st.floor === matched.floor.id && st.section === sec.id);
+    const rows = sec.rows.map(r => {
+      const cells = stalls.filter(st => st.row === r);
+      return `<div class="plan-row"><span class="rl">${r}</span><div class="cells" style="--n:${sec.per}">${cells.map(st => {
+        const t = st.traderId ? A.idx.trader.get(st.traderId) : null;
+        return `<button class="cell s-${st.status} ${sec.type === 'kiot' ? 'kiot' : ''}" data-act="stall" data-id="${st.id}" title="${st.code} · ${D.STATUS[st.status].label}${t ? ' · ' + U.esc(t.name) : ''}">${st.num}</button>`;
+      }).join('')}</div></div>`;
+    }).join('<div class="aisle"></div>');
+    return `<div class="plan-section">${head}<div class="small muted" style="margin:-4px 0 8px">${stalls.length} điểm · ${mbStatusLine(stalls)}</div>${rows}</div>`;
+  }
+  // ---- Khu (mục 8): giữ đúng hành vi cũ (legend lọc trạng thái + tìm kiếm + sơ đồ đầy đủ). ----
   A.mbZoneDiagramHtml = function (mid, z, canEditZone) {
     const resolved = A.mbResolveZoneContext(mid, z);
     const editBtn = canEditZone ? `<button class="btn sm" data-act="qh-zone-edit-open" data-id="${z.key}">✎ Sửa thông tin khu</button>` : '';
@@ -930,8 +996,8 @@
       <div class="divider"></div>
       ${t ? `<dl class="kv"><dt>Tiểu thương</dt><dd><a href="#" data-act="trader" data-id="${t.id}">${U.esc(t.name)}</a> (${t.id})</dd>
         <dt>Điện thoại</dt><dd>${U.maskPhone(t.phone)}</dd><dt>Mini app</dt><dd>${t.app ? '<span class="tag ok">Đã cài</span>' : '<span class="tag">Chưa cài</span>'}</dd>
-        ${c ? `<dt>Hợp đồng</dt><dd>${c.id}<br><span class="small muted">${U.dmy(c.start)} – ${U.dmy(c.end)} · ${left <= 30 ? `<b style="color:#d6453b">còn ${left} ngày</b>` : 'còn ' + left + ' ngày'}</span></dd>` : ''}
-        <dt>Công nợ</dt><dd>${unpaid.length ? `<b style="color:#d6453b">${U.money(U.sum(unpaid, U.due))}</b> <span class="small muted">(${unpaid.length} kỳ)</span>` : '<span class="tag ok">Không nợ</span>'}</dd></dl>`
+        ${c ? `<dt>Hợp đồng</dt><dd>${c.id}<br><span class="small muted">${U.dmy(c.start)} – ${U.dmy(c.end)} · ${left <= 30 ? `<b style="color:#df2225">còn ${left} ngày</b>` : 'còn ' + left + ' ngày'}</span></dd>` : ''}
+        <dt>Công nợ</dt><dd>${unpaid.length ? `<b style="color:#df2225">${U.money(U.sum(unpaid, U.due))}</b> <span class="small muted">(${unpaid.length} kỳ)</span>` : '<span class="tag ok">Không nợ</span>'}</dd></dl>`
         : '<div class="note info">Điểm kinh doanh đang trống, có thể cho thuê.</div>'}
       ${(canThuTien || canXemHoSo || canTaoHopDong || canDoiTrangThai) ? `<div class="row" style="margin-top:14px">
         ${canThuTien && t && unpaid.length ? `<button class="btn primary" data-act="pay-open" data-id="${t.id}">💳 Thu tiền</button>` : ''}
@@ -939,6 +1005,62 @@
         ${canDoiTrangThai ? `<button class="btn" data-act="stall-status" data-id="${st.id}">Đổi trạng thái</button>` : ''}</div>` : ''}
       ${st.history && st.history.length ? `<div class="divider"></div><div class="small"><b>Lịch sử thay đổi</b>${st.history.map(h => `<div class="muted">${h}</div>`).join('')}</div>` : ''}`;
   };
+
+  // ---- Mặt bằng chợ — Chợ Cao Lãnh: drawer "xem nhanh" khi click 1 điểm trên sơ đồ (KHÁC
+  // A.stallPanel ở trên — A.stallPanel GIỮ NGUYÊN, vẫn dùng cho Mặt bằng chợ quê TTĐ + màn "Điểm
+  // kinh doanh" TTD, không đổi gì ở đó). Theo yêu cầu BUSINESS_POINT_MAP_DRAWER_REFACTOR: chỉ XEM
+  // NHANH (4 nhóm A/B/C/D), KHÔNG có nút "Đổi trạng thái"/"Thu tiền"/"Tạo hợp đồng", KHÔNG mở modal
+  // hồ sơ lớn tại chỗ — thay bằng 2 nút điều hướng dùng lại router/state hiện có (A.go + A.ACT có
+  // sẵn của chính 2 màn đích), không tạo màn/modal chi tiết thứ hai.
+  function mbStallPointTypeLabel(st) {
+    return st.pointType && D.POINT_TYPE[st.pointType] ? D.POINT_TYPE[st.pointType].label : 'Chưa có thông tin';
+  }
+  // Người bán thực tế: tham chiếu ĐÚNG model sellerId đã chốt — KHÔNG suy đoán "giống người thuê"
+  // khi sellerId rỗng (khác dkSeller() ở màn Điểm kinh doanh — nơi đó null = mặc định giống người
+  // thuê); ở đây null hiển thị đúng nghĩa "chưa ghi nhận" theo yêu cầu, không tự bịa dữ liệu.
+  function mbStallSeller(st, t) {
+    if (!t || !st.sellerId) return null;
+    const seller = A.idx.trader.get(st.sellerId);
+    return seller ? { trader: seller, same: seller.id === t.id } : null;
+  }
+  function mbStallPanelCL(st) {
+    const t = st.traderId ? A.idx.trader.get(st.traderId) : null;
+    const c = st.contractId ? A.idx.contract.get(st.contractId) : null;
+    const seller = mbStallSeller(st, t);
+    // Điều hướng chỉ theo screen permission của MÀN ĐÍCH (U.can — đã gồm account active + role +
+    // screenMarketOk/marketScopes) — không action permission riêng, không hard-code role/market.
+    const canXemHoSo = U.can('tieu-thuong');
+    const canXemDiemKD = U.can('diem-kd');
+    const unpaid = t ? A.db.invoices.filter(i => i.stallId === st.id && i.status !== 'paid') : [];
+    const owe = U.sum(unpaid, U.due);
+    const left = c ? U.days(U.today(), c.end) : null;
+    const sec = (label, body) => `<div class="row"><b style="font-size:var(--font-size-sm)">${label}</b></div><div style="margin:6px 0 14px">${body}</div>`;
+    const actions = [];
+    if (t && canXemHoSo) actions.push(`<button class="btn" data-act="mb-open-trader" data-id="${t.id}">Xem hồ sơ tiểu thương</button>`);
+    if (canXemDiemKD) actions.push(`<button class="btn" data-act="mb-open-diemkd" data-id="${st.id}">Xem điểm kinh doanh</button>`);
+    return `<div class="muted small" style="margin:2px 0 12px">${U.esc(st.sectionName)} · ${U.market(st.market).floors.find(f => f.id === st.floor).name} · ${U.esc(U.market(st.market).name)}</div>
+      ${sec('A. Thông tin điểm', `<dl class="kv">
+        <dt>Loại điểm</dt><dd>${U.esc(mbStallPointTypeLabel(st))}</dd>
+        <dt>Diện tích</dt><dd>${st.area.toLocaleString('vi-VN')} m²</dd>
+        <dt>Ngành hàng</dt><dd>${U.esc(st.cat)}</dd>
+        <dt>Đơn giá áp dụng</dt><dd>${U.unitLabel(st)}</dd></dl>`)}
+      <div class="divider"></div>
+      ${sec('B. Thông tin sử dụng', `<dl class="kv">
+        <dt>Người thuê</dt><dd>${t ? `${U.esc(t.name)} (${t.id})` : 'Chưa có'}</dd>
+        <dt>Người bán thực tế</dt><dd>${!t ? 'Chưa ghi nhận' : !seller ? 'Chưa ghi nhận' : seller.same ? `${U.esc(seller.trader.name)} <span class="small muted">(người thuê trực tiếp kinh doanh)</span>` : U.esc(seller.trader.name)}</dd>
+        ${t ? `<dt>Điện thoại</dt><dd>${U.maskPhone(t.phone)}</dd>` : ''}</dl>`)}
+      <div class="divider"></div>
+      ${sec('C. Hợp đồng hiện hành', c
+        ? `<dl class="kv"><dt>Số hợp đồng</dt><dd>${c.id}</dd>
+        <dt>Thời hạn</dt><dd>${U.dmy(c.start)} – ${U.dmy(c.end)}<br><span class="small muted">${left <= 30 ? `<b style="color:#df2225">còn ${left} ngày</b>` : 'còn ' + left + ' ngày'}</span></dd>
+        <dt>Trạng thái</dt><dd>${c.status === 'hieuluc' ? '<span class="tag ok">Đang hiệu lực</span>' : '<span class="tag">Đã thanh lý</span>'}</dd></dl>`
+        : '<div class="note info">Chưa có hợp đồng hiệu lực.</div>')}
+      <div class="divider"></div>
+      ${sec('D. Công nợ', !t ? '<span class="tag">Không có nghĩa vụ hiện tại</span>'
+        : owe ? `<span class="tag danger">Nợ phí</span> <b style="color:#df2225;margin-left:6px">${U.money(owe)}</b>`
+        : '<span class="tag ok">Không nợ</span>')}
+      ${actions.length ? `<div class="row" style="gap:8px;flex-wrap:wrap">${actions.join('')}</div>` : ''}`;
+  }
 
   // A.VIEWS['mat-bang'] giờ định nghĩa ở js/v-cautruc.js (mbWorkspaceHtml) — nơi giữ cây cấu trúc +
   // model LAYOUT. File này chỉ còn giữ đúng phần thao tác điểm kinh doanh thật (drawer khi click 1
@@ -952,8 +1074,25 @@
       if (!st) { U.toast('Không tìm thấy điểm kinh doanh trong chợ hiện tại'); return; }
       A.$('#modal-root').innerHTML = `<div class="drawer-overlay" data-act="close"></div><div class="drawer">
         <div class="drawer-h"><div><h3>${st.code}</h3><div class="small muted" style="margin-top:2px">${U.statusTag(st.status)}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
-        <div class="drawer-b">${A.stallPanel(st)}</div></div>`;
+        <div class="drawer-b">${st.market === 'CL' ? mbStallPanelCL(st) : A.stallPanel(st)}</div></div>`;
       A.render();
+    },
+    // 2 nút điều hướng "xem sâu" của drawer Mặt bằng CL — tái dùng NGUYÊN A.go() (router hiện có)
+    // + đúng handler đã có sẵn của chính màn đích (A.ACT.trader mở hồ sơ, A.ACT['dk-open'] mở drawer
+    // điểm KD ở màn Điểm kinh doanh) — không tạo màn/modal mới, không duplicate logic.
+    'mb-open-trader': el => {
+      if (!U.can('tieu-thuong')) return;
+      const t = A.idx.trader.get(el.dataset.id);
+      if (!t) return;
+      A.go('tieu-thuong');
+      A.ACT.trader({ dataset: { id: t.id } });
+    },
+    'mb-open-diemkd': el => {
+      if (!U.can('diem-kd')) return;
+      const st = A.idx.stall.get(el.dataset.id);
+      if (!st) return;
+      A.go('diem-kd');
+      A.ACT['dk-open']({ dataset: { id: st.id } });
     },
     'stall-status': el => {
       const st = A.mbBusinessPointById(ui.market, el.dataset.id);
@@ -1073,7 +1212,7 @@
     <div class="card"><div class="card-h"><h3>Báo cáo & lịch sử</h3></div><div class="card-b">
     <div class="grid g2">
       <div class="card"><div class="card-h"><h3>Lượt khách theo phiên</h3></div><div class="card-b">
-        ${chartHistory.length ? U.bars(chartHistory.map(s => s.date.slice(8) + '/' + s.date.slice(5, 7)), [{ name: 'Lượt khách (ước)', values: chartHistory.map(s => Number(s.visitors)), color: '#c93d6e' }], { fmt: v => Math.round(v).toLocaleString('vi-VN'), stacked: false }) : '<div class="muted">Chưa có dữ liệu phiên đã chốt.</div>'}</div></div>
+        ${chartHistory.length ? U.bars(chartHistory.map(s => s.date.slice(8) + '/' + s.date.slice(5, 7)), [{ name: 'Lượt khách (ước)', values: chartHistory.map(s => Number(s.visitors)), color: '#0089df' }], { fmt: v => Math.round(v).toLocaleString('vi-VN'), stacked: false }) : '<div class="muted">Chưa có dữ liệu phiên đã chốt.</div>'}</div></div>
       <div class="card"><div class="card-h"><h3>Lịch sử các phiên</h3></div><div class="card-b">
         ${U.table([{ t: 'Ngày' }, { t: 'Trạng thái' }, { t: 'Quầy thực tế tham gia', num: true }, { t: 'Phí phiên', num: true }, { t: 'Khách (ước)', num: true }, { t: 'Không tiền mặt', num: true }],
           historical.slice().reverse().map(s => `<tr><td>${U.dmy(s.date)}</td><td>${sessionStatusTag(s)}</td><td class="num">${formatNumber(s.booths)}</td><td class="num">${formatMoney(s.fee)}</td><td class="num">${formatNumber(s.visitors)}</td><td class="num">${formatPct(s.noncash)}</td></tr>`))}
