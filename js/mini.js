@@ -27,6 +27,60 @@
   function canTraderRegisterStall(market) {
     return U.can('mini-app') && isTraderMini() && isSessionMarket(market) && A.canDo('mini-app.stall-registration.create', market);
   }
+  function miniSessionStatusFromOps(s) {
+    if (!s) return 'SCHEDULED';
+    if (s.status === 'open') return 'REGISTRATION_OPEN';
+    if (s.status === 'registration_closed' || s.status === 'preparing' || s.status === 'active' || s.status === 'pending_close') return 'REGISTRATION_CLOSED';
+    if (s.status === 'closed') return 'COMPLETED';
+    if (s.status === 'cancelled') return 'CANCELLED';
+    if (s.status === 'postponed') return 'POSTPONED';
+    return 'SCHEDULED';
+  }
+  function miniOpenCloseDate(s, status) {
+    const deadline = (s && s.registrationDeadline || '').slice(0, 10);
+    if (status !== 'REGISTRATION_OPEN') return deadline || (s && s.date) || U.today();
+    return [deadline, U.today(), s && s.date].filter(Boolean).sort().slice(-1)[0];
+  }
+  function syncOpsSessionsToMiniRegistrationModel() {
+    const opsSessions = (A.db.sessions || []).filter(s => s && s.market === 'TTD' && s.id && s.date);
+    if (!opsSessions.length) return;
+    const sessionPoints = A.db.stalls.filter(s => s.market === 'TTD' && U.rentalKind(s) === 'session');
+    const cats = Array.from(new Set(sessionPoints.map(s => s.cat).filter(Boolean))).slice(0, 4);
+    const pricing = miniSessionPricing('TTD');
+    opsSessions.forEach(s => {
+      let ms = A.db.marketSessions.find(x => x.id === s.id);
+      if (!ms) {
+        ms = { id: s.id, code: s.id, marketId: 'TTD' };
+        A.db.marketSessions.push(ms);
+      }
+      const wasOpen = ms.status === 'REGISTRATION_OPEN';
+      const status = miniSessionStatusFromOps(s);
+      const closeAt = miniOpenCloseDate(s, status);
+      Object.assign(ms, {
+        code: s.id,
+        marketId: 'TTD',
+        name: 'Phiên chợ quê thứ Bảy ' + U.dmy(s.date),
+        sessionDate: s.date,
+        startTime: s.startTime || '14:00',
+        endTime: s.endTime || '20:00',
+        registrationOpenAt: status === 'REGISTRATION_OPEN' ? U.today() : ((s.registrationStartAt || U.today()).slice(0, 10)),
+        registrationCloseAt: closeAt,
+        totalStalls: Math.max(1, Number(ms.totalStalls) || Math.min(sessionPoints.length || 24, 99)),
+        maxStallsPerMerchant: Number(ms.maxStallsPerMerchant) || 2,
+        allowedBusinessCategories: (ms.allowedBusinessCategories && ms.allowedBusinessCategories.length) ? ms.allowedBusinessCategories : (cats.length ? cats : ['Ẩm thực', 'Nông sản', 'Thủ công']),
+        pricingConfig: ms.pricingConfig || { unitPrice: pricing.unitPrice, additionalFees: pricing.additionalFees, source: pricing.source },
+        cashPaymentEnabled: ms.cashPaymentEnabled !== false,
+        onlinePaymentEnabled: ms.onlinePaymentEnabled !== false,
+        waitingListEnabled: ms.waitingListEnabled !== false,
+        status,
+        createdBy: ms.createdBy || s.createdBy || 'Điều hành phiên chợ',
+        createdAt: ms.createdAt || s.createdAt || U.today(),
+        updatedBy: s.updatedBy || ms.updatedBy || 'Điều hành phiên chợ',
+        updatedAt: s.updatedAt || ms.updatedAt || U.today()
+      });
+      if (wasOpen && status !== 'REGISTRATION_OPEN') ms.registrationOpenAt = (s.registrationStartAt || ms.registrationOpenAt || U.today()).slice(0, 10);
+    });
+  }
   function ensureMiniRegistrationModel() {
     A.db.marketSessions = A.db.marketSessions || [];
     A.db.sessionRegistrations = A.db.sessionRegistrations || [];
@@ -41,6 +95,7 @@
         miniSession('PC-TTD-20260926', 'Phiên chợ quê thứ Bảy 26/09/2026', '2026-09-26', 'SCHEDULED', 30, cats, pricing)
       );
     }
+    syncOpsSessionsToMiniRegistrationModel();
   }
   function miniSessionPricing(mid) {
     const services = A.SERVICE_CFG && A.SERVICE_CFG.list ? (A.SERVICE_CFG.list('extraServices') || []) : [];
@@ -85,6 +140,9 @@
   function miniBlocksCapacity(r) {
     return ['registered', 'approved', 'CONDITIONAL_HOLD', 'CONFIRMED', 'CHECKED_IN', 'PARTICIPATING', 'COMPLETED'].indexOf(r.status) !== -1;
   }
+  function miniCanCollectCashRegistration(reg) {
+    return reg && ['registered', 'approved', 'CONDITIONAL_HOLD'].indexOf(reg.status) !== -1;
+  }
   function miniAvailableStalls(s) {
     return Math.max(0, s.totalStalls - U.sum(miniSessionRegs(s.id).filter(miniBlocksCapacity), r => r.requestedStalls));
   }
@@ -109,7 +167,7 @@
       const t = A.idx.trader.get(reg.merchantId);
       const p = miniSessionCashPaymentForReg(reg);
       if (!s || !t || !p || reg.marketId !== ui.market || t.market !== ui.market) return null;
-      if (reg.paymentMethod !== 'CASH' || ['registered', 'CONDITIONAL_HOLD'].indexOf(reg.status) === -1 || p.status !== 'WAITING_COLLECTION') return null;
+      if (reg.paymentMethod !== 'CASH' || !miniCanCollectCashRegistration(reg) || p.status !== 'WAITING_COLLECTION') return null;
       return { reg, session: s, trader: t, payment: p, amount: p.amount || reg.totalAmount || 0, deadline: p.dueAt || miniSessionCashDeadline(s) };
     }).filter(Boolean).sort((a, b) => String(a.deadline || '').localeCompare(String(b.deadline || '')));
   }
@@ -210,7 +268,7 @@
     if (!reg || !session || !payment) return null;
     const t = A.idx.trader.get(reg.merchantId);
     if (!t || t.market !== reg.marketId || session.marketId !== reg.marketId || payment.marketId !== reg.marketId) return null;
-    if (['registered', 'CONDITIONAL_HOLD'].indexOf(reg.status) === -1 || reg.paymentMethod !== 'CASH' || payment.method !== 'CASH' || payment.status !== 'WAITING_COLLECTION') return null;
+    if (!miniCanCollectCashRegistration(reg) || reg.paymentMethod !== 'CASH' || payment.method !== 'CASH' || payment.status !== 'WAITING_COLLECTION') return null;
     if (!A.canDirectCollect(reg.marketId)) return null;
     const deadline = payment.dueAt || miniSessionCashDeadline(session);
     if (deadline && (A.db.today + ' ' + U.nowTime()) > deadline) return null;

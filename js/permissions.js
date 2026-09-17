@@ -70,6 +70,7 @@
     { key: 'action:phien-cho.chot-danh-sach', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Chốt danh sách đăng ký phiên chợ quê' },
     { key: 'action:phien-cho.quan-ly-dang-ky', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Quản lý đăng ký phiên chợ quê' },
     { key: 'action:phien-cho.diem-danh', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Điểm danh trước phiên chợ quê' },
+    { key: 'action:phien-cho.dieu-phoi-du-bi', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Điều phối hộ dự bị thay thế' },
     { key: 'action:phien-cho.bat-dau-chuan-bi', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Bắt đầu chuẩn bị phiên chợ quê' },
     { key: 'action:phien-cho.bat-dau-phien', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Bắt đầu phiên chợ quê' },
     { key: 'action:phien-cho.cho-chot', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Chuyển phiên chợ quê sang chờ chốt' },
@@ -207,6 +208,7 @@
       'phien-cho.chot-danh-sach': ['market_manager'],
       'phien-cho.quan-ly-dang-ky': ['market_manager'],
       'phien-cho.diem-danh': ['market_staff'],
+      'phien-cho.dieu-phoi-du-bi': ['market_staff'],
       'phien-cho.bat-dau-chuan-bi': ['market_staff'],
       'phien-cho.bat-dau-phien': ['market_staff'],
       'phien-cho.cho-chot': ['market_staff'],
@@ -311,12 +313,14 @@
   //        hoặc PC3-only đều được migrate đủ, không suy luận chỉ từ seedVersion tuyến tính.
   //   v13 = giữ các phần ngoài PC3 đã có ở nhánh local: khoản phải thu yêu cầu điều chỉnh và
   //        mini-app.stall-registration.create. Phiên chợ quê dùng action key PC3 từ bản pull.
+  //        Bao gồm cả PC3C-B: action điều phối hộ dự bị thay hộ chính thức vắng mặt.
   const PERM_SEED_VERSION = 13;
   const RATE_POLICY_PERM_VERSION = 1;
   const BANK_ACCOUNT_PERM_VERSION = 1;
   const PC3A_SESSION_PERM_VERSION = 1;
   const PC3B_REGISTRATION_PERM_VERSION = 1;
   const PC3C_ATTENDANCE_PERM_VERSION = 1;
+  const PC3C_REPLACEMENT_PERM_VERSION = 1;
   function freshState() {
     return {
       schemaVersion: A.RBAC_SCHEMA,
@@ -326,6 +330,7 @@
       pc3aSessionPermVersion: PC3A_SESSION_PERM_VERSION,
       pc3bRegistrationPermVersion: PC3B_REGISTRATION_PERM_VERSION,
       pc3cAttendancePermVersion: PC3C_ATTENDANCE_PERM_VERSION,
+      pc3cReplacementPermVersion: PC3C_REPLACEMENT_PERM_VERSION,
       roles: defaultRoles(),
       rolePerms: defaultRolePermissions()
     };
@@ -390,6 +395,16 @@
     stored.pc3cAttendancePermVersion = PC3C_ATTENDANCE_PERM_VERSION;
     return true;
   }
+  function migratePc3cReplacementPerms(stored) {
+    if (stored.pc3cReplacementPermVersion >= PC3C_REPLACEMENT_PERM_VERSION) return false;
+    const key = 'action:phien-cho.dieu-phoi-du-bi';
+    const hasAny = stored.rolePerms.some(r => r.permKey === key);
+    if (!hasAny) {
+      defaultRolePermissions().filter(r => r.permKey === key).forEach(r => stored.rolePerms.push(r));
+    }
+    stored.pc3cReplacementPermVersion = PC3C_REPLACEMENT_PERM_VERSION;
+    return true;
+  }
   // Merge state đã lưu (shape còn đúng — schemaVersion khớp) vào seed hiện tại, THAY VÌ reseed toàn
   // bộ, để không xoá mất grant/revoke tuỳ biến của admin cho các permKey KHÔNG đổi giữa 2 bản seed
   // (Phase 6 STEP A — trước đây mỗi lần bump PERM_SEED_VERSION đều xoá sạch toàn bộ tuỳ biến, xem
@@ -442,11 +457,13 @@
     const knownKeys = new Set(stored.rolePerms.map(r => r.permKey));
     defaultRolePermissions().forEach(d => {
       if (stored.matBangMigratedV5 && d.permKey === 'screen:mat-bang') return;
+      if (stored.pc3aSessionPermVersion >= PC3A_SESSION_PERM_VERSION && d.permKey.indexOf('action:phien-cho.') === 0) return;
       if (!knownKeys.has(d.permKey)) stored.rolePerms.push(d);
     });
     migratePc3aSessionPerms(stored);
     migratePc3bRegistrationPerms(stored);
     migratePc3cAttendancePerms(stored);
+    migratePc3cReplacementPerms(stored);
     stored.seedVersion = PERM_SEED_VERSION;
     return stored;
   }
@@ -493,6 +510,7 @@
     if (migratePc3aSessionPerms(s)) needSave = true;
     if (migratePc3bRegistrationPerms(s)) needSave = true;
     if (migratePc3cAttendancePerms(s)) needSave = true;
+    if (migratePc3cReplacementPerms(s)) needSave = true;
     if (migrateRatePolicyPerms(s)) needSave = true;
     if (migrateBankAccountPerms(s)) needSave = true;
     // Cùng lý do Hotfix persist migration ở trên: ghi lại NGAY nếu vừa merge (seedVersion đổi),

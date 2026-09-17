@@ -527,6 +527,7 @@ window.DATA = (function () {
     const sessionReceipts = [];
     const sessionNotifications = [];
     const marketSessions = [];
+    const sessionReplacements = [];
     // Phiên 12/09/2026 để trống để demo thao tác "chốt phiên"
     for (let d = new Date(2026, 5, 20); d <= addDays(TODAY, -8); d = addDays(d, 7)) {
       const booths = between(30, 36);
@@ -702,7 +703,7 @@ window.DATA = (function () {
 
     return {
       version: VERSION, today: iso(TODAY), stalls, traders, contracts, invoices, payments, readings, incidents,
-      notifications, sessions, marketSessions, sessionRegistrations, sessionPayments, sessionReceipts, sessionNotifications, sessionAttendances, bank, months, audit, issuedPeriods: PERIODS.slice(), extraLog: [],
+      notifications, sessions, marketSessions, sessionRegistrations, sessionPayments, sessionReceipts, sessionNotifications, sessionAttendances, sessionReplacements, bank, months, audit, issuedPeriods: PERIODS.slice(), extraLog: [],
       meterPeriods: METER_PERIODS, meterAdjustRequests: [], receivableAdjustRequests: [],
       cashDeposits, cashConfirms, billingPeriods: BILLING_PERIODS
     };

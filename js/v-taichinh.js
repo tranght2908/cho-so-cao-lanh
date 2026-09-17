@@ -963,7 +963,8 @@
     }).sort((a, b) => b.collected - a.collected);
   }
   function dsCashStatusOf(e) {
-    if (e.remaining === 0) return { id: 'RECONCILED', label: 'Đã đối soát', cls: 'ok', ico: '✓' };
+    if (e.remaining === 0 && e.confirm) return { id: 'RECONCILED', label: 'Đã đối soát', cls: 'ok', ico: '✓' };
+    if (e.remaining === 0) return { id: 'DEPOSITED', label: 'Đã nộp', cls: 'ok', ico: '✓' };
     if (e.deposited === 0 && e.collected > 0) return { id: 'WAITING_DEPOSIT', label: 'Chờ nộp', cls: '', ico: '●' };
     if (e.deposited > 0 && e.deposited < e.collected) return { id: 'PARTIAL_DEPOSIT', label: 'Chưa nộp đủ', cls: 'warn', ico: '●' };
     return { id: 'OVER_DEPOSIT', label: 'Có chênh lệch', cls: 'danger', ico: '⚠' };
@@ -1023,7 +1024,8 @@
     const e = dsCashRows().find(x => x.employeeId === employeeId);
     if (!e) return '';
     const s = dsCashStatusOf(e);
-    const canConfirm = dsCanCashConfirm(e.market) && s.id === 'RECONCILED' && !e.confirm;
+    const canDeposit = dsCanCashConfirm(e.market) && e.remaining > 0;
+    const canConfirm = dsCanCashConfirm(e.market) && s.id === 'DEPOSITED' && !e.confirm;
     const canAudit = dsCanAudit(e.market);
     const receiptRows = e.payments.map(p => {
       const inv = A.idx.invoice.get(p.invoiceId);
@@ -1050,7 +1052,7 @@
         ${e.confirm ? `<div class="small muted" style="margin-top:6px">Đã xác nhận bởi ${U.esc(e.confirm.confirmedBy)} · ${U.esc(e.confirm.confirmedAt)}</div>` : ''}
         ${canAudit ? `<div class="divider"></div><b class="small">Lịch sử xử lý</b>${dsCashAuditHtml(e)}` : ''}
       </div>
-      <div class="drawer-f">${canConfirm ? `<button class="btn primary" data-act="ds-cash-confirm" data-id="${e.employeeId}">Xác nhận đối soát</button>` : ''}<button class="btn" data-act="close">Đóng</button></div>`;
+      <div class="drawer-f">${canDeposit ? `<button class="btn primary" data-act="ds-cash-deposit" data-id="${e.employeeId}">Ghi nhận nộp quỹ ${U.money(e.remaining)}</button>` : ''}${canConfirm ? `<button class="btn primary" data-act="ds-cash-confirm" data-id="${e.employeeId}">Xác nhận đối soát</button>` : ''}<button class="btn" data-act="close">Đóng</button></div>`;
   }
   A.ACT['ds-cash-view'] = el => {
     const e = dsCashRows().find(x => x.employeeId === el.dataset.id);
@@ -1064,11 +1066,28 @@
       <div class="empty" style="padding:40px 16px">📄<br>${U.esc(d.attachment.name)}<div class="small muted" style="margin-top:6px">Chứng từ minh họa (dữ liệu mẫu) · ${U.esc(d.attachment.type)}</div></div>
       </div><div class="modal-f"><button class="btn primary" data-act="close">Đóng</button></div>`);
   };
+  A.ACT['ds-cash-deposit'] = el => {
+    const employeeId = el.dataset.id;
+    const e0 = dsCashRows().find(x => x.employeeId === employeeId);
+    if (!e0 || !dsCanCashConfirm(e0.market) || e0.remaining <= 0) return;
+    const acc = A.currentAccount();
+    A.db.cashDeposits = A.db.cashDeposits || [];
+    const id = 'NQ-' + U.pad(A.db.cashDeposits.length + 1, 5);
+    A.db.cashDeposits.push({
+      id, employeeId, market: e0.market, date: U.today(), amount: e0.remaining,
+      depositedAt: dsNowStamp(), receivedBy: acc && acc.code ? acc.code : dsActor(),
+      attachment: { name: 'phieu_nop_quy_' + id.toLowerCase() + '.pdf', type: 'application/pdf' }
+    });
+    U.log('Ghi nhận nộp quỹ tiền mặt ' + id + ' cho ' + U.staffName(employeeId) + ': ' + U.money(e0.remaining));
+    A.save(); A.render();
+    A.$('#modal-root').innerHTML = `<div class="drawer-overlay" data-act="close"></div><div class="drawer">${dsCashDrawerHtml(employeeId)}</div>`;
+    U.toast('Đã ghi nhận nộp quỹ ' + U.money(e0.remaining));
+  };
   A.ACT['ds-cash-confirm'] = el => {
     const employeeId = el.dataset.id;
     const e0 = dsCashRows().find(x => x.employeeId === employeeId);
     if (!e0 || !dsCanCashConfirm(e0.market)) return;
-    if (!e0 || dsCashStatusOf(e0).id !== 'RECONCILED' || e0.confirm) return;
+    if (!e0 || dsCashStatusOf(e0).id !== 'DEPOSITED' || e0.confirm) return;
     A.db.cashConfirms.push({ employeeId, market: e0.market, date: U.today(), confirmedBy: dsActor(), confirmedAt: dsNowStamp() });
     U.log('Xác nhận đối soát tiền mặt cho ' + U.staffName(employeeId) + ' ngày ' + U.dmy(U.today()));
     A.save(); A.render();

@@ -145,7 +145,7 @@
       name: 'Phiên chợ quê thứ Bảy ' + U.dmy(s.date),
       sessionDate: s.date, startTime: s.startTime || '14:00', endTime: s.endTime || '20:00',
       registrationOpenAt: U.today(),
-      registrationCloseAt: (s.registrationDeadline || s.date).slice(0, 10),
+      registrationCloseAt: [(s.registrationDeadline || '').slice(0, 10), U.today(), s.date].filter(Boolean).sort().slice(-1)[0],
       totalStalls: Math.max(1, Math.min(points.filter(p => U.rentalKind(p) === 'session').length || 24, 99)),
       maxStallsPerMerchant: 2,
       allowedBusinessCategories: cats.length ? cats : ['Ẩm thực', 'Nông sản', 'Thủ công'],
@@ -256,6 +256,13 @@
   function ensureSessionAttendanceCollection() {
     if (!Array.isArray(A.db.sessionAttendances)) A.db.sessionAttendances = [];
     return A.db.sessionAttendances;
+  }
+  function sessionReplacements() {
+    return Array.isArray(A.db.sessionReplacements) ? A.db.sessionReplacements : [];
+  }
+  function ensureSessionReplacementCollection() {
+    if (!Array.isArray(A.db.sessionReplacements)) A.db.sessionReplacements = [];
+    return A.db.sessionReplacements;
   }
   function registrationNow() {
     return parseLocalDateTime(A.__sessionRegistrationNow) || new Date();
@@ -517,6 +524,42 @@
   function attendanceRecordFor(session, registrationId) {
     return canonicalAttendanceRecord(session, registrationId);
   }
+  function replacementId(sessionId, absentRegistrationId, replacementRegistrationId) {
+    return 'REP-' + String(sessionId || '').replace(/[^A-Za-z0-9]/g, '') + '-' +
+      String(absentRegistrationId || '').replace(/[^A-Za-z0-9]/g, '') + '-' +
+      String(replacementRegistrationId || '').replace(/[^A-Za-z0-9]/g, '') + '-' + Date.now().toString(36);
+  }
+  function replacementFingerprint(r) {
+    return ['absentRegistrationId', 'replacementRegistrationId', 'pointId', 'reason', 'status', 'assignedAt', 'cancelledAt', 'createdBy', 'updatedBy']
+      .map(k => String((r && r[k]) == null ? '' : r[k])).join('|');
+  }
+  function compareReplacementRecord(a, b) {
+    const au = attendanceTimestamp(a && a.updatedAt), bu = attendanceTimestamp(b && b.updatedAt);
+    if (au !== bu) return au - bu;
+    const ac = attendanceTimestamp(a && a.createdAt), bc = attendanceTimestamp(b && b.createdAt);
+    if (ac !== bc) return ac - bc;
+    const ai = String(a && a.id || ''), bi = String(b && b.id || '');
+    if (ai !== bi) return ai < bi ? -1 : 1;
+    const af = replacementFingerprint(a), bf = replacementFingerprint(b);
+    if (af !== bf) return af < bf ? -1 : 1;
+    return 0;
+  }
+  function activeReplacementRecordsFor(session, field, id) {
+    if (!session || !id) return [];
+    return sessionReplacements().filter(r => r && r.sessionId === session.id && r.market === TTD_SESSION_MARKET && r.status === 'active' && r[field] === id);
+  }
+  function canonicalReplacementFor(session, field, id) {
+    return activeReplacementRecordsFor(session, field, id).slice().sort(compareReplacementRecord).pop() || null;
+  }
+  function canonicalAbsentReplacement(session, registrationId) {
+    return canonicalReplacementFor(session, 'absentRegistrationId', registrationId);
+  }
+  function canonicalWaitlistReplacement(session, registrationId) {
+    return canonicalReplacementFor(session, 'replacementRegistrationId', registrationId);
+  }
+  function replacementById(id) {
+    return sessionReplacements().find(r => r && r.id === id) || null;
+  }
   function officialAttendanceRegistrations(session) {
     const seen = new Set();
     return registrationReadModels(session).filter(r => {
@@ -533,13 +576,78 @@
       return Object.assign({}, r, { trader, traderId: trader.id });
     });
   }
+  function waitlistReplacementRegistrations(session) {
+    const seen = new Set();
+    return registrationReadModels(session).filter(r => {
+      if (!r || r.sessionId !== session.id || r.market !== TTD_SESSION_MARKET) return false;
+      if (r.status !== 'waitlisted' || r.listType !== 'waitlist') return false;
+      if (!r.trader || r.trader.market !== TTD_SESSION_MARKET) return false;
+      if (seen.has(r.id)) return false;
+      seen.add(r.id);
+      return true;
+    });
+  }
+  function officialRegistrationMap(session) {
+    const map = new Map();
+    officialAttendanceRegistrations(session).forEach(r => map.set(r.id, r));
+    return map;
+  }
+  function activeTraderIdsInOfficial(session) {
+    return new Set(officialAttendanceRegistrations(session).map(r => r.traderId));
+  }
+  function replacementReadModels(session) {
+    if (!session) return [];
+    const officialMap = officialRegistrationMap(session);
+    const waitlistMap = new Map(waitlistReplacementRegistrations(session).map(r => [r.id, r]));
+    const seenAbsent = new Set(), seenWaitlist = new Set();
+    return sessionReplacements().slice().sort(compareReplacementRecord).reverse().filter(r => {
+      if (!r || r.sessionId !== session.id || r.market !== TTD_SESSION_MARKET) return false;
+      const absent = officialMap.get(r.absentRegistrationId);
+      const repl = waitlistMap.get(r.replacementRegistrationId);
+      if (!absent || !repl) return false;
+      if (r.pointId !== absent.point.id) return false;
+      if (r.replacementTraderId !== repl.trader.id || r.absentTraderId !== absent.trader.id) return false;
+      if (r.status === 'active') {
+        if (seenAbsent.has(r.absentRegistrationId) || seenWaitlist.has(r.replacementRegistrationId)) return false;
+        seenAbsent.add(r.absentRegistrationId);
+        seenWaitlist.add(r.replacementRegistrationId);
+      }
+      return r.status === 'active' || r.status === 'cancelled';
+    }).map(r => ({
+      record: r,
+      absent: officialMap.get(r.absentRegistrationId),
+      replacement: waitlistMap.get(r.replacementRegistrationId),
+      point: officialMap.get(r.absentRegistrationId).point
+    }));
+  }
+  function activeReplacementReadModels(session) {
+    const byAbsent = new Map();
+    replacementReadModels(session).filter(r => r.record.status === 'active').forEach(r => {
+      const current = byAbsent.get(r.record.absentRegistrationId);
+      if (!current || compareReplacementRecord(current.record, r.record) < 0) byAbsent.set(r.record.absentRegistrationId, r);
+    });
+    return Array.from(byAbsent.values());
+  }
+  function availableWaitlistForReplacement(session, absentRegistrationId) {
+    const officialTraderIds = activeTraderIdsInOfficial(session);
+    const activeReplIds = new Set(activeReplacementReadModels(session).map(r => r.record.replacementRegistrationId));
+    const absent = officialAttendanceRegistrations(session).find(r => r.id === absentRegistrationId);
+    return waitlistReplacementRegistrations(session).filter(r => {
+      if (activeReplIds.has(r.id)) return false;
+      if (absent && r.trader.id === absent.trader.id) return false;
+      if (officialTraderIds.has(r.trader.id)) return false;
+      return true;
+    }).sort((a, b) => Number(a.waitlistOrder || 9999) - Number(b.waitlistOrder || 9999) || String(a.trader.name || '').localeCompare(String(b.trader.name || ''), 'vi'));
+  }
   function attendanceReadModels(session) {
     if (!session) return [];
-    return officialAttendanceRegistrations(session).map((r, i) => {
+    const officialRows = officialAttendanceRegistrations(session).map((r, i) => {
       const rec = attendanceRecordFor(session, r.id);
       const status = rec && ATTENDANCE_STATUS[rec.status] ? rec.status : 'pending';
+      const replacement = canonicalAbsentReplacement(session, r.id);
       return {
         index: i + 1,
+        kind: 'official',
         session,
         registration: r,
         attendance: rec,
@@ -549,12 +657,35 @@
         reason: rec && rec.reason,
         note: rec && rec.note,
         point: r.point,
-        trader: r.trader
+        trader: r.trader,
+        replacement: replacement
       };
     });
+    const replacementRows = activeReplacementReadModels(session).map((x, i) => {
+      const r = x.replacement;
+      const rec = attendanceRecordFor(session, r.id);
+      const status = rec && ATTENDANCE_STATUS[rec.status] ? rec.status : 'pending';
+      return {
+        index: officialRows.length + i + 1,
+        kind: 'replacement',
+        session,
+        registration: r,
+        attendance: rec,
+        status,
+        checkedAt: rec && rec.checkedAt,
+        arrivalAt: rec && rec.arrivalAt,
+        reason: rec && rec.reason,
+        note: rec && rec.note,
+        point: x.point,
+        trader: r.trader,
+        absent: x.absent,
+        replacementRecord: x.record
+      };
+    });
+    return officialRows.concat(replacementRows);
   }
   function attendanceBuckets(rows) {
-    const counts = { total: rows.length, pending: 0, present: 0, late_notified: 0, late_arrived: 0, absent_excused: 0, absent_unexcused: 0 };
+    const counts = { total: rows.filter(r => r.kind !== 'replacement').length, rows: rows.length, pending: 0, present: 0, late_notified: 0, late_arrived: 0, absent_excused: 0, absent_unexcused: 0 };
     rows.forEach(r => { counts[r.status] = (counts[r.status] || 0) + 1; });
     counts.attended = counts.present + counts.late_arrived;
     counts.needsAction = counts.pending + counts.late_notified;
@@ -581,7 +712,7 @@
     if (filter === 'needs_action') return counts.needsAction;
     if (filter === 'attended') return counts.attended;
     if (filter === 'absent') return counts.absent;
-    return counts.total;
+    return counts.rows;
   }
   function attendanceEmptyText(filter) {
     if (filter === 'needs_action') return 'Không còn hộ cần điểm danh hoặc theo dõi đến trễ.';
@@ -589,8 +720,28 @@
     if (filter === 'absent') return 'Chưa ghi nhận hộ nào vắng mặt.';
     return 'Chưa có hộ chính thức để điểm danh.';
   }
+  function replacementHistoryHtml(session) {
+    const rows = replacementReadModels(session);
+    if (!rows.length) return '';
+    const body = rows.map((r, i) => `<tr>
+      <td class="num">${i + 1}</td>
+      <td>${U.esc(r.point.code)}<div class="small muted">${U.esc(r.point.sectionName || '—')} · ${U.esc(r.point.cat || '—')}</div></td>
+      <td>${U.esc(r.absent.trader.name)}</td>
+      <td>${U.esc(r.replacement.trader.name)}</td>
+      <td class="session-reg-note">${U.esc(r.record.reason || '') || '—'}</td>
+      <td>${U.esc(r.record.assignedBy || r.record.createdBy || '—')}<div class="small muted">${formatDateTimeValue(r.record.assignedAt || r.record.createdAt, '—')}</div></td>
+      <td>${r.record.status === 'active' ? '<span class="tag ok">Đang thay</span>' : '<span class="tag">Đã hủy</span>'}${r.record.cancelReason ? `<div class="small muted">${U.esc(r.record.cancelReason)}</div>` : ''}</td>
+    </tr>`);
+    return `<div class="session-replacement-history">
+      <h4>Điều phối dự bị</h4>
+      ${U.table([{ t: 'STT', num: true }, { t: 'Điểm được thay' }, { t: 'Hộ chính thức vắng' }, { t: 'Hộ dự bị thay thế' }, { t: 'Lý do' }, { t: 'Người/thời điểm' }, { t: 'Trạng thái' }], body)}
+    </div>`;
+  }
   function canTakeAttendance(session) {
     return !!(session && session.status === 'preparing' && canDoSessionAction('phien-cho.diem-danh', session));
+  }
+  function canCoordinateReplacement(session) {
+    return !!(session && session.status === 'preparing' && canDoSessionAction('phien-cho.dieu-phoi-du-bi', session));
   }
   function attendanceSnapshot() {
     return {
@@ -611,6 +762,80 @@
       A.db.extraLog.length = 0;
       snap.log.forEach(x => A.db.extraLog.push(x));
     }
+  }
+  function replacementSnapshot() {
+    return {
+      had: Object.prototype.hasOwnProperty.call(A.db, 'sessionReplacements'),
+      value: A.db.sessionReplacements,
+      data: JSON.stringify(A.db.sessionReplacements),
+      attendanceHad: Object.prototype.hasOwnProperty.call(A.db, 'sessionAttendances'),
+      attendanceValue: A.db.sessionAttendances,
+      attendanceData: JSON.stringify(A.db.sessionAttendances),
+      log: Array.isArray(A.db.extraLog) ? A.db.extraLog.slice() : null
+    };
+  }
+  function restoreReplacementSnapshot(snap) {
+    if (snap.had) A.db.sessionReplacements = snap.value;
+    else delete A.db.sessionReplacements;
+    if (snap.had && Array.isArray(snap.value) && snap.data) {
+      snap.value.length = 0;
+      JSON.parse(snap.data).forEach(x => snap.value.push(x));
+    }
+    if (snap.attendanceHad) A.db.sessionAttendances = snap.attendanceValue;
+    else delete A.db.sessionAttendances;
+    if (snap.attendanceHad && Array.isArray(snap.attendanceValue) && snap.attendanceData) {
+      snap.attendanceValue.length = 0;
+      JSON.parse(snap.attendanceData).forEach(x => snap.attendanceValue.push(x));
+    }
+    if (snap.log) {
+      A.db.extraLog.length = 0;
+      snap.log.forEach(x => A.db.extraLog.push(x));
+    }
+  }
+  function validateReplacementSession(session, showToast) {
+    if (!ttdSessionCanMutate('phien-cho.dieu-phoi-du-bi', session, showToast)) return false;
+    if (session.status !== 'preparing') { if (showToast) U.toast('Chỉ điều phối dự bị khi phiên đang chuẩn bị'); return false; }
+    return true;
+  }
+  function validateReplacementTarget(session, absentRegistrationId, replacementRegistrationId, reason, showToast) {
+    if (!validateReplacementSession(session, showToast)) return null;
+    const absent = attendanceReadModels(session).find(r => r.kind === 'official' && r.registration.id === absentRegistrationId);
+    if (!absent) { if (showToast) U.toast('Không tìm thấy hộ chính thức hợp lệ'); return null; }
+    if (absent.status !== 'absent_excused' && absent.status !== 'absent_unexcused') {
+      if (showToast) U.toast('Chỉ điều phối khi hộ chính thức đã được ghi nhận vắng mặt');
+      return null;
+    }
+    if (canonicalAbsentReplacement(session, absent.registration.id)) { if (showToast) U.toast('Điểm này đã có hộ dự bị thay thế'); return null; }
+    const waitlist = availableWaitlistForReplacement(session, absent.registration.id).find(r => r.id === replacementRegistrationId);
+    if (!waitlist) { if (showToast) U.toast('Hộ dự bị không hợp lệ hoặc đã được điều phối'); return null; }
+    if (canonicalWaitlistReplacement(session, waitlist.id)) { if (showToast) U.toast('Hộ dự bị này đang thay thế vị trí khác'); return null; }
+    if (!String(reason || '').trim()) { if (showToast) U.toast('Vui lòng nhập lý do điều phối'); return null; }
+    return { absent, waitlist };
+  }
+  function normalizeReplacementBusinessKey(session, rec) {
+    A.db.sessionReplacements = ensureSessionReplacementCollection().filter(r => {
+      if (!r || r === rec) return true;
+      if (r.sessionId !== session.id) return true;
+      if (rec.status === 'active' && r.status === 'active' && r.absentRegistrationId === rec.absentRegistrationId) return false;
+      if (rec.status === 'active' && r.status === 'active' && r.replacementRegistrationId === rec.replacementRegistrationId) return false;
+      return true;
+    });
+  }
+  function runReplacementMutation(session, mutate, logText, onSuccess) {
+    const snap = replacementSnapshot();
+    ensureSessionReplacementCollection();
+    try {
+      const rec = mutate(A.db.sessionReplacements);
+      if (rec) normalizeReplacementBusinessKey(session, rec);
+      U.log(logText);
+      A.save();
+    } catch (e) {
+      restoreReplacementSnapshot(snap);
+      U.toast('Không lưu được điều phối dự bị, dữ liệu đã được hoàn tác');
+      return false;
+    }
+    if (onSuccess) onSuccess();
+    return true;
   }
   function validateAttendanceTarget(session, registrationId, status, reason, showToast) {
     if (!ttdSessionCanMutate('phien-cho.diem-danh', session, showToast)) return null;
@@ -700,17 +925,26 @@
     const k = (label, value, cls) => `<div class="session-attendance-kpi ${cls || ''}"><span>${label}</span><b>${value}</b></div>`;
     const body = shown.map((r, i) => {
       const time = r.status === 'late_arrived' ? (r.arrivalAt || r.checkedAt) : r.checkedAt;
-      const actions = canManage ? `<td><button class="btn sm ${r.status === 'pending' ? 'primary' : ''}" data-act="attendance-open" data-session="${session.id}" data-reg="${r.registration.id}">${r.status === 'pending' ? 'Ghi nhận' : 'Cập nhật'}</button></td>` : '';
-      return `<tr><td class="num">${i + 1}</td><td class="session-reg-name">${U.esc(r.trader.name)}</td><td>${U.esc(r.point.code)}</td><td>${U.esc(r.point.sectionName || '—')}</td><td>${U.esc(r.point.cat || '—')}</td><td>${attendanceStatusTag(r.status)}</td><td>${formatDateTimeValue(time, '—')}</td><td class="session-reg-note">${U.esc(r.reason || r.note || '') || '—'}</td>${actions}</tr>`;
+      const replacement = r.kind === 'official' && r.replacement ? replacementReadModels(session).find(x => x.record.id === r.replacement.id) : null;
+      const traderCell = r.kind === 'replacement'
+        ? `<div><b>${U.esc(r.trader.name)}</b> <span class="tag ok">Hộ thay thế</span></div><div class="small muted">Thay hộ: ${U.esc(r.absent.trader.name)}</div>`
+        : `<div><b>${U.esc(r.trader.name)}</b>${replacement ? ' <span class="tag ok">Đã có hộ thay</span>' : ''}</div>${replacement ? `<div class="small muted">Hộ thay thế: ${U.esc(replacement.replacement.trader.name)}</div>` : ''}`;
+      const buttons = [];
+      if (canManage) buttons.push(`<button class="btn sm ${r.status === 'pending' ? 'primary' : ''}" data-act="attendance-open" data-session="${session.id}" data-reg="${r.registration.id}">${r.kind === 'replacement' ? 'Điểm danh hộ thay' : (r.status === 'pending' ? 'Ghi nhận' : 'Cập nhật')}</button>`);
+      if (canCoordinateReplacement(session) && r.kind === 'official' && (r.status === 'absent_excused' || r.status === 'absent_unexcused') && !replacement) buttons.push(`<button class="btn sm" data-act="replacement-open" data-session="${session.id}" data-reg="${r.registration.id}">Điều phối dự bị</button>`);
+      if (canCoordinateReplacement(session) && replacement) buttons.push(`<button class="btn sm danger" data-act="replacement-cancel-open" data-id="${replacement.record.id}">Hủy điều phối</button>`);
+      const actions = canManage || canCoordinateReplacement(session) ? `<td><div class="session-reg-actions">${buttons.join('')}</div></td>` : '';
+      return `<tr><td class="num">${i + 1}</td><td class="session-reg-name">${traderCell}</td><td>${U.esc(r.point.code)}</td><td>${U.esc(r.point.sectionName || '—')}</td><td>${U.esc(r.point.cat || '—')}</td><td>${attendanceStatusTag(r.status)}</td><td>${formatDateTimeValue(time, '—')}</td><td class="session-reg-note">${U.esc(r.reason || r.note || '') || '—'}</td>${actions}</tr>`;
     });
     const cols = [{ t: 'STT', num: true }, { t: 'Hộ/tiểu thương' }, { t: 'Mã điểm' }, { t: 'Khu chức năng' }, { t: 'Mặt hàng' }, { t: 'Trạng thái' }, { t: 'Thời điểm ghi nhận' }, { t: 'Lý do/Ghi chú' }];
-    if (canManage) cols.push({ t: 'Thao tác' });
+    if (canManage || canCoordinateReplacement(session)) cols.push({ t: 'Thao tác' });
     return `<div class="session-attendance">
-      <div class="session-attendance-head"><h4>Điểm danh & điều phối trước phiên</h4><span class="spacer"></span><span class="small muted">Đã xử lý ${counts.processed}/${counts.total} hộ · Còn ${counts.needsAction} hộ cần theo dõi</span></div>
+      <div class="session-attendance-head"><h4>Điểm danh & điều phối trước phiên</h4><span class="spacer"></span><span class="small muted">Đã xử lý ${counts.processed}/${counts.rows} dòng · Còn ${counts.needsAction} dòng cần theo dõi</span></div>
       <div class="session-attendance-summary">
         ${k('Chính thức', counts.total, 'total')}${k('Đã có mặt', counts.attended, 'attended')}${k('Cần xử lý', counts.needsAction, 'needs-action')}${k('Vắng mặt', counts.absent, 'absent')}
       </div>
       <div class="session-attendance-tabs">${tabs}</div>
+      ${replacementHistoryHtml(session)}
       <div class="session-attendance-table">${U.table(cols, body, { empty: attendanceEmptyText(filter) })}</div>
     </div>`;
   }
@@ -1329,6 +1563,90 @@
       const row = s && validateAttendanceTarget(s, registrationId, status, reason, true);
       if (!row) return;
       runAttendanceMutation(s, row, status, reason, note, () => { A.closeModal(); A.render(); U.toast('Đã lưu ghi nhận điểm danh'); });
+    },
+    'replacement-open': el => {
+      const s = sessionById(el.dataset.session);
+      if (!validateReplacementSession(s, true)) return;
+      const absent = attendanceReadModels(s).find(r => r.kind === 'official' && r.registration.id === el.dataset.reg);
+      if (!absent || (absent.status !== 'absent_excused' && absent.status !== 'absent_unexcused')) { U.toast('Chỉ điều phối cho hộ chính thức đã vắng mặt'); return; }
+      if (canonicalAbsentReplacement(s, absent.registration.id)) { U.toast('Điểm này đã có hộ dự bị thay thế'); return; }
+      const options = availableWaitlistForReplacement(s, absent.registration.id);
+      if (!options.length) { U.toast('Không còn hộ dự bị khả dụng để điều phối'); return; }
+      const opts = options.map(r => `<option value="${r.id}">#${Number(r.waitlistOrder || 0)} · ${U.esc(r.trader.name)}${r.trader.phone ? ' · ' + U.maskPhone(r.trader.phone) : ''}${r.note ? ' · ' + U.esc(r.note) : ''}</option>`).join('');
+      A.modal(A.mHead('Điều phối hộ dự bị') + `<div class="modal-b">
+        <dl class="kv">
+          <dt>Hộ chính thức vắng</dt><dd>${U.esc(absent.trader.name)}</dd>
+          <dt>Điểm thay thế tạm</dt><dd>${U.esc(absent.point.code)} · ${U.esc(absent.point.sectionName || '—')} · ${U.esc(absent.point.cat || '—')}</dd>
+          <dt>Trạng thái vắng</dt><dd>${attendanceStatusTag(absent.status)}</dd>
+          <dt>Lý do vắng</dt><dd>${U.esc(absent.reason || absent.note || '') || '—'}</dd>
+        </dl>
+        <div class="field" style="margin-top:10px"><label>Hộ dự bị khả dụng *</label><select class="input" id="rep-reg">${opts}</select></div>
+        <div class="field" style="margin-top:10px"><label>Lý do điều phối *</label><textarea class="input" id="rep-reason" rows="3" placeholder="Nhập lý do điều phối hộ dự bị"></textarea></div>
+      </div><div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="replacement-save" data-session="${s.id}" data-absent="${absent.registration.id}">Xác nhận điều phối</button></div>`);
+    },
+    'replacement-save': el => {
+      const s = sessionById(el.dataset.session);
+      const absentId = el.dataset.absent;
+      const replacementIdValue = A.$('#rep-reg').value;
+      const reason = A.$('#rep-reason').value.trim();
+      const target = s && validateReplacementTarget(s, absentId, replacementIdValue, reason, true);
+      if (!target) return;
+      const now = nowIso();
+      runReplacementMutation(s, list => {
+        const rec = {
+          id: replacementId(s.id, target.absent.registration.id, target.waitlist.id),
+          sessionId: s.id,
+          market: TTD_SESSION_MARKET,
+          absentRegistrationId: target.absent.registration.id,
+          absentTraderId: target.absent.trader.id,
+          replacementRegistrationId: target.waitlist.id,
+          replacementTraderId: target.waitlist.trader.id,
+          pointId: target.absent.point.id,
+          reason,
+          status: 'active',
+          assignedAt: now,
+          assignedBy: currentAccountName(),
+          cancelledAt: null,
+          cancelledBy: null,
+          cancelReason: '',
+          createdAt: now,
+          createdBy: currentAccountId(),
+          updatedAt: now,
+          updatedBy: currentAccountId()
+        };
+        list.push(rec);
+        return rec;
+      }, `Điều phối dự bị phiên ${s.id}: ${target.waitlist.trader.name} thay ${target.absent.trader.name} tại ${target.absent.point.code}`, () => { A.closeModal(); A.render(); U.toast('Đã điều phối hộ dự bị'); });
+    },
+    'replacement-cancel-open': el => {
+      const rec = replacementById(el.dataset.id);
+      const s = rec && sessionById(rec.sessionId);
+      if (!validateReplacementSession(s, true)) return;
+      const model = replacementReadModels(s).find(r => r.record.id === rec.id && r.record.status === 'active');
+      if (!model) { U.toast('Không tìm thấy điều phối đang hiệu lực'); return; }
+      A.modal(A.mHead('Hủy điều phối dự bị') + `<div class="modal-b">
+        <dl class="kv"><dt>Điểm</dt><dd>${U.esc(model.point.code)}</dd><dt>Hộ chính thức vắng</dt><dd>${U.esc(model.absent.trader.name)}</dd><dt>Hộ dự bị thay thế</dt><dd>${U.esc(model.replacement.trader.name)}</dd></dl>
+        <div class="field" style="margin-top:10px"><label>Lý do hủy *</label><textarea class="input" id="rep-cancel-reason" rows="3" placeholder="Nhập lý do hủy điều phối"></textarea></div>
+      </div><div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn danger" data-act="replacement-cancel-save" data-id="${rec.id}">Hủy điều phối</button></div>`);
+    },
+    'replacement-cancel-save': el => {
+      const rec = replacementById(el.dataset.id);
+      const s = rec && sessionById(rec.sessionId);
+      if (!validateReplacementSession(s, true)) return;
+      const model = replacementReadModels(s).find(r => r.record.id === rec.id && r.record.status === 'active');
+      if (!model) { U.toast('Không tìm thấy điều phối đang hiệu lực'); return; }
+      const reason = A.$('#rep-cancel-reason').value.trim();
+      if (!reason) { U.toast('Vui lòng nhập lý do hủy điều phối'); return; }
+      const now = nowIso();
+      runReplacementMutation(s, () => {
+        rec.status = 'cancelled';
+        rec.cancelledAt = now;
+        rec.cancelledBy = currentAccountName();
+        rec.cancelReason = reason;
+        rec.updatedAt = now;
+        rec.updatedBy = currentAccountId();
+        return rec;
+      }, `Hủy điều phối dự bị phiên ${s.id}: ${model.replacement.trader.name} tại ${model.point.code}`, () => { A.closeModal(); A.render(); U.toast('Đã hủy điều phối dự bị'); });
     },
     'session-registration-tab': el => {
       const tab = el.dataset.tab;
