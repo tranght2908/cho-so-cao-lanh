@@ -24,6 +24,7 @@
 (function (A) {
   'use strict';
   const PKEY = 'choso-caolanh-permissions';
+  const RETIRED_ROLE_IDS = ['session_market_operator_demo'];
 
   // ============================================================
   // 1) PERMISSION — danh mục quyền (catalog). Tương đối tĩnh: chỉ
@@ -64,6 +65,24 @@
     { key: 'action:so-do.tao-hop-dong', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Tạo hợp đồng từ sơ đồ mặt bằng' },
     { key: 'action:so-do.doi-trang-thai', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Đổi trạng thái điểm kinh doanh' },
     { key: 'action:phien-cho.chot-phien', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Điểm danh & chốt phiên chợ quê' },
+    { key: 'action:phien-cho.create', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Tạo phiên chợ quê' },
+    { key: 'action:phien-cho.edit', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Sửa phiên chợ quê khi trạng thái cho phép' },
+    { key: 'action:phien-cho.schedule', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Lên lịch phiên chợ quê' },
+    { key: 'action:phien-cho.registration.open', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Mở đăng ký phiên chợ quê' },
+    { key: 'action:phien-cho.registration.close', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Đóng đăng ký phiên chợ quê' },
+    { key: 'action:phien-cho.start', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Bắt đầu vận hành phiên chợ quê' },
+    { key: 'action:phien-cho.end', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Kết thúc phiên và chuyển sang chờ đối soát' },
+    { key: 'action:phien-cho.cancel', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Hủy phiên chợ quê' },
+    { key: 'action:phien-cho.close', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Đóng phiên sau đối soát' },
+    { key: 'action:phien-cho.registration.create', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Tạo đăng ký quầy phiên chợ quê' },
+    { key: 'action:phien-cho.registration.cancel', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Hủy đăng ký quầy phiên chợ quê' },
+    { key: 'action:phien-cho.registration.lateCreate', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Tạo đăng ký bổ sung sau khi đóng đăng ký' },
+    { key: 'action:phien-cho.waitingList.promote', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Duyệt thủ công danh sách chờ phiên chợ quê' },
+    { key: 'action:phien-cho.checkin', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Check-in tiểu thương phiên chợ quê' },
+    { key: 'action:phien-cho.cash.collect', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Thu tiền mặt tại phiên chợ quê' },
+    { key: 'action:phien-cho.reconciliation.view', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Xem đối soát phiên chợ quê' },
+    { key: 'action:phien-cho.reconciliation.process', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Chạy đối soát phiên chợ quê' },
+    { key: 'action:phien-cho.reconciliation.exception.resolve', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Xử lý ngoại lệ đối soát phiên chợ quê' },
     { key: 'action:tieu-thuong.them-moi', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'tieu-thuong', label: 'Thêm hồ sơ tiểu thương' },
     { key: 'action:hop-dong.tao', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Tạo hợp đồng (từ màn Hợp đồng)' },
     { key: 'action:hop-dong.gia-han', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Gia hạn hợp đồng' },
@@ -167,7 +186,7 @@
       'bao-cao': ['system_admin', 'ward_leader', 'market_manager', 'market_staff', 'accountant'],
       'tai-khoan': ['system_admin'],
       'cai-dat': ['system_admin'],
-      'mini-app': ['trader']
+      'mini-app': ['trader', 'collector']
     };
     // DEFAULT ACTION PERMISSION MATRIX V1 (Phase 4B) — bám sát đúng ma trận đã chốt trong yêu cầu
     // Phase 4B, áp dụng least-privilege: 'technician' không có action nào ở V1 (chỉ xem, chờ xác
@@ -181,6 +200,24 @@
       'so-do.tao-hop-dong': ['market_manager', 'market_staff'],
       'so-do.doi-trang-thai': ['market_manager', 'market_staff'],
       'phien-cho.chot-phien': ['market_manager', 'market_staff'],
+      'phien-cho.create': ['market_manager'],
+      'phien-cho.edit': ['market_manager'],
+      'phien-cho.schedule': ['market_manager'],
+      'phien-cho.registration.open': ['market_manager'],
+      'phien-cho.registration.close': ['market_manager'],
+      'phien-cho.start': ['market_manager'],
+      'phien-cho.end': ['market_manager'],
+      'phien-cho.cancel': ['market_manager'],
+      'phien-cho.close': ['market_manager'],
+      'phien-cho.registration.create': ['market_manager'],
+      'phien-cho.registration.cancel': ['market_manager'],
+      'phien-cho.registration.lateCreate': ['market_manager'],
+      'phien-cho.waitingList.promote': ['market_manager'],
+      'phien-cho.checkin': ['market_manager'],
+      'phien-cho.cash.collect': ['market_manager'],
+      'phien-cho.reconciliation.view': ['market_manager'],
+      'phien-cho.reconciliation.process': ['market_manager'],
+      'phien-cho.reconciliation.exception.resolve': ['market_manager'],
       'tieu-thuong.them-moi': ['market_manager', 'market_staff'],
       'hop-dong.tao': ['market_manager', 'market_staff'],
       'hop-dong.gia-han': ['market_manager', 'market_staff'],
@@ -267,7 +304,14 @@
   //        TẾ của từng role — xử lý TƯỜNG MINH trong mergeIntoCurrentSeed(), KHÔNG dùng default
   //        matrix mới để suy ra. Xem MARKET_LAYOUT_SCREEN_PERMISSION_AUDIT.md +
   //        MARKET_LAYOUT_SCREEN_PERMISSION_IMPLEMENTATION_REPORT.md.)
-  const PERM_SEED_VERSION = 5;
+  //   v6 = Phase 8 (thêm action permission granular cho workflow đăng ký tham gia phiên chợ quê.
+  //        Chưa có xác nhận role mặc định cho từng action nên chỉ thêm catalog, DEFAULT DENY).
+  //   v7 = Phase 9 (xác nhận Trưởng Ban Quản lý chợ là quyền nghiệp vụ cao nhất trong phạm vi
+  //        Account.marketScopes; grant market_manager cho action:phien-cho.* mới, không cấp
+  //        system_admin và không bỏ qua SelectedMarket/Business State).
+  //   v8 = Phase 10 (Mini app áp dụng theo marketScopes/SelectedMarket; grant screen:mini-app cho
+  //        collector để nhân viên thu phí dùng mobile view, mutation vẫn check action:thu-tien.thu).
+  const PERM_SEED_VERSION = 8;
   function freshState() { return { schemaVersion: A.RBAC_SCHEMA, seedVersion: PERM_SEED_VERSION, roles: defaultRoles(), rolePerms: defaultRolePermissions() }; }
   // Merge state đã lưu (shape còn đúng — schemaVersion khớp) vào seed hiện tại, THAY VÌ reseed toàn
   // bộ, để không xoá mất grant/revoke tuỳ biến của admin cho các permKey KHÔNG đổi giữa 2 bản seed
@@ -308,10 +352,51 @@
     });
     stored.matBangMigratedV5 = true;
   }
+  function migrateMarketManagerSessionActions(stored) {
+    if (stored.marketManagerSessionActionsMigratedV7) return;
+    stored.roles = stored.roles.filter(r => RETIRED_ROLE_IDS.indexOf(r.id) === -1);
+    stored.rolePerms = stored.rolePerms.filter(r => RETIRED_ROLE_IDS.indexOf(r.roleId) === -1);
+    const grants = [
+      'phien-cho.create',
+      'phien-cho.edit',
+      'phien-cho.schedule',
+      'phien-cho.registration.open',
+      'phien-cho.registration.close',
+      'phien-cho.start',
+      'phien-cho.end',
+      'phien-cho.cancel',
+      'phien-cho.close',
+      'phien-cho.registration.create',
+      'phien-cho.registration.cancel',
+      'phien-cho.registration.lateCreate',
+      'phien-cho.waitingList.promote',
+      'phien-cho.checkin',
+      'phien-cho.cash.collect',
+      'phien-cho.reconciliation.view',
+      'phien-cho.reconciliation.process',
+      'phien-cho.reconciliation.exception.resolve'
+    ];
+    grants.forEach(action => {
+      const permKey = 'action:' + action;
+      const exists = stored.rolePerms.some(r => r.roleId === 'market_manager' && r.permKey === permKey);
+      if (!exists) stored.rolePerms.push({ roleId: 'market_manager', permKey: permKey, grantedAt: 'migrate-v7', grantedBy: 'Hệ thống (Trưởng Ban Quản lý chợ quản trị phiên chợ trong phạm vi marketScopes)' });
+    });
+    stored.marketManagerSessionActionsMigratedV7 = true;
+  }
+  function migrateCollectorMiniApp(stored) {
+    if (stored.collectorMiniAppMigratedV8) return;
+    const exists = stored.rolePerms.some(r => r.roleId === 'collector' && r.permKey === 'screen:mini-app');
+    if (!exists) stored.rolePerms.push({ roleId: 'collector', permKey: 'screen:mini-app', grantedAt: 'migrate-v8', grantedBy: 'Hệ thống (Nhân viên thu phí dùng mini app trong phạm vi marketScopes)' });
+    stored.collectorMiniAppMigratedV8 = true;
+  }
   function mergeIntoCurrentSeed(stored) {
+    stored.roles = stored.roles.filter(r => RETIRED_ROLE_IDS.indexOf(r.id) === -1);
+    stored.rolePerms = stored.rolePerms.filter(r => RETIRED_ROLE_IDS.indexOf(r.roleId) === -1);
     const roleIds = new Set(stored.roles.map(r => r.id));
     defaultRoles().forEach(r => { if (!roleIds.has(r.id)) stored.roles.push(r); });
     migrateMatBangScreen(stored);
+    migrateMarketManagerSessionActions(stored);
+    migrateCollectorMiniApp(stored);
     const validKeys = new Set(CATALOG.map(p => p.key));
     stored.rolePerms = stored.rolePerms.filter(r => validKeys.has(r.permKey));
     const knownKeys = new Set(stored.rolePerms.map(r => r.permKey));

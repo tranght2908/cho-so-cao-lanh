@@ -93,8 +93,9 @@ window.DATA = (function () {
     { id: 'NV03', name: 'Phạm Văn Lợi', role: 'Nhân viên thu phí', market: 'CL' },
     { id: 'NV04', name: 'Nguyễn Thị Diễm', role: 'Nhân viên thu phí', market: 'CL' },
     { id: 'NV05', name: 'Võ Hoàng Tuấn', role: 'Nhân viên kỹ thuật (điện, nước)', market: 'CL' },
-    { id: 'NV06', name: 'Huỳnh Thanh Tâm', role: 'Tổ quản lý chợ quê', market: 'TTD' },
-    { id: 'NV07', name: 'Đỗ Thị Kim Yến', role: 'Nhân viên thu phí phiên', market: 'TTD' }
+    { id: 'NV06', name: 'Huỳnh Thanh Tâm', role: 'Trưởng Ban Quản lý chợ', market: 'TTD' },
+    { id: 'NV07', name: 'Đỗ Thị Kim Yến', role: 'Nhân viên thu phí phiên', market: 'TTD' },
+    { id: 'NV08', name: 'Mai Thị Thanh Xuân', role: 'Kế toán', market: 'TTD' }
   ];
 
   const ROLES = [

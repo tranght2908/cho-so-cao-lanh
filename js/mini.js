@@ -4,23 +4,55 @@
   const D = A.D, U = A.U, ui = A.ui;
   const mini = () => ui.mini;
 
+  function activeRole() {
+    return A.PERM.role(ui.role);
+  }
+  function miniMarkets() {
+    return A.allowedMarkets(A.currentAccount());
+  }
+  function inMiniScopeMarket(market) {
+    return miniMarkets().indexOf(market) !== -1;
+  }
+  function isTraderMini() {
+    const role = activeRole();
+    return !!(role && role.selfService);
+  }
+  function isCollectorMini() {
+    return A.canDo('thu-tien.thu', ui.market);
+  }
+  function collectorActor() {
+    const acc = A.currentAccount();
+    return acc && D.STAFF.some(s => s.id === acc.code) ? acc.code : (acc ? acc.fullName : 'Mini app thu phí');
+  }
   function sampleTraders() {
     const db = A.db, out = [];
     const add = t => { if (t && !out.includes(t)) out.push(t); };
-    add(db.traders.find(t => t.market === 'CL' && t.app && U.traderOverdue(t.id) > 0));
-    add(db.traders.find(t => t.market === 'CL' && t.app && U.traderDebt(t.id) > 0 && !U.traderOverdue(t.id)));
-    add(db.traders.find(t => t.market === 'TTD' && U.traderDebt(t.id) > 0));
-    db.traders.filter(t => t.stalls.length && U.traderDebt(t.id) > 0).slice(3, 8).forEach(add);
-    add(db.traders.find(t => t.stalls.length && !U.traderDebt(t.id)));
+    const scoped = db.traders.filter(t => t.stalls.length && inMiniScopeMarket(t.market));
+    add(scoped.find(t => t.market === ui.market && t.app && U.traderOverdue(t.id) > 0));
+    add(scoped.find(t => t.market === ui.market && t.app && U.traderDebt(t.id) > 0 && !U.traderOverdue(t.id)));
+    add(scoped.find(t => t.market === 'TTD' && U.traderDebt(t.id) > 0));
+    scoped.filter(t => U.traderDebt(t.id) > 0).slice(0, 8).forEach(add);
+    add(scoped.find(t => !U.traderDebt(t.id)));
     return out.filter(t => t.stalls.length);
   }
   function trader() {
     const m = mini();
     let t = m.traderId ? A.idx.trader.get(m.traderId) : null;
-    if (!t || !t.stalls.length) { t = sampleTraders()[0]; m.traderId = t.id; }
+    if (!t || !t.stalls.length || !inMiniScopeMarket(t.market)) { t = sampleTraders()[0]; if (t) m.traderId = t.id; }
     return t;
   }
   const unpaid = t => A.db.invoices.filter(i => i.traderId === t.id && i.status !== 'paid').sort((a, b) => a.due.localeCompare(b.due));
+  const collectorDebtors = () => {
+    const debtors = new Map();
+    A.db.invoices.filter(i => i.market === ui.market && i.status !== 'paid').forEach(i => {
+      const t = A.idx.trader.get(i.traderId);
+      if (!t) return;
+      const d = debtors.get(t.id) || { t, n: 0, amt: 0, over: 0 };
+      d.n++; d.amt += U.due(i); if (U.isOver(i)) d.over += U.due(i);
+      debtors.set(t.id, d);
+    });
+    return Array.from(debtors.values()).sort((a, b) => b.over - a.over || b.amt - a.amt);
+  };
 
   function screenLogin(t) {
     const m = mini();
@@ -123,8 +155,55 @@
     return `<div class="phone"><div class="screen"><div class="notch"><span>9:41</span><span>▮▮▮ 4G 🔋</span></div>${body}</div></div>`;
   }
 
+  function collectorPhone() {
+    const m = mini();
+    const list = collectorDebtors();
+    const selectedRaw = m.collectTraderId ? A.idx.trader.get(m.collectTraderId) : null;
+    const selected = selectedRaw && selectedRaw.market === ui.market ? selectedRaw : null;
+    const due = selected ? unpaid(selected) : [];
+    const total = selected ? U.sum(due, U.due) : 0;
+    let body;
+    if (m.collectDone) {
+      const pays = m.lastPays || [];
+      body = `<div class="m-body" style="text-align:center"><div style="font-size:54px;margin-top:20px">✓</div><h3>Đã ghi nhận thu</h3>
+        <div class="m-card" style="text-align:left"><div class="m-list">
+          <div class="it"><span class="muted">Số tiền</span><b>${U.money(U.sum(pays, p => p.amount))}</b></div>
+          <div class="it"><span class="muted">Biên lai</span><span>${pays.map(p => p.receipt).join('<br>')}</span></div>
+          <div class="it"><span class="muted">Người thu</span><span>${U.esc(A.currentAccount().fullName)}</span></div></div></div>
+        <button class="m-btn solid" data-act="mini-collector-home">Về danh sách</button></div>`;
+    } else if (selected) {
+      body = `<div class="m-body"><button class="btn sm" style="align-self:flex-start" data-act="mini-collector-home">‹ Quay lại</button>
+        <div class="m-card"><b>${U.esc(selected.name)}</b><div class="small muted">${selected.id} · ${U.maskPhone(selected.phone)} · ${U.mShort(selected.market)}</div>
+          <div class="m-list" style="margin-top:8px">${due.map(i => `<div class="it"><span>Kỳ ${U.per(i.period)}<div class="small muted">${A.idx.stall.get(i.stallId).code}</div></span><b>${U.money(U.due(i))}</b></div>`).join('') || '<div class="small muted">Không còn khoản phải thu</div>'}</div></div>
+        <div class="m-card m-due"><div class="small" style="opacity:.85">Tổng cần thu</div><div class="amt">${U.money(total)}</div>
+          <button class="m-btn" data-act="mini-collect-paid" ${total > 0 && isCollectorMini() ? '' : 'disabled'}>Ghi nhận thu tiền mặt</button></div></div>`;
+    } else {
+      body = `<div class="m-head"><div class="hi">Xin chào,</div><div class="nm">${U.esc(A.currentAccount().fullName)}</div><div class="hi">${U.esc(U.market(ui.market).short)}</div></div>
+        <div class="m-body"><div class="m-card m-due"><div class="small" style="opacity:.85">Cần thu hôm nay</div><div class="amt">${list.length}</div><div class="small">Tổng ${U.money(U.sum(list, x => x.amt))}</div></div>
+        <div class="m-card"><b>Danh sách tiểu thương</b><div class="m-list">${list.slice(0, 12).map(x => `<button class="it" style="width:100%;text-align:left;background:transparent;border:0;cursor:pointer" data-act="mini-collect-open" data-id="${x.t.id}">
+          <span><b>${U.esc(x.t.name)}</b><div class="small muted">${x.t.stalls.map(id => A.idx.stall.get(id).code).join(', ')} · ${x.n} khoản</div></span>
+          <span style="text-align:right"><b>${U.money(x.amt)}</b>${x.over ? `<div class="small" style="color:#d6453b">Quá hạn ${U.money(x.over)}</div>` : ''}</span></button>`).join('') || '<div class="small muted">Không có khoản cần thu</div>'}</div></div></div>`;
+    }
+    return `<div class="phone"><div class="screen"><div class="notch"><span>9:41</span><span>□□□ 4G 🔋</span></div>${body}</div></div>`;
+  }
+
   A.VIEWS['mini-app'] = function () {
+    if (isCollectorMini() && !isTraderMini()) {
+      return `<div class="mini-wrap"><div>${collectorPhone()}</div>
+      <div class="grid" style="align-content:start">
+        <div class="card"><div class="card-h"><h3>Mini app nhân viên thu phí</h3></div><div class="card-b">
+          <p class="muted" style="margin-top:0">Nhân viên thu phí chỉ thấy danh sách trong phạm vi chợ của tài khoản. Ghi nhận thu tiền kiểm tra lại action <b>thu-tien.thu</b> trước khi lưu.</p>
+          <div class="note info">Tài khoản: <b>${U.esc(A.currentAccount().fullName)}</b> · Chợ: <b>${U.esc(U.market(ui.market).short)}</b></div>
+        </div></div>
+        <div class="card"><div class="card-h"><h3>Kiểm soát quyền</h3></div><div class="card-b"><ol class="script">
+          <li><div>Vào được mini app nhờ <b>screen:mini-app</b>.</div></li>
+          <li><div>Ghi nhận thu tiền cần <b>action:thu-tien.thu</b>, đúng <b>Account.marketScopes</b> và <b>SelectedMarket</b>.</div></li>
+          <li><div>Khoản đã thu đủ hoặc sai chợ sẽ bị từ chối trong handler.</div></li>
+        </ol></div></div>
+      </div></div>`;
+    }
     const t = trader(), list = sampleTraders();
+    if (!t) return '<div class="empty">Không có tiểu thương trong phạm vi tài khoản mini app.</div>';
     return `<div class="mini-wrap"><div>${phone(t)}</div>
       <div class="grid" style="align-content:start">
         <div class="card"><div class="card-h"><h3>Mini app tiểu thương</h3></div><div class="card-b">
@@ -149,9 +228,26 @@
     'mini-pay': () => { mini().pay = 'qr'; A.render(); },
     'mini-paid': () => {
       const t = trader(), list = unpaid(t);
+      if (!isTraderMini() || !t || !inMiniScopeMarket(t.market)) { U.toast('Không có quyền thanh toán cho tiểu thương này'); return; }
       const pays = A.applyPayment(list.map(i => i.id), U.sum(list, U.due), 'qr', 'Mini app');
       mini().lastPays = pays; mini().pay = 'done'; A.render();
       U.toast('Ngân hàng báo có · hệ thống tự ghi nhận ' + U.money(U.sum(pays, p => p.amount)));
+    },
+    'mini-collect-open': el => {
+      const t = A.idx.trader.get(el.dataset.id);
+      if (!t || t.market !== ui.market) return;
+      Object.assign(mini(), { collectTraderId: t.id, collectDone: false, lastPays: null });
+      A.render();
+    },
+    'mini-collector-home': () => { Object.assign(mini(), { collectTraderId: null, collectDone: false, lastPays: null }); A.render(); },
+    'mini-collect-paid': () => {
+      const t = mini().collectTraderId ? A.idx.trader.get(mini().collectTraderId) : null;
+      if (!t || !A.canDo('thu-tien.thu', t.market)) { U.toast('Không có quyền thu tiền cho chợ này'); return; }
+      const list = unpaid(t);
+      if (!list.length) { U.toast('Tiểu thương không còn khoản phải thu'); return; }
+      const pays = A.applyPayment(list.map(i => i.id), U.sum(list, U.due), 'tm', collectorActor());
+      mini().lastPays = pays; mini().collectDone = true; A.render();
+      U.toast('Đã ghi nhận thu ' + U.money(U.sum(pays, p => p.amount)));
     },
     'mini-bill': el => { mini().bill = mini().bill === el.dataset.id ? null : el.dataset.id; A.render(); },
     'mini-pdf': () => U.toast('Mở bản số hóa hợp đồng (PDF) – minh họa'),

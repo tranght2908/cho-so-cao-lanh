@@ -236,8 +236,7 @@ window.APP = (function () {
   //              nội bộ riêng (xem A.xmMarket()/A.xmScopeBar()).
   //   'BOTH'   = áp dụng cho cả CL và TTD, theo đúng selectedMarket hiện tại.
   //   'CL'/'TTD' = chỉ áp dụng đúng 1 chợ trong prototype V1 hiện tại.
-  //   'SYSTEM' = không gate theo market (Tài khoản, Cài đặt = hệ thống; Mini app = theo tự phục
-  //              vụ/trader context riêng, không theo selectedMarket).
+  //   'SYSTEM' = không gate theo market (Tài khoản, Cài đặt = hệ thống).
   A.SCREEN_MARKET = {
     'tong-quan': 'CROSS', 'bao-cao': 'CROSS',
     'mat-bang': 'BOTH', 'diem-kd': 'BOTH', 'tieu-thuong': 'BOTH', 'hop-dong': 'BOTH',
@@ -246,7 +245,7 @@ window.APP = (function () {
     'su-co': 'BOTH', 'thong-bao': 'BOTH',
     'phien-cho': 'TTD',
     'dien-nuoc': 'CL',
-    'tai-khoan': 'SYSTEM', 'cai-dat': 'SYSTEM', 'mini-app': 'SYSTEM'
+    'tai-khoan': 'SYSTEM', 'cai-dat': 'SYSTEM', 'mini-app': 'BOTH'
   };
   // screenId có hợp lệ với market scope của account + selectedMarket hiện tại không. Đây là điểm
   // kiểm tra DUY NHẤT cho cả 2 vế "accountHasRequiredMarketScope" và "screenApplicableToMarket"
@@ -424,8 +423,8 @@ window.APP = (function () {
       { id: 'tai-khoan', ico: '🧑‍💼', label: 'Tài khoản người dùng' },
       { id: 'cai-dat', ico: '⚙️', label: 'Cài đặt & phân quyền' }
     ] },
-    { group: 'Dành cho tiểu thương', items: [
-      { id: 'mini-app', ico: '📱', label: 'Mini app tiểu thương' }
+    { group: 'Mini app', items: [
+      { id: 'mini-app', ico: '📱', label: 'Mini app' }
     ] }
   ];
   A.menuItem = id => { for (const g of A.MENU) for (const it of g.items) if (it.id === id) return it; return null; };
@@ -554,7 +553,8 @@ window.APP = (function () {
       A.syncAccountContext();
       A.saveUi();
       const role = A.PERM.role(ui.role);
-      if (role && role.selfService) A.go('mini-app'); else if (!U.can(A.current) || A.current === 'mini-app') A.go('tong-quan'); else A.route();
+      if (U.can('mini-app') && ((role && role.selfService) || A.canDo('thu-tien.thu', ui.market))) A.go('mini-app');
+      else if (!U.can(A.current) || A.current === 'mini-app') A.go('tong-quan'); else A.route();
     },
     // Đổi selectedMarket toàn cục: chỉ chấp nhận market nằm trong allowedMarkets của account đang
     // dùng (phòng thủ — UI vốn chỉ render đúng các nút này). Luôn đi qua A.route() thay vì

@@ -2,7 +2,7 @@
  * "Account Demo" mà topbar dùng để xác định phiên đang chạy (xem A.currentAccount() ở core.js).
  * Module này ĐỘC LẬP với D.STAFF trong data.js — D.STAFF vẫn giữ nguyên,
  * tiếp tục dùng cho dropdown "Người xử lý" ở Phản ánh & sự cố như cũ.
- * Seed mặc định TÁI SỬ DỤNG đúng 7 bản ghi D.STAFF (không đổi mã/tên/chức danh),
+ * Seed mặc định TÁI SỬ DỤNG các bản ghi D.STAFF (không đổi mã/tên/chức danh),
  * chỉ bổ sung thêm vài tài khoản mẫu để có đủ các loại tài khoản theo yêu cầu.
  *
  * RBAC V1 — PHASE 1: roleIds của mọi account đã chuyển sang role V1 (8 role trong
@@ -28,6 +28,7 @@
     'Tổ quản lý chợ quê': 'market_staff',
     'Nhân viên thu phí phiên': 'collector'
   };
+  const RETIRED_SEED_ACCOUNT_IDS = ['AC-BQL-TTD', 'AC-PHIEN-DEMO'];
 
   function defaultAccounts() {
     const list = D.STAFF.map(s => ({
@@ -40,6 +41,7 @@
     list.push(
       { id: 'AC-LD01', code: 'LD01', fullName: 'Nguyễn Văn Phúc', phone: '0909123456', accountType: 'Lãnh đạo UBND phường', title: 'Phó Chủ tịch UBND phường', roleIds: ['ward_leader'], organization: 'UBND phường Cao Lãnh', marketScopes: ['ALL'], status: 'active' },
       { id: 'AC-QT01', code: 'QT01', fullName: 'Đặng Thị Thu', phone: '0909234567', accountType: 'Quản trị hệ thống', title: 'Quản trị hệ thống', roleIds: ['system_admin'], organization: 'UBND phường Cao Lãnh', marketScopes: ['ALL'], status: 'active' },
+      { id: 'AC-TT-TTD', code: 'TT-TTD', fullName: 'Tiểu thương Chợ quê Tân Thuận Đông', phone: '0909666777', accountType: 'Tiểu thương', title: 'Tiểu thương chợ quê mẫu', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'active' },
       { id: 'AC-TT01', code: 'TT-DEMO1', fullName: 'Nguyễn Thị Hoa', phone: '0909345678', accountType: 'Tiểu thương', title: 'Tiểu thương mẫu', roleIds: ['trader'], organization: 'Chợ Cao Lãnh', marketScopes: ['CL'], status: 'active' },
       { id: 'AC-TT02', code: 'TT-DEMO2', fullName: 'Trần Văn Sáu', phone: '0909456789', accountType: 'Tiểu thương', title: 'Tiểu thương mẫu (đã tạm khoá minh hoạ)', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'disabled' }
     );
@@ -53,10 +55,42 @@
       // seed lại từ defaultAccounts() (đã dùng role id V1).
       if (localStorage.getItem(ASCHEMA_KEY) === String(A.RBAC_SCHEMA)) {
         const s = localStorage.getItem(AKEY);
-        if (s) { const x = JSON.parse(s); if (Array.isArray(x)) return x; }
+        if (s) { const x = JSON.parse(s); if (Array.isArray(x)) return mergeSeedAccounts(x); }
       }
     } catch (e) { /* bỏ qua */ }
     return defaultAccounts();
+  }
+  function mergeSeedAccounts(accounts) {
+    const before = accounts.length;
+    accounts = accounts.filter(a => RETIRED_SEED_ACCOUNT_IDS.indexOf(a.id) === -1);
+    const existingIds = new Set(accounts.map(a => a.id));
+    let changed = accounts.length !== before;
+    const ttdManager = defaultAccounts().find(a => a.id === 'AC-NV06');
+    const oldTtdStaff = accounts.find(a => a.id === 'AC-NV06');
+    if (ttdManager && oldTtdStaff && oldTtdStaff.roleIds && oldTtdStaff.roleIds[0] !== 'market_manager') {
+      Object.assign(oldTtdStaff, {
+        accountType: ttdManager.accountType,
+        title: ttdManager.title,
+        roleIds: ttdManager.roleIds,
+        organization: ttdManager.organization,
+        marketScopes: ttdManager.marketScopes
+      });
+      changed = true;
+    }
+    defaultAccounts().forEach(acc => {
+      if (!existingIds.has(acc.id)) {
+        accounts.push(acc);
+        existingIds.add(acc.id);
+        changed = true;
+      }
+    });
+    if (changed) {
+      try {
+        localStorage.setItem(AKEY, JSON.stringify(accounts));
+        localStorage.setItem(ASCHEMA_KEY, String(A.RBAC_SCHEMA));
+      } catch (e) { /* bỏ qua */ }
+    }
+    return accounts;
   }
   let ACCOUNTS = loadAccounts();
   function saveAccounts() {
