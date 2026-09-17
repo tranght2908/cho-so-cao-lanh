@@ -65,25 +65,18 @@
     { key: 'action:so-do.xem-ho-so', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Xem hồ sơ tiểu thương từ sơ đồ mặt bằng' },
     { key: 'action:so-do.tao-hop-dong', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Tạo hợp đồng từ sơ đồ mặt bằng' },
     { key: 'action:so-do.doi-trang-thai', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Đổi trạng thái điểm kinh doanh' },
+    { key: 'action:phien-cho.tao-phien', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Tạo phiên chợ quê' },
+    { key: 'action:phien-cho.mo-dang-ky', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Mở đăng ký phiên chợ quê' },
+    { key: 'action:phien-cho.chot-danh-sach', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Chốt danh sách đăng ký phiên chợ quê' },
+    { key: 'action:phien-cho.quan-ly-dang-ky', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Quản lý đăng ký phiên chợ quê' },
+    { key: 'action:phien-cho.diem-danh', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Điểm danh trước phiên chợ quê' },
+    { key: 'action:phien-cho.bat-dau-chuan-bi', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Bắt đầu chuẩn bị phiên chợ quê' },
+    { key: 'action:phien-cho.bat-dau-phien', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Bắt đầu phiên chợ quê' },
+    { key: 'action:phien-cho.cho-chot', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Chuyển phiên chợ quê sang chờ chốt' },
     { key: 'action:phien-cho.chot-phien', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Điểm danh & chốt phiên chợ quê' },
-    { key: 'action:phien-cho.create', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Tạo phiên chợ quê' },
-    { key: 'action:phien-cho.edit', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Sửa phiên chợ quê khi trạng thái cho phép' },
-    { key: 'action:phien-cho.schedule', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Lên lịch phiên chợ quê' },
-    { key: 'action:phien-cho.registration.open', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Mở đăng ký phiên chợ quê' },
-    { key: 'action:phien-cho.registration.close', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Đóng đăng ký phiên chợ quê' },
-    { key: 'action:phien-cho.start', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Bắt đầu vận hành phiên chợ quê' },
-    { key: 'action:phien-cho.end', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Kết thúc phiên và chuyển sang chờ đối soát' },
-    { key: 'action:phien-cho.cancel', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Hủy phiên chợ quê' },
-    { key: 'action:phien-cho.close', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Đóng phiên sau đối soát' },
-    { key: 'action:phien-cho.registration.create', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Tạo đăng ký quầy phiên chợ quê' },
-    { key: 'action:phien-cho.registration.cancel', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Hủy đăng ký quầy phiên chợ quê' },
-    { key: 'action:phien-cho.registration.lateCreate', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Tạo đăng ký bổ sung sau khi đóng đăng ký' },
-    { key: 'action:phien-cho.waitingList.promote', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Duyệt thủ công danh sách chờ phiên chợ quê' },
-    { key: 'action:phien-cho.checkin', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Check-in tiểu thương phiên chợ quê' },
-    { key: 'action:phien-cho.cash.collect', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Thu tiền mặt tại phiên chợ quê' },
-    { key: 'action:phien-cho.reconciliation.view', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Xem đối soát phiên chợ quê' },
-    { key: 'action:phien-cho.reconciliation.process', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Chạy đối soát phiên chợ quê' },
-    { key: 'action:phien-cho.reconciliation.exception.resolve', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Xử lý ngoại lệ đối soát phiên chợ quê' },
+    { key: 'action:phien-cho.hoan-phien', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Tạm hoãn phiên chợ quê' },
+    { key: 'action:phien-cho.huy-phien', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Hủy phiên chợ quê' },
+    { key: 'action:phien-cho.xem-bao-cao', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Xem báo cáo phiên chợ quê' },
     { key: 'action:mini-app.stall-registration.create', kind: 'action', group: 'Dành cho tiểu thương', screenId: 'mini-app', label: 'Tiểu thương tự đăng ký quầy chợ quê trong mini app' },
     { key: 'action:tieu-thuong.them-moi', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'tieu-thuong', label: 'Thêm hồ sơ tiểu thương' },
     { key: 'action:hop-dong.tao', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Tạo hợp đồng (từ màn Hợp đồng)' },
@@ -209,25 +202,18 @@
       'so-do.xem-ho-so': ['ward_leader', 'market_manager', 'market_staff', 'accountant', 'collector'],
       'so-do.tao-hop-dong': ['market_manager', 'market_staff'],
       'so-do.doi-trang-thai': ['market_manager', 'market_staff'],
-      'phien-cho.chot-phien': ['market_manager', 'market_staff'],
-      'phien-cho.create': ['market_manager'],
-      'phien-cho.edit': ['market_manager'],
-      'phien-cho.schedule': ['market_manager'],
-      'phien-cho.registration.open': ['market_manager'],
-      'phien-cho.registration.close': ['market_manager'],
-      'phien-cho.start': ['market_manager'],
-      'phien-cho.end': ['market_manager'],
-      'phien-cho.cancel': ['market_manager'],
-      'phien-cho.close': ['market_manager'],
-      'phien-cho.registration.create': ['market_manager'],
-      'phien-cho.registration.cancel': ['market_manager'],
-      'phien-cho.registration.lateCreate': ['market_manager'],
-      'phien-cho.waitingList.promote': ['market_manager'],
-      'phien-cho.checkin': ['market_manager'],
-      'phien-cho.cash.collect': ['market_manager'],
-      'phien-cho.reconciliation.view': ['market_manager'],
-      'phien-cho.reconciliation.process': ['market_manager'],
-      'phien-cho.reconciliation.exception.resolve': ['market_manager'],
+      'phien-cho.tao-phien': ['market_manager'],
+      'phien-cho.mo-dang-ky': ['market_manager'],
+      'phien-cho.chot-danh-sach': ['market_manager'],
+      'phien-cho.quan-ly-dang-ky': ['market_manager'],
+      'phien-cho.diem-danh': ['market_staff'],
+      'phien-cho.bat-dau-chuan-bi': ['market_staff'],
+      'phien-cho.bat-dau-phien': ['market_staff'],
+      'phien-cho.cho-chot': ['market_staff'],
+      'phien-cho.chot-phien': ['market_staff'],
+      'phien-cho.hoan-phien': ['market_manager'],
+      'phien-cho.huy-phien': ['market_manager'],
+      'phien-cho.xem-bao-cao': ['ward_leader', 'market_manager', 'market_staff', 'collector'],
       'mini-app.stall-registration.create': ['trader'],
       'tieu-thuong.them-moi': ['market_manager', 'market_staff'],
       'hop-dong.tao': ['market_manager', 'market_staff'],
@@ -318,30 +304,92 @@
   //        TẾ của từng role — xử lý TƯỜNG MINH trong mergeIntoCurrentSeed(), KHÔNG dùng default
   //        matrix mới để suy ra. Xem MARKET_LAYOUT_SCREEN_PERMISSION_AUDIT.md +
   //        MARKET_LAYOUT_SCREEN_PERMISSION_IMPLEMENTATION_REPORT.md.)
-  //   v6 = Phase 8 (thêm action permission granular cho workflow đăng ký tham gia phiên chợ quê.
-  //        Chưa có xác nhận role mặc định cho từng action nên chỉ thêm catalog, DEFAULT DENY).
-  //   v7 = Phase 9 (xác nhận Trưởng Ban Quản lý chợ là quyền nghiệp vụ cao nhất trong phạm vi
-  //        Account.marketScopes; grant market_manager cho action:phien-cho.* mới, không cấp
-  //        system_admin và không bỏ qua SelectedMarket/Business State).
-  //   v8 = Phase 10 (Mini app áp dụng theo marketScopes/SelectedMarket; grant screen:mini-app cho
-  //        collector để nhân viên thu phí dùng mobile view, mutation vẫn check action:thu-tien.thu).
-  //   v9 = Chính sách thu và biểu phí: giữ nguyên permKey/screenId, thêm system_admin vào screen,
-  //        chuyển 3 action biểu phí sang system_admin-only bằng migration tường minh. Migration có
-  //        marker riêng để reconcile được cả state local đã từng ở nhánh Phase 8/9/10.
-  //   v10 = Danh mục "Danh sách tài khoản ngân hàng" (Tài chính > Quản lý khai báo, ngang hàng
-  //        cau-hinh-gia) — thêm HOÀN TOÀN MỚI screen:tai-khoan-ngan-hang (system_admin/
-  //        market_manager/accountant/ward_leader xem) + action:tai-khoan-ngan-hang.quan-ly
-  //        (system_admin). Không phát sinh migration tường minh — 2 permKey này chưa từng tồn tại
-  //        trong bất kỳ state đã lưu nào, nên được thêm bởi đúng bước "tự bổ sung permKey mới theo
-  //        default" đã có sẵn ở cuối mergeIntoCurrentSeed()/loadState() (không cần rewrite/thu hồi
-  //        gì ở permKey khác).
-  //   v11 = Khoản phải thu: thêm action phai-thu.yeu-cau-dieu-chinh cho market_staff gửi
-  //        request PENDING; phai-thu.mien-giam hiện có tiếp tục là quyền phê duyệt của
-  //        market_manager trong phạm vi Account.marketScopes/SelectedMarket.
-  //   v12 = Mini app tiểu thương: thêm action mini-app.stall-registration.create cho role trader
-  //        tự tạo đăng ký quầy chợ quê mock, vẫn bị chặn bởi marketScopes/SelectedMarket/Business State.
-  const PERM_SEED_VERSION = 12;
-  function freshState() { return { schemaVersion: A.RBAC_SCHEMA, seedVersion: PERM_SEED_VERSION, roles: defaultRoles(), rolePerms: defaultRolePermissions() }; }
+  //   v6/v7 đã phát triển song song trên 2 nhánh:
+  //        upstream: chính sách thu/biểu phí + tài khoản ngân hàng;
+  //        PC3: lifecycle/registration/attendance phiên chợ quê.
+  //   v9 = merge tổng hợp: giữ seed hiện tại và dùng marker theo từng feature để state upstream-only
+  //        hoặc PC3-only đều được migrate đủ, không suy luận chỉ từ seedVersion tuyến tính.
+  //   v13 = giữ các phần ngoài PC3 đã có ở nhánh local: khoản phải thu yêu cầu điều chỉnh và
+  //        mini-app.stall-registration.create. Phiên chợ quê dùng action key PC3 từ bản pull.
+  const PERM_SEED_VERSION = 13;
+  const RATE_POLICY_PERM_VERSION = 1;
+  const BANK_ACCOUNT_PERM_VERSION = 1;
+  const PC3A_SESSION_PERM_VERSION = 1;
+  const PC3B_REGISTRATION_PERM_VERSION = 1;
+  const PC3C_ATTENDANCE_PERM_VERSION = 1;
+  function freshState() {
+    return {
+      schemaVersion: A.RBAC_SCHEMA,
+      seedVersion: PERM_SEED_VERSION,
+      ratePolicyPermVersion: RATE_POLICY_PERM_VERSION,
+      bankAccountPermVersion: BANK_ACCOUNT_PERM_VERSION,
+      pc3aSessionPermVersion: PC3A_SESSION_PERM_VERSION,
+      pc3bRegistrationPermVersion: PC3B_REGISTRATION_PERM_VERSION,
+      pc3cAttendancePermVersion: PC3C_ATTENDANCE_PERM_VERSION,
+      roles: defaultRoles(),
+      rolePerms: defaultRolePermissions()
+    };
+  }
+  function migrateRatePolicyPerms(stored) {
+    if (stored.ratePolicyPermVersion >= RATE_POLICY_PERM_VERSION) return false;
+    const rateActionKeys = new Set([
+      'action:cau-hinh-gia.mat-bang',
+      'action:cau-hinh-gia.dien-nuoc',
+      'action:cau-hinh-gia.dich-vu-khac'
+    ]);
+    stored.rolePerms = stored.rolePerms.filter(r => !rateActionKeys.has(r.permKey) || r.roleId === 'system_admin');
+    rateActionKeys.forEach(permKey => {
+      if (!stored.rolePerms.some(r => r.roleId === 'system_admin' && r.permKey === permKey)) {
+        stored.rolePerms.push({ roleId: 'system_admin', permKey: permKey, grantedAt: 'migrate-rate-policy', grantedBy: 'Hệ thống' });
+      }
+    });
+    if (!stored.rolePerms.some(r => r.roleId === 'system_admin' && r.permKey === 'screen:cau-hinh-gia')) {
+      stored.rolePerms.push({ roleId: 'system_admin', permKey: 'screen:cau-hinh-gia', grantedAt: 'migrate-rate-policy', grantedBy: 'Hệ thống' });
+    }
+    stored.ratePolicyPermVersion = RATE_POLICY_PERM_VERSION;
+    return true;
+  }
+  function migrateBankAccountPerms(stored) {
+    if (stored.bankAccountPermVersion >= BANK_ACCOUNT_PERM_VERSION) return false;
+    const bankKeys = new Set(['screen:tai-khoan-ngan-hang', 'action:tai-khoan-ngan-hang.quan-ly']);
+    const known = new Set(stored.rolePerms.map(r => r.permKey));
+    defaultRolePermissions().filter(r => bankKeys.has(r.permKey)).forEach(r => {
+      if (!known.has(r.permKey)) stored.rolePerms.push(r);
+    });
+    stored.bankAccountPermVersion = BANK_ACCOUNT_PERM_VERSION;
+    return true;
+  }
+  function migratePc3aSessionPerms(stored) {
+    if (stored.pc3aSessionPermVersion >= PC3A_SESSION_PERM_VERSION) return false;
+    const knownKeys = new Set(stored.rolePerms.map(r => r.permKey));
+    const sessionDefaults = defaultRolePermissions().filter(r => r.permKey.indexOf('action:phien-cho.') === 0);
+    sessionDefaults.forEach(r => {
+      if (r.permKey === 'action:phien-cho.chot-phien') return;
+      if (!knownKeys.has(r.permKey)) stored.rolePerms.push(r);
+    });
+    stored.pc3aSessionPermVersion = PC3A_SESSION_PERM_VERSION;
+    return true;
+  }
+  function migratePc3bRegistrationPerms(stored) {
+    if (stored.pc3bRegistrationPermVersion >= PC3B_REGISTRATION_PERM_VERSION) return false;
+    const key = 'action:phien-cho.quan-ly-dang-ky';
+    const hasAny = stored.rolePerms.some(r => r.permKey === key);
+    if (!hasAny) {
+      defaultRolePermissions().filter(r => r.permKey === key).forEach(r => stored.rolePerms.push(r));
+    }
+    stored.pc3bRegistrationPermVersion = PC3B_REGISTRATION_PERM_VERSION;
+    return true;
+  }
+  function migratePc3cAttendancePerms(stored) {
+    if (stored.pc3cAttendancePermVersion >= PC3C_ATTENDANCE_PERM_VERSION) return false;
+    const key = 'action:phien-cho.diem-danh';
+    const hasAny = stored.rolePerms.some(r => r.permKey === key);
+    if (!hasAny) {
+      defaultRolePermissions().filter(r => r.permKey === key).forEach(r => stored.rolePerms.push(r));
+    }
+    stored.pc3cAttendancePermVersion = PC3C_ATTENDANCE_PERM_VERSION;
+    return true;
+  }
   // Merge state đã lưu (shape còn đúng — schemaVersion khớp) vào seed hiện tại, THAY VÌ reseed toàn
   // bộ, để không xoá mất grant/revoke tuỳ biến của admin cho các permKey KHÔNG đổi giữa 2 bản seed
   // (Phase 6 STEP A — trước đây mỗi lần bump PERM_SEED_VERSION đều xoá sạch toàn bộ tuỳ biến, xem
@@ -381,76 +429,14 @@
     });
     stored.matBangMigratedV5 = true;
   }
-  function migrateMarketManagerSessionActions(stored) {
-    if (stored.marketManagerSessionActionsMigratedV7) return;
-    stored.roles = stored.roles.filter(r => RETIRED_ROLE_IDS.indexOf(r.id) === -1);
-    stored.rolePerms = stored.rolePerms.filter(r => RETIRED_ROLE_IDS.indexOf(r.roleId) === -1);
-    const grants = [
-      'phien-cho.create',
-      'phien-cho.edit',
-      'phien-cho.schedule',
-      'phien-cho.registration.open',
-      'phien-cho.registration.close',
-      'phien-cho.start',
-      'phien-cho.end',
-      'phien-cho.cancel',
-      'phien-cho.close',
-      'phien-cho.registration.create',
-      'phien-cho.registration.cancel',
-      'phien-cho.registration.lateCreate',
-      'phien-cho.waitingList.promote',
-      'phien-cho.checkin',
-      'phien-cho.cash.collect',
-      'phien-cho.reconciliation.view',
-      'phien-cho.reconciliation.process',
-      'phien-cho.reconciliation.exception.resolve'
-    ];
-    grants.forEach(action => {
-      const permKey = 'action:' + action;
-      const exists = stored.rolePerms.some(r => r.roleId === 'market_manager' && r.permKey === permKey);
-      if (!exists) stored.rolePerms.push({ roleId: 'market_manager', permKey: permKey, grantedAt: 'migrate-v7', grantedBy: 'Hệ thống (Trưởng Ban Quản lý chợ quản trị phiên chợ trong phạm vi marketScopes)' });
-    });
-    stored.marketManagerSessionActionsMigratedV7 = true;
-  }
-  function migrateCollectorMiniApp(stored) {
-    if (stored.collectorMiniAppMigratedV8) return;
-    const exists = stored.rolePerms.some(r => r.roleId === 'collector' && r.permKey === 'screen:mini-app');
-    if (!exists) stored.rolePerms.push({ roleId: 'collector', permKey: 'screen:mini-app', grantedAt: 'migrate-v8', grantedBy: 'Hệ thống (Nhân viên thu phí dùng mini app trong phạm vi marketScopes)' });
-    stored.collectorMiniAppMigratedV8 = true;
-  }
-  function migrateSystemAdminRatePolicy(stored) {
-    if (stored.ratePolicySystemAdminMigratedV9) return;
-    const rateActionKeys = new Set([
-      'action:cau-hinh-gia.mat-bang',
-      'action:cau-hinh-gia.dien-nuoc',
-      'action:cau-hinh-gia.dich-vu-khac'
-    ]);
-    const isSeedGrant = r => r.grantedAt === 'seed' || r.grantedAt === 'seed-v6' || r.grantedBy === 'Hệ thống (seed mặc định)';
-    const hasLegacySeedGrant = stored.rolePerms.some(r => rateActionKeys.has(r.permKey) && r.roleId !== 'system_admin' && isSeedGrant(r));
-    const missingSystemAdminAction = Array.from(rateActionKeys).some(permKey => !stored.rolePerms.some(r => r.roleId === 'system_admin' && r.permKey === permKey));
-    const missingSystemAdminScreen = !stored.rolePerms.some(r => r.roleId === 'system_admin' && r.permKey === 'screen:cau-hinh-gia');
-    if ((stored.seedVersion || 0) < 6 || hasLegacySeedGrant || missingSystemAdminAction || missingSystemAdminScreen) {
-      stored.rolePerms = stored.rolePerms.filter(r => !rateActionKeys.has(r.permKey) || r.roleId === 'system_admin' || !isSeedGrant(r));
-      rateActionKeys.forEach(permKey => {
-        if (!stored.rolePerms.some(r => r.roleId === 'system_admin' && r.permKey === permKey)) {
-          stored.rolePerms.push({ roleId: 'system_admin', permKey: permKey, grantedAt: 'migrate-v9', grantedBy: 'Hệ thống' });
-        }
-      });
-      if (!stored.rolePerms.some(r => r.roleId === 'system_admin' && r.permKey === 'screen:cau-hinh-gia')) {
-        stored.rolePerms.push({ roleId: 'system_admin', permKey: 'screen:cau-hinh-gia', grantedAt: 'migrate-v9', grantedBy: 'Hệ thống' });
-      }
-    }
-    stored.ratePolicySystemAdminMigratedV9 = true;
-  }
   function mergeIntoCurrentSeed(stored) {
     stored.roles = stored.roles.filter(r => RETIRED_ROLE_IDS.indexOf(r.id) === -1);
     stored.rolePerms = stored.rolePerms.filter(r => RETIRED_ROLE_IDS.indexOf(r.roleId) === -1);
     const roleIds = new Set(stored.roles.map(r => r.id));
     defaultRoles().forEach(r => { if (!roleIds.has(r.id)) stored.roles.push(r); });
     migrateMatBangScreen(stored);
-    migrateSystemAdminRatePolicy(stored);
-    migrateMarketManagerSessionActions(stored);
-    migrateCollectorMiniApp(stored);
+    migrateRatePolicyPerms(stored);
+    migrateBankAccountPerms(stored);
     const validKeys = new Set(CATALOG.map(p => p.key));
     stored.rolePerms = stored.rolePerms.filter(r => validKeys.has(r.permKey));
     const knownKeys = new Set(stored.rolePerms.map(r => r.permKey));
@@ -458,6 +444,9 @@
       if (stored.matBangMigratedV5 && d.permKey === 'screen:mat-bang') return;
       if (!knownKeys.has(d.permKey)) stored.rolePerms.push(d);
     });
+    migratePc3aSessionPerms(stored);
+    migratePc3bRegistrationPerms(stored);
+    migratePc3cAttendancePerms(stored);
     stored.seedVersion = PERM_SEED_VERSION;
     return stored;
   }
@@ -498,8 +487,14 @@
     const known = new Set(s.rolePerms.map(r => r.permKey));
     defaultRolePermissions().forEach(d => {
       if (s.matBangMigratedV5 && d.permKey === 'screen:mat-bang') return;
+      if (s.pc3aSessionPermVersion >= PC3A_SESSION_PERM_VERSION && d.permKey.indexOf('action:phien-cho.') === 0) return;
       if (!known.has(d.permKey)) s.rolePerms.push(d);
     });
+    if (migratePc3aSessionPerms(s)) needSave = true;
+    if (migratePc3bRegistrationPerms(s)) needSave = true;
+    if (migratePc3cAttendancePerms(s)) needSave = true;
+    if (migrateRatePolicyPerms(s)) needSave = true;
+    if (migrateBankAccountPerms(s)) needSave = true;
     // Cùng lý do Hotfix persist migration ở trên: ghi lại NGAY nếu vừa merge (seedVersion đổi),
     // không chờ tới lượt grant/revoke đầu tiên — STATE vẫn đang TDZ nên không gọi saveState().
     if (needSave) { try { localStorage.setItem(PKEY, JSON.stringify(s)); } catch (e) { /* bỏ qua */ } }

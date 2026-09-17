@@ -374,7 +374,12 @@ window.APP = (function () {
     const p0 = pays[0], t = A.idx.trader.get(p0.traderId), m = U.market(p0.market);
     const rows = pays.map(p => {
       const inv = A.idx.invoice.get(p.invoiceId);
-      return `<tr><td>${p.receipt}</td><td>Kỳ ${U.per(inv.period)} · ${A.idx.stall.get(inv.stallId).code}</td><td class="num">${U.money(p.amount)}</td></tr>`;
+      const s = p.sessionId && A.db.marketSessions ? A.db.marketSessions.find(x => x.id === p.sessionId) : null;
+      const reg = p.registrationId && A.db.sessionRegistrations ? A.db.sessionRegistrations.find(x => x.id === p.registrationId) : null;
+      const content = inv
+        ? `Kỳ ${U.per(inv.period)} · ${A.idx.stall.get(inv.stallId).code}`
+        : `Phiên chợ quê · ${s ? U.dmy(s.sessionDate) : U.esc(p.sessionId || '')}${reg ? ' · ' + U.esc(reg.code || reg.id) : ''}`;
+      return `<tr><td>${p.receipt}</td><td>${content}</td><td class="num">${U.money(p.amount)}</td></tr>`;
     });
     return `<div class="receipt"><h4>BIÊN LAI THU TIỀN ĐIỆN TỬ</h4><div class="sub">Ban Quản lý ${m.name} · UBND phường Cao Lãnh</div>
       <div class="row" style="align-items:flex-start;gap:16px"><dl class="kv" style="flex:1">
@@ -384,7 +389,7 @@ window.APP = (function () {
         <dt>Người thu</dt><dd>${U.esc(p0.by === 'Hệ thống' || p0.by === 'Mini app' ? p0.by + ' (tự động)' : U.staffName(p0.by))}</dd>
         <dt>Mã tra cứu</dt><dd><b>${p0.lookup}</b></dd>
         <dt>Gửi Mini app</dt><dd><span class="tag ok">Đã gửi</span></dd></dl>
-        <div class="note info" style="max-width:220px">Biên lai dùng để rà soát dữ liệu, truy vết giao dịch và kiểm soát tiền mặt theo nhân viên thu.</div></div>
+        <div class="note info" style="max-width:220px">Biên lai dùng để rà soát dữ liệu, truy vết giao dịch và kiểm soát thu theo từng phương thức.</div></div>
       <div class="divider"></div>
       ${U.table([{ t: 'Số biên lai' }, { t: 'Nội dung' }, { t: 'Số tiền', num: true }], rows)}
       <div class="total" style="margin-top:10px">${U.money(U.sum(pays, p => p.amount))}</div>

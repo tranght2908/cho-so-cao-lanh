@@ -6,12 +6,13 @@
 window.DATA = (function () {
   'use strict';
 
+  // v10: thêm dữ liệu demo luồng mở đăng ký phiên chợ quê TTĐ -> Mini app -> thu tiền mặt -> đối soát.
   // v7 (màn Điểm kinh doanh CL): thêm field THUẦN HIỂN THỊ `pointType` trên section CL (khai báo rõ
   // ràng — xem MARKETS bên dưới) + lan truyền vào stall khi build() — KHÔNG đổi/xoá `type` (vẫn
   // dùng tính đơn giá dịch vụ ở các màn tài chính, giữ nguyên) và KHÔNG đổi `cat` (ngành hàng, khái
   // niệm riêng). Bump version để cache localStorage cũ (thiếu field mới) tự rebuild — độc lập với
   // RBAC_SCHEMA/PERM_SEED_VERSION (js/core.js, js/permissions.js — KHÔNG đổi 2 hằng số đó).
-  const VERSION = 9;
+  const VERSION = 10;
   const TODAY = new Date(2026, 8, 13); // 13/09/2026
 
   // Giá dịch vụ sử dụng diện tích bán hàng – QĐ 480/QĐ-UBND ngày 14/02/2026 (đ/m²/ngày, đã gồm VAT)
@@ -516,9 +517,16 @@ window.DATA = (function () {
     ];
     const countFor = g => g === 'Toàn bộ tiểu thương' ? traders.length : g === 'Chợ Cao Lãnh' ? traders.filter(t => t.market === 'CL').length : g === 'Chợ quê Tân Thuận Đông' ? traders.filter(t => t.market === 'TTD').length : Math.round(traders.length * 0.09);
     notifications.forEach(n => { n.sent = countFor(n.group); });
+    const todayIso = iso(TODAY);
 
     // ---- Phiên chợ quê ----
     const sessions = [];
+    const sessionRegistrations = [];
+    const sessionAttendances = [];
+    const sessionPayments = [];
+    const sessionReceipts = [];
+    const sessionNotifications = [];
+    const marketSessions = [];
     // Phiên 12/09/2026 để trống để demo thao tác "chốt phiên"
     for (let d = new Date(2026, 5, 20); d <= addDays(TODAY, -8); d = addDays(d, 7)) {
       const booths = between(30, 36);
@@ -528,10 +536,105 @@ window.DATA = (function () {
         noncash: +(0.25 + R() * 0.2).toFixed(2)
       });
     }
+    const ttdSessionCats = Array.from(new Set(stalls.filter(s => s.market === 'TTD' && s.type === 'phien').map(s => s.cat).filter(Boolean))).slice(0, 4);
+    const ttdSessionExtras = RATE_POLICY_SEED.extraServices
+      .filter(x => x.marketId === 'TTD' && x.status === 'active' && x.marketModel === RATE_MARKET_MODEL.MARKET_SESSION)
+      .map(x => ({ name: x.name, amount: x.amount || 0, sourceId: x.id }));
+    sessions.push({
+      id: 'PC-TTD-20260919', market: 'TTD', date: '2026-09-19', startTime: '14:00', endTime: '20:00',
+      registrationStartAt: '2026-09-13T08:00', registrationDeadline: '2026-09-18T17:00',
+      status: 'open', note: 'Phiên demo đang mở đăng ký để kiểm thử Mini app tiểu thương',
+      createdBy: 'Huỳnh Thanh Tâm', createdAt: '2026-09-13T08:00', updatedBy: 'Huỳnh Thanh Tâm', updatedAt: '2026-09-13T08:05'
+    });
+    marketSessions.push(
+      {
+        id: 'PC-TTD-20260919', code: 'PC-TTD-20260919', marketId: 'TTD',
+        name: 'Phiên chợ quê thứ Bảy 19/09/2026', sessionDate: '2026-09-19', startTime: '14:00', endTime: '20:00',
+        registrationOpenAt: '2026-09-13', registrationCloseAt: '2026-09-18',
+        totalStalls: 24, maxStallsPerMerchant: 2, allowedBusinessCategories: ttdSessionCats.length ? ttdSessionCats : ['Ẩm thực', 'Nông sản', 'Thủ công'],
+        pricingConfig: { unitPrice: SESSION_FEE, additionalFees: ttdSessionExtras, source: 'DATA.SESSION_FEE' },
+        cashPaymentEnabled: true, onlinePaymentEnabled: true, waitingListEnabled: true,
+        status: 'REGISTRATION_OPEN', createdBy: 'Huỳnh Thanh Tâm', createdAt: '2026-09-13', updatedBy: 'Huỳnh Thanh Tâm', updatedAt: '2026-09-13'
+      },
+      {
+        id: 'PC-TTD-20260926', code: 'PC-TTD-20260926', marketId: 'TTD',
+        name: 'Phiên chợ quê thứ Bảy 26/09/2026', sessionDate: '2026-09-26', startTime: '14:00', endTime: '20:00',
+        registrationOpenAt: '2026-09-20', registrationCloseAt: '2026-09-24',
+        totalStalls: 30, maxStallsPerMerchant: 2, allowedBusinessCategories: ttdSessionCats.length ? ttdSessionCats : ['Ẩm thực', 'Nông sản', 'Thủ công'],
+        pricingConfig: { unitPrice: SESSION_FEE, additionalFees: ttdSessionExtras, source: 'DATA.SESSION_FEE' },
+        cashPaymentEnabled: true, onlinePaymentEnabled: true, waitingListEnabled: true,
+        status: 'SCHEDULED', createdBy: 'Huỳnh Thanh Tâm', createdAt: '2026-09-13', updatedBy: 'Huỳnh Thanh Tâm', updatedAt: '2026-09-13'
+      }
+    );
+    const ttdDemoTraders = traders.filter(t => t.market === 'TTD' && t.id !== 'TTD-CQ' && t.stalls.length).slice(0, 4);
+    const sessionAmount = stallsCount => stallsCount * SESSION_FEE + ttdSessionExtras.reduce((a, x) => a + (x.amount || 0) * stallsCount, 0);
+    const addSessionReg = (idx, trader, stallsCount, method, paymentStatus, opts) => {
+      if (!trader) return null;
+      const amount = sessionAmount(stallsCount);
+      const code = 'DK-20260919-' + pad(idx, 3);
+      const reg = {
+        id: 'DK-TTD-20260919-' + pad(idx, 3), code, sessionId: 'PC-TTD-20260919',
+        market: 'TTD', marketId: 'TTD', traderId: trader.id, merchantId: trader.id,
+        pointId: null, requestedSectionId: null, requestedStalls: stallsCount, businessCategory: trader.cat,
+        listType: 'official', status: 'registered', waitlistOrder: null,
+        paymentMethod: method, paymentWorkflowStatus: paymentStatus, pricingSnapshot: {
+          unitPrice: SESSION_FEE, numberOfStalls: stallsCount, stallFee: stallsCount * SESSION_FEE,
+          additionalFees: ttdSessionExtras.map(x => Object.assign({}, x, { amount: (x.amount || 0) * stallsCount })),
+          totalAmount: amount, source: 'DATA.SESSION_FEE', capturedAt: todayIso
+        },
+        totalAmount: amount, registeredAt: todayIso, createdBy: 'Mini app tiểu thương', createdAt: todayIso,
+        updatedBy: 'Mini app tiểu thương', updatedAt: todayIso, note: opts && opts.note || ''
+      };
+      sessionRegistrations.push(reg);
+      const pay = {
+        id: 'PM-TTD-20260919-' + pad(idx, 3), sessionId: reg.sessionId, registrationId: reg.id, marketId: 'TTD',
+        method, status: paymentStatus, amount, reference: (method === 'CASH' ? 'CASH-' : 'MOCK-') + code,
+        createdAt: todayIso, dueAt: '2026-09-19 14:00', paidAt: null, collectedAt: null, collectedBy: null
+      };
+      sessionPayments.push(pay);
+      return { reg, pay, amount };
+    };
+    const cashPending = addSessionReg(1, ttdDemoTraders[0], 1, 'CASH', 'WAITING_COLLECTION', { note: 'Demo: chờ nhân viên thu phí xác nhận tiền mặt' });
+    const cashPending2 = addSessionReg(2, ttdDemoTraders[1], 2, 'CASH', 'WAITING_COLLECTION', { note: 'Demo: đăng ký 2 quầy, chờ thu tiền mặt' });
+    const onlinePending = addSessionReg(3, ttdDemoTraders[2], 1, 'ONLINE', 'WAITING_PAYMENT', { note: 'Demo: chờ thanh toán QR' });
+    const cashDone = addSessionReg(4, ttdDemoTraders[3], 1, 'CASH', 'SUCCESS', { note: 'Demo: đã thu tiền mặt để đối soát' });
+    if (cashDone) {
+      const receiptNo = 'BL-PC-260913-00001';
+      const p = {
+        id: 'GD' + pad(payments.length + 1, 6), invoiceId: null, market: 'TTD', traderId: cashDone.reg.traderId,
+        amount: cashDone.amount, method: 'tm', date: todayIso, time: '10:20', by: 'NV07', receipt: receiptNo,
+        lookup: 'TTD001', reconciled: null, sourceType: 'SESSION_REGISTRATION',
+        sessionId: cashDone.reg.sessionId, registrationId: cashDone.reg.id, sessionPaymentId: cashDone.pay.id,
+        receiptDelivery: { miniApp: true, sentAt: todayIso + ' 10:20', status: 'SENT_MOCK' }, printStatus: 'PENDING'
+      };
+      payments.push(p);
+      cashDone.pay.collectedAt = todayIso + ' 10:20';
+      cashDone.pay.collectedBy = 'NV07';
+      cashDone.pay.receiptNumber = receiptNo;
+      cashDone.reg.paymentWorkflowStatus = 'CONFIRMED';
+      cashDone.reg.receiptNumber = receiptNo;
+      cashDone.reg.confirmedAt = todayIso + ' 10:20';
+      sessionReceipts.push({
+        id: 'RC-00001', receiptNumber: receiptNo, paymentId: p.id, sessionPaymentId: cashDone.pay.id,
+        sessionId: cashDone.reg.sessionId, registrationId: cashDone.reg.id, marketId: 'TTD', merchantId: cashDone.reg.traderId,
+        amount: cashDone.amount, method: 'CASH', issuedAt: todayIso + ' 10:20', collectedAt: todayIso + ' 10:20',
+        collectedBy: 'NV07', sentToMiniAppAt: todayIso + ' 10:20', printStatus: 'PENDING'
+      });
+    }
+    sessionNotifications.push({
+      id: 'SN-PC-TTD-20260919-OPEN', sessionId: 'PC-TTD-20260919', marketId: 'TTD',
+      kind: 'SESSION_REGISTRATION_OPEN', at: todayIso, channels: ['Mini app'],
+      text: 'Phiên chợ quê 19/09/2026 đã mở đăng ký. Tiểu thương có thể đăng ký quầy theo phiên.'
+    });
+    notifications.unshift({
+      id: 'TB-032', at: todayIso, title: 'Phiên chợ quê 19/09/2026 đã mở đăng ký',
+      group: 'Chợ quê Tân Thuận Đông', channels: ['Mini app'], sent: traders.filter(t => t.market === 'TTD').length,
+      delivered: 1, read: 0, auto: true, kind: 'SESSION_REGISTRATION_OPEN', sessionId: 'PC-TTD-20260919',
+      text: 'Tiểu thương có thể đăng ký trong tab Đăng ký khi phiên còn mở.'
+    });
 
     // ---- Đối soát: sao kê ngân hàng ngày 13/09/2026 ----
     // Chuỗi truy vết: BankStatementTransaction -> Payment -> Receivable (khoản phải thu) -> Receipt (biên lai)
-    const todayIso = iso(TODAY);
     const bankLog = (b, actor, text) => b.log.push({ at: b.time, actor, text });
     const bank = payments.filter(p => p.date === todayIso && p.method !== 'tm').map((p, i) => {
       const b = {
@@ -599,7 +702,7 @@ window.DATA = (function () {
 
     return {
       version: VERSION, today: iso(TODAY), stalls, traders, contracts, invoices, payments, readings, incidents,
-      notifications, sessions, bank, months, audit, issuedPeriods: PERIODS.slice(), extraLog: [],
+      notifications, sessions, marketSessions, sessionRegistrations, sessionPayments, sessionReceipts, sessionNotifications, sessionAttendances, bank, months, audit, issuedPeriods: PERIODS.slice(), extraLog: [],
       meterPeriods: METER_PERIODS, meterAdjustRequests: [], receivableAdjustRequests: [],
       cashDeposits, cashConfirms, billingPeriods: BILLING_PERIODS
     };

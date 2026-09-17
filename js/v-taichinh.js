@@ -355,26 +355,36 @@
     const periods = A.db.issuedPeriods;
     const q = (f.ptSearch || '').toLowerCase();
     const inv = A.db.invoices.filter(i => U.inM(i) && i.period === p);
+    const sessionReceivables = sessionCashReceivables(true);
     const rows = inv.filter(i => (!f.ptStatus || (f.ptStatus === 'over' ? U.isOver(i) : i.status === f.ptStatus))
       && (!q || i.id.toLowerCase().includes(q) || A.idx.trader.get(i.traderId).name.toLowerCase().includes(q) || A.idx.stall.get(i.stallId).code.toLowerCase().includes(q)));
+    const sessionRows = sessionReceivables.filter(x => (!f.ptStatus || x.status === f.ptStatus) && sessionCashMatchesSearch(x, q));
     const pg = U.pager('pt' + p, rows.length, 25);
+    const spg = U.pager('ptSession' + p, sessionRows.length, 12);
     const amt = U.sum(inv, i => i.amount), paid = U.sum(inv, i => i.paid);
+    const allAmt = amt + U.sum(sessionReceivables, x => x.amount), allPaid = paid + U.sum(sessionReceivables, x => x.paid);
     const next = periods.includes('2026-10') ? null : '2026-10';
     const canIssue = A.canDo('phai-thu.phat-hanh', ui.market);
     return `<div class="card"><div class="card-b" style="padding-top:14px">${financeTimeBarRow('Kỳ thu')}
       <div class="row small" style="margin-top:8px;flex-wrap:wrap"><span class="muted">Hạn nộp: <b>${U.dmy(fp.dueDate)}</b></span><span class="spacer"></span>
         ${next && canIssue ? `<button class="btn primary" data-act="pt-issue">⚙ Phát hành tự động kỳ 10/2026</button>` : (next ? '' : '<span class="tag ok">Đã phát hành kỳ 10/2026</span>')}</div></div></div>
     <div class="kpis">
-      <div class="card kpi"><div class="k-label">Số khoản phải thu</div><div class="k-value">${inv.length}</div><div class="k-sub">Tạo tự động từ hợp đồng, đơn giá, chỉ số điện nước</div></div>
-      <div class="card kpi"><div class="k-label">Tổng phải thu</div><div class="k-value">${U.moneyShort(amt)}</div><div class="k-sub">${U.money(amt)}</div></div>
-      <div class="card kpi"><div class="k-label">Đã thu</div><div class="k-value">${U.moneyShort(paid)}</div><div class="bar-mini"><i style="width:${U.pct(paid, amt)}%"></i></div></div>
-      <div class="card kpi"><div class="k-label">Còn phải thu</div><div class="k-value" style="color:#df2225">${U.moneyShort(amt - paid)}</div><div class="k-sub">Tỷ lệ thu ${U.pctTxt(U.pct(paid, amt))}</div></div></div>
+      <div class="card kpi"><div class="k-label">Số khoản phải thu</div><div class="k-value">${inv.length + sessionReceivables.length}</div><div class="k-sub">Gồm khoản cố định và khoản đăng ký phiên</div></div>
+      <div class="card kpi"><div class="k-label">Tổng phải thu</div><div class="k-value">${U.moneyShort(allAmt)}</div><div class="k-sub">${U.money(allAmt)}</div></div>
+      <div class="card kpi"><div class="k-label">Đã thu</div><div class="k-value">${U.moneyShort(allPaid)}</div><div class="bar-mini"><i style="width:${U.pct(allPaid, allAmt)}%"></i></div></div>
+      <div class="card kpi"><div class="k-label">Còn phải thu</div><div class="k-value" style="color:#df2225">${U.moneyShort(allAmt - allPaid)}</div><div class="k-sub">Tỷ lệ thu ${U.pctTxt(U.pct(allPaid, allAmt))}</div></div></div>
     <div class="card"><div class="card-h"><h3>Danh sách khoản phải thu kỳ ${fp.label}</h3>
       <select class="input" data-ch="pt-status"><option value="">Mọi trạng thái</option><option value="paid" ${f.ptStatus === 'paid' ? 'selected' : ''}>Đã thu</option><option value="unpaid" ${f.ptStatus === 'unpaid' ? 'selected' : ''}>Chưa thu</option><option value="partial" ${f.ptStatus === 'partial' ? 'selected' : ''}>Thu một phần</option><option value="over" ${f.ptStatus === 'over' ? 'selected' : ''}>Quá hạn</option></select>
       <input class="input" placeholder="Mã khoản, tiểu thương, mã điểm" data-in="pt-search" value="${U.esc(f.ptSearch || '')}"></div>
       <div class="card-b">${U.table([{ t: 'Mã khoản' }, { t: 'Tiểu thương' }, { t: 'Điểm KD' }, { t: 'Số tiền', num: true }, { t: 'Đã thu', num: true }, { t: 'Hạn nộp' }, { t: 'Trạng thái' }],
         rows.slice(pg.start, pg.end).map(i => `<tr class="click" data-act="inv-open" data-id="${i.id}"><td>${i.id}${i.adjust ? ' <span class="tag purple">Miễn giảm</span>' : ''}</td><td>${U.esc(A.idx.trader.get(i.traderId).name)}</td><td>${A.idx.stall.get(i.stallId).code}</td>
           <td class="num">${U.money(i.amount)}</td><td class="num">${U.money(i.paid)}</td><td>${U.dmy(i.due)}</td><td>${U.invTag(i)}${ptPendingReq(i.id) ? ' <span class="tag warn">Chờ điều chỉnh</span>' : ''}</td></tr>`))}${pg.html}</div></div>
+    <div class="card"><div class="card-h"><h3>Khoản thu tiền mặt đăng ký phiên chợ</h3></div>
+      <div class="card-b">${U.table([{ t: 'Mã đăng ký' }, { t: 'Tiểu thương' }, { t: 'Phiên' }, { t: 'Số tiền', num: true }, { t: 'Đã thu', num: true }, { t: 'Hạn thu' }, { t: 'Trạng thái' }],
+        sessionRows.slice(spg.start, spg.end).map(x => `<tr><td>${U.esc(x.id)}<div class="small muted">${U.esc(x.payment.id)}</div></td><td>${U.esc(x.trader.name)}<div class="small muted">${x.trader.id}</div></td>
+          <td>${U.dmy(x.session.sessionDate || x.session.date)}<div class="small muted">${U.esc(x.session.name || x.session.id)}</div></td>
+          <td class="num">${U.money(x.amount)}</td><td class="num">${U.money(x.paid)}</td><td>${U.esc(x.dueAt || '')}</td><td>${sessionCashStatusTag(x)}</td></tr>`),
+        { empty: 'Chưa có khoản thu tiền mặt từ đăng ký phiên chợ' })}${spg.html}</div></div>
     <div class="card"><div class="card-h"><h3>Yêu cầu miễn giảm / điều chỉnh</h3></div>
       <div class="card-b">${U.table([{ t: 'Mã yêu cầu' }, { t: 'Khoản' }, { t: 'Dòng điều chỉnh' }, { t: 'Hiện tại', num: true }, { t: 'Đề nghị', num: true }, { t: 'Chênh lệch', num: true }, { t: 'Lý do' }, { t: 'Trạng thái' }, { t: '' }],
         ptRequestRows(), { empty: 'Chưa có yêu cầu điều chỉnh' })}</div></div>`;
@@ -492,6 +502,61 @@
     const p = financePeriod();
     return invoices.length && p && p.status === 'COLLECTING';
   }
+  function sessionCashReceivables(includePaid) {
+    const regs = A.db.sessionRegistrations || [], pays = A.db.sessionPayments || [], sessions = A.db.marketSessions || [];
+    const now = A.db.today + ' ' + U.nowTime();
+    return pays.filter(p => p && p.method === 'CASH' && p.marketId === ui.market && (includePaid || p.status === 'WAITING_COLLECTION')).map(p => {
+      const reg = regs.find(r => r.id === p.registrationId);
+      const t = reg && A.idx.trader.get(reg.traderId || reg.merchantId);
+      const s = reg && sessions.find(x => x.id === reg.sessionId);
+      if (!reg || !t || !s || t.market !== ui.market) return null;
+      const dueAt = p.dueAt || ((s.sessionDate || s.date || U.today()) + ' ' + (s.attendanceStartTime || s.startTime || '00:00'));
+      const paid = p.status === 'SUCCESS' ? p.amount : 0;
+      return {
+        id: reg.code || reg.id, reg, payment: p, session: s, trader: t,
+        amount: p.amount || reg.totalAmount || 0, paid, dueAt,
+        status: p.status === 'SUCCESS' ? 'paid' : (dueAt && now > dueAt ? 'over' : 'unpaid')
+      };
+    }).filter(Boolean);
+  }
+  function sessionCashStatusTag(x) {
+    if (x.status === 'paid') return '<span class="tag ok">Đã thu</span>';
+    if (x.status === 'over') return '<span class="tag danger">Quá hạn trước điểm danh</span>';
+    return '<span class="tag warn">Chờ thu tiền mặt</span>';
+  }
+  function sessionCashMatchesSearch(x, q) {
+    if (!q) return true;
+    return [x.id, x.payment.id, x.trader.name, x.trader.id, x.trader.phone, x.session.name || '', x.session.code || x.session.id].join(' ').toLowerCase().includes(q);
+  }
+  function sessionCashCollectAllowed(x) {
+    return !!(x && x.status !== 'paid' && directCollectAllowedForMarket(x.payment.marketId));
+  }
+  function sessionCashSnapshot() {
+    return {
+      registrations: JSON.stringify(A.db.sessionRegistrations || []),
+      sessionPayments: JSON.stringify(A.db.sessionPayments || []),
+      sessionReceipts: JSON.stringify(A.db.sessionReceipts || []),
+      payments: JSON.stringify(A.db.payments || []),
+      log: JSON.stringify(A.db.extraLog || [])
+    };
+  }
+  function restoreSessionCashSnapshot(snap) {
+    A.db.sessionRegistrations = JSON.parse(snap.registrations);
+    A.db.sessionPayments = JSON.parse(snap.sessionPayments);
+    A.db.sessionReceipts = JSON.parse(snap.sessionReceipts);
+    A.db.payments = JSON.parse(snap.payments);
+    A.db.extraLog = JSON.parse(snap.log);
+    A.reindex();
+  }
+  function openSessionCashPay(x) {
+    if (!sessionCashCollectAllowed(x)) { U.toast('Không thể thu khoản này trong ngữ cảnh hiện tại'); return; }
+    A.modal(A.mHead('Thu tiền mặt đăng ký phiên') + `<div class="modal-b">
+      <dl class="kv"><dt>Tiểu thương</dt><dd>${U.esc(x.trader.name)} (${x.trader.id})</dd><dt>Đăng ký</dt><dd>${U.esc(x.id)}</dd>
+        <dt>Phiên</dt><dd>${U.dmy(x.session.sessionDate || x.session.date)} · ${U.esc(x.session.name || x.session.id)}</dd>
+        <dt>Hạn thu</dt><dd>Trước điểm danh · ${U.esc(x.dueAt || '')}</dd><dt>Số tiền</dt><dd><b>${U.money(x.amount)}</b></dd></dl>
+      <div class="note info" style="margin-top:12px">Khoản này phát sinh từ đăng ký quầy chợ quê theo phiên, không phải phí cố định tháng/quý.</div>
+      </div><div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="pay-session-confirm" data-id="${x.payment.id}">Xác nhận thu tiền mặt & in biên lai</button></div>`, true);
+  }
   function renderPay() {
     const ps = ui.pay, t = A.idx.trader.get(ps.traderId);
     const invs = A.db.invoices.filter(i => i.traderId === t.id && i.status !== 'paid' && i.market === t.market).sort((a, b) => a.due.localeCompare(b.due));
@@ -518,6 +583,23 @@
     if (!collectingBusinessStateOk(invs)) { U.toast('Chỉ thu trực tiếp cho kỳ đang ở trạng thái Đang thu'); return; }
     ui.pay = { traderId: tid, sel: el.dataset.inv ? [el.dataset.inv] : invs.map(i => i.id), method: 'tm', amount: null };
     renderPay();
+  };
+  A.ACT['pay-session-open'] = el => {
+    const x = sessionCashReceivables(false).find(r => r.payment.id === el.dataset.id);
+    openSessionCashPay(x);
+  };
+  A.ACT['pay-session-confirm'] = el => {
+    const x = sessionCashReceivables(false).find(r => r.payment.id === el.dataset.id);
+    if (!sessionCashCollectAllowed(x)) { U.toast('Khoản thu phiên không còn hợp lệ hoặc ngoài phạm vi'); A.closeModal(); A.render(); return; }
+    if (!A.completeSessionCashPayment) { U.toast('Luồng thu phiên chưa sẵn sàng'); return; }
+    const actor = (A.currentAccount() && A.currentAccount().code) || 'NV07';
+    const snap = sessionCashSnapshot();
+    const done = A.completeSessionCashPayment(x.reg, x.session, x.payment, actor);
+    if (!done) { U.toast('Không thể ghi nhận thu: sai trạng thái đăng ký hoặc đã quá hạn trước điểm danh'); return; }
+    try { A.save(); }
+    catch (err) { restoreSessionCashSnapshot(snap); U.toast('Không lưu được khoản thu, chưa in biên lai'); A.closeModal(); A.render(); return; }
+    A.render(); A.showReceipt([done.ledgerPayment], { autoPrint: true });
+    U.toast('Đã thu ' + U.money(done.ledgerPayment.amount) + ' · biên lai đã gửi Mini app');
   };
   A.CH['pay-sel'] = el => { const s = ui.pay.sel, id = el.dataset.id; ui.pay.sel = el.checked ? s.concat([id]) : s.filter(x => x !== id); ui.pay.amount = null; renderPay(); };
   A.CH['pay-amount'] = el => { ui.pay.amount = Math.max(0, Number(el.value) || 0); renderPay(); };
@@ -546,14 +628,16 @@
     return A.db.payments.filter(p => U.inM(p) && (!payDate || p.date === payDate))
       .map(p => {
         const i = A.idx.invoice.get(p.invoiceId), t = A.idx.trader.get(p.traderId), st = i && A.idx.stall.get(i.stallId);
-        return { p, i, t, st, complete: t ? U.traderDebt(t.id) === 0 : false };
+        const reg = p.registrationId && (A.db.sessionRegistrations || []).find(r => r.id === p.registrationId);
+        const session = reg && (A.db.marketSessions || []).find(s => s.id === reg.sessionId);
+        return { p, i, t, st, reg, session, complete: p.sourceType === 'SESSION_REGISTRATION' ? true : (t ? U.traderDebt(t.id) === 0 : false) };
       })
       .filter(x => {
         if (method !== 'all' && x.p.method !== method) return false;
         if (status === 'complete' && !x.complete) return false;
         if (status === 'debt' && x.complete) return false;
         if (!q) return true;
-        return [x.p.receipt, x.p.lookup, x.p.id, x.i ? x.i.id : '', x.t ? x.t.name : '', x.t ? x.t.id : '', x.t ? x.t.phone : '', x.st ? x.st.code : ''].join(' ').toLowerCase().includes(q);
+        return [x.p.receipt, x.p.lookup, x.p.id, x.i ? x.i.id : '', x.reg ? (x.reg.code || x.reg.id) : '', x.t ? x.t.name : '', x.t ? x.t.id : '', x.t ? x.t.phone : '', x.st ? x.st.code : '', x.session ? (x.session.name || x.session.id) : ''].join(' ').toLowerCase().includes(q);
       })
       .sort((a, b) => (b.p.date + b.p.time).localeCompare(a.p.date + a.p.time));
   }
@@ -571,31 +655,46 @@
     let list = Array.from(debtors.entries()).map(([id, d]) => Object.assign({ t: A.idx.trader.get(id) }, d))
       .filter(x => !q || x.t.name.toLowerCase().includes(q) || x.t.phone.includes(q) || x.t.stalls.some(id => A.idx.stall.get(id).code.toLowerCase().includes(q)))
       .sort((a, b) => b.over - a.over || b.amt - a.amt);
+    const sessionList = sessionCashReceivables(false).filter(x => sessionCashMatchesSearch(x, q));
     const pg = U.pager('thu', list.length, 12);
+    const spg = U.pager('thuSession', sessionList.length, 12);
     const today = A.db.payments.filter(p => U.inM(p) && p.date === payDate).slice().reverse();
     const cash = U.sum(today.filter(p => p.method === 'tm'), p => p.amount), non = U.sum(today.filter(p => p.method !== 'tm'), p => p.amount);
     const receipts = receiptRows(payDate), rpg = U.pager('thuReceipt', receipts.length, 12);
     const done = receipts.filter(x => x.complete).length;
+    const sessionAmt = U.sum(sessionList, x => x.amount), fixedAmt = U.sum(list, x => x.amt);
     const timeBar = `<div class="card"><div class="card-b" style="padding-top:14px">${financeTimeBarRow('Kỳ khoản thu')}
-      <div class="row small" style="margin-top:8px;flex-wrap:wrap"><span class="label-sm">Ngày thu / biên lai</span><input type="date" class="input" style="width:160px" data-ch="thu-date" value="${payDate}">
-      <span class="tag">Tiền mặt ${U.moneyShort(cash)}</span><span class="tag info">Qua app/CK ${U.moneyShort(non)}</span><span class="tag ${p.status === 'COLLECTING' ? 'ok' : ''}">${p.status === 'COLLECTING' ? 'Đang thu' : 'Kỳ trước'}</span></div></div></div>`;
-    return timeBar + `<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));align-items:start">
-      <div class="card"><div class="card-h"><div><h3>Thu tiền mặt tại quầy</h3><div class="small muted">Nhân viên thu phí xác nhận tiểu thương hoàn thành sau khi nhận đủ tiền mặt.</div></div></div>
+      <div class="row small" style="margin-top:10px;gap:8px;flex-wrap:wrap">
+        <input class="input" style="min-width:260px;flex:1" placeholder="Tìm tiểu thương, SĐT, mã đăng ký, biên lai, mã điểm" data-in="thu-search" value="${U.esc(f.thuSearch || '')}">
+        <span class="label-sm">Ngày thu / biên lai</span><input type="date" class="input" style="width:160px" data-ch="thu-date" value="${payDate}">
+        <span class="tag ${p.status === 'COLLECTING' ? 'ok' : ''}">${p.status === 'COLLECTING' ? 'Đang thu' : 'Kỳ trước'}</span>
+      </div></div></div>`;
+    return timeBar + `<div class="kpis">
+      <div class="card kpi"><div class="k-label">Đăng ký phiên chờ thu</div><div class="k-value">${sessionList.length}</div><div class="k-sub">${U.money(sessionAmt)}</div></div>
+      <div class="card kpi"><div class="k-label">Phí cố định chờ thu</div><div class="k-value">${list.length}</div><div class="k-sub">${U.money(fixedAmt)}</div></div>
+      <div class="card kpi"><div class="k-label">Tiền mặt đã thu ngày chọn</div><div class="k-value">${U.moneyShort(cash)}</div><div class="k-sub">${receipts.filter(x => x.p.method === 'tm').length} biên lai</div></div>
+      <div class="card kpi"><div class="k-label">Qua app / chuyển khoản</div><div class="k-value">${U.moneyShort(non)}</div><div class="k-sub">${receipts.filter(x => x.p.method !== 'tm').length} biên lai</div></div></div>
+      <div class="card"><div class="card-h"><div><h3>Việc cần thu hôm nay</h3><div class="small muted">Ưu tiên khoản đăng ký phiên vì phải hoàn thành trước điểm danh.</div></div><span class="spacer"></span><span class="tag warn">${sessionList.length} chờ thu</span></div>
+        <div class="card-b">${U.table([{ t: 'Tiểu thương' }, { t: 'Đăng ký / phiên' }, { t: 'Hạn thu' }, { t: 'Số tiền', num: true }, { t: 'Trạng thái' }, { t: '' }],
+          sessionList.slice(spg.start, spg.end).map(x => `<tr><td><b>${U.esc(x.trader.name)}</b><div class="small muted">${x.trader.id} · ${U.maskPhone(x.trader.phone)}</div></td>
+            <td>${U.esc(x.id)}<div class="small muted">${U.dmy(x.session.sessionDate || x.session.date)} · ${U.esc(x.session.name || x.session.id)}</div></td>
+            <td>${U.esc(x.dueAt || '')}</td><td class="num">${U.money(x.amount)}</td><td>${sessionCashStatusTag(x)}</td>
+            <td>${sessionCashCollectAllowed(x) ? `<button class="btn sm primary" data-act="pay-session-open" data-id="${x.payment.id}">Thu tiền mặt</button>` : ''}</td></tr>`),
+          { empty: 'Không có đăng ký phiên chờ thu tiền mặt' })}${spg.html}</div></div>
+      <div class="card"><div class="card-h"><div><h3>Thu phí cố định tại quầy</h3><div class="small muted">Các khoản phí tháng/quý còn phải thu của tiểu thương.</div></div><span class="spacer"></span><span class="tag">${list.length} hồ sơ</span></div>
         <div class="card-b">
-          <div class="row" style="margin-bottom:10px;gap:8px"><input class="input" placeholder="Tìm tiểu thương, SĐT hoặc mã điểm" data-in="thu-search" value="${U.esc(f.thuSearch || '')}"></div>
           ${U.table([{ t: 'Tiểu thương' }, { t: 'Điểm KD' }, { t: 'Còn phải thu', num: true }, { t: 'Trạng thái' }, { t: '' }],
           list.slice(pg.start, pg.end).map(x => `<tr><td><b>${U.esc(x.t.name)}</b><div class="small muted">${x.t.id} · ${U.maskPhone(x.t.phone)}</div></td><td>${x.t.stalls.map(id => A.idx.stall.get(id).code).join(', ')}</td><td class="num">${U.money(x.amt)}<div class="small muted">${x.n} khoản</div></td><td>${x.over ? `<span class="tag danger">Quá hạn ${U.moneyShort(x.over)}</span>` : '<span class="tag warn">Chờ thu</span>'}</td><td>${directCollectAllowedForMarket(x.t.market) ? `<button class="btn sm primary" data-act="pay-open" data-id="${x.t.id}">Thu tiền mặt</button>` : ''}</td></tr>`), { empty: 'Không còn tiểu thương cần thu' })}${pg.html}
         </div></div>
-      <div class="card"><div class="card-h"><div><h3>Biên lai & truy vết</h3><div class="small muted">Tìm theo tiểu thương, số biên lai, mã tra cứu, mã điểm hoặc khoản phải thu.</div></div></div><div class="card-b">
+      <div class="card"><div class="card-h"><div><h3>Biên lai & truy vết</h3><div class="small muted">Biên lai chỉ xuất hiện sau khi ghi nhận thu thành công.</div></div><span class="spacer"></span><span class="tag ok">${done} hoàn thành</span><span class="tag">${receipts.length} biên lai</span></div><div class="card-b">
         <div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px">
           <input class="input" style="min-width:240px;flex:1" placeholder="Tìm biên lai / tiểu thương / mã điểm" data-in="receipt-search" value="${U.esc(f.receiptSearch || '')}">
           <select class="input" style="width:150px" data-ch="receipt-method"><option value="all">Mọi hình thức</option>${Object.keys(D.METHOD).map(m => `<option value="${m}" ${(f.receiptMethod || 'all') === m ? 'selected' : ''}>${D.METHOD[m]}</option>`).join('')}</select>
           <select class="input" style="width:160px" data-ch="receipt-status"><option value="all">Mọi trạng thái</option><option value="complete" ${(f.receiptStatus || 'all') === 'complete' ? 'selected' : ''}>Đã hoàn thành</option><option value="debt" ${(f.receiptStatus || 'all') === 'debt' ? 'selected' : ''}>Còn phải thu</option></select>
         </div>
-        <div class="row small" style="margin-bottom:8px"><span class="tag ok">${done} hoàn thành</span><span class="tag">${receipts.length} biên lai</span></div>
         ${U.table([{ t: 'Biên lai' }, { t: 'Tiểu thương' }, { t: 'Điểm / khoản' }, { t: 'Hình thức' }, { t: 'Số tiền', num: true }, { t: 'Hoàn thành' }],
-          receipts.slice(rpg.start, rpg.end).map(x => `<tr class="click" data-act="receipt" data-id="${x.p.receipt}"><td><b>${x.p.receipt}</b><div class="small muted">${U.dmy(x.p.date)} ${x.p.time} · ${x.p.lookup}</div></td><td>${x.t ? U.esc(x.t.name) : ''}<div class="small muted">${x.t ? x.t.id : ''}</div></td><td>${x.st ? x.st.code : ''}<div class="small muted">${x.i ? x.i.id + ' · kỳ ' + U.per(x.i.period) : ''}</div></td><td>${D.METHOD[x.p.method]}</td><td class="num">${U.money(x.p.amount)}</td><td>${x.complete ? '<span class="tag ok">Đã hoàn thành</span>' : '<span class="tag warn">Còn phải thu</span>'}</td></tr>`), { empty: 'Không tìm thấy biên lai phù hợp' })}${rpg.html}
-      </div></div></div>`;
+          receipts.slice(rpg.start, rpg.end).map(x => `<tr class="click" data-act="receipt" data-id="${x.p.receipt}"><td><b>${x.p.receipt}</b><div class="small muted">${U.dmy(x.p.date)} ${x.p.time} · ${x.p.lookup}</div></td><td>${x.t ? U.esc(x.t.name) : ''}<div class="small muted">${x.t ? x.t.id : ''}</div></td><td>${x.st ? x.st.code : (x.reg ? U.esc(x.reg.code || x.reg.id) : '')}<div class="small muted">${x.i ? x.i.id + ' · kỳ ' + U.per(x.i.period) : (x.session ? 'Phiên chợ quê · ' + U.dmy(x.session.sessionDate || x.session.date) : '')}</div></td><td>${D.METHOD[x.p.method]}</td><td class="num">${U.money(x.p.amount)}</td><td>${x.complete ? '<span class="tag ok">Đã hoàn thành</span>' : '<span class="tag warn">Còn phải thu</span>'}</td></tr>`), { empty: 'Không tìm thấy biên lai phù hợp' })}${rpg.html}
+      </div></div>`;
   };
   A.IN['thu-search'] = el => { f.thuSearch = el.value; ui.page.thu = 0; A.render(); };
   A.CH['thu-date'] = el => { f.thuDate = el.value || U.today(); A.render(); };
@@ -658,7 +757,7 @@
     const onlineRecon = U.sum(pays.filter(p => p.method === 'ONLINE' && p.status === 'RECONCILED'), p => p.amount);
     const onlineWaiting = U.sum(pays.filter(p => p.method === 'ONLINE' && p.status === 'WAITING_PAYMENT'), p => p.amount);
     const cashSystem = U.sum(pays.filter(p => p.method === 'CASH' && p.status === 'SUCCESS'), p => p.amount);
-    const cashReceipts = U.sum(receipts, r => r.amount);
+    const cashReceipts = U.sum(receipts.filter(r => r.method === 'CASH'), r => r.amount);
     const expected = U.sum(regs.filter(r => r.status !== 'CANCELLED' && r.status !== 'REJECTED'), r => r.totalAmount || 0);
     return { regs, pays, receipts, openEx, onlineSuccess, onlineRecon, onlineWaiting, cashSystem, cashReceipts, expected, confirm: dsSessionCashConfirm(s.id) };
   }
@@ -928,7 +1027,10 @@
     const canAudit = dsCanAudit(e.market);
     const receiptRows = e.payments.map(p => {
       const inv = A.idx.invoice.get(p.invoiceId);
-      return `<div class="row small" style="padding:5px 0;border-bottom:1px solid #eef2f7"><span>${p.receipt}</span><span>${inv ? A.idx.stall.get(inv.stallId).code : ''}</span><span class="spacer"></span><b>${U.money(p.amount)}</b></div>`;
+      const reg = p.registrationId && (A.db.sessionRegistrations || []).find(r => r.id === p.registrationId);
+      const s = reg && (A.db.marketSessions || []).find(x => x.id === reg.sessionId);
+      const label = inv ? A.idx.stall.get(inv.stallId).code : (reg ? (reg.code || reg.id) + (s ? ' · ' + U.dmy(s.sessionDate || s.date) : '') : '');
+      return `<div class="row small" style="padding:5px 0;border-bottom:1px solid #eef2f7"><span>${p.receipt}<div class="muted">${U.esc(p.sourceType === 'SESSION_REGISTRATION' ? 'Đăng ký phiên chợ' : 'Khoản phí cố định')}</div></span><span>${U.esc(label)}</span><span class="spacer"></span><b>${U.money(p.amount)}</b></div>`;
     }).join('');
     const depositRows = e.deposits.length ? e.deposits.map(d => `<div style="padding:8px 0;border-bottom:1px solid #eef2f7">
         <div class="row small"><b>${d.id}</b><span class="spacer"></span><b>${U.money(d.amount)}</b></div>

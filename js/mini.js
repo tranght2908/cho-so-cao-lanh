@@ -60,6 +60,22 @@
       status, createdBy: 'Mini app seed', createdAt: U.today()
     };
   }
+  function miniEnsureOpsSession(s) {
+    if (!s || s.marketId !== 'TTD') return null;
+    A.db.sessions = A.db.sessions || [];
+    let ops = A.db.sessions.find(x => x && x.id === s.id);
+    if (!ops) {
+      ops = {
+        id: s.id, market: s.marketId, date: s.sessionDate, startTime: s.startTime || '14:00', endTime: s.endTime || '20:00',
+        registrationStartAt: (s.registrationOpenAt || U.today()) + 'T08:00',
+        registrationDeadline: (s.registrationCloseAt || s.sessionDate) + 'T17:00',
+        status: 'open', note: 'Tự đồng bộ từ phiên đang mở đăng ký trên Mini app',
+        createdBy: 'Mini app seed', createdAt: U.today(), updatedBy: 'Mini app seed', updatedAt: U.today()
+      };
+      A.db.sessions.push(ops);
+    }
+    return ops;
+  }
   function miniSeq(prefix, arr) {
     return prefix + '-' + U.pad((arr ? arr.length : 0) + 1, 4);
   }
@@ -67,7 +83,7 @@
     return (A.db.sessionRegistrations || []).filter(r => r.sessionId === sessionId);
   }
   function miniBlocksCapacity(r) {
-    return ['CONDITIONAL_HOLD', 'CONFIRMED', 'CHECKED_IN', 'PARTICIPATING', 'COMPLETED'].indexOf(r.status) !== -1;
+    return ['registered', 'approved', 'CONDITIONAL_HOLD', 'CONFIRMED', 'CHECKED_IN', 'PARTICIPATING', 'COMPLETED'].indexOf(r.status) !== -1;
   }
   function miniAvailableStalls(s) {
     return Math.max(0, s.totalStalls - U.sum(miniSessionRegs(s.id).filter(miniBlocksCapacity), r => r.requestedStalls));
@@ -79,6 +95,47 @@
   function miniSessionPaymentForReg(reg) {
     return (A.db.sessionPayments || []).find(p => p.registrationId === reg.id && p.method === 'ONLINE') || null;
   }
+  function miniSessionCashPaymentForReg(reg) {
+    return (A.db.sessionPayments || []).find(p => p.registrationId === reg.id && p.method === 'CASH') || null;
+  }
+  function miniSessionCashDeadline(s) {
+    if (!s) return null;
+    return (s.sessionDate || s.date || U.today()) + ' ' + (s.attendanceStartTime || s.startTime || '00:00');
+  }
+  function miniSessionCashDues() {
+    ensureMiniRegistrationModel();
+    return (A.db.sessionRegistrations || []).map(reg => {
+      const s = A.db.marketSessions.find(x => x.id === reg.sessionId);
+      const t = A.idx.trader.get(reg.merchantId);
+      const p = miniSessionCashPaymentForReg(reg);
+      if (!s || !t || !p || reg.marketId !== ui.market || t.market !== ui.market) return null;
+      if (reg.paymentMethod !== 'CASH' || ['registered', 'CONDITIONAL_HOLD'].indexOf(reg.status) === -1 || p.status !== 'WAITING_COLLECTION') return null;
+      return { reg, session: s, trader: t, payment: p, amount: p.amount || reg.totalAmount || 0, deadline: p.dueAt || miniSessionCashDeadline(s) };
+    }).filter(Boolean).sort((a, b) => String(a.deadline || '').localeCompare(String(b.deadline || '')));
+  }
+  function miniSessionCashSnapshot() {
+    return {
+      registrations: JSON.stringify(A.db.sessionRegistrations || []),
+      sessionPayments: JSON.stringify(A.db.sessionPayments || []),
+      sessionReceipts: JSON.stringify(A.db.sessionReceipts || []),
+      payments: JSON.stringify(A.db.payments || []),
+      log: JSON.stringify(A.db.extraLog || [])
+    };
+  }
+  function miniRestoreSessionCashSnapshot(snap) {
+    A.db.sessionRegistrations = JSON.parse(snap.registrations);
+    A.db.sessionPayments = JSON.parse(snap.sessionPayments);
+    A.db.sessionReceipts = JSON.parse(snap.sessionReceipts);
+    A.db.payments = JSON.parse(snap.payments);
+    A.db.extraLog = JSON.parse(snap.log);
+    A.reindex();
+  }
+  function miniSessionReceiptNumber() {
+    return 'BL-PC-' + U.today().replace(/-/g, '').slice(2) + '-' + U.pad((A.db.sessionReceipts || []).length + 1, 5);
+  }
+  function miniSessionBankRef(reg) {
+    return 'TTD ' + (reg && (reg.code || reg.id)) + ' CHO QUE';
+  }
   function miniCanPaySessionRegistration(t, reg) {
     if (!t || !reg) return false;
     const s = A.db.marketSessions.find(x => x.id === reg.sessionId), p = miniSessionPaymentForReg(reg);
@@ -86,9 +143,111 @@
     if (!canTraderRegisterStall(reg.marketId) || !inMiniScopeMarket(reg.marketId) || reg.marketId !== ui.market) return false;
     if (reg.merchantId !== t.id || t.market !== reg.marketId) return false;
     if (s.marketId !== reg.marketId || p.marketId !== reg.marketId) return false;
-    if (reg.status !== 'WAITING_PAYMENT' || p.status !== 'WAITING_PAYMENT' || reg.paymentMethod !== 'ONLINE') return false;
+    if (['registered', 'WAITING_PAYMENT'].indexOf(reg.status) === -1 || p.status !== 'WAITING_PAYMENT' || reg.paymentMethod !== 'ONLINE') return false;
     return miniAvailableStalls(s) >= reg.requestedStalls;
   }
+  A.completeSessionOnlinePayment = function (reg, session, payment, actor) {
+    ensureMiniRegistrationModel();
+    if (!reg || !session || !payment) return null;
+    const t = A.idx.trader.get(reg.merchantId);
+    if (!t || t.market !== reg.marketId || session.marketId !== reg.marketId || payment.marketId !== reg.marketId) return null;
+    if (['registered', 'WAITING_PAYMENT'].indexOf(reg.status) === -1 || payment.status !== 'WAITING_PAYMENT' || reg.paymentMethod !== 'ONLINE') return null;
+    const time = U.nowTime();
+    const receiptNumber = miniSessionReceiptNumber();
+    const payNo = A.db.payments.length + 1;
+    payment.status = 'RECONCILED';
+    payment.paidAt = A.db.today + ' ' + time;
+    payment.reconciledAt = A.db.today + ' ' + time;
+    payment.receiptNumber = receiptNumber;
+    reg.paymentWorkflowStatus = 'CONFIRMED';
+    reg.receiptNumber = receiptNumber;
+    reg.confirmedAt = A.db.today + ' ' + time;
+
+    const ledgerPayment = {
+      id: 'GD' + U.pad(payNo, 6), invoiceId: null, market: reg.marketId, traderId: reg.merchantId,
+      amount: payment.amount, method: 'qr', date: A.db.today, time, by: actor || 'Mini app',
+      receipt: receiptNumber, lookup: Math.random().toString(36).slice(2, 8).toUpperCase(),
+      reconciled: true, sourceType: 'SESSION_REGISTRATION', sessionId: session.id,
+      registrationId: reg.id, sessionPaymentId: payment.id,
+      receiptDelivery: { miniApp: true, sentAt: A.db.today + ' ' + time, status: 'SENT_MOCK' },
+      printStatus: 'PENDING'
+    };
+    A.db.payments.push(ledgerPayment);
+
+    const receipt = {
+      id: 'RC-' + U.pad(A.db.sessionReceipts.length + 1, 5), receiptNumber,
+      paymentId: ledgerPayment.id, sessionPaymentId: payment.id, sessionId: session.id,
+      registrationId: reg.id, marketId: reg.marketId, merchantId: reg.merchantId,
+      amount: payment.amount, method: 'ONLINE', issuedAt: A.db.today + ' ' + time,
+      sentToMiniAppAt: A.db.today + ' ' + time, printStatus: 'PENDING'
+    };
+    A.db.sessionReceipts.push(receipt);
+
+    A.db.bank.push({
+      id: 'SK' + U.pad(A.db.bank.length + 1, 4), date: A.db.today, time, amount: payment.amount,
+      ref: miniSessionBankRef(reg), market: reg.marketId,
+      bankName: (D.BANK_BY_MARKET && D.BANK_BY_MARKET[reg.marketId]) || 'Vietcombank',
+      paymentId: ledgerPayment.id, receivableId: reg.id, receiptId: receiptNumber,
+      status: 'MATCHED_AUTO', matched: true, matchedBy: 'Hệ thống', matchedAt: A.db.today + ' ' + time,
+      matchMethod: 'AUTO', sourceType: 'SESSION_REGISTRATION',
+      log: [
+        { at: time, actor: 'Hệ thống', text: 'Nhận báo có QR cho đăng ký phiên ' + (reg.code || reg.id) },
+        { at: time, actor: 'Hệ thống', text: 'Tự động phát hành biên lai ' + receiptNumber + ' và gửi Mini app' }
+      ]
+    });
+    A.db.notifications.unshift({
+      id: 'TB-' + U.pad(32 + A.db.notifications.length, 3), at: A.db.today,
+      title: 'Biên lai ' + receiptNumber + ' đã được phát hành',
+      group: 'Chợ quê Tân Thuận Đông', channels: ['Mini app'], sent: 1, delivered: 1, read: 0, auto: true,
+      kind: 'SESSION_PAYMENT_SUCCESS', sessionId: session.id, receiptId: receipt.id,
+      merchantId: reg.merchantId, text: 'Thanh toán QR thành công cho ' + (reg.code || reg.id)
+    });
+    U.log('Thanh toán QR phiên chợ quê ' + (reg.code || reg.id) + ', phát hành ' + receiptNumber);
+    return receipt;
+  };
+  A.completeSessionCashPayment = function (reg, session, payment, actor) {
+    ensureMiniRegistrationModel();
+    if (!reg || !session || !payment) return null;
+    const t = A.idx.trader.get(reg.merchantId);
+    if (!t || t.market !== reg.marketId || session.marketId !== reg.marketId || payment.marketId !== reg.marketId) return null;
+    if (['registered', 'CONDITIONAL_HOLD'].indexOf(reg.status) === -1 || reg.paymentMethod !== 'CASH' || payment.method !== 'CASH' || payment.status !== 'WAITING_COLLECTION') return null;
+    if (!A.canDirectCollect(reg.marketId)) return null;
+    const deadline = payment.dueAt || miniSessionCashDeadline(session);
+    if (deadline && (A.db.today + ' ' + U.nowTime()) > deadline) return null;
+    const time = U.nowTime();
+    const receiptNumber = miniSessionReceiptNumber();
+    const payNo = A.db.payments.length + 1;
+    payment.status = 'SUCCESS';
+    payment.collectedAt = A.db.today + ' ' + time;
+    payment.collectedBy = actor || collectorActor();
+    payment.receiptNumber = receiptNumber;
+    reg.paymentWorkflowStatus = 'CONFIRMED';
+    reg.receiptNumber = receiptNumber;
+    reg.confirmedAt = A.db.today + ' ' + time;
+
+    const ledgerPayment = {
+      id: 'GD' + U.pad(payNo, 6), invoiceId: null, market: reg.marketId, traderId: reg.merchantId,
+      amount: payment.amount, method: 'tm', date: A.db.today, time, by: payment.collectedBy,
+      receipt: receiptNumber, lookup: Math.random().toString(36).slice(2, 8).toUpperCase(),
+      reconciled: null, sourceType: 'SESSION_REGISTRATION', sessionId: session.id,
+      registrationId: reg.id, sessionPaymentId: payment.id,
+      receiptDelivery: { miniApp: true, sentAt: A.db.today + ' ' + time, status: 'SENT_MOCK' },
+      printStatus: 'PENDING'
+    };
+    A.db.payments.push(ledgerPayment);
+
+    const receipt = {
+      id: 'RC-' + U.pad(A.db.sessionReceipts.length + 1, 5), receiptNumber,
+      paymentId: ledgerPayment.id, sessionPaymentId: payment.id, sessionId: session.id,
+      registrationId: reg.id, marketId: reg.marketId, merchantId: reg.merchantId,
+      amount: payment.amount, method: 'CASH', issuedAt: A.db.today + ' ' + time,
+      collectedAt: A.db.today + ' ' + time, collectedBy: payment.collectedBy,
+      sentToMiniAppAt: A.db.today + ' ' + time, printStatus: 'PENDING'
+    };
+    A.db.sessionReceipts.push(receipt);
+    U.log('Thu tiền mặt đăng ký phiên chợ quê ' + (reg.code || reg.id) + ', phát hành ' + receiptNumber);
+    return { receipt, ledgerPayment };
+  };
   function miniSnapshotAmount(stalls, mid) {
     const cfg = miniSessionPricing(mid), extras = cfg.additionalFees.map(f => Object.assign({}, f, { amount: f.amount * stalls }));
     return {
@@ -213,6 +372,31 @@
       <div class="m-card small">${list.map(i => `<div class="row" style="padding:3px 0"><span style="flex:1">Kỳ ${U.per(i.period)} · ${A.idx.stall.get(i.stallId).code}</span><b>${U.money(U.due(i))}</b></div>`).join('')}</div>
       <button class="m-btn solid" data-act="mini-paid">Giả lập: đã chuyển khoản thành công</button></div>`;
   }
+  function screenSessionPay(t) {
+    const m = mini();
+    const reg = (A.db.sessionRegistrations || []).find(r => r.id === m.sessionPayId);
+    const s = reg && A.db.marketSessions.find(x => x.id === reg.sessionId);
+    const p = reg && miniSessionPaymentForReg(reg);
+    if (!miniCanPaySessionRegistration(t, reg) || !s || !p) {
+      return `<div class="m-body"><button class="btn sm" style="align-self:flex-start" data-act="mini-session-pay-cancel">‹ Quay lại</button>
+        <div class="m-card"><b>Không thể thanh toán</b><div class="small muted" style="margin-top:6px">Đăng ký không còn ở trạng thái chờ thanh toán hoặc không thuộc phạm vi mini app hiện tại.</div></div></div>`;
+    }
+    const content = miniSessionBankRef(reg);
+    return `<div class="m-body"><button class="btn sm" style="align-self:flex-start" data-act="mini-session-pay-cancel">‹ Quay lại</button>
+      <div class="m-card" style="text-align:center">
+        <div class="small muted">Quét mã bằng ứng dụng ngân hàng bất kỳ</div>
+        <div class="mini-qr-card"><div>${U.qr(content + ' ' + p.amount, 178)}</div></div>
+        <div style="font-size:var(--font-size-kpi);font-weight:800">${U.money(p.amount)}</div>
+        <div class="small muted">Nội dung: ${U.esc(content)}</div>
+      </div>
+      <div class="m-card small"><div class="m-list">
+        <div class="it"><span>Phiên</span><b>${U.dmy(s.sessionDate)}</b></div>
+        <div class="it"><span>Đăng ký</span><b>${U.esc(reg.code || reg.id)}</b></div>
+        <div class="it"><span>Số quầy</span><b>${reg.requestedStalls}</b></div>
+        <div class="it"><span>Trạng thái</span><span class="tag warn">Chờ thanh toán</span></div>
+      </div></div>
+      <button class="m-btn solid" data-act="mini-session-pay-success" data-id="${reg.id}">Giả lập thanh toán thành công</button></div>`;
+  }
 
   function tabHome(t) {
     const list = unpaid(t), total = U.sum(list, U.due), over = list.filter(U.isOver);
@@ -311,8 +495,10 @@
       <button class="m-btn solid" style="margin-top:10px" data-act="mini-reg-submit" ${reasons.length ? 'disabled' : ''}>Gửi đăng ký</button></div>
       <div class="m-card"><b>Hồ sơ gần đây</b><div class="m-list">${mySessionRegs.map(r => {
         const canPay = miniCanPaySessionRegistration(t, r);
+        const cashPay = miniSessionCashPaymentForReg(r);
         return `<div class="it" style="flex-wrap:wrap"><span>${U.esc(r.code)}<div class="small muted">Theo phiên · ${r.requestedStalls} quầy · ${U.money(r.totalAmount || 0)}</div></span><span class="tag info">${U.esc(r.status)}</span>
           ${canPay ? `<button class="m-btn solid" style="width:100%;margin-top:8px" data-act="mini-session-pay" data-id="${r.id}">Giả lập: đã thanh toán online</button>` : ''}
+          ${cashPay && cashPay.status === 'WAITING_COLLECTION' ? `<div class="small muted" style="width:100%;margin-top:4px">Chờ thu tiền mặt · hạn trước điểm danh ${U.esc(cashPay.dueAt || '')}</div>` : ''}
           ${r.receiptNumber ? `<div class="small muted" style="width:100%;margin-top:4px">Biên lai ${U.esc(r.receiptNumber)} đã gửi Mini app</div>` : ''}</div>`;
       }).join('')}${myFixed.map(r => `<div class="it"><span>${U.esc(r.id)}<div class="small muted">${r.term === 'QUARTER' ? 'Theo quý' : 'Theo tháng'}</div></span><span class="tag warn">${U.esc(r.status)}</span></div>`).join('') || (!mySessionRegs.length ? '<div class="small muted">Chưa có đăng ký</div>' : '')}</div></div>`;
   }
@@ -322,6 +508,7 @@
     const TABS = [['home', '🏠', 'Trang chủ'], ['bills', '🧾', 'Hóa đơn'], ['contract', '📄', 'Hợp đồng'], ['register', '🪷', 'Đăng ký'], ['notice', '🔔', 'Thông báo'], ['report', '💬', 'Phản ánh']];
     let body;
     if (m.step !== 'app') body = screenLogin(t);
+    else if (m.sessionPayId) body = screenSessionPay(t);
     else if (m.pay) body = screenPay(t);
     else {
       const f = { home: tabHome, bills: tabBills, contract: tabContract, register: tabRegister, notice: tabNotice, report: tabReport }[m.tab];
@@ -334,6 +521,8 @@
   function collectorPhone() {
     const m = mini();
     const list = collectorDebtors();
+    const sessionDues = miniSessionCashDues();
+    const selectedSession = m.collectSessionRegId ? sessionDues.find(x => x.reg.id === m.collectSessionRegId) : null;
     const selectedRaw = m.collectTraderId ? A.idx.trader.get(m.collectTraderId) : null;
     const selected = selectedRaw && selectedRaw.market === ui.market ? selectedRaw : null;
     const due = selected ? unpaid(selected) : [];
@@ -348,6 +537,17 @@
           <div class="it"><span class="muted">Người thu</span><span>${U.esc(A.currentAccount().fullName)}</span></div>
           <div class="it"><span class="muted">Gửi Mini app</span><span class="tag ok">Đã gửi</span></div></div></div>
         <button class="m-btn solid" data-act="mini-collector-home">Về danh sách</button></div>`;
+    } else if (selectedSession) {
+      body = `<div class="m-body"><button class="btn sm" style="align-self:flex-start" data-act="mini-collector-home">‹ Quay lại</button>
+        <div class="m-card"><b>${U.esc(selectedSession.trader.name)}</b><div class="small muted">${selectedSession.trader.id} · ${U.maskPhone(selectedSession.trader.phone)} · ${U.mShort(selectedSession.trader.market)}</div>
+          <div class="m-list" style="margin-top:8px">
+            <div class="it"><span>Đăng ký</span><b>${U.esc(selectedSession.reg.code || selectedSession.reg.id)}</b></div>
+            <div class="it"><span>Phiên</span><b>${U.dmy(selectedSession.session.sessionDate)}</b></div>
+            <div class="it"><span>Số quầy</span><b>${selectedSession.reg.requestedStalls}</b></div>
+            <div class="it"><span>Hạn thu</span><b>Trước điểm danh · ${U.esc(selectedSession.deadline || '')}</b></div>
+          </div></div>
+        <div class="m-card m-due"><div class="small" style="opacity:.85">Tổng cần thu</div><div class="amt">${U.money(selectedSession.amount)}</div>
+          <button class="m-btn" data-act="mini-session-cash-paid" ${isCollectorMini() ? '' : 'disabled'}>Ghi nhận thu tiền mặt</button></div></div>`;
     } else if (selected) {
       body = `<div class="m-body"><button class="btn sm" style="align-self:flex-start" data-act="mini-collector-home">‹ Quay lại</button>
         <div class="m-card"><b>${U.esc(selected.name)}</b><div class="small muted">${selected.id} · ${U.maskPhone(selected.phone)} · ${U.mShort(selected.market)}</div>
@@ -356,7 +556,10 @@
           <button class="m-btn" data-act="mini-collect-paid" ${total > 0 && isCollectorMini() && miniCollectingBusinessStateOk(due) ? '' : 'disabled'}>Ghi nhận thu tiền mặt</button></div></div>`;
     } else {
       body = `<div class="m-head"><div class="hi">Xin chào,</div><div class="nm">${U.esc(A.currentAccount().fullName)}</div><div class="hi">${U.esc(U.market(ui.market).short)}</div></div>
-        <div class="m-body"><div class="m-card m-due"><div class="small" style="opacity:.85">Cần thu hôm nay</div><div class="amt">${list.length}</div><div class="small">Tổng ${U.money(U.sum(list, x => x.amt))}</div></div>
+        <div class="m-body"><div class="m-card m-due"><div class="small" style="opacity:.85">Cần thu hôm nay</div><div class="amt">${list.length + sessionDues.length}</div><div class="small">Tổng ${U.money(U.sum(list, x => x.amt) + U.sum(sessionDues, x => x.amount))}</div></div>
+        ${sessionDues.length ? `<div class="m-card"><b>Đăng ký phiên chờ thu tiền mặt</b><div class="m-list">${sessionDues.slice(0, 12).map(x => `<button class="it" style="width:100%;text-align:left;background:transparent;border:0;cursor:pointer" data-act="mini-session-cash-open" data-id="${x.reg.id}">
+          <span><b>${U.esc(x.trader.name)}</b><div class="small muted">${U.esc(x.reg.code || x.reg.id)} · trước điểm danh ${U.dmy(x.session.sessionDate)}</div></span>
+          <span style="text-align:right"><b>${U.money(x.amount)}</b><div class="small muted">${U.esc(x.deadline || '')}</div></span></button>`).join('')}</div></div>` : ''}
         <div class="m-card"><b>Danh sách tiểu thương</b><div class="m-list">${list.slice(0, 12).map(x => `<button class="it" style="width:100%;text-align:left;background:transparent;border:0;cursor:pointer" data-act="mini-collect-open" data-id="${x.t.id}">
           <span><b>${U.esc(x.t.name)}</b><div class="small muted">${x.t.stalls.map(id => A.idx.stall.get(id).code).join(', ')} · ${x.n} khoản</div></span>
           <span style="text-align:right"><b>${U.money(x.amt)}</b>${x.over ? `<div class="small" style="color:#d6453b">Quá hạn ${U.money(x.over)}</div>` : ''}</span></button>`).join('') || '<div class="small muted">Không có khoản cần thu</div>'}</div></div></div>`;
@@ -420,7 +623,26 @@
       Object.assign(mini(), { collectTraderId: t.id, collectDone: false, lastPays: null });
       A.render();
     },
-    'mini-collector-home': () => { Object.assign(mini(), { collectTraderId: null, collectDone: false, lastPays: null }); A.render(); },
+    'mini-collector-home': () => { Object.assign(mini(), { collectTraderId: null, collectSessionRegId: null, collectDone: false, lastPays: null }); A.render(); },
+    'mini-session-cash-open': el => {
+      const due = miniSessionCashDues().find(x => x.reg.id === el.dataset.id);
+      if (!due || !isCollectorMini()) return;
+      Object.assign(mini(), { collectTraderId: null, collectSessionRegId: due.reg.id, collectDone: false, lastPays: null });
+      A.render();
+    },
+    'mini-session-cash-paid': () => {
+      const due = mini().collectSessionRegId ? miniSessionCashDues().find(x => x.reg.id === mini().collectSessionRegId) : null;
+      if (!due || !A.canDirectCollect(ui.market)) { U.toast('Chỉ được thu trực tiếp tiền mặt cho Chợ quê TTĐ trong phạm vi tài khoản'); return; }
+      const snap = miniSessionCashSnapshot();
+      const done = A.completeSessionCashPayment(due.reg, due.session, due.payment, collectorActor());
+      if (!done) { U.toast('Không thể ghi nhận thu: sai trạng thái đăng ký hoặc đã quá hạn trước điểm danh'); return; }
+      mini().lastPays = [done.ledgerPayment]; mini().collectDone = true; mini().collectSessionRegId = null;
+      try { A.save(); }
+      catch (err) { miniRestoreSessionCashSnapshot(snap); U.toast('Không lưu được khoản thu, chưa in biên lai'); A.render(); return; }
+      A.render();
+      A.showReceipt([done.ledgerPayment], { autoPrint: true });
+      U.toast('Đã ghi nhận thu ' + U.money(done.ledgerPayment.amount));
+    },
     'mini-collect-paid': () => {
       const t = mini().collectTraderId ? A.idx.trader.get(mini().collectTraderId) : null;
       if (!t || !A.canDirectCollect(t.market)) { U.toast('Chỉ được thu trực tiếp tiền mặt cho Chợ quê TTĐ trong phạm vi tài khoản'); return; }
@@ -450,18 +672,24 @@
       if (reasons.length) { U.toast(reasons[0]); return; }
       if (form.kind === 'SESSION') {
         const s = A.db.marketSessions.find(x => x.id === form.sessionId), n = Math.max(1, Number(form.stalls || 1));
+        miniEnsureOpsSession(s);
         const isWaiting = miniAvailableStalls(s) < n;
         const snap = miniSnapshotAmount(n, s.marketId);
         const reg = {
           id: miniSeq('DK', A.db.sessionRegistrations), code: 'DK-' + s.code.slice(-8) + '-' + U.pad(A.db.sessionRegistrations.length + 1, 3),
-          sessionId: s.id, marketId: s.marketId, merchantId: t.id, requestedStalls: n, businessCategory: form.cat,
-          status: isWaiting ? 'WAITING_LIST' : (form.method === 'CASH' ? 'CONDITIONAL_HOLD' : 'WAITING_PAYMENT'),
+          sessionId: s.id, market: s.marketId, marketId: s.marketId, traderId: t.id, merchantId: t.id,
+          pointId: null, requestedSectionId: null, requestedStalls: n, businessCategory: form.cat,
+          listType: isWaiting ? 'waitlist' : 'official', status: isWaiting ? 'waitlisted' : 'registered',
+          waitlistOrder: isWaiting ? miniSessionRegs(s.id).filter(x => x.listType === 'waitlist' || x.status === 'waitlisted').length + 1 : null,
           paymentMethod: form.method || 'ONLINE', pricingSnapshot: snap, totalAmount: snap.totalAmount,
-          createdBy: 'Mini app tiểu thương', createdAt: U.today(), note: isWaiting ? 'Mini app: chờ duyệt danh sách chờ' : ''
+          paymentWorkflowStatus: isWaiting ? 'WAITING_LIST' : (form.method === 'CASH' ? 'WAITING_COLLECTION' : 'WAITING_PAYMENT'),
+          registeredAt: U.today(), createdBy: 'Mini app tiểu thương', createdAt: U.today(), updatedBy: 'Mini app tiểu thương', updatedAt: U.today(),
+          note: isWaiting ? 'Mini app: chờ duyệt danh sách chờ' : ''
         };
         A.db.sessionRegistrations.push(reg);
         if (!isWaiting && reg.paymentMethod === 'ONLINE') A.db.sessionPayments.push({ id: miniSeq('PM', A.db.sessionPayments), sessionId: s.id, registrationId: reg.id, marketId: s.marketId, method: 'ONLINE', status: 'WAITING_PAYMENT', amount: snap.totalAmount, reference: 'MOCK-' + reg.code, createdAt: U.today(), paidAt: null });
-        U.toast(isWaiting ? 'Đã gửi đăng ký vào danh sách chờ' : 'Đã gửi đăng ký phiên, chờ thanh toán/xác nhận');
+        if (!isWaiting && reg.paymentMethod === 'CASH') A.db.sessionPayments.push({ id: miniSeq('PM', A.db.sessionPayments), sessionId: s.id, registrationId: reg.id, marketId: s.marketId, method: 'CASH', status: 'WAITING_COLLECTION', amount: snap.totalAmount, reference: 'CASH-' + reg.code, createdAt: U.today(), dueAt: miniSessionCashDeadline(s), collectedAt: null, collectedBy: null });
+        U.toast(isWaiting ? 'Đã gửi đăng ký vào danh sách chờ' : (reg.paymentMethod === 'CASH' ? 'Đăng ký thành công. Vui lòng sớm hoàn thành khoản thu tiền mặt trước điểm danh phiên chợ để được bán hàng tại chợ.' : 'Đã gửi đăng ký phiên, chờ thanh toán/xác nhận'));
       } else {
         const fixed = fixedMonthlyAmount(form.term || 'MONTH');
         A.db.fixedStallApplications.push({
