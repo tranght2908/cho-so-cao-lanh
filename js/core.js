@@ -10,7 +10,7 @@ window.APP = (function () {
   // luôn phải là 'CL'/'TTD' cụ thể. Bump version để mọi state cũ (kể cả market:'ALL' đã lưu từ
   // Phase 1) bị bỏ qua hoàn toàn thay vì cố vá — A.syncAccountContext() ở A.load() sẽ tự chọn lại
   // market hợp lệ theo đúng account đang dùng.
-  const RBAC_SCHEMA = 2;
+  const RBAC_SCHEMA = 3; // 3: Trưởng BQL chợ có phạm vi cả 02 chợ
   const A = {
     D, db: null, idx: null, current: null, RBAC_SCHEMA,
     VIEWS: {}, ACT: {}, IN: {}, CH: {},
@@ -63,6 +63,8 @@ window.APP = (function () {
   U.staffName = id => { const s = D.STAFF.find(x => x.id === id); return s ? s.name : (id || ''); };
   U.typeLabel = t => ({ kiot: 'Ki-ốt', nhalong: 'Trong nhà lồng', ngoai: 'Ngoài nhà lồng', phien: 'Quầy phiên' }[t]);
   U.unitLabel = st => st.type === 'phien' ? U.money(D.SESSION_FEE) + '/quầy/phiên' : U.money(D.UNIT[st.type]) + '/m²/ngày';
+  U.rentalKind = st => st && st.type === 'phien' ? 'session' : 'fixed';
+  U.rentalLabel = st => U.rentalKind(st) === 'session' ? 'Quầy thuê theo phiên / khách vãng lai' : 'Quầy thuê cố định tháng/quý';
   U.statusTag = s => `<span class="tag"><span class="dot" style="background:${D.STATUS[s].color}"></span>${D.STATUS[s].label}</span>`;
   U.today = () => A.db.today;
   U.nowTime = () => { const d = new Date(); return U.pad(d.getHours()) + ':' + U.pad(d.getMinutes()); };
@@ -101,6 +103,9 @@ window.APP = (function () {
     if (!A.PERM.canAction(ui.role, actionKey)) return false;
     if (targetMarket != null && targetMarket !== ui.market) return false;
     return true;
+  };
+  A.canDirectCollect = function (targetMarket) {
+    return targetMarket === 'TTD' && ui.market === 'TTD' && U.can('thu-tien') && A.canDo('thu-tien.thu', targetMarket);
   };
   U.pager = (key, total, size) => {
     const pages = Math.max(1, Math.ceil(total / size));
@@ -144,7 +149,7 @@ window.APP = (function () {
     const finder = (x, y) => (x < 7 && y < 7) || (x >= N - 7 && y < 7) || (x < 7 && y >= N - 7);
     for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (!finder(x, y) && rnd() < 0.48) cells.push(`<rect x="${x}" y="${y}" width="1" height="1"/>`);
     const fp = (x, y) => `<rect x="${x}" y="${y}" width="7" height="7"/><rect x="${x + 1}" y="${y + 1}" width="5" height="5" fill="#fff"/><rect x="${x + 2}" y="${y + 2}" width="3" height="3"/>`;
-    return `<svg viewBox="-2 -2 29 29" width="${size || 170}" height="${size || 170}" role="img" aria-label="Mã QR minh họa"><rect x="-2" y="-2" width="29" height="29" fill="#fff"/><g fill="#10362e">${cells.join('')}${fp(0, 0)}${fp(N - 7, 0)}${fp(0, N - 7)}</g><rect x="10" y="10" width="5" height="5" rx="1" fill="#c93d6e"/></svg>`;
+    return `<svg viewBox="-2 -2 29 29" width="${size || 170}" height="${size || 170}" role="img" aria-label="Mã QR minh họa"><rect x="-2" y="-2" width="29" height="29" fill="#fff"/><g fill="#0d2e55">${cells.join('')}${fp(0, 0)}${fp(N - 7, 0)}${fp(0, N - 7)}</g><rect x="10" y="10" width="5" height="5" rx="1" fill="#0089df"/></svg>`;
   };
 
   // ---------- biểu đồ ----------
@@ -158,7 +163,7 @@ window.APP = (function () {
     let g = '';
     for (let k = 0; k <= 4; k++) {
       const y = Tp + ph * (1 - k / 4);
-      g += `<line x1="${L}" x2="${W - Rt}" y1="${y}" y2="${y}" stroke="#e6ecea"/><text x="${L - 6}" y="${y + 4}" text-anchor="end" font-size="11" fill="#7a8883">${o.fmt(max * k / 4)}</text>`;
+      g += `<line x1="${L}" x2="${W - Rt}" y1="${y}" y2="${y}" stroke="#e5eaf1"/><text x="${L - 6}" y="${y + 4}" text-anchor="end" font-size="11" fill="#6b7683">${o.fmt(max * k / 4)}</text>`;
     }
     labels.forEach((lb, i) => {
       const x0 = L + i * bw;
@@ -176,7 +181,7 @@ window.APP = (function () {
           g += `<rect x="${x0 + bw * 0.15 + j * w}" y="${Tp + ph - hh}" width="${w - 2}" height="${Math.max(0, hh)}" fill="${s.color}" rx="2"><title>${lb} · ${s.name}: ${o.fmt(v)}</title></rect>`;
         });
       }
-      g += `<text x="${x0 + bw / 2}" y="${H - 9}" text-anchor="middle" font-size="11" fill="#5f6e69">${lb}</text>`;
+      g += `<text x="${x0 + bw / 2}" y="${H - 9}" text-anchor="middle" font-size="11" fill="#5c646f">${lb}</text>`;
     });
     return `<div class="chart"><svg viewBox="0 0 ${W} ${H}">${g}</svg><div class="chart-legend">${series.map(s => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join('')}</div></div>`;
   };
@@ -188,7 +193,7 @@ window.APP = (function () {
       arcs += `<circle r="15.9155" cx="21" cy="21" fill="none" stroke="${p.color}" stroke-width="6" stroke-dasharray="${len} ${100 - len}" stroke-dashoffset="${off}"><title>${p.label}: ${p.value}</title></circle>`;
       off -= len;
     });
-    return `<div class="donut-wrap"><svg viewBox="0 0 42 42">${arcs}<text x="21" y="21" text-anchor="middle" font-size="6.5" font-weight="700" fill="#1b2a26">${center ? center[0] : ''}</text><text x="21" y="27" text-anchor="middle" font-size="3.2" fill="#66756f">${center ? center[1] : ''}</text></svg>
+    return `<div class="donut-wrap"><svg viewBox="0 0 42 42">${arcs}<text x="21" y="21" text-anchor="middle" font-size="6.5" font-weight="700" fill="#0f1e32">${center ? center[0] : ''}</text><text x="21" y="27" text-anchor="middle" font-size="3.2" fill="#5c646f">${center ? center[1] : ''}</text></svg>
       <div class="donut-legend">${parts.map(p => `<div><span class="tag"><span class="dot" style="background:${p.color}"></span>${p.label}</span><b>${p.value}</b></div>`).join('')}</div></div>`;
   };
 
@@ -241,10 +246,10 @@ window.APP = (function () {
     'tong-quan': 'CROSS', 'bao-cao': 'CROSS',
     'mat-bang': 'BOTH', 'diem-kd': 'BOTH', 'tieu-thuong': 'BOTH', 'hop-dong': 'BOTH',
     'cau-hinh-gia': 'BOTH',
-    'phai-thu': 'BOTH', 'thu-tien': 'BOTH', 'doi-soat': 'BOTH', 'cong-no': 'BOTH',
+    'phai-thu': 'BOTH', 'thu-tien': 'TTD', 'doi-soat': 'BOTH', 'cong-no': 'BOTH',
     'su-co': 'BOTH', 'thong-bao': 'BOTH',
     'phien-cho': 'TTD',
-    'dien-nuoc': 'CL',
+    'dien-nuoc': 'BOTH',
     'tai-khoan': 'SYSTEM', 'cai-dat': 'SYSTEM', 'mini-app': 'BOTH'
   };
   // screenId có hợp lệ với market scope của account + selectedMarket hiện tại không. Đây là điểm
@@ -336,7 +341,9 @@ window.APP = (function () {
       const p = {
         id: 'GD' + U.pad(n, 6), invoiceId: inv.id, market: inv.market, traderId: inv.traderId, amount: take, method,
         date: db.today, time, by, receipt: 'BL2609-' + U.pad(n, 6),
-        lookup: Math.random().toString(36).slice(2, 8).toUpperCase(), reconciled: method === 'tm' ? null : true
+        lookup: Math.random().toString(36).slice(2, 8).toUpperCase(), reconciled: method === 'tm' ? null : true,
+        receiptDelivery: { miniApp: true, sentAt: db.today + ' ' + time, status: 'SENT_MOCK' },
+        printStatus: 'PENDING'
       };
       db.payments.push(p);
       out.push(p);
@@ -375,17 +382,23 @@ window.APP = (function () {
         <dt>Hình thức</dt><dd>${D.METHOD[p0.method]}</dd>
         <dt>Thời gian</dt><dd>${U.dmy(p0.date)} ${p0.time}</dd>
         <dt>Người thu</dt><dd>${U.esc(p0.by === 'Hệ thống' || p0.by === 'Mini app' ? p0.by + ' (tự động)' : U.staffName(p0.by))}</dd>
-        <dt>Mã tra cứu</dt><dd><b>${p0.lookup}</b></dd></dl>
-        <div style="text-align:center">${U.qr(p0.lookup, 92)}<div class="small muted">Quét để tra cứu</div></div></div>
+        <dt>Mã tra cứu</dt><dd><b>${p0.lookup}</b></dd>
+        <dt>Gửi Mini app</dt><dd><span class="tag ok">Đã gửi</span></dd></dl>
+        <div class="note info" style="max-width:220px">Biên lai dùng để rà soát dữ liệu, truy vết giao dịch và kiểm soát tiền mặt theo nhân viên thu.</div></div>
       <div class="divider"></div>
       ${U.table([{ t: 'Số biên lai' }, { t: 'Nội dung' }, { t: 'Số tiền', num: true }], rows)}
       <div class="total" style="margin-top:10px">${U.money(U.sum(pays, p => p.amount))}</div>
       <div class="small muted" style="margin-top:8px">✓ Đã gửi biên lai tới tiểu thương qua Mini app và Zalo OA (mô phỏng)</div></div>`;
   };
-  A.showReceipt = function (pays) {
+  A.showReceipt = function (pays, opts) {
     if (!pays || !pays.length) return;
     A.modal(A.mHead('Biên lai điện tử') + `<div class="modal-b">${A.receiptHtml(pays)}</div>
       <div class="modal-f"><button class="btn" data-act="print">In biên lai</button><button class="btn primary" data-act="close">Xong</button></div>`);
+    if (opts && opts.autoPrint) {
+      pays.forEach(p => { p.printStatus = 'PRINTED_MOCK'; });
+      A.save();
+      setTimeout(() => window.print(), 0);
+    }
   };
 
   // ---------- menu & định tuyến ----------
@@ -409,7 +422,10 @@ window.APP = (function () {
       { id: 'hop-dong', ico: '📄', label: 'Hợp đồng', badge: () => A.db.contracts.filter(c => U.inM(c) && c.status === 'hieuluc' && U.days(U.today(), c.end) <= 30).length }
     ] },
     { group: 'Tài chính', items: [
-      { id: 'cau-hinh-gia', ico: '💰', label: 'Cấu hình giá dịch vụ' },
+      { sub: 'Quản lý khai báo' },
+      { id: 'cau-hinh-gia', ico: '💰', label: 'Chính sách thu và biểu phí' },
+      { id: 'tai-khoan-ngan-hang', ico: '🏦', label: 'Danh sách tài khoản ngân hàng' },
+      { sub: 'Nghiệp vụ tài chính' },
       { id: 'dien-nuoc', ico: '⚡', label: 'Chỉ số điện, nước' },
       { id: 'phai-thu', ico: '🧾', label: 'Khoản phải thu' },
       { id: 'thu-tien', ico: '💳', label: 'Thu tiền & biên lai' },
@@ -553,7 +569,7 @@ window.APP = (function () {
       A.syncAccountContext();
       A.saveUi();
       const role = A.PERM.role(ui.role);
-      if (U.can('mini-app') && ((role && role.selfService) || A.canDo('thu-tien.thu', ui.market))) A.go('mini-app');
+      if (U.can('mini-app') && ((role && role.selfService) || A.canDirectCollect(ui.market))) A.go('mini-app');
       else if (!U.can(A.current) || A.current === 'mini-app') A.go('tong-quan'); else A.route();
     },
     // Đổi selectedMarket toàn cục: chỉ chấp nhận market nằm trong allowedMarkets của account đang
@@ -577,7 +593,7 @@ window.APP = (function () {
       <p class="muted" style="margin-top:0">Prototype mô phỏng <b>Hệ thống quản lý chợ số</b> cho 02 chợ: Chợ Cao Lãnh và Chợ quê Cù lao Tân Thuận Đông. Đổi <b>Vai trò</b> và <b>Chợ</b> ở thanh trên cùng.</p>
       <ol class="script">
         <li><div><b>Lãnh đạo phường → Tổng quan liên chợ:</b> số liệu tổng hợp, so sánh 02 chợ, cảnh báo cần xử lý.</div></li>
-        <li><div><b>Ban Quản lý chợ → Sơ đồ mặt bằng:</b> bấm vào một ô màu đỏ (nợ phí) để xem tiểu thương, hợp đồng, công nợ → <b>Thu tiền</b> bằng mã QR → nhận biên lai điện tử.</div></li>
+        <li><div><b>Ban Quản lý chợ quê TTĐ → Thu tiền & biên lai:</b> ghi nhận thu tiền mặt trực tiếp, hệ thống phát hành biên lai, tự mở lệnh in và gửi biên lai qua Mini app.</div></li>
         <li><div><b>Tiểu thương → Mini app:</b> đăng nhập bằng OTP, thanh toán khoản phải nộp, gửi phản ánh kèm ảnh.</div></li>
         <li><div>Quay lại <b>Ban Quản lý chợ → Phản ánh & sự cố:</b> phản ánh vừa gửi đã nằm ở cột "Tiếp nhận" để phân công xử lý.</div></li>
         <li><div><b>Báo cáo thống kê:</b> hơn 10 báo cáo, xuất Excel (CSV) hoặc in PDF.</div></li>

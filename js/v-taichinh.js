@@ -77,6 +77,27 @@
       <td>${r.status === 'RECORDED' ? '<span class="tag ok">Đã ghi</span>' : '<span class="tag">Chưa ghi</span>'}${abnormal(r) ? `<br><span class="tag danger" title="TB 3 kỳ: ${r.elecAvg} kWh">⚠ Gấp ${(ec / r.elecAvg).toFixed(1)} lần TB</span>` : ''}</td>
       <td class="nowrap">${r.status === 'RECORDED' ? `<button class="btn sm" data-act="dn-detail" data-id="${r.stallId}" data-period="${r.period}">Chi tiết</button>` : ''}</td></tr>`;
   }
+
+  function receivableItemsForContract(st, c, readingPeriod) {
+    const items = [];
+    items.push({ name: 'Phí quầy cố định tháng/quý (' + st.area + ' m² × ' + c.unit.toLocaleString('vi-VN') + ' đ × 30 ngày)', amount: c.monthly });
+    const r = A.db.readings.find(x => x.stallId === st.id && x.period === readingPeriod);
+    if (r) {
+      const kwh = r.elecCur != null ? r.elecCur - r.elecPrev : r.elecAvg;
+      const m3 = r.waterCur != null ? r.waterCur - r.waterPrev : r.waterAvg;
+      items.push({ name: 'Tiền điện (' + kwh + ' kWh × ' + D.ELEC.toLocaleString('vi-VN') + ' đ)' + (r.elecCur == null ? ' – tạm tính theo TB' : ''), amount: kwh * D.ELEC });
+      items.push({ name: 'Tiền nước (' + m3 + ' m³ × ' + D.WATER.toLocaleString('vi-VN') + ' đ)' + (r.waterCur == null ? ' – tạm tính theo TB' : ''), amount: m3 * D.WATER });
+    }
+    if (st.market === 'TTD') {
+      D.RATE_POLICY_SEED.extraServices
+        .filter(x => x.status === 'active' && x.marketModel === D.RATE_MARKET_MODEL.FIXED_MONTHLY && x.marketId === st.market)
+        .forEach(x => {
+          const amount = x.calcMethod === 'area' ? Math.round(st.area * x.amount / 1000) * 1000 : x.amount;
+          items.push({ name: x.name + ' (' + x.unit + ')', amount });
+        });
+    }
+    return items;
+  }
   A.VIEWS['dien-nuoc'] = function () {
     const p = currentPeriod();
     const canEdit = A.canDo('dien-nuoc.ghi-chi-so', ui.market);
@@ -91,8 +112,8 @@
     return header + `<div class="kpis">
       <div class="card kpi"><div class="k-label">Kỳ ghi chỉ số</div><div class="k-value">${U.per(p.id)}</div><div class="k-sub">${periodStatusBadge(p)}</div></div>
       <div class="card kpi"><div class="k-label">Đã ghi</div><div class="k-value">${done}/${all.length}</div><div class="bar-mini"><i style="width:${U.pct(done, all.length)}%"></i></div></div>
-      <div class="card kpi"><div class="k-label">Chưa ghi</div><div class="k-value" style="${todo ? 'color:#d6453b' : ''}">${todo}</div><div class="k-sub">điểm kinh doanh</div></div>
-      <div class="card kpi"><div class="k-label">Tăng bất thường</div><div class="k-value" style="color:#d6453b">${abn}</div><div class="k-sub">> 150% trung bình 3 kỳ</div></div></div>
+      <div class="card kpi"><div class="k-label">Chưa ghi</div><div class="k-value" style="${todo ? 'color:#df2225' : ''}">${todo}</div><div class="k-sub">điểm kinh doanh</div></div>
+      <div class="card kpi"><div class="k-label">Tăng bất thường</div><div class="k-value" style="color:#df2225">${abn}</div><div class="k-sub">> 150% trung bình 3 kỳ</div></div></div>
     <div class="card"><div class="card-h"><h3>Ghi chỉ số điện, nước</h3>
       <div class="seg">${[['all', 'Tất cả'], ['todo', 'Chưa ghi'], ['abn', 'Bất thường']].map(x => `<button class="${ui.readingsFilter === x[0] ? 'on' : ''}" data-act="dn-filter" data-id="${x[0]}">${x[1]}</button>`).join('')}</div>
       <span class="spacer"></span>
@@ -157,7 +178,7 @@
     const rows = A.db.readings.filter(r => r.period === p.id && U.inM(A.idx.stall.get(r.stallId)));
     const done = rows.filter(r => r.status === 'RECORDED').length, todo = rows.length - done, abn = rows.filter(abnormal).length;
     A.modal(A.mHead('Chốt kỳ ghi chỉ số ' + U.per(p.id) + '?') + `<div class="modal-b">
-      <dl class="kv"><dt>Đã ghi</dt><dd>${done}/${rows.length}</dd><dt>Chưa ghi</dt><dd style="${todo ? 'color:#d6453b;font-weight:600' : ''}">${todo}</dd><dt>Tăng bất thường</dt><dd>${abn}</dd></dl>
+      <dl class="kv"><dt>Đã ghi</dt><dd>${done}/${rows.length}</dd><dt>Chưa ghi</dt><dd style="${todo ? 'color:#df2225;font-weight:600' : ''}">${todo}</dd><dt>Tăng bất thường</dt><dd>${abn}</dd></dl>
       ${todo ? `<div class="note" style="margin-top:12px">Còn ${todo} điểm kinh doanh chưa ghi chỉ số. Vui lòng ghi đủ trước khi chốt kỳ.</div>` : '<div class="note info" style="margin-top:12px">Sau khi chốt, dữ liệu kỳ này sẽ chuyển sang chế độ chỉ xem.</div>'}
       </div><div class="modal-f"><button class="btn" data-act="close">Hủy</button>
       <button class="btn primary" data-act="dn-close-confirm" data-id="${p.id}" ${todo ? 'disabled' : ''}>Xác nhận chốt kỳ</button></div>`);
@@ -223,6 +244,112 @@
   };
 
   // ---------- Khoản phải thu ----------
+  function ptReqs() {
+    A.db.receivableAdjustRequests = A.db.receivableAdjustRequests || [];
+    return A.db.receivableAdjustRequests;
+  }
+  function ptCan(action, market) { return U.can('phai-thu') && A.canDo(action, market); }
+  function ptPendingReq(invoiceId) { return ptReqs().find(r => r.invoiceId === invoiceId && r.status === 'PENDING'); }
+  function ptReqStatusTag(s) {
+    if (s === 'APPROVED') return '<span class="tag ok">Đã duyệt</span>';
+    if (s === 'REJECTED') return '<span class="tag danger">Từ chối</span>';
+    return '<span class="tag warn">Chờ duyệt</span>';
+  }
+  function ptMoneySigned(n) {
+    return (n >= 0 ? '+' : '−') + U.money(Math.abs(n));
+  }
+  function ptReqDelta(r) {
+    if (!r) return 0;
+    if (typeof r.delta === 'number') return r.delta;
+    return -(r.value || 0);
+  }
+  function ptItemKind(name) {
+    const s = (name || '').toLowerCase();
+    if (s.indexOf('điện') !== -1) return 'Tiền điện';
+    if (s.indexOf('nước') !== -1) return 'Tiền nước';
+    if (s.indexOf('phí quầy') !== -1 || s.indexOf('mặt bằng') !== -1) return 'Tiền quầy / mặt bằng';
+    return 'Dịch vụ khác / khoản khác';
+  }
+  function ptCanRequestAdjust(i) {
+    return !!i && ptCan('phai-thu.yeu-cau-dieu-chinh', i.market) && i.status !== 'paid' && !i.adjust && !ptPendingReq(i.id);
+  }
+  function ptCanViewAdjustReq(req) {
+    return !!req && U.can('phai-thu') && req.market === ui.market;
+  }
+  function ptCanApproveAdjustReq(req) {
+    const i = req && A.idx.invoice.get(req.invoiceId);
+    return !!req && !!i && ptCan('phai-thu.mien-giam', i.market) && req.status === 'PENDING' && i.status !== 'paid' && !i.adjust && i.amount + ptReqDelta(req) >= i.paid;
+  }
+  function ptRequestRows(invoiceId) {
+    return ptReqs().filter(r => r.market === ui.market && (!invoiceId || r.invoiceId === invoiceId)).map(r => {
+      const i = A.idx.invoice.get(r.invoiceId), canApprove = ptCanApproveAdjustReq(r);
+      return `<tr><td>${r.id}<div class="small muted">${r.requestedAt}</div></td><td>${r.invoiceId}<div class="small muted">${U.esc(r.itemKind || '')}</div></td><td>${U.esc(r.itemName || 'Điều chỉnh khoản phải thu')}</td><td class="num">${U.money(r.currentAmount || 0)}</td><td class="num">${U.money(r.proposedAmount || 0)}</td><td class="num">${ptMoneySigned(ptReqDelta(r))}</td><td>${U.esc(r.reason)}</td><td>${ptReqStatusTag(r.status)}</td><td class="nowrap">
+        <button class="btn sm" data-act="inv-adjust-detail" data-id="${r.id}">Chi tiết</button>
+        ${canApprove ? `<button class="btn sm primary" data-act="inv-adjust-approve" data-id="${r.id}">Phê duyệt</button><button class="btn sm" data-act="inv-adjust-reject" data-id="${r.id}">Từ chối</button>` : ''}
+        ${i && i.adjust && r.status === 'APPROVED' ? '<span class="small muted">Đã cập nhật khoản</span>' : ''}
+      </td></tr>`;
+    });
+  }
+  function ptAdjustDetailModal(req) {
+    if (!ptCanViewAdjustReq(req)) return;
+    const i = A.idx.invoice.get(req.invoiceId);
+    if (!i || i.market !== req.market) return;
+    const t = A.idx.trader.get(i.traderId), st = A.idx.stall.get(i.stallId), delta = ptReqDelta(req);
+    const canApprove = ptCanApproveAdjustReq(req);
+    A.modal(A.mHead('Chi tiết yêu cầu ' + req.id) + `<div class="modal-b">
+      <dl class="kv">
+        <dt>Mã yêu cầu</dt><dd>${req.id}</dd>
+        <dt>Trạng thái</dt><dd>${ptReqStatusTag(req.status)}</dd>
+        <dt>Khoản phải thu</dt><dd>${req.invoiceId} · ${U.per(i.period)}</dd>
+        <dt>Chợ / điểm KD</dt><dd>${U.mShort(req.market)} · ${st ? U.esc(st.code) : '-'}</dd>
+        <dt>Tiểu thương</dt><dd>${t ? U.esc(t.name) + ' (' + t.id + ')' : '-'}</dd>
+        <dt>Người gửi</dt><dd>${U.esc(req.requestedBy || '-')} · ${U.esc(req.requestedAt || '-')}</dd>
+        <dt>Người xử lý</dt><dd>${req.decidedBy ? U.esc(req.decidedBy) + ' · ' + U.esc(req.decidedAt || '-') : 'Chưa xử lý'}</dd>
+      </dl>
+      <div class="divider"></div>
+      ${U.table([{ t: 'Nội dung' }, { t: 'Giá trị' }], [
+        `<tr><td>Dòng điều chỉnh</td><td>${U.esc(req.itemName || 'Điều chỉnh khoản phải thu')}</td></tr>`,
+        `<tr><td>Nhóm khoản</td><td>${U.esc(req.itemKind || '-')}</td></tr>`,
+        `<tr><td>Loại sai số</td><td>${U.esc(req.adjustmentType || '-')}</td></tr>`,
+        `<tr><td>Số tiền hiện tại</td><td>${U.money(req.currentAmount || 0)}</td></tr>`,
+        `<tr><td>Số tiền đề nghị</td><td>${U.money(req.proposedAmount || 0)}</td></tr>`,
+        `<tr><td>Chênh lệch</td><td>${ptMoneySigned(delta)}</td></tr>`,
+        `<tr><td>Lý do nghiệp vụ</td><td>${U.esc(req.reason || '-')}</td></tr>`,
+        `<tr><td>Ghi chú minh chứng</td><td>${U.esc(req.evidenceNote || '-')}</td></tr>`,
+        `<tr><td>Tệp minh chứng</td><td>${req.attachment ? U.esc(req.attachment.name) : '-'}</td></tr>`
+      ])}
+    </div><div class="modal-f">
+      ${canApprove ? `<button class="btn primary" data-act="inv-adjust-approve" data-id="${req.id}">Phê duyệt</button><button class="btn" data-act="inv-adjust-reject" data-id="${req.id}">Từ chối</button>` : ''}
+      <button class="btn" data-act="close">Đóng</button></div>`, true);
+  }
+  function renderPtAdjustForm() {
+    const d = ui.ptAdjForm, i = d && A.idx.invoice.get(d.invoiceId);
+    if (!i || !ptCanRequestAdjust(i)) { A.closeModal(); A.render(); return; }
+    const idx = Math.max(0, Math.min(i.items.length - 1, Number(d.lineIndex) || 0));
+    const item = i.items[idx];
+    const proposed = Math.max(0, Number(d.proposedAmount != null ? d.proposedAmount : item.amount) || 0);
+    const delta = proposed - item.amount;
+    ui.ptAdjForm.lineIndex = String(idx);
+    ui.ptAdjForm.proposedAmount = proposed;
+    A.modal(A.mHead('Yêu cầu điều chỉnh ' + i.id) + `<div class="modal-b">
+      <div class="form-grid">
+        <div class="field"><label>Dòng phát sinh cần điều chỉnh</label><select class="input" data-ch="adj-line">${i.items.map((x, n) => `<option value="${n}" ${idx === n ? 'selected' : ''}>${U.esc(ptItemKind(x.name) + ' · ' + x.name)}</option>`).join('')}</select></div>
+        <div class="field"><label>Loại sai số</label><select class="input" data-ch="adj-kind">
+          ${['Nhầm tiền quầy / mặt bằng', 'Nhầm tiền điện', 'Nhầm tiền nước', 'Nhầm dịch vụ khác', 'Miễn giảm theo chính sách', 'Khác'].map(x => `<option value="${U.esc(x)}" ${d.adjustmentType === x ? 'selected' : ''}>${U.esc(x)}</option>`).join('')}
+        </select></div>
+        <div class="field"><label>Số tiền hiện tại</label><input class="input" value="${U.money(item.amount)}" disabled></div>
+        <div class="field"><label>Số tiền đề nghị đúng</label><input class="input" type="number" min="0" data-ch="adj-proposed" value="${proposed}"></div>
+        <div class="field"><label>Chênh lệch sau điều chỉnh</label><input class="input" value="${ptMoneySigned(delta)}" disabled></div>
+        <div class="field"><label>Trạng thái xử lý</label><input class="input" value="Chờ Trưởng Ban Quản lý phê duyệt" disabled></div>
+      </div>
+      <div class="field" style="margin-top:10px"><label>Lý do nghiệp vụ</label><textarea class="input" id="adj-reason" data-in="adj-reason" rows="2" placeholder="VD: nhập nhầm số quầy, sai chỉ số điện/nước, tính thừa dịch vụ khác...">${U.esc(d.reason || '')}</textarea></div>
+      <div class="form-grid" style="margin-top:10px">
+        <div class="field"><label>Ghi chú minh chứng</label><input class="input" id="adj-evidence" data-in="adj-evidence" value="${U.esc(d.evidenceNote || '')}" placeholder="VD: biên bản kiểm tra, ảnh đồng hồ, phiếu rà soát"></div>
+        <div class="field"><label>Tệp minh chứng</label><input class="input" id="adj-file" type="file" accept="image/*,.pdf"></div>
+      </div>
+      <div class="note" style="margin-top:12px">Yêu cầu chỉ lưu trạng thái PENDING. Khoản phải thu chỉ thay đổi sau khi Trưởng Ban Quản lý phê duyệt.</div></div>
+      <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="inv-adjust-save" data-id="${i.id}" ${delta === 0 ? 'disabled' : ''}>Gửi yêu cầu</button></div>`, true);
+  }
   A.VIEWS['phai-thu'] = function () {
     const fp = financePeriod(), p = fp.id;
     const periods = A.db.issuedPeriods;
@@ -233,7 +360,7 @@
     const pg = U.pager('pt' + p, rows.length, 25);
     const amt = U.sum(inv, i => i.amount), paid = U.sum(inv, i => i.paid);
     const next = periods.includes('2026-10') ? null : '2026-10';
-    const canIssue = A.canDo('phai-thu.phat-hanh');
+    const canIssue = A.canDo('phai-thu.phat-hanh', ui.market);
     return `<div class="card"><div class="card-b" style="padding-top:14px">${financeTimeBarRow('Kỳ thu')}
       <div class="row small" style="margin-top:8px;flex-wrap:wrap"><span class="muted">Hạn nộp: <b>${U.dmy(fp.dueDate)}</b></span><span class="spacer"></span>
         ${next && canIssue ? `<button class="btn primary" data-act="pt-issue">⚙ Phát hành tự động kỳ 10/2026</button>` : (next ? '' : '<span class="tag ok">Đã phát hành kỳ 10/2026</span>')}</div></div></div>
@@ -241,36 +368,30 @@
       <div class="card kpi"><div class="k-label">Số khoản phải thu</div><div class="k-value">${inv.length}</div><div class="k-sub">Tạo tự động từ hợp đồng, đơn giá, chỉ số điện nước</div></div>
       <div class="card kpi"><div class="k-label">Tổng phải thu</div><div class="k-value">${U.moneyShort(amt)}</div><div class="k-sub">${U.money(amt)}</div></div>
       <div class="card kpi"><div class="k-label">Đã thu</div><div class="k-value">${U.moneyShort(paid)}</div><div class="bar-mini"><i style="width:${U.pct(paid, amt)}%"></i></div></div>
-      <div class="card kpi"><div class="k-label">Còn phải thu</div><div class="k-value" style="color:#d6453b">${U.moneyShort(amt - paid)}</div><div class="k-sub">Tỷ lệ thu ${U.pctTxt(U.pct(paid, amt))}</div></div></div>
+      <div class="card kpi"><div class="k-label">Còn phải thu</div><div class="k-value" style="color:#df2225">${U.moneyShort(amt - paid)}</div><div class="k-sub">Tỷ lệ thu ${U.pctTxt(U.pct(paid, amt))}</div></div></div>
     <div class="card"><div class="card-h"><h3>Danh sách khoản phải thu kỳ ${fp.label}</h3>
       <select class="input" data-ch="pt-status"><option value="">Mọi trạng thái</option><option value="paid" ${f.ptStatus === 'paid' ? 'selected' : ''}>Đã thu</option><option value="unpaid" ${f.ptStatus === 'unpaid' ? 'selected' : ''}>Chưa thu</option><option value="partial" ${f.ptStatus === 'partial' ? 'selected' : ''}>Thu một phần</option><option value="over" ${f.ptStatus === 'over' ? 'selected' : ''}>Quá hạn</option></select>
       <input class="input" placeholder="Mã khoản, tiểu thương, mã điểm" data-in="pt-search" value="${U.esc(f.ptSearch || '')}"></div>
       <div class="card-b">${U.table([{ t: 'Mã khoản' }, { t: 'Tiểu thương' }, { t: 'Điểm KD' }, { t: 'Số tiền', num: true }, { t: 'Đã thu', num: true }, { t: 'Hạn nộp' }, { t: 'Trạng thái' }],
         rows.slice(pg.start, pg.end).map(i => `<tr class="click" data-act="inv-open" data-id="${i.id}"><td>${i.id}${i.adjust ? ' <span class="tag purple">Miễn giảm</span>' : ''}</td><td>${U.esc(A.idx.trader.get(i.traderId).name)}</td><td>${A.idx.stall.get(i.stallId).code}</td>
-          <td class="num">${U.money(i.amount)}</td><td class="num">${U.money(i.paid)}</td><td>${U.dmy(i.due)}</td><td>${U.invTag(i)}</td></tr>`))}${pg.html}</div></div>`;
+          <td class="num">${U.money(i.amount)}</td><td class="num">${U.money(i.paid)}</td><td>${U.dmy(i.due)}</td><td>${U.invTag(i)}${ptPendingReq(i.id) ? ' <span class="tag warn">Chờ điều chỉnh</span>' : ''}</td></tr>`))}${pg.html}</div></div>
+    <div class="card"><div class="card-h"><h3>Yêu cầu miễn giảm / điều chỉnh</h3></div>
+      <div class="card-b">${U.table([{ t: 'Mã yêu cầu' }, { t: 'Khoản' }, { t: 'Dòng điều chỉnh' }, { t: 'Hiện tại', num: true }, { t: 'Đề nghị', num: true }, { t: 'Chênh lệch', num: true }, { t: 'Lý do' }, { t: 'Trạng thái' }, { t: '' }],
+        ptRequestRows(), { empty: 'Chưa có yêu cầu điều chỉnh' })}</div></div>`;
   };
   A.CH['pt-status'] = el => { f.ptStatus = el.value; A.render(); };
   A.IN['pt-search'] = el => { f.ptSearch = el.value; A.render(); };
   A.ACT['pt-issue'] = () => {
-    if (!A.canDo('phai-thu.phat-hanh')) return;
+    if (!A.canDo('phai-thu.phat-hanh', ui.market)) return;
     const db = A.db;
     if (db.issuedPeriods.includes('2026-10')) { U.toast('Kỳ 10/2026 đã được phát hành'); A.render(); return; }
     const out = [];
-    db.contracts.filter(c => c.status === 'hieuluc').forEach(c => {
+    const latestPeriod = db.meterPeriods[db.meterPeriods.length - 1].id;
+    db.contracts.filter(c => c.status === 'hieuluc' && U.inM(c)).forEach(c => {
       const st = A.idx.stall.get(c.stallId);
       if (st.status === 'ngung' || st.status === 'trong') return;
-      const items = [];
-      if (st.market === 'TTD') items.push({ name: 'Phí quầy theo phiên (5 phiên × ' + D.SESSION_FEE.toLocaleString('vi-VN') + ' đ)', amount: 5 * D.SESSION_FEE });
-      else {
-        items.push({ name: 'Giá dịch vụ sử dụng diện tích bán hàng (' + st.area + ' m² × ' + c.unit.toLocaleString('vi-VN') + ' đ × 30 ngày)', amount: c.monthly });
-        const latestPeriod = db.meterPeriods[db.meterPeriods.length - 1].id;
-        const r = db.readings.find(x => x.stallId === st.id && x.period === latestPeriod);
-        if (r) {
-          const kwh = r.elecCur != null ? r.elecCur - r.elecPrev : r.elecAvg, m3 = r.waterCur != null ? r.waterCur - r.waterPrev : r.waterAvg;
-          items.push({ name: 'Tiền điện (' + kwh + ' kWh × ' + D.ELEC.toLocaleString('vi-VN') + ' đ)' + (r.elecCur == null ? ' – tạm tính theo TB' : ''), amount: kwh * D.ELEC });
-          items.push({ name: 'Tiền nước (' + m3 + ' m³ × ' + D.WATER.toLocaleString('vi-VN') + ' đ)' + (r.waterCur == null ? ' – tạm tính theo TB' : ''), amount: m3 * D.WATER });
-        }
-      }
+      if (U.rentalKind(st) !== 'fixed') return;
+      const items = receivableItemsForContract(st, c, latestPeriod);
       const inv = { id: 'PT-202610-' + U.pad(db.invoices.length + 1, 5), period: '2026-10', market: c.market, stallId: st.id, traderId: c.traderId, contractId: c.id, items, amount: U.sum(items, x => x.amount), paid: 0, issued: '2026-10-01', due: '2026-10-15', status: 'unpaid', adjust: null, reminders: 0 };
       db.invoices.push(inv); A.idx.invoice.set(inv.id, inv); out.push(inv);
     });
@@ -285,87 +406,162 @@
   };
   A.ACT['inv-open'] = el => {
     const i = A.idx.invoice.get(el.dataset.id), t = A.idx.trader.get(i.traderId);
-    const pays = A.db.payments.filter(p => p.invoiceId === i.id);
+    const pays = A.db.payments.filter(p => p.invoiceId === i.id), reqRows = ptRequestRows(i.id);
     A.modal(A.mHead('Khoản phải thu ' + i.id) + `<div class="modal-b">
       <dl class="kv"><dt>Tiểu thương</dt><dd>${U.esc(t.name)} (${t.id})</dd><dt>Điểm KD</dt><dd>${A.idx.stall.get(i.stallId).code} · ${U.mShort(i.market)}</dd>
         <dt>Kỳ / hạn nộp</dt><dd>${U.per(i.period)} · hạn ${U.dmy(i.due)}</dd><dt>Trạng thái</dt><dd>${U.invTag(i)}</dd></dl><div class="divider"></div>
       ${U.table([{ t: 'Nội dung' }, { t: 'Số tiền', num: true }], i.items.map(x => `<tr><td>${x.name}</td><td class="num">${U.money(x.amount)}</td></tr>`)
-        .concat(i.adjust ? [`<tr><td>Miễn giảm ${i.adjust.pct}% (${U.esc(i.adjust.reason)}) – đã phê duyệt</td><td class="num">−${U.money(i.adjust.value)}</td></tr>`] : [])
+        .concat(i.adjust ? [`<tr><td>${U.esc(i.adjust.itemName || 'Điều chỉnh khoản phải thu')} (${U.esc(i.adjust.reason)}) – đã phê duyệt</td><td class="num">${ptMoneySigned(i.adjust.delta != null ? i.adjust.delta : -(i.adjust.value || 0))}</td></tr>`] : [])
         .concat([`<tr><td><b>Tổng cộng</b></td><td class="num"><b>${U.money(i.amount)}</b></td></tr>`]))}
       ${pays.length ? '<div class="divider"></div><b>Thanh toán</b>' + U.table([{ t: 'Biên lai' }, { t: 'Ngày' }, { t: 'Hình thức' }, { t: 'Số tiền', num: true }], pays.map(p => `<tr class="click" data-act="receipt" data-id="${p.receipt}"><td>${p.receipt}</td><td>${U.dmy(p.date)} ${p.time}</td><td>${D.METHOD[p.method]}</td><td class="num">${U.money(p.amount)}</td></tr>`)) : ''}
+      ${reqRows.length ? '<div class="divider"></div><b>Yêu cầu điều chỉnh</b>' + U.table([{ t: 'Mã yêu cầu' }, { t: 'Khoản' }, { t: 'Dòng điều chỉnh' }, { t: 'Hiện tại', num: true }, { t: 'Đề nghị', num: true }, { t: 'Chênh lệch', num: true }, { t: 'Lý do' }, { t: 'Trạng thái' }, { t: '' }], reqRows) : ''}
       </div><div class="modal-f">
-      ${i.status !== 'paid' && !i.adjust && A.canDo('phai-thu.mien-giam', i.market) ? `<button class="btn" data-act="inv-adjust" data-id="${i.id}">Miễn giảm / điều chỉnh</button>` : ''}
-      ${i.status !== 'paid' && A.canDo('thu-tien.thu', i.market) ? `<button class="btn primary" data-act="pay-open" data-id="${i.traderId}" data-inv="${i.id}">💳 Thu tiền</button>` : ''}
+      ${ptCanRequestAdjust(i) ? `<button class="btn" data-act="inv-adjust" data-id="${i.id}">Gửi yêu cầu miễn giảm / điều chỉnh</button>` : ''}
       <button class="btn" data-act="close">Đóng</button></div>`, true);
+  };
+  A.ACT['inv-adjust-detail'] = el => {
+    const req = ptReqs().find(r => r.id === el.dataset.id);
+    ptAdjustDetailModal(req);
   };
   A.ACT['inv-adjust'] = el => {
     const i = A.idx.invoice.get(el.dataset.id);
-    if (!A.canDo('phai-thu.mien-giam', i.market) || i.status === 'paid' || i.adjust) return;
-    A.modal(A.mHead('Miễn giảm ' + i.id) + `<div class="modal-b"><div class="form-grid">
-      <div class="field"><label>Mức miễn giảm</label><select class="input" id="adj-pct"><option>10</option><option>30</option><option selected>50</option><option>100</option></select></div>
-      <div class="field"><label>Lý do</label><input class="input" id="adj-reason" value="Sửa chữa hạ tầng khu vực, tạm ngừng kinh doanh"></div></div>
-      <div class="note" style="margin-top:12px">Quy trình: nhân viên đề xuất → Trưởng Ban Quản lý phê duyệt → hệ thống điều chỉnh khoản phải thu và ghi nhật ký. (Prototype: phê duyệt ngay)</div></div>
-      <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="inv-adjust-save" data-id="${i.id}">Gửi & phê duyệt</button></div>`);
+    if (!ptCanRequestAdjust(i)) return;
+    const first = i.items[0];
+    ui.ptAdjForm = { invoiceId: i.id, lineIndex: '0', adjustmentType: 'Nhầm tiền quầy / mặt bằng', proposedAmount: first ? first.amount : 0, reason: '', evidenceNote: '' };
+    renderPtAdjustForm();
   };
+  A.CH['adj-line'] = el => {
+    const d = ui.ptAdjForm, i = d && A.idx.invoice.get(d.invoiceId);
+    if (!i) return;
+    const item = i.items[Number(el.value) || 0];
+    d.lineIndex = el.value;
+    d.proposedAmount = item ? item.amount : 0;
+    renderPtAdjustForm();
+  };
+  A.CH['adj-kind'] = el => { if (ui.ptAdjForm) ui.ptAdjForm.adjustmentType = el.value; };
+  A.CH['adj-proposed'] = el => { if (ui.ptAdjForm) { ui.ptAdjForm.proposedAmount = Math.max(0, Number(el.value) || 0); renderPtAdjustForm(); } };
+  A.IN['adj-reason'] = el => { if (ui.ptAdjForm) ui.ptAdjForm.reason = el.value; };
+  A.IN['adj-evidence'] = el => { if (ui.ptAdjForm) ui.ptAdjForm.evidenceNote = el.value; };
   A.ACT['inv-adjust-save'] = el => {
     const i = A.idx.invoice.get(el.dataset.id);
-    if (!A.canDo('phai-thu.mien-giam', i.market) || i.status === 'paid' || i.adjust) return;
-    const pctv = Number(A.$('#adj-pct').value), reason = A.$('#adj-reason').value.trim() || 'Không ghi';
-    const base = i.items[0].amount, value = Math.round(base * pctv / 100 / 1000) * 1000;
-    i.adjust = { pct: pctv, reason, value }; i.amount = Math.max(i.paid, i.amount - value);
+    if (!ptCanRequestAdjust(i)) return;
+    const d = ui.ptAdjForm || {}, lineIndex = Number(d.lineIndex) || 0, item = i.items[lineIndex];
+    if (!item) return;
+    const reason = A.$('#adj-reason').value.trim(), evidenceNote = A.$('#adj-evidence').value.trim();
+    if (!reason) { U.toast('Vui lòng nhập lý do nghiệp vụ'); return; }
+    const file = A.$('#adj-file').files[0] || null;
+    const proposedAmount = Math.max(0, Number(d.proposedAmount) || 0), delta = proposedAmount - item.amount;
+    if (delta === 0) { U.toast('Số tiền đề nghị chưa thay đổi'); return; }
+    if (i.amount + delta < i.paid) { U.toast('Điều chỉnh làm tổng phải thu nhỏ hơn số đã thu, không hợp lệ'); return; }
+    ptReqs().unshift({
+      id: 'YCDT-' + U.pad(ptReqs().length + 1, 4), invoiceId: i.id, market: i.market, lineIndex,
+      itemName: item.name, itemKind: ptItemKind(item.name), adjustmentType: d.adjustmentType || ptItemKind(item.name),
+      currentAmount: item.amount, proposedAmount, delta, reason, evidenceNote,
+      attachment: file ? { name: file.name, type: file.type || 'application/octet-stream', size: file.size } : null,
+      status: 'PENDING', requestedBy: (A.currentAccount() || {}).fullName || 'Không rõ', requestedAt: nowStamp(), decidedBy: null, decidedAt: null
+    });
+    ui.ptAdjForm = null;
+    U.log(`Gửi yêu cầu điều chỉnh khoản ${i.id}: ${item.name} ${ptMoneySigned(delta)} (${reason})`);
+    A.save(); A.closeModal(); A.render(); U.toast('Đã gửi yêu cầu, chờ Trưởng Ban Quản lý phê duyệt');
+  };
+  A.ACT['inv-adjust-approve'] = el => {
+    const req = ptReqs().find(r => r.id === el.dataset.id), i = req && A.idx.invoice.get(req.invoiceId);
+    if (!ptCanApproveAdjustReq(req)) return;
+    const delta = ptReqDelta(req);
+    i.adjust = { itemName: req.itemName, itemKind: req.itemKind, adjustmentType: req.adjustmentType, reason: req.reason, currentAmount: req.currentAmount, proposedAmount: req.proposedAmount, delta, requestId: req.id };
+    i.amount = i.amount + delta;
     if (i.paid >= i.amount) i.status = 'paid';
+    req.status = 'APPROVED'; req.decidedBy = (A.currentAccount() || {}).fullName || 'Không rõ'; req.decidedAt = nowStamp();
     A.refreshStall(A.idx.stall.get(i.stallId));
-    U.log(`Phê duyệt miễn giảm ${pctv}% khoản ${i.id} (${reason})`);
-    A.save(); A.closeModal(); A.render(); U.toast('Đã phê duyệt miễn giảm ' + U.money(value));
+    U.log(`Phê duyệt yêu cầu điều chỉnh khoản ${i.id}: ${U.esc(req.itemName || '')} ${ptMoneySigned(delta)} (${req.reason})`);
+    A.save(); A.closeModal(); A.render(); U.toast('Đã phê duyệt và cập nhật khoản phải thu ' + ptMoneySigned(delta));
+  };
+  A.ACT['inv-adjust-reject'] = el => {
+    const req = ptReqs().find(r => r.id === el.dataset.id);
+    if (!ptCanApproveAdjustReq(req)) return;
+    req.status = 'REJECTED'; req.decidedBy = (A.currentAccount() || {}).fullName || 'Không rõ'; req.decidedAt = nowStamp();
+    U.log(`Từ chối yêu cầu miễn giảm khoản ${req.invoiceId} (${req.reason})`);
+    A.save(); A.closeModal(); A.render(); U.toast('Đã từ chối yêu cầu');
   };
 
   // ---------- Thu tiền ----------
+  function directCollectAllowedForMarket(market) {
+    return A.canDirectCollect(market);
+  }
+  function collectingBusinessStateOk(invoices) {
+    const p = financePeriod();
+    return invoices.length && p && p.status === 'COLLECTING';
+  }
   function renderPay() {
     const ps = ui.pay, t = A.idx.trader.get(ps.traderId);
     const invs = A.db.invoices.filter(i => i.traderId === t.id && i.status !== 'paid' && i.market === t.market).sort((a, b) => a.due.localeCompare(b.due));
     const total = U.sum(invs.filter(i => ps.sel.includes(i.id)), U.due);
     const amount = ps.amount == null ? total : Math.min(ps.amount, total);
-    const content = 'CHOSO ' + t.id + ' ' + (invs.find(i => ps.sel.includes(i.id)) || { id: '' }).id;
+    const currentDebt = U.traderDebt(t.id), willComplete = amount >= currentDebt;
     A.modal(A.mHead('Thu tiền · ' + U.esc(t.name)) + `<div class="modal-b">
+      <div class="note ${willComplete ? 'info' : ''}" style="margin-bottom:12px">${willComplete ? 'Sau khi xác nhận, tiểu thương này sẽ hoàn thành toàn bộ khoản phải thu hiện tại.' : 'Sau khi xác nhận, tiểu thương vẫn còn khoản phải thu chưa hoàn thành.'}</div>
       ${U.table([{ t: '' }, { t: 'Khoản' }, { t: 'Kỳ' }, { t: 'Điểm KD' }, { t: 'Hạn' }, { t: 'Còn phải thu', num: true }],
         invs.map(i => `<tr><td><input type="checkbox" data-ch="pay-sel" data-id="${i.id}" ${ps.sel.includes(i.id) ? 'checked' : ''}></td><td>${i.id}</td><td>${U.per(i.period)}</td><td>${A.idx.stall.get(i.stallId).code}</td><td>${U.isOver(i) ? `<span class="tag danger">${U.dmy(i.due)}</span>` : U.dmy(i.due)}</td><td class="num">${U.money(U.due(i))}</td></tr>`), { empty: 'Không còn khoản nào phải thu' })}
       <div class="form-grid" style="margin-top:14px">
         <div class="field"><label>Số tiền thu (có thể thu một phần)</label><input class="input" type="number" data-ch="pay-amount" value="${amount}"></div>
         <div class="field"><label>Tổng các khoản đã chọn</label><input class="input" value="${U.money(total)}" disabled></div></div>
-      <div class="pay-methods" style="margin-top:14px">${['qr', 'ck', 'tm'].map(m => `<label><input type="radio" name="pm" data-ch="pay-method" value="${m}" ${ps.method === m ? 'checked' : ''}><span>${{ qr: '📱 ', ck: '🏦 ', tm: '💵 ' }[m]}${D.METHOD[m]}</span></label>`).join('')}</div>
-      ${ps.method === 'qr' ? `<div class="qr-box">${U.qr(content + amount)}<div class="small"><b>Mã QR thanh toán (minh họa)</b><br>Ngân hàng: (kết nối khi triển khai)<br>Tài khoản: BQL ${U.esc(U.market(t.market).name)}<br>Số tiền: <b>${U.money(amount)}</b><br>Nội dung: <b>${content}</b><br><span class="muted">Hệ thống tự ghi nhận khi ngân hàng báo có.</span></div></div>` : ''}
-      ${ps.method === 'ck' ? '<div class="note info" style="margin-top:12px">Ghi nhận khoản chuyển khoản đã nhận; hệ thống sẽ đối chiếu với sao kê ngân hàng.</div>' : ''}
+      <div class="note info" style="margin-top:12px">Luồng này chỉ ghi nhận thu trực tiếp bằng tiền mặt tại Chợ quê TTĐ. Tiểu thương thanh toán QR/chuyển khoản qua Mini app riêng.</div>
       </div><div class="modal-f"><button class="btn" data-act="close">Hủy</button>
-      <button class="btn primary" data-act="pay-confirm" ${amount > 0 ? '' : 'disabled'}>${ps.method === 'qr' ? 'Giả lập: tiểu thương đã quét mã và chuyển tiền' : 'Xác nhận thu & phát hành biên lai'}</button></div>`, true);
+      <button class="btn primary" data-act="pay-confirm" ${amount > 0 ? '' : 'disabled'}>Xác nhận thu tiền mặt & in biên lai</button></div>`, true);
   }
   A.ACT['pay-open'] = el => {
+    if (A.current === 'phai-thu') { U.toast('Màn Khoản phải thu chỉ dùng để kiểm tra và gửi yêu cầu điều chỉnh, không thu tiền trực tiếp.'); return; }
     const tid = el.dataset.id, t = A.idx.trader.get(tid);
-    if (!t || !A.canDo('thu-tien.thu', t.market)) { U.toast('Bạn không có quyền thu tiền cho tiểu thương này'); return; }
+    if (!t || !directCollectAllowedForMarket(t.market)) { U.toast('Chỉ được thu trực tiếp tiền mặt cho Chợ quê TTĐ trong phạm vi tài khoản'); return; }
     const invs = A.db.invoices.filter(i => i.traderId === tid && i.status !== 'paid' && i.market === t.market);
     if (!invs.length) { U.toast('Tiểu thương không còn khoản nào phải thu'); return; }
-    ui.pay = { traderId: tid, sel: el.dataset.inv ? [el.dataset.inv] : invs.map(i => i.id), method: 'qr', amount: null };
+    if (!collectingBusinessStateOk(invs)) { U.toast('Chỉ thu trực tiếp cho kỳ đang ở trạng thái Đang thu'); return; }
+    ui.pay = { traderId: tid, sel: el.dataset.inv ? [el.dataset.inv] : invs.map(i => i.id), method: 'tm', amount: null };
     renderPay();
   };
   A.CH['pay-sel'] = el => { const s = ui.pay.sel, id = el.dataset.id; ui.pay.sel = el.checked ? s.concat([id]) : s.filter(x => x !== id); ui.pay.amount = null; renderPay(); };
   A.CH['pay-amount'] = el => { ui.pay.amount = Math.max(0, Number(el.value) || 0); renderPay(); };
-  A.CH['pay-method'] = el => { ui.pay.method = el.value; renderPay(); };
   A.ACT['pay-confirm'] = () => {
+    if (A.current === 'phai-thu') { U.toast('Màn Khoản phải thu không thực hiện thu tiền trực tiếp.'); A.closeModal(); return; }
     const ps = ui.pay;
     const t = ps && A.idx.trader.get(ps.traderId);
-    if (!t || !A.canDo('thu-tien.thu', t.market)) { U.toast('Bạn không có quyền thu tiền cho tiểu thương này'); A.closeModal(); return; }
+    if (!t || !directCollectAllowedForMarket(t.market)) { U.toast('Chỉ được thu trực tiếp tiền mặt cho Chợ quê TTĐ trong phạm vi tài khoản'); A.closeModal(); return; }
     const sel = A.db.invoices.filter(i => ps.sel.includes(i.id) && i.traderId === t.id && i.market === t.market && i.status !== 'paid');
     if (!sel.length) { U.toast('Khoản phải thu không còn hợp lệ (đã thu hoặc không thuộc phạm vi)'); A.closeModal(); A.render(); return; }
+    if (!collectingBusinessStateOk(sel)) { U.toast('Chỉ thu trực tiếp cho kỳ đang ở trạng thái Đang thu'); return; }
     const total = U.sum(sel, U.due);
     const amount = ps.amount == null ? total : Math.min(ps.amount, total);
     if (amount <= 0) { U.toast('Số tiền thu không hợp lệ'); return; }
-    const pays = A.applyPayment(sel.map(i => i.id), amount, ps.method, ps.method === 'tm' ? 'NV03' : 'Hệ thống');
-    A.render(); A.showReceipt(pays);
-    U.toast('Đã thu ' + U.money(amount) + ' · biên lai điện tử đã gửi tới tiểu thương');
+    const actor = (A.currentAccount() && A.currentAccount().code) || 'NV07';
+    const pays = A.applyPayment(sel.map(i => i.id), amount, 'tm', actor);
+    const completed = U.traderDebt(t.id) === 0;
+    A.render(); A.showReceipt(pays, { autoPrint: true });
+    U.toast('Đã thu ' + U.money(amount) + (completed ? ' · tiểu thương đã hoàn thành' : ' · còn khoản phải thu') + ' · biên lai đã gửi Mini app');
   };
+
+  function receiptRows(payDate) {
+    const q = (f.receiptSearch || '').toLowerCase();
+    const method = f.receiptMethod || 'all';
+    const status = f.receiptStatus || 'all';
+    return A.db.payments.filter(p => U.inM(p) && (!payDate || p.date === payDate))
+      .map(p => {
+        const i = A.idx.invoice.get(p.invoiceId), t = A.idx.trader.get(p.traderId), st = i && A.idx.stall.get(i.stallId);
+        return { p, i, t, st, complete: t ? U.traderDebt(t.id) === 0 : false };
+      })
+      .filter(x => {
+        if (method !== 'all' && x.p.method !== method) return false;
+        if (status === 'complete' && !x.complete) return false;
+        if (status === 'debt' && x.complete) return false;
+        if (!q) return true;
+        return [x.p.receipt, x.p.lookup, x.p.id, x.i ? x.i.id : '', x.t ? x.t.name : '', x.t ? x.t.id : '', x.t ? x.t.phone : '', x.st ? x.st.code : ''].join(' ').toLowerCase().includes(q);
+      })
+      .sort((a, b) => (b.p.date + b.p.time).localeCompare(a.p.date + a.p.time));
+  }
 
   A.VIEWS['thu-tien'] = function () {
     const q = (f.thuSearch || '').toLowerCase();
     const payDate = f.thuDate || U.today();
+    const p = financePeriod();
     const debtors = new Map();
     A.db.invoices.filter(i => U.inM(i) && i.status !== 'paid').forEach(i => {
       const d = debtors.get(i.traderId) || { n: 0, amt: 0, over: 0 };
@@ -378,19 +574,34 @@
     const pg = U.pager('thu', list.length, 12);
     const today = A.db.payments.filter(p => U.inM(p) && p.date === payDate).slice().reverse();
     const cash = U.sum(today.filter(p => p.method === 'tm'), p => p.amount), non = U.sum(today.filter(p => p.method !== 'tm'), p => p.amount);
+    const receipts = receiptRows(payDate), rpg = U.pager('thuReceipt', receipts.length, 12);
+    const done = receipts.filter(x => x.complete).length;
     const timeBar = `<div class="card"><div class="card-b" style="padding-top:14px">${financeTimeBarRow('Kỳ khoản thu')}
-      <div class="row small" style="margin-top:8px"><span class="label-sm">Ngày thu</span><input type="date" class="input" style="width:160px" data-ch="thu-date" value="${payDate}"></div></div></div>`;
-    return timeBar + `<div class="grid g-main" style="align-items:start">
-      <div class="card"><div class="card-h"><h3>Tìm tiểu thương cần thu</h3><input class="input" style="width:260px" placeholder="Tên, SĐT hoặc mã điểm (VD: HS-A05)" data-in="thu-search" value="${U.esc(f.thuSearch || '')}"></div>
-        <div class="card-b">${U.table([{ t: 'Tiểu thương' }, { t: 'Điểm KD' }, { t: 'Số khoản', num: true }, { t: 'Còn phải thu', num: true }, { t: 'Quá hạn', num: true }, { t: '' }],
-          list.slice(pg.start, pg.end).map(x => `<tr><td><b>${U.esc(x.t.name)}</b><div class="small muted">${x.t.id} · ${U.maskPhone(x.t.phone)}</div></td><td>${x.t.stalls.map(id => A.idx.stall.get(id).code).join(', ')}</td><td class="num">${x.n}</td><td class="num">${U.money(x.amt)}</td><td class="num" style="${x.over ? 'color:#d6453b;font-weight:600' : ''}">${x.over ? U.money(x.over) : '–'}</td><td>${A.canDo('thu-tien.thu', x.t.market) ? `<button class="btn sm primary" data-act="pay-open" data-id="${x.t.id}">Thu tiền</button>` : ''}</td></tr>`))}${pg.html}</div></div>
-      <div class="card"><div class="card-h"><h3>Giao dịch ngày ${U.dmy(payDate)}</h3></div><div class="card-b">
-        <div class="row small" style="margin-bottom:8px"><span class="tag">💵 Tiền mặt ${U.moneyShort(cash)}</span><span class="tag info">📱 QR/CK ${U.moneyShort(non)}</span></div>
-        ${today.length ? today.slice(0, 14).map(p => `<div class="row small click" style="padding:7px 0;border-bottom:1px solid #eef2f0;cursor:pointer" data-act="receipt" data-id="${p.receipt}"><span class="muted">${p.time}</span><span style="flex:1">${U.esc(A.idx.trader.get(p.traderId).name)}<div class="muted">${p.receipt} · ${D.METHOD[p.method]}</div></span><b>${U.money(p.amount)}</b></div>`).join('') : '<div class="empty">Chưa có giao dịch</div>'}
+      <div class="row small" style="margin-top:8px;flex-wrap:wrap"><span class="label-sm">Ngày thu / biên lai</span><input type="date" class="input" style="width:160px" data-ch="thu-date" value="${payDate}">
+      <span class="tag">Tiền mặt ${U.moneyShort(cash)}</span><span class="tag info">Qua app/CK ${U.moneyShort(non)}</span><span class="tag ${p.status === 'COLLECTING' ? 'ok' : ''}">${p.status === 'COLLECTING' ? 'Đang thu' : 'Kỳ trước'}</span></div></div></div>`;
+    return timeBar + `<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));align-items:start">
+      <div class="card"><div class="card-h"><div><h3>Thu tiền mặt tại quầy</h3><div class="small muted">Nhân viên thu phí xác nhận tiểu thương hoàn thành sau khi nhận đủ tiền mặt.</div></div></div>
+        <div class="card-b">
+          <div class="row" style="margin-bottom:10px;gap:8px"><input class="input" placeholder="Tìm tiểu thương, SĐT hoặc mã điểm" data-in="thu-search" value="${U.esc(f.thuSearch || '')}"></div>
+          ${U.table([{ t: 'Tiểu thương' }, { t: 'Điểm KD' }, { t: 'Còn phải thu', num: true }, { t: 'Trạng thái' }, { t: '' }],
+          list.slice(pg.start, pg.end).map(x => `<tr><td><b>${U.esc(x.t.name)}</b><div class="small muted">${x.t.id} · ${U.maskPhone(x.t.phone)}</div></td><td>${x.t.stalls.map(id => A.idx.stall.get(id).code).join(', ')}</td><td class="num">${U.money(x.amt)}<div class="small muted">${x.n} khoản</div></td><td>${x.over ? `<span class="tag danger">Quá hạn ${U.moneyShort(x.over)}</span>` : '<span class="tag warn">Chờ thu</span>'}</td><td>${directCollectAllowedForMarket(x.t.market) ? `<button class="btn sm primary" data-act="pay-open" data-id="${x.t.id}">Thu tiền mặt</button>` : ''}</td></tr>`), { empty: 'Không còn tiểu thương cần thu' })}${pg.html}
+        </div></div>
+      <div class="card"><div class="card-h"><div><h3>Biên lai & truy vết</h3><div class="small muted">Tìm theo tiểu thương, số biên lai, mã tra cứu, mã điểm hoặc khoản phải thu.</div></div></div><div class="card-b">
+        <div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <input class="input" style="min-width:240px;flex:1" placeholder="Tìm biên lai / tiểu thương / mã điểm" data-in="receipt-search" value="${U.esc(f.receiptSearch || '')}">
+          <select class="input" style="width:150px" data-ch="receipt-method"><option value="all">Mọi hình thức</option>${Object.keys(D.METHOD).map(m => `<option value="${m}" ${(f.receiptMethod || 'all') === m ? 'selected' : ''}>${D.METHOD[m]}</option>`).join('')}</select>
+          <select class="input" style="width:160px" data-ch="receipt-status"><option value="all">Mọi trạng thái</option><option value="complete" ${(f.receiptStatus || 'all') === 'complete' ? 'selected' : ''}>Đã hoàn thành</option><option value="debt" ${(f.receiptStatus || 'all') === 'debt' ? 'selected' : ''}>Còn phải thu</option></select>
+        </div>
+        <div class="row small" style="margin-bottom:8px"><span class="tag ok">${done} hoàn thành</span><span class="tag">${receipts.length} biên lai</span></div>
+        ${U.table([{ t: 'Biên lai' }, { t: 'Tiểu thương' }, { t: 'Điểm / khoản' }, { t: 'Hình thức' }, { t: 'Số tiền', num: true }, { t: 'Hoàn thành' }],
+          receipts.slice(rpg.start, rpg.end).map(x => `<tr class="click" data-act="receipt" data-id="${x.p.receipt}"><td><b>${x.p.receipt}</b><div class="small muted">${U.dmy(x.p.date)} ${x.p.time} · ${x.p.lookup}</div></td><td>${x.t ? U.esc(x.t.name) : ''}<div class="small muted">${x.t ? x.t.id : ''}</div></td><td>${x.st ? x.st.code : ''}<div class="small muted">${x.i ? x.i.id + ' · kỳ ' + U.per(x.i.period) : ''}</div></td><td>${D.METHOD[x.p.method]}</td><td class="num">${U.money(x.p.amount)}</td><td>${x.complete ? '<span class="tag ok">Đã hoàn thành</span>' : '<span class="tag warn">Còn phải thu</span>'}</td></tr>`), { empty: 'Không tìm thấy biên lai phù hợp' })}${rpg.html}
       </div></div></div>`;
   };
   A.IN['thu-search'] = el => { f.thuSearch = el.value; ui.page.thu = 0; A.render(); };
   A.CH['thu-date'] = el => { f.thuDate = el.value || U.today(); A.render(); };
+  A.IN['receipt-search'] = el => { f.receiptSearch = el.value; ui.page.thuReceipt = 0; A.render(); };
+  A.CH['receipt-method'] = el => { f.receiptMethod = el.value; ui.page.thuReceipt = 0; A.render(); };
+  A.CH['receipt-status'] = el => { f.receiptStatus = el.value; ui.page.thuReceipt = 0; A.render(); };
 
   // ---------- Đối soát ----------
   const DS_BANK_LABEL = {
@@ -401,13 +612,15 @@
     NEEDS_REVIEW: { t: '⚠ Cần xử lý', cls: 'warn' }
   };
   function dsBankTag(b) { const s = DS_BANK_LABEL[b.status] || DS_BANK_LABEL.UNMATCHED; return `<span class="tag ${s.cls}">${s.t}</span>`; }
-  function dsActor() { return ui.role === 'lanhdao' ? 'Lãnh đạo UBND phường' : 'Trần Minh Khoa'; }
+  function dsActor() { const acc = A.currentAccount(); return acc ? acc.fullName : 'Không rõ'; }
   function dsNowStamp() { return U.dmy(U.today()) + ' ' + U.nowTime(); }
-  function dsCanBank() { return A.PERM.canAction(ui.role, 'doi-soat.xem-ngan-hang'); }
-  function dsCanBankMatch() { return A.PERM.canAction(ui.role, 'doi-soat.gan-thu-cong'); }
-  function dsCanCash() { return A.PERM.canAction(ui.role, 'doi-soat.xem-tien-mat'); }
-  function dsCanCashConfirm() { return A.PERM.canAction(ui.role, 'doi-soat.xac-nhan-nop-quy'); }
-  function dsCanAudit() { return A.PERM.canAction(ui.role, 'doi-soat.xem-truy-vet'); }
+  function dsCanAction(actionKey, targetMarket) { return U.can('doi-soat') && A.canDo(actionKey, targetMarket || ui.market); }
+  function dsCanBank(targetMarket) { return dsCanAction('doi-soat.xem-ngan-hang', targetMarket); }
+  function dsCanBankMatch(targetMarket) { return dsCanAction('doi-soat.gan-thu-cong', targetMarket); }
+  function dsCanCash(targetMarket) { return dsCanAction('doi-soat.xem-tien-mat', targetMarket); }
+  function dsCanCashConfirm(targetMarket) { return dsCanAction('doi-soat.xac-nhan-nop-quy', targetMarket); }
+  function dsCanAudit(targetMarket) { return dsCanAction('doi-soat.xem-truy-vet', targetMarket); }
+  function dsIsSessionMarket() { const m = U.market(ui.market); return !!m && m.kind === 'session'; }
   function dsBankOf(id) { return A.db.bank.find(x => x.id === id); }
   function dsInvoiceInfo(receivableId) {
     if (!receivableId) return null;
@@ -431,6 +644,55 @@
       const hay = [b.id, b.ref, b.receivableId || '', b.receiptId || '', info ? info.trader.name : '', info ? info.stall.code : ''].join(' ').toLowerCase();
       return hay.includes(q);
     }).slice().reverse();
+  }
+  function dsSessions() { return (A.db.marketSessions || []).filter(s => s.marketId === ui.market).slice().sort((a, b) => (b.sessionDate || '').localeCompare(a.sessionDate || '')); }
+  function dsSessionRegs(sessionId) { return (A.db.sessionRegistrations || []).filter(r => r.sessionId === sessionId); }
+  function dsSessionPays(sessionId) { return (A.db.sessionPayments || []).filter(p => p.sessionId === sessionId); }
+  function dsSessionReceipts(sessionId) { return (A.db.sessionReceipts || []).filter(r => r.sessionId === sessionId); }
+  function dsSessionExceptions(sessionId) { return (A.db.sessionReconExceptions || []).filter(e => e.sessionId === sessionId); }
+  function dsSessionOpenExceptions(sessionId) { return dsSessionExceptions(sessionId).filter(e => e.status === 'OPEN' || e.status === 'IN_REVIEW'); }
+  function dsSessionCashConfirm(sessionId) { return (A.db.cashConfirms || []).find(c => c.sessionId === sessionId && c.market === ui.market); }
+  function dsSessionTotals(s) {
+    const regs = dsSessionRegs(s.id), pays = dsSessionPays(s.id), receipts = dsSessionReceipts(s.id), openEx = dsSessionOpenExceptions(s.id);
+    const onlineSuccess = U.sum(pays.filter(p => p.method === 'ONLINE' && p.status === 'SUCCESS'), p => p.amount);
+    const onlineRecon = U.sum(pays.filter(p => p.method === 'ONLINE' && p.status === 'RECONCILED'), p => p.amount);
+    const onlineWaiting = U.sum(pays.filter(p => p.method === 'ONLINE' && p.status === 'WAITING_PAYMENT'), p => p.amount);
+    const cashSystem = U.sum(pays.filter(p => p.method === 'CASH' && p.status === 'SUCCESS'), p => p.amount);
+    const cashReceipts = U.sum(receipts, r => r.amount);
+    const expected = U.sum(regs.filter(r => r.status !== 'CANCELLED' && r.status !== 'REJECTED'), r => r.totalAmount || 0);
+    return { regs, pays, receipts, openEx, onlineSuccess, onlineRecon, onlineWaiting, cashSystem, cashReceipts, expected, confirm: dsSessionCashConfirm(s.id) };
+  }
+  function dsSessionState(s) {
+    const t = dsSessionTotals(s);
+    const hasCashEx = t.openEx.some(e => e.type === 'CASH_SUBMITTED_MISMATCH');
+    if (s.status !== 'WAITING_RECONCILIATION' && s.status !== 'CLOSED') return { id: 'NOT_DUE', label: 'Chưa tới bước đối soát', cls: 'info' };
+    if (hasCashEx) return { id: 'CASH_EXCEPTION', label: 'Lệch tiền mặt', cls: 'danger' };
+    if (t.openEx.length) return { id: 'EXCEPTION', label: 'Có ngoại lệ', cls: 'danger' };
+    if (t.cashSystem !== t.cashReceipts) return { id: 'CASH_MISMATCH', label: 'Lệch biên lai tiền mặt', cls: 'danger' };
+    if (t.onlineSuccess > 0) return { id: 'ONLINE_WAITING', label: 'Online chờ đối soát', cls: 'warn' };
+    if (s.status === 'CLOSED') return { id: 'CLOSED', label: 'Đã đóng phiên', cls: 'ok' };
+    if (t.cashSystem > 0 && !t.confirm) return { id: 'CASH_READY', label: 'Sẵn sàng xác nhận tiền mặt', cls: 'warn' };
+    return { id: 'RECONCILED', label: 'Đã đối soát', cls: 'ok' };
+  }
+  function dsCanSessionCashConfirm(s) {
+    if (!s || !dsCanCashConfirm(s.marketId) || s.status !== 'WAITING_RECONCILIATION' || dsSessionCashConfirm(s.id)) return false;
+    const t = dsSessionTotals(s);
+    return t.cashSystem > 0 && t.cashSystem === t.cashReceipts && !t.openEx.some(e => e.type === 'CASH_SUBMITTED_MISMATCH');
+  }
+  function dsSessionReconPanel() {
+    if (!dsIsSessionMarket()) return '';
+    const rows = dsSessions();
+    if (!rows.length) return `<div class="card"><div class="card-b"><div class="empty">Chợ quê chưa có phiên nào trong local state. Mở màn Phiên chợ quê để seed dữ liệu mẫu phiên chợ.</div></div></div>`;
+    return `<div class="card"><div class="card-h"><h3>Đối soát phiên chợ quê</h3><span class="small muted">Nguồn: đăng ký, thanh toán, biên lai và exception của workflow Phiên chợ quê</span></div>
+      <div class="card-b">${U.table([{ t: 'Phiên' }, { t: 'Trạng thái phiên' }, { t: 'Online đã khớp', num: true }, { t: 'Online chờ khớp', num: true }, { t: 'Tiền mặt theo biên lai', num: true }, { t: 'Ngoại lệ' }, { t: 'Kết quả' }],
+        rows.map(s => {
+          const t = dsSessionTotals(s), st = dsSessionState(s);
+          return `<tr><td><b>${U.esc(s.code)}</b><div class="small muted">${U.dmy(s.sessionDate)} · ${U.esc(s.name || '')}</div></td>
+            <td><span class="tag">${U.esc(s.status)}</span></td>
+            <td class="num">${U.money(t.onlineRecon)}</td><td class="num">${U.money(t.onlineSuccess + t.onlineWaiting)}</td>
+            <td class="num">${U.money(t.cashReceipts)}</td><td>${t.openEx.length ? `<span class="tag danger">${t.openEx.length} mở</span>` : '<span class="tag ok">Không</span>'}</td>
+            <td><span class="tag ${st.cls}">${st.label}</span></td></tr>`;
+        }), { empty: 'Chưa có dữ liệu phiên chợ để đối soát' })}</div></div>`;
   }
 
   A.VIEWS['doi-soat'] = function () {
@@ -466,8 +728,9 @@
     return `<div class="kpis">
       <div class="card kpi"><div class="k-label">Tổng giao dịch ngân hàng</div><div class="k-value">${total}</div><div class="k-sub">${U.money(totalAmt)}</div></div>
       <div class="card kpi"><div class="k-label">Khớp tự động</div><div class="k-value">${autoMatched}/${total}</div><div class="k-sub">${U.pctTxt(U.pct(autoMatched, total))}</div></div>
-      <div class="card kpi"><div class="k-label">Cần xử lý</div><div class="k-value" style="color:${needsWork.length ? '#d6453b' : '#2e9e6a'}">${needsWork.length}</div><div class="k-sub">${U.money(U.sum(needsWork, b => b.amount))}</div></div>
-      <div class="card kpi"><div class="k-label">Lệch số tiền</div><div class="k-value" style="color:${mismatch.length ? '#d6453b' : '#2e9e6a'}">${mismatch.length}</div><div class="k-sub">Cần Kế toán kiểm tra</div></div></div>
+      <div class="card kpi"><div class="k-label">Cần xử lý</div><div class="k-value" style="color:${needsWork.length ? '#df2225' : '#20a04e'}">${needsWork.length}</div><div class="k-sub">${U.money(U.sum(needsWork, b => b.amount))}</div></div>
+      <div class="card kpi"><div class="k-label">Lệch số tiền</div><div class="k-value" style="color:${mismatch.length ? '#df2225' : '#20a04e'}">${mismatch.length}</div><div class="k-sub">Cần Kế toán kiểm tra</div></div></div>
+    ${dsSessionReconPanel()}
     <div class="card"><div class="card-h"><h3>Sao kê ngân hàng / QR</h3>
       <div class="seg">${[['all', 'Tất cả'], ['matched', 'Đã khớp'], ['unmatched', 'Chưa khớp'], ['mismatch', 'Lệch số tiền'], ['review', 'Cần xử lý']].map(x => `<button class="${ui.dsBankFilter === x[0] ? 'on' : ''}" data-act="ds-bank-filter" data-id="${x[0]}">${x[1]}</button>`).join('')}</div>
       <span class="spacer"></span>
@@ -476,7 +739,7 @@
       <div class="card-b">${U.table([{ t: 'Ngày giờ' }, { t: 'Mã sao kê' }, { t: 'Nội dung chuyển khoản' }, { t: 'Số tiền', num: true }, { t: 'Khoản phải thu' }, { t: 'Biên lai' }, { t: 'Tiểu thương' }, { t: 'Kết quả' }, { t: '' }],
         rows.slice(pg.start, pg.end).map(b => {
           const info = dsInvoiceInfo(b.receivableId);
-          const canBtnMatch = canMatch && b.status !== 'MATCHED_AUTO' && b.status !== 'MATCHED_MANUAL';
+          const canBtnMatch = canMatch && dsCanBankMatch(b.market) && b.status !== 'MATCHED_AUTO' && b.status !== 'MATCHED_MANUAL';
           return `<tr class="click" data-act="ds-bank-view" data-id="${b.id}">
             <td class="nowrap">${U.dmy(b.date || U.today())} ${b.time}</td><td>${b.id}</td><td class="small">${U.esc(b.ref)}</td>
             <td class="num">${U.money(b.amount)}</td>
@@ -491,14 +754,15 @@
   A.IN['ds-bank-search'] = el => { ui.dsBankSearch = el.value; ui.page['ds-bank' + ui.dsBankFilter] = 0; A.render(); };
   A.ACT['ds-bank-filter'] = el => { ui.dsBankFilter = el.dataset.id; A.render(); };
   A.ACT['ds-csv'] = () => {
+    if (!dsCanBank()) return;
     const rows = dsBankRows();
     U.csv('doi-soat-ngan-hang-' + U.today(), ['Giờ', 'Mã sao kê', 'Nội dung', 'Số tiền', 'Khoản phải thu', 'Biên lai', 'Trạng thái'],
       rows.map(b => [b.time, b.id, b.ref, b.amount, b.receivableId || '', b.receiptId || '', (DS_BANK_LABEL[b.status] || {}).t || b.status]));
   };
 
   function dsBankDrawerHtml(b) {
-    const canMatch = dsCanBankMatch() && b.status !== 'MATCHED_AUTO' && b.status !== 'MATCHED_MANUAL';
-    const canAudit = dsCanAudit();
+    const canMatch = dsCanBankMatch(b.market) && b.status !== 'MATCHED_AUTO' && b.status !== 'MATCHED_MANUAL';
+    const canAudit = dsCanAudit(b.market);
     const info = dsInvoiceInfo(b.receivableId);
     const pay = b.paymentId ? A.db.payments.find(x => x.id === b.paymentId) : null;
     const reasons = {
@@ -524,13 +788,13 @@
         <div style="margin-top:6px">${dsBankTag(b)}</div>
         <ul class="small muted" style="margin:6px 0 0 18px;padding:0">${reasons.map(r => `<li>${U.esc(r)}</li>`).join('')}</ul>
         ${b.status === 'MATCHED_MANUAL' && b.matchedBy ? `<div class="small muted" style="margin-top:6px">Gắn bởi ${U.esc(b.matchedBy)} · ${U.esc(b.matchedAt)}</div>` : ''}
-        ${canAudit ? `<div class="divider"></div><b class="small">Lịch sử xử lý</b>${(b.log || []).map(l => `<div class="small" style="padding:4px 0;border-bottom:1px solid #eef2f0"><span class="muted">${U.dmy(b.date || U.today())} ${l.at}</span> · ${U.esc(l.actor)}: ${U.esc(l.text)}</div>`).join('')}` : ''}
+        ${canAudit ? `<div class="divider"></div><b class="small">Lịch sử xử lý</b>${(b.log || []).map(l => `<div class="small" style="padding:4px 0;border-bottom:1px solid #eef2f7"><span class="muted">${U.dmy(b.date || U.today())} ${l.at}</span> · ${U.esc(l.actor)}: ${U.esc(l.text)}</div>`).join('')}` : ''}
       </div>
       <div class="drawer-f">${canMatch ? `<button class="btn primary" data-act="ds-bank-match" data-id="${b.id}">Gắn khoản thu thủ công</button>` : ''}<button class="btn" data-act="close">Đóng</button></div>`;
   }
   A.ACT['ds-bank-view'] = el => {
     const b = dsBankOf(el.dataset.id);
-    if (!b) return;
+    if (!b || !dsCanBank(b.market)) return;
     A.$('#modal-root').innerHTML = `<div class="drawer-overlay" data-act="close"></div><div class="drawer">${dsBankDrawerHtml(b)}</div>`;
   };
 
@@ -554,13 +818,15 @@
       </div><div class="modal-f"><button class="btn" data-act="close">Hủy</button></div>`, true);
   }
   A.ACT['ds-bank-match'] = el => {
-    if (!dsCanBankMatch()) return;
-    ui.dsMatch = { bankId: el.dataset.id, q: '' };
+    const b = dsBankOf(el.dataset.id);
+    if (!b || !dsCanBankMatch(b.market) || b.status === 'MATCHED_AUTO' || b.status === 'MATCHED_MANUAL') return;
+    ui.dsMatch = { bankId: b.id, q: '' };
     renderDsMatchModal();
   };
   A.IN['ds-match-search'] = el => { ui.dsMatch.q = el.value; renderDsMatchModal(); };
   A.ACT['ds-bank-match-pick'] = el => {
     const b = dsBankOf(ui.dsMatch.bankId), inv = A.idx.invoice.get(el.dataset.inv);
+    if (!b || !inv || !dsCanBankMatch(b.market) || inv.market !== b.market || b.market !== ui.market || inv.status === 'paid') { A.closeModal(); return; }
     A.modal(A.mHead('Xác nhận gắn giao dịch') + `<div class="modal-b">
       <p>Gắn giao dịch <b>${b.id}</b> với khoản phải thu <b>${inv.id}</b> (${U.esc(A.idx.trader.get(inv.traderId).name)})?</p>
       <div class="note info">Thao tác này chỉ cập nhật trạng thái đối soát trên màn này, không thay đổi khoản phải thu hay tạo thanh toán mới.</div>
@@ -568,8 +834,9 @@
   };
   A.ACT['ds-bank-match-back'] = () => renderDsMatchModal();
   A.ACT['ds-bank-match-confirm'] = el => {
-    if (!dsCanBankMatch() || !ui.dsMatch) { A.closeModal(); return; }
+    if (!ui.dsMatch) { A.closeModal(); return; }
     const b = dsBankOf(ui.dsMatch.bankId), inv = A.idx.invoice.get(el.dataset.inv);
+    if (!b || !inv || !dsCanBankMatch(b.market) || inv.market !== b.market || b.market !== ui.market || inv.status === 'paid' || b.status === 'MATCHED_AUTO' || b.status === 'MATCHED_MANUAL') { A.closeModal(); return; }
     const actor = dsActor(), at = dsNowStamp();
     b.status = 'MATCHED_MANUAL'; b.matched = true; b.receivableId = inv.id;
     b.matchedBy = actor; b.matchedAt = at; b.matchMethod = 'MANUAL';
@@ -602,6 +869,21 @@
     if (e.deposited > 0 && e.deposited < e.collected) return { id: 'PARTIAL_DEPOSIT', label: 'Chưa nộp đủ', cls: 'warn', ico: '●' };
     return { id: 'OVER_DEPOSIT', label: 'Có chênh lệch', cls: 'danger', ico: '⚠' };
   }
+  function dsSessionCashPanel() {
+    if (!dsIsSessionMarket()) return '';
+    const rows = dsSessions();
+    if (!rows.length) return `<div class="card"><div class="card-b"><div class="empty">Chưa có phiên chợ quê trong local state để đối soát tiền mặt.</div></div></div>`;
+    return `<div class="card"><div class="card-h"><h3>Tiền mặt phiên chợ quê</h3><span class="small muted">Xác nhận theo phiên, không gộp với thu phí cố định hằng tháng</span></div>
+      <div class="card-b">${U.table([{ t: 'Phiên' }, { t: 'Thu tiền mặt trên hệ thống', num: true }, { t: 'Biên lai tiền mặt', num: true }, { t: 'Trạng thái' }, { t: 'Xác nhận' }, { t: '' }],
+        rows.map(s => {
+          const t = dsSessionTotals(s), st = dsSessionState(s), canConfirm = dsCanSessionCashConfirm(s);
+          return `<tr><td><b>${U.esc(s.code)}</b><div class="small muted">${U.dmy(s.sessionDate)} · ${U.esc(s.name || '')}</div></td>
+            <td class="num">${U.money(t.cashSystem)}</td><td class="num">${U.money(t.cashReceipts)}</td>
+            <td><span class="tag ${st.cls}">${st.label}</span></td>
+            <td>${t.confirm ? `<span class="tag ok">Đã xác nhận</span><div class="small muted">${U.esc(t.confirm.confirmedBy)} · ${U.esc(t.confirm.confirmedAt)}</div>` : '<span class="muted">Chưa xác nhận</span>'}</td>
+            <td>${canConfirm ? `<button class="btn sm primary" data-act="ds-session-cash-confirm" data-id="${s.id}">Xác nhận tiền mặt</button>` : ''}</td></tr>`;
+        }), { empty: 'Chưa có dữ liệu tiền mặt phiên chợ quê' })}</div></div>`;
+  }
   function dsCashView() {
     const rows = dsCashRows();
     const totalReceipts = U.sum(rows, e => e.payments.length);
@@ -609,21 +891,22 @@
     const totalDeposited = U.sum(rows, e => e.deposited);
     const totalRemaining = totalCollected - totalDeposited;
     const notDone = rows.filter(e => dsCashStatusOf(e).id !== 'RECONCILED').length;
-    return `<div class="kpis">
+    return `${dsSessionCashPanel()}<div class="kpis">
       <div class="card kpi"><div class="k-label">Tổng biên lai tiền mặt</div><div class="k-value">${totalReceipts}</div><div class="k-sub">${U.money(totalCollected)}</div></div>
       <div class="card kpi"><div class="k-label">Đã nộp quỹ</div><div class="k-value">${U.money(totalDeposited)}</div></div>
-      <div class="card kpi"><div class="k-label">Còn phải nộp</div><div class="k-value" style="color:${totalRemaining ? '#d6453b' : '#2e9e6a'}">${U.money(totalRemaining)}</div></div>
-      <div class="card kpi"><div class="k-label">Nhân viên chưa hoàn tất</div><div class="k-value" style="color:${notDone ? '#d6453b' : '#2e9e6a'}">${notDone}</div></div></div>
+      <div class="card kpi"><div class="k-label">Còn phải nộp</div><div class="k-value" style="color:${totalRemaining ? '#df2225' : '#20a04e'}">${U.money(totalRemaining)}</div></div>
+      <div class="card kpi"><div class="k-label">Nhân viên chưa hoàn tất</div><div class="k-value" style="color:${notDone ? '#df2225' : '#20a04e'}">${notDone}</div></div></div>
     <div class="card"><div class="card-h"><h3>Đối soát tiền mặt theo nhân viên thu · ${U.dmy(U.today())}</h3><button class="btn" data-act="ds-cash-csv">⬇ Xuất Excel</button></div>
       <div class="card-b">${U.table([{ t: 'Nhân viên thu' }, { t: 'Số biên lai', num: true }, { t: 'Tổng tiền đã thu', num: true }, { t: 'Đã nộp quỹ', num: true }, { t: 'Còn phải nộp / Chênh lệch', num: true }, { t: 'Trạng thái' }, { t: '' }],
         rows.map(e => {
           const s = dsCashStatusOf(e);
           return `<tr><td>${U.esc(U.staffName(e.employeeId))}</td><td class="num">${e.payments.length}</td><td class="num">${U.money(e.collected)}</td><td class="num">${U.money(e.deposited)}</td>
-            <td class="num" style="${e.remaining ? 'color:#d6453b;font-weight:600' : ''}">${U.money(Math.abs(e.remaining))}</td><td><span class="tag ${s.cls}">${s.ico} ${s.label}</span></td>
+            <td class="num" style="${e.remaining ? 'color:#df2225;font-weight:600' : ''}">${U.money(Math.abs(e.remaining))}</td><td><span class="tag ${s.cls}">${s.ico} ${s.label}</span></td>
             <td><button class="btn sm" data-act="ds-cash-view" data-id="${e.employeeId}">Xem chi tiết</button></td></tr>`;
         }), { empty: 'Hôm nay chưa thu tiền mặt' })}</div></div>`;
   }
   A.ACT['ds-cash-csv'] = () => {
+    if (!dsCanCash()) return;
     const rows = dsCashRows();
     U.csv('doi-soat-tien-mat-' + U.today(), ['Nhân viên', 'Số biên lai', 'Đã thu', 'Đã nộp quỹ', 'Còn phải nộp', 'Trạng thái'],
       rows.map(e => [U.staffName(e.employeeId), e.payments.length, e.collected, e.deposited, e.remaining, dsCashStatusOf(e).label]));
@@ -635,19 +918,19 @@
     e.deposits.forEach(d => items.push({ at: d.depositedAt.slice(-5), text: U.esc(U.staffName(d.employeeId)) + ' nộp quỹ ' + d.id + ' (' + U.money(d.amount) + ') cho ' + U.esc(U.staffName(d.receivedBy)) }));
     if (e.confirm) items.push({ at: e.confirm.confirmedAt.slice(-5), text: U.esc(e.confirm.confirmedBy) + ' xác nhận đối soát hoàn tất' });
     items.sort((a, b) => a.at.localeCompare(b.at));
-    return items.length ? items.map(i => `<div class="small" style="padding:4px 0;border-bottom:1px solid #eef2f0"><span class="muted">${U.dmy(U.today())} ${i.at}</span> · ${i.text}</div>`).join('') : '<div class="small muted">Chưa có lịch sử</div>';
+    return items.length ? items.map(i => `<div class="small" style="padding:4px 0;border-bottom:1px solid #eef2f7"><span class="muted">${U.dmy(U.today())} ${i.at}</span> · ${i.text}</div>`).join('') : '<div class="small muted">Chưa có lịch sử</div>';
   }
   function dsCashDrawerHtml(employeeId) {
     const e = dsCashRows().find(x => x.employeeId === employeeId);
     if (!e) return '';
     const s = dsCashStatusOf(e);
-    const canConfirm = dsCanCashConfirm() && s.id === 'RECONCILED' && !e.confirm;
-    const canAudit = dsCanAudit();
+    const canConfirm = dsCanCashConfirm(e.market) && s.id === 'RECONCILED' && !e.confirm;
+    const canAudit = dsCanAudit(e.market);
     const receiptRows = e.payments.map(p => {
       const inv = A.idx.invoice.get(p.invoiceId);
-      return `<div class="row small" style="padding:5px 0;border-bottom:1px solid #eef2f0"><span>${p.receipt}</span><span>${inv ? A.idx.stall.get(inv.stallId).code : ''}</span><span class="spacer"></span><b>${U.money(p.amount)}</b></div>`;
+      return `<div class="row small" style="padding:5px 0;border-bottom:1px solid #eef2f7"><span>${p.receipt}</span><span>${inv ? A.idx.stall.get(inv.stallId).code : ''}</span><span class="spacer"></span><b>${U.money(p.amount)}</b></div>`;
     }).join('');
-    const depositRows = e.deposits.length ? e.deposits.map(d => `<div style="padding:8px 0;border-bottom:1px solid #eef2f0">
+    const depositRows = e.deposits.length ? e.deposits.map(d => `<div style="padding:8px 0;border-bottom:1px solid #eef2f7">
         <div class="row small"><b>${d.id}</b><span class="spacer"></span><b>${U.money(d.amount)}</b></div>
         <div class="small muted">${d.depositedAt}</div>
         <div class="small">Người nộp: ${U.esc(U.staffName(d.employeeId))} · Người nhận: ${U.esc(U.staffName(d.receivedBy))}</div>
@@ -668,6 +951,8 @@
       <div class="drawer-f">${canConfirm ? `<button class="btn primary" data-act="ds-cash-confirm" data-id="${e.employeeId}">Xác nhận đối soát</button>` : ''}<button class="btn" data-act="close">Đóng</button></div>`;
   }
   A.ACT['ds-cash-view'] = el => {
+    const e = dsCashRows().find(x => x.employeeId === el.dataset.id);
+    if (!e || !dsCanCash(e.market)) return;
     A.$('#modal-root').innerHTML = `<div class="drawer-overlay" data-act="close"></div><div class="drawer">${dsCashDrawerHtml(el.dataset.id)}</div>`;
   };
   A.ACT['ds-cash-att'] = el => {
@@ -678,15 +963,24 @@
       </div><div class="modal-f"><button class="btn primary" data-act="close">Đóng</button></div>`);
   };
   A.ACT['ds-cash-confirm'] = el => {
-    if (!dsCanCashConfirm()) return;
     const employeeId = el.dataset.id;
     const e0 = dsCashRows().find(x => x.employeeId === employeeId);
+    if (!e0 || !dsCanCashConfirm(e0.market)) return;
     if (!e0 || dsCashStatusOf(e0).id !== 'RECONCILED' || e0.confirm) return;
     A.db.cashConfirms.push({ employeeId, market: e0.market, date: U.today(), confirmedBy: dsActor(), confirmedAt: dsNowStamp() });
     U.log('Xác nhận đối soát tiền mặt cho ' + U.staffName(employeeId) + ' ngày ' + U.dmy(U.today()));
     A.save(); A.render();
     A.$('#modal-root').innerHTML = `<div class="drawer-overlay" data-act="close"></div><div class="drawer">${dsCashDrawerHtml(employeeId)}</div>`;
     U.toast('Đã xác nhận đối soát tiền mặt cho ' + U.staffName(employeeId));
+  };
+  A.ACT['ds-session-cash-confirm'] = el => {
+    const s = dsSessions().find(x => x.id === el.dataset.id);
+    if (!dsCanSessionCashConfirm(s)) return;
+    A.db.cashConfirms = A.db.cashConfirms || [];
+    A.db.cashConfirms.push({ sessionId: s.id, market: s.marketId, date: U.today(), confirmedBy: dsActor(), confirmedAt: dsNowStamp(), kind: 'SESSION_CASH' });
+    U.log('Xác nhận đối soát tiền mặt phiên chợ quê ' + s.code + ' ngày ' + U.dmy(s.sessionDate));
+    A.save(); A.render();
+    U.toast('Đã xác nhận tiền mặt phiên ' + s.code);
   };
 
   // ---------- Công nợ ----------
@@ -715,12 +1009,12 @@
     const canRemindAll = A.canDo('cong-no.nhac-no-hang-loat', ui.market);
     return timeBar + `<div class="grid g2">
       <div class="card"><div class="card-h"><h3>Phân loại nợ theo số ngày quá hạn</h3></div><div class="card-b">
-        ${buckets.map(b => `<div style="margin:10px 0"><div class="row small"><b style="width:100px">${b.label}</b><span class="muted">${b.n} tiểu thương</span><span class="spacer"></span><b>${U.money(b.amt)}</b></div><div class="bar-mini" style="height:10px"><i style="width:${b.amt * 100 / maxAmt}%;background:#d6453b"></i></div></div>`).join('')}
-        <div class="divider"></div><div class="row"><b>Tổng nợ quá hạn</b><span class="spacer"></span><b style="color:#d6453b;font-size:var(--font-size-lg)">${U.money(U.sum(over, U.due))}</b></div></div></div>
+        ${buckets.map(b => `<div style="margin:10px 0"><div class="row small"><b style="width:100px">${b.label}</b><span class="muted">${b.n} tiểu thương</span><span class="spacer"></span><b>${U.money(b.amt)}</b></div><div class="bar-mini" style="height:10px"><i style="width:${b.amt * 100 / maxAmt}%;background:#df2225"></i></div></div>`).join('')}
+        <div class="divider"></div><div class="row"><b>Tổng nợ quá hạn</b><span class="spacer"></span><b style="color:#df2225;font-size:var(--font-size-lg)">${U.money(U.sum(over, U.due))}</b></div></div></div>
       <div class="card"><div class="card-h"><h3>Lịch nhắc nợ tự động</h3></div><div class="card-b small">
         <div class="row" style="padding:6px 0"><span class="tag info">Ngày 12</span>Nhắc trước hạn 3 ngày qua Mini app, Zalo OA</div>
         <div class="row" style="padding:6px 0"><span class="tag warn">Ngày 16</span>Thông báo quá hạn lần 1</div>
-        <div class="row" style="padding:6px 0"><span class="tag warn">Ngày 25</span>Nhắc lần 2 kèm mã QR thanh toán</div>
+        <div class="row" style="padding:6px 0"><span class="tag warn">Ngày 25</span>Nhắc lần 2 kèm hướng dẫn thanh toán trên Mini app</div>
         <div class="row" style="padding:6px 0"><span class="tag danger">Quá 60 ngày</span>Chuyển danh sách cho Trưởng Ban Quản lý xử lý theo hợp đồng</div>
         <div class="muted" style="margin-top:8px">Không gửi lặp trong cùng mốc, cùng kênh. Lưu nhật ký gửi, nhận, đọc.</div></div></div></div>
     <div class="card"><div class="card-h"><h3>Danh sách tiểu thương nợ quá hạn (${list.length})</h3>${canRemindAll ? `<button class="btn accent" data-act="cn-remind-all">📣 Gửi nhắc nợ tất cả</button>` : ''}
@@ -728,7 +1022,7 @@
       <div class="card-b">${U.table([{ t: 'Tiểu thương' }, { t: 'Điểm KD' }, { t: 'Số kỳ nợ', num: true }, { t: 'Tổng nợ', num: true }, { t: 'Quá hạn lâu nhất', num: true }, { t: 'Đã nhắc', num: true }, { t: '' }],
         list.slice(pg.start, pg.end).map(x => `<tr><td><b>${U.esc(x.t.name)}</b> <span class="small muted">${x.t.app ? '· có mini app' : '· chưa cài app'}</span></td><td>${x.t.stalls.map(id => A.idx.stall.get(id).code).join(', ')}</td><td class="num">${x.n}</td><td class="num">${U.money(x.amt)}</td>
           <td class="num"><span class="tag ${x.days > 60 ? 'danger' : 'warn'}">${x.days} ngày</span></td><td class="num">${x.rem}</td>
-          <td class="nowrap">${A.canDo('cong-no.nhac-no', x.t.market) ? `<button class="btn sm" data-act="cn-remind" data-id="${x.t.id}">Nhắc nợ</button>` : ''} ${A.canDo('thu-tien.thu', x.t.market) ? `<button class="btn sm primary" data-act="pay-open" data-id="${x.t.id}">Thu</button>` : ''}</td></tr>`), { empty: 'Không có nợ quá hạn 🎉' })}${pg.html}</div></div>`;
+          <td class="nowrap">${A.canDo('cong-no.nhac-no', x.t.market) ? `<button class="btn sm" data-act="cn-remind" data-id="${x.t.id}">Nhắc nợ</button>` : ''} ${directCollectAllowedForMarket(x.t.market) ? `<button class="btn sm primary" data-act="pay-open" data-id="${x.t.id}">Thu tiền mặt</button>` : ''}</td></tr>`), { empty: 'Không có nợ quá hạn 🎉' })}${pg.html}</div></div>`;
   };
   A.CH['cn-asof'] = el => { f.cnAsOf = el.value || U.today(); A.render(); };
   A.CH['cn-origin'] = el => { f.cnOrigin = el.value; A.render(); };

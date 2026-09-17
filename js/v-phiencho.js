@@ -88,6 +88,72 @@
   function inWindow(s) { return s.registrationOpenAt <= today() && today() <= s.registrationCloseAt; }
   function merchantActive(t) { return !!t && t.stalls && t.stalls.length && t.market === ui.market; }
   function seq(prefix, arr) { return prefix + '-' + U.pad((arr ? arr.length : 0) + 1, 4); }
+  function sessionReceiptNo() { return 'BLP-' + U.pad((A.db.sessionReceipts || []).length + 1, 5); }
+  function sessionReceiptForPayment(paymentId) { return (A.db.sessionReceipts || []).find(r => r.paymentId === paymentId); }
+  function pushSessionNotification(reg, s, receipt) {
+    A.db.sessionNotifications = A.db.sessionNotifications || [];
+    if (A.db.sessionNotifications.some(n => n.kind === 'SESSION_PAYMENT_SUCCESS' && n.receiptId === receipt.id)) return;
+    A.db.sessionNotifications.unshift({
+      at: today(), sessionId: s.id, merchantId: reg.merchantId, kind: 'SESSION_PAYMENT_SUCCESS',
+      receiptId: receipt.id,
+      text: 'Thanh toán thành công ' + U.money(receipt.amount) + ' cho ' + s.name + '. Biên lai ' + receipt.receiptNumber + ' đã lưu trên hệ thống.'
+    });
+  }
+  A.completeSessionOnlinePayment = function (reg, s, payment, by) {
+    if (!reg || !s || !payment) return null;
+    if (reg.marketId !== ui.market || s.marketId !== ui.market || payment.marketId !== ui.market) return null;
+    if (reg.sessionId !== s.id || payment.sessionId !== s.id || payment.registrationId !== reg.id) return null;
+    if (reg.status !== R.WAITING_PAYMENT || payment.method !== 'ONLINE' || payment.status !== P.WAITING_PAYMENT) return null;
+    if (paidAmount(reg) >= reg.totalAmount) return null;
+    if (availableStalls(s) < reg.requestedStalls) return null;
+    payment.status = P.SUCCESS;
+    payment.paidAt = today();
+    payment.confirmedBy = by || actor();
+    payment.gateway = 'MOCK_ONLINE';
+    payment.delivery = { miniApp: true, sentAt: today(), status: 'SENT_MOCK' };
+    reg.status = R.CONFIRMED;
+    let receipt = sessionReceiptForPayment(payment.id);
+    if (!receipt) {
+      receipt = {
+        id: seq('RC', A.db.sessionReceipts), sessionId: s.id, registrationId: reg.id, paymentId: payment.id,
+        merchantId: reg.merchantId, marketId: s.marketId, receiptNumber: sessionReceiptNo(),
+        amount: payment.amount, method: 'ONLINE', collectedBy: 'Cổng thanh toán mock',
+        collectedAt: today(), issuedBy: by || actor(), issuedAt: today(),
+        delivery: { miniApp: true, sentAt: today(), status: 'SENT_MOCK' }
+      };
+      A.db.sessionReceipts.push(receipt);
+    }
+    reg.receiptNumber = receipt.receiptNumber;
+    pushSessionNotification(reg, s, receipt);
+    return receipt;
+  };
+  function sendRegistrationOpenNotification(s) {
+    A.db.notifications = A.db.notifications || [];
+    A.db.sessionNotifications = A.db.sessionNotifications || [];
+    const market = U.market(s.marketId);
+    const group = market ? market.short : s.marketId;
+    const title = 'Mở đăng ký ' + s.name;
+    const exists = A.db.notifications.some(n => n.sessionId === s.id && n.kind === 'SESSION_REGISTRATION_OPEN');
+    if (!exists) {
+      A.db.notifications.unshift({
+        id: 'TB-' + U.pad(32 + A.db.notifications.length, 3),
+        at: today(),
+        title,
+        body: 'Phiên ' + U.dmy(s.sessionDate) + ' đã mở đăng ký. Tiểu thương đăng ký trên Mini app và chọn QR code thanh toán tự động hoặc thanh toán tiền mặt.',
+        group,
+        channels: ['Mini app'],
+        sent: A.db.traders.filter(t => t.market === s.marketId && t.app).length,
+        delivered: 1,
+        read: 0,
+        auto: true,
+        kind: 'SESSION_REGISTRATION_OPEN',
+        sessionId: s.id
+      });
+    }
+    if (!A.db.sessionNotifications.some(n => n.sessionId === s.id && n.kind === 'REGISTRATION_OPEN')) {
+      A.db.sessionNotifications.unshift({ at: today(), sessionId: s.id, kind: 'REGISTRATION_OPEN', text: title });
+    }
+  }
   function sessionList() { ensureModel(); return A.db.marketSessions.filter(s => s.marketId === ui.market); }
   function regs(sid) { return A.db.sessionRegistrations.filter(r => r.sessionId === sid); }
   function paymentsFor(regId) { return A.db.sessionPayments.filter(p => p.registrationId === regId); }
@@ -147,7 +213,7 @@
     return m ? m.id : null;
   }
   function seedSessions(mid) {
-    const cats = Array.from(new Set(A.db.stalls.filter(s => s.market === mid).map(s => s.cat))).slice(0, 4);
+    const cats = Array.from(new Set(A.db.stalls.filter(s => s.market === mid && U.rentalKind(s) === 'session').map(s => s.cat))).slice(0, 4);
     const pricing = activePricing(mid);
     A.db.marketSessions.push(
       mkSession(mid, 'PC-' + mid + '-20260919', 'Phiên chợ quê thứ Bảy 19/09/2026', '2026-09-19', S.REGISTRATION_OPEN, 24, cats, pricing),
@@ -183,11 +249,18 @@
       note: status === R.WAITING_LIST ? 'Manual promotion - NEED_CONFIRMATION thứ tự ưu tiên' : ''
     };
     A.db.sessionRegistrations.push(reg);
-    if (payStatus) A.db.sessionPayments.push({
+    if (payStatus) {
+      const pay = {
       id: seq('PM', A.db.sessionPayments), sessionId: s.id, registrationId: reg.id, marketId: s.marketId,
       method, status: payStatus, amount: snap.totalAmount, reference: 'MOCK-' + reg.code,
       createdAt: '2026-09-13', paidAt: payStatus === P.SUCCESS ? '2026-09-13' : null, reconciledAt: null
-    });
+      };
+      A.db.sessionPayments.push(pay);
+      if (method === 'ONLINE' && payStatus === P.SUCCESS) {
+        pay.status = P.WAITING_PAYMENT; reg.status = R.WAITING_PAYMENT;
+        A.completeSessionOnlinePayment(reg, s, pay, 'Hệ thống seed');
+      }
+    }
   }
 
   function validateRegistration(s, traderId, requestedStalls, category, allowWaiting) {
@@ -268,8 +341,9 @@
     return regs(s.id).map(r => {
       const t = A.idx.trader.get(r.merchantId);
       const paid = paidAmount(r);
+      const canPaySuccess = r.status === R.WAITING_PAYMENT && canMutate('phien-cho.registration.create', s, [S.REGISTRATION_OPEN, S.REGISTRATION_CLOSED, S.IN_PROGRESS]);
       return `<tr><td><b>${r.code}</b><div class="small muted">${U.esc(t ? t.name : '')}</div></td><td>${r.requestedStalls}</td><td>${U.esc(r.businessCategory)}</td><td>${U.esc(r.paymentMethod || '-')}</td><td>${tag(r.status)}</td><td class="num">${U.money(r.totalAmount)}</td><td class="num">${U.money(paid)}</td><td class="nowrap">
-        ${r.status === R.WAITING_PAYMENT ? `<button class="btn sm primary" data-act="ms-pay-success" data-id="${r.id}">Simulate Payment Success</button>` : ''}
+        ${canPaySuccess ? `<button class="btn sm primary" data-act="ms-pay-success" data-id="${r.id}">Simulate Payment Success</button>` : ''}
         ${r.status === R.CONDITIONAL_HOLD ? `<button class="btn sm danger" data-act="ms-noshow" data-id="${r.id}">Mark no-show</button>` : ''}
         ${[R.CONFIRMED, R.CONDITIONAL_HOLD, R.WAITING_PAYMENT, R.WAITING_LIST].indexOf(r.status) !== -1 ? `<button class="btn sm" data-act="ms-reg-cancel" data-id="${r.id}">Cancel</button>` : ''}
       </td></tr>`;
@@ -329,9 +403,9 @@
       const r = A.db.sessionRegistrations.find(x => x.id === p.registrationId);
       return `<tr><td>${p.id}</td><td>${r ? r.code : ''}</td><td>${p.method}</td><td>${tag(p.status)}</td><td class="num">${U.money(p.amount)}</td><td>${U.esc(p.reference || '')}</td><td>${U.esc(p.paidAt || '')}</td></tr>`;
     });
-    const recRows = A.db.sessionReceipts.filter(r => r.sessionId === s.id).map(r => `<tr><td>${r.receiptNumber}</td><td>${r.registrationId}</td><td class="num">${U.money(r.amount)}</td><td>${U.esc(r.collectedBy)}</td><td>${U.esc(r.collectedAt)}</td></tr>`);
+    const recRows = A.db.sessionReceipts.filter(r => r.sessionId === s.id).map(r => `<tr><td>${r.receiptNumber}</td><td>${r.registrationId}</td><td>${U.esc(r.method || 'CASH')}</td><td class="num">${U.money(r.amount)}</td><td>${U.esc(r.collectedBy)}</td><td>${U.esc(r.collectedAt)}</td><td>${r.delivery && r.delivery.miniApp ? '<span class="tag ok">Đã gửi</span>' : '<span class="muted">-</span>'}</td></tr>`);
     return `<div class="grid g2"><div class="card"><div class="card-h"><h3>Payments</h3></div><div class="card-b">${U.table([{ t: 'Payment' }, { t: 'Registration' }, { t: 'Method' }, { t: 'Status' }, { t: 'Amount', num: true }, { t: 'Reference' }, { t: 'Paid at' }], rows)}</div></div>
-      <div class="card"><div class="card-h"><h3>Receipts</h3></div><div class="card-b">${U.table([{ t: 'Receipt' }, { t: 'Registration' }, { t: 'Amount', num: true }, { t: 'Collector' }, { t: 'Collected at' }], recRows)}</div></div></div>`;
+      <div class="card"><div class="card-h"><h3>Receipts</h3></div><div class="card-b">${U.table([{ t: 'Receipt' }, { t: 'Registration' }, { t: 'Method' }, { t: 'Amount', num: true }, { t: 'Collector' }, { t: 'Collected at' }, { t: 'Mini app' }], recRows)}</div></div></div>`;
   }
   function waitingView(s) {
     const rows = regs(s.id).filter(r => r.status === R.WAITING_LIST).map(r => {
@@ -405,7 +479,7 @@
   A.ACT['ms-create'] = () => {
     ensureModel();
     if (!canAction('phien-cho.create', ui.market)) return deny();
-    const cats = Array.from(new Set(A.db.stalls.filter(s => s.market === ui.market).map(s => s.cat))).slice(0, 4);
+    const cats = Array.from(new Set(A.db.stalls.filter(s => s.market === ui.market && U.rentalKind(s) === 'session').map(s => s.cat))).slice(0, 4);
     const cfg = activePricing(ui.market);
     const code = 'PC-' + ui.market + '-' + String(Date.now()).slice(-6);
     const s = mkSession(ui.market, code, 'Phiên chợ quê mới', '2026-10-10', S.DRAFT, 25, cats, cfg);
@@ -437,7 +511,7 @@
       });
       if (regs(s.id).some(r => paidAmount(r) > 0)) U.toast('NEED_CONFIRMATION: phiên có payment SUCCESS, chưa tự xử lý refund/reversal.');
     }
-    if (a === 'phien-cho.registration.open') A.db.sessionNotifications.unshift({ at: today(), sessionId: s.id, text: 'Phiên chợ ' + s.name + ' đã mở đăng ký.' });
+    if (a === 'phien-cho.registration.open') sendRegistrationOpenNotification(s);
     if (a === 'phien-cho.start') autoNoShow(s);
     if (a === 'phien-cho.registration.close') U.toast('Đăng ký bổ sung cần permission riêng và business rule. DEFAULT DENY.');
     U.log(next[2] + ': ' + s.code);
@@ -477,8 +551,10 @@
     if (availableStalls(s) < r.requestedStalls) return deny('DENY: không còn capacity tại thời điểm bank callback.');
     const p = paymentsFor(r.id).find(x => x.method === 'ONLINE') || null;
     if (!p || p.status === P.SUCCESS || p.status === P.RECONCILED) return deny('DENY: payment callback đã xử lý.');
-    p.status = P.SUCCESS; p.paidAt = today(); r.status = R.CONFIRMED;
-    A.save(); A.render(); U.toast('Fake callback SUCCESS -> registration CONFIRMED');
+    const receipt = A.completeSessionOnlinePayment(r, s, p, actor());
+    if (!receipt) return deny('DENY: không thể hoàn tất callback do sai trạng thái nghiệp vụ.');
+    U.log('Thanh toán online thành công đăng ký ' + r.code + ', phát hành biên lai ' + receipt.receiptNumber);
+    A.save(); A.render(); U.toast('Fake callback SUCCESS -> đã phát hành biên lai và gửi Mini app');
   };
   A.ACT['ms-reg-cancel'] = el => {
     const r = A.db.sessionRegistrations.find(x => x.id === el.dataset.id), s = A.db.marketSessions.find(x => x.id === r.sessionId);

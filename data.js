@@ -6,7 +6,12 @@
 window.DATA = (function () {
   'use strict';
 
-  const VERSION = 6;
+  // v7 (màn Điểm kinh doanh CL): thêm field THUẦN HIỂN THỊ `pointType` trên section CL (khai báo rõ
+  // ràng — xem MARKETS bên dưới) + lan truyền vào stall khi build() — KHÔNG đổi/xoá `type` (vẫn
+  // dùng tính đơn giá dịch vụ ở các màn tài chính, giữ nguyên) và KHÔNG đổi `cat` (ngành hàng, khái
+  // niệm riêng). Bump version để cache localStorage cũ (thiếu field mới) tự rebuild — độc lập với
+  // RBAC_SCHEMA/PERM_SEED_VERSION (js/core.js, js/permissions.js — KHÔNG đổi 2 hằng số đó).
+  const VERSION = 9;
   const TODAY = new Date(2026, 8, 13); // 13/09/2026
 
   // Giá dịch vụ sử dụng diện tích bán hàng – QĐ 480/QĐ-UBND ngày 14/02/2026 (đ/m²/ngày, đã gồm VAT)
@@ -16,7 +21,68 @@ window.DATA = (function () {
   const ELEC = 3200;   // đ/kWh – đơn giá mẫu
   const WATER = 12000; // đ/m³ – đơn giá mẫu
   // Tài khoản ngân hàng thu hộ của Ban Quản lý theo từng chợ (đối soát) – GIẢ ĐỊNH minh họa
+  // Enum dùng chung cho "Chính sách thu và biểu phí". Giá trị được lưu tường minh trên từng dòng,
+  // không suy luận loại thuế/mô hình thu từ tab hay đơn vị tính.
+  const RATE_MARKET_MODEL = {
+    FIXED_MONTHLY: 'FIXED_MONTHLY',
+    MARKET_SESSION: 'MARKET_SESSION'
+  };
+  const RATE_COLLECTION_CYCLE = { MONTH: 'MONTH', SESSION: 'SESSION', DAY: 'DAY' };
+  const RATE_TAX_CLASS = {
+    TAXABLE_REVENUE: 'TAXABLE_REVENUE',
+    PASS_THROUGH_NON_TAX: 'PASS_THROUGH_NON_TAX'
+  };
+  // Danh mục tối giản để các dòng phí tham chiếu. Task này chưa xây UI quản trị riêng cho danh mục.
+  const WAIVER_TYPES = [
+    { id: 'WAIVER_AUTHORIZED_DECISION', name: 'Miễn, giảm theo quyết định của cơ quan có thẩm quyền', active: true }
+  ];
+  const RATE_POLICY_SEED = {
+    stallPrices: [
+      { id: 'sp-cl-kiot-v1', marketId: 'CL', area: 'Toàn chợ (hạng 1)', stallType: 'Ki-ốt', marketModel: RATE_MARKET_MODEL.FIXED_MONTHLY, collectionCycle: RATE_COLLECTION_CYCLE.MONTH, amount: 2000, unit: 'đ/m²/ngày', taxClass: RATE_TAX_CLASS.TAXABLE_REVENUE, waiverTypeId: 'WAIVER_AUTHORIZED_DECISION', effectiveFrom: '2026-02-14', effectiveTo: null, status: 'active', legalBasis: { docNo: '480/QĐ-UBND', docDate: '2026-02-14', issuer: 'UBND tỉnh Đồng Tháp', summary: 'Quy định đơn giá dịch vụ chợ', effectiveDate: '2026-02-14', note: '' }, attachments: [{ id: 'att-001', name: 'QD_480_2026.pdf', type: 'application/pdf', note: 'Văn bản căn cứ', mock: true }], history: [{ time: '14/02/2026 09:30', user: 'Trần Minh Khoa', action: 'Tạo đơn giá', detail: '2.000 đ/m²/ngày' }] },
+      { id: 'sp-cl-nhalong-v1', marketId: 'CL', area: 'Toàn chợ (hạng 1)', stallType: 'Trong nhà lồng chợ', marketModel: RATE_MARKET_MODEL.FIXED_MONTHLY, collectionCycle: RATE_COLLECTION_CYCLE.MONTH, amount: 2000, unit: 'đ/m²/ngày', taxClass: RATE_TAX_CLASS.TAXABLE_REVENUE, waiverTypeId: 'WAIVER_AUTHORIZED_DECISION', effectiveFrom: '2026-02-14', effectiveTo: null, status: 'active', legalBasis: { docNo: '480/QĐ-UBND', docDate: '2026-02-14', issuer: 'UBND tỉnh Đồng Tháp', summary: 'Quy định đơn giá dịch vụ chợ', effectiveDate: '2026-02-14', note: '' }, attachments: [], history: [{ time: '14/02/2026 09:30', user: 'Trần Minh Khoa', action: 'Tạo đơn giá', detail: '2.000 đ/m²/ngày' }] },
+      { id: 'sp-cl-ngoai-v1', marketId: 'CL', area: 'Ngoài nhà lồng', stallType: 'Tự sản tự tiêu', marketModel: RATE_MARKET_MODEL.FIXED_MONTHLY, collectionCycle: RATE_COLLECTION_CYCLE.MONTH, amount: 800, unit: 'đ/m²/ngày', taxClass: RATE_TAX_CLASS.TAXABLE_REVENUE, waiverTypeId: 'WAIVER_AUTHORIZED_DECISION', effectiveFrom: '2026-02-14', effectiveTo: null, status: 'active', legalBasis: { docNo: '480/QĐ-UBND', docDate: '2026-02-14', issuer: 'UBND tỉnh Đồng Tháp', summary: 'Quy định đơn giá dịch vụ chợ', effectiveDate: '2026-02-14', note: '' }, attachments: [{ id: 'att-002', name: 'bang_gia_trang_3.png', type: 'image/png', note: 'Trang có bảng đơn giá', mock: true }], history: [{ time: '14/02/2026 09:30', user: 'Trần Minh Khoa', action: 'Tạo đơn giá', detail: '800 đ/m²/ngày' }] },
+      { id: 'sp-ttd-codinh-v1', marketId: 'TTD', area: 'Khu quầy thuê cố định', stallType: 'Quầy cố định tháng/quý', marketModel: RATE_MARKET_MODEL.FIXED_MONTHLY, collectionCycle: RATE_COLLECTION_CYCLE.MONTH, amount: 1200, unit: 'đ/m²/ngày', taxClass: RATE_TAX_CLASS.TAXABLE_REVENUE, waiverTypeId: null, effectiveFrom: '2026-01-01', effectiveTo: null, status: 'active', legalBasis: { docNo: '', docDate: '', issuer: 'UBND phường Cao Lãnh', summary: 'Mức thu giả định cho quầy cố định chợ quê', effectiveDate: '2026-01-01', note: 'Giả định FE prototype, chờ xác nhận mức thu chính thức' }, attachments: [], history: [{ time: '01/01/2026 08:00', user: 'Huỳnh Thanh Tâm', action: 'Tạo đơn giá', detail: '1.200 đ/m²/ngày' }] },
+      { id: 'sp-ttd-phien-v1', marketId: 'TTD', area: 'Khu chợ quê', stallType: 'Quầy theo phiên', marketModel: RATE_MARKET_MODEL.MARKET_SESSION, collectionCycle: RATE_COLLECTION_CYCLE.SESSION, amount: 20000, unit: 'đ/phiên', taxClass: RATE_TAX_CLASS.TAXABLE_REVENUE, waiverTypeId: null, effectiveFrom: '2026-01-01', effectiveTo: null, status: 'active', legalBasis: { docNo: '', docDate: '', issuer: 'UBND phường Cao Lãnh', summary: 'Mức thu giả định, chưa có trong phụ lục QĐ 480', effectiveDate: '2026-01-01', note: 'Giả định, chờ văn bản chính thức' }, attachments: [], history: [{ time: '01/01/2026 08:00', user: 'Trần Minh Khoa', action: 'Tạo đơn giá', detail: '20.000 đ/phiên' }] }
+    ],
+    utilities: [
+      { id: 'ut-cl-v1', marketId: 'CL', marketModel: RATE_MARKET_MODEL.FIXED_MONTHLY, collectionCycle: RATE_COLLECTION_CYCLE.MONTH, elecPrice: 3200, elecUnit: 'đ/kWh', waterPrice: 12000, waterUnit: 'đ/m³', taxClass: RATE_TAX_CLASS.PASS_THROUGH_NON_TAX, waiverTypeId: null, effectiveFrom: '2026-01-01', effectiveTo: null, status: 'active', legalBasis: { docNo: '', docDate: '', issuer: 'Theo giá bán lẻ hiện hành', summary: 'Thu hộ điện, nước theo giá gốc cho điểm kinh doanh có đồng hồ riêng', effectiveDate: '2026-01-01', note: '' }, attachments: [], history: [{ time: '01/01/2026 08:00', user: 'Võ Hoàng Tuấn', action: 'Tạo cấu hình', detail: 'Điện 3.200 đ/kWh · Nước 12.000 đ/m³' }] },
+      { id: 'ut-ttd-v1', marketId: 'TTD', marketModel: RATE_MARKET_MODEL.FIXED_MONTHLY, collectionCycle: RATE_COLLECTION_CYCLE.MONTH, elecPrice: 3200, elecUnit: 'đ/kWh', waterPrice: 12000, waterUnit: 'đ/m³', taxClass: RATE_TAX_CLASS.PASS_THROUGH_NON_TAX, waiverTypeId: null, effectiveFrom: '2026-01-01', effectiveTo: null, status: 'active', legalBasis: { docNo: '', docDate: '', issuer: 'Theo giá bán lẻ hiện hành', summary: 'Thu hộ điện, nước cho quầy cố định chợ quê', effectiveDate: '2026-01-01', note: 'Nhân viên Ban Quản lý chợ ghi chỉ số tại quầy cố định' }, attachments: [], history: [{ time: '01/01/2026 08:00', user: 'Nguyễn Hoàng Phúc', action: 'Tạo cấu hình', detail: 'Điện 3.200 đ/kWh · Nước 12.000 đ/m³' }] }
+    ],
+    extraServices: [
+      { id: 'es-cl-vesinh-v1', name: 'Vệ sinh', marketId: 'CL', marketModel: RATE_MARKET_MODEL.FIXED_MONTHLY, collectionCycle: RATE_COLLECTION_CYCLE.MONTH, calcMethod: 'area', amount: 2000, unit: 'đ/m²/tháng', taxClass: RATE_TAX_CLASS.TAXABLE_REVENUE, waiverTypeId: 'WAIVER_AUTHORIZED_DECISION', effectiveFrom: '2026-01-01', effectiveTo: null, status: 'active', legalBasis: { docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' }, attachments: [], history: [{ time: '01/01/2026 08:00', user: 'Trần Minh Khoa', action: 'Tạo dịch vụ', detail: '2.000 đ/m²/tháng' }] },
+      { id: 'es-cl-baove-v1', name: 'Bảo vệ', marketId: 'CL', marketModel: RATE_MARKET_MODEL.FIXED_MONTHLY, collectionCycle: RATE_COLLECTION_CYCLE.MONTH, calcMethod: 'fixed', amount: 50000, unit: 'đ/điểm/tháng', taxClass: RATE_TAX_CLASS.TAXABLE_REVENUE, waiverTypeId: null, effectiveFrom: '2026-01-01', effectiveTo: null, status: 'active', legalBasis: { docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' }, attachments: [], history: [{ time: '01/01/2026 08:00', user: 'Trần Minh Khoa', action: 'Tạo dịch vụ', detail: '50.000 đ/điểm/tháng' }] },
+      { id: 'es-ttd-vesinh-v1', name: 'Vệ sinh chợ quê', marketId: 'TTD', marketModel: RATE_MARKET_MODEL.FIXED_MONTHLY, collectionCycle: RATE_COLLECTION_CYCLE.MONTH, calcMethod: 'fixed', amount: 40000, unit: 'đ/quầy/tháng', taxClass: RATE_TAX_CLASS.TAXABLE_REVENUE, waiverTypeId: null, effectiveFrom: '2026-01-01', effectiveTo: null, status: 'active', legalBasis: { docNo: '', docDate: '', issuer: '', summary: 'Phí dịch vụ khác cho quầy cố định TTD', effectiveDate: '2026-01-01', note: 'Giả định FE prototype' }, attachments: [], history: [{ time: '01/01/2026 08:00', user: 'Huỳnh Thanh Tâm', action: 'Tạo dịch vụ', detail: '40.000 đ/quầy/tháng' }] },
+      { id: 'es-all-guixe-v1', name: 'Gửi xe', marketId: 'ALL', marketModel: RATE_MARKET_MODEL.FIXED_MONTHLY, collectionCycle: RATE_COLLECTION_CYCLE.DAY, calcMethod: 'qty', amount: 3000, unit: 'đ/lượt', taxClass: RATE_TAX_CLASS.TAXABLE_REVENUE, waiverTypeId: null, effectiveFrom: '2026-01-01', effectiveTo: null, status: 'inactive', legalBasis: { docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: 'Chưa triển khai, đang chờ bố trí bãi xe' }, attachments: [], history: [{ time: '01/01/2026 08:00', user: 'Trần Minh Khoa', action: 'Tạo dịch vụ', detail: '3.000 đ/lượt (tạm chưa áp dụng)' }] }
+    ]
+  };
+
   const BANK_BY_MARKET = { CL: 'Vietcombank', TTD: 'Agribank' };
+
+  // Danh mục ngân hàng cho dropdown "Ngân hàng" ở màn Danh sách tài khoản ngân hàng (Tài chính >
+  // Quản lý khai báo) — chỉ phục vụ hiển thị/lọc trong prototype, không kết nối cổng thanh toán thật.
+  const BANKS = [
+    { code: 'VCB', name: 'Vietcombank' },
+    { code: 'AGB', name: 'Agribank' },
+    { code: 'BIDV', name: 'BIDV' },
+    { code: 'VTB', name: 'VietinBank' },
+    { code: 'ACB', name: 'ACB' },
+    { code: 'STB', name: 'Sacombank' },
+    { code: 'MB', name: 'MB Bank' },
+    { code: 'TCB', name: 'Techcombank' },
+    { code: 'VPB', name: 'VPBank' },
+    { code: 'OCB', name: 'OCB' }
+  ];
+  // Seed "Danh sách tài khoản ngân hàng" — tài khoản của Ban Quản lý chợ dùng nhận tiền qua
+  // QR/chuyển khoản từ tiểu thương, phục vụ đối soát giao dịch. Tách theo từng chợ (marketId) như
+  // phần lớn dữ liệu nghiệp vụ khác trong hệ thống (xem RATE_POLICY_SEED). hasTransactions:true minh
+  // họa tài khoản đã có giao dịch tham chiếu — không được xoá cứng, chỉ chuyển "Ngừng hoạt động".
+  const BANK_ACCOUNT_SEED = [
+    { id: 'BA-CL-01', marketId: 'CL', bankCode: 'VCB', bankName: 'Vietcombank', accountHolderName: 'BAN QUAN LY CHO CAO LANH', accountNumber: '0071001234567', isCollectionAccount: true, note: 'Tài khoản thu chính - Chợ Cao Lãnh', status: 'active', hasTransactions: true, createdBy: 'Trần Minh Khoa', createdAt: '01/01/2026 08:00', updatedBy: 'Trần Minh Khoa', updatedAt: '01/01/2026 08:00' },
+    { id: 'BA-CL-02', marketId: 'CL', bankCode: 'BIDV', bankName: 'BIDV', accountHolderName: 'BAN QUAN LY CHO CAO LANH', accountNumber: '12310009988776', isCollectionAccount: false, note: 'Tài khoản dự phòng, chưa dùng thu tiền', status: 'active', hasTransactions: false, createdBy: 'Trần Minh Khoa', createdAt: '15/01/2026 09:20', updatedBy: 'Trần Minh Khoa', updatedAt: '15/01/2026 09:20' },
+    { id: 'BA-TTD-01', marketId: 'TTD', bankCode: 'AGB', bankName: 'Agribank', accountHolderName: 'BAN QUAN LY CHO QUE TAN THUAN DONG', accountNumber: '3305201122334', isCollectionAccount: true, note: 'Tài khoản thu chính - Chợ quê Tân Thuận Đông', status: 'active', hasTransactions: true, createdBy: 'Huỳnh Thanh Tâm', createdAt: '01/01/2026 08:00', updatedBy: 'Huỳnh Thanh Tâm', updatedAt: '01/01/2026 08:00' },
+    { id: 'BA-TTD-02', marketId: 'TTD', bankCode: 'VTB', bankName: 'VietinBank', accountHolderName: 'HUYNH THANH TAM', accountNumber: '0999888777', isCollectionAccount: false, note: 'Tài khoản cá nhân tổ trưởng, đã ngừng dùng', status: 'inactive', hasTransactions: false, createdBy: 'Huỳnh Thanh Tâm', createdAt: '05/01/2026 10:00', updatedBy: 'Trần Minh Khoa', updatedAt: '20/03/2026 14:00' }
+  ];
+
 
   const MARKETS = [
     {
@@ -24,28 +90,36 @@ window.DATA = (function () {
       address: 'Khóm 7, phường Cao Lãnh, tỉnh Đồng Tháp',
       note: 'Tòa nhà chợ mới: 1 hầm, 1 trệt, 1 lầu, khoảng 20.435 m² sàn',
       priceNote: 'Giá dịch vụ theo QĐ 480/QĐ-UBND ngày 14/02/2026: ki-ốt và trong nhà lồng 2.000 đ/m²/ngày; ngoài nhà lồng 800 đ/m²/ngày',
+      // pointType (CHỈ Chợ Cao Lãnh — màn "Điểm kinh doanh"): "loại điểm kinh doanh" theo nghĩa bán
+      // lẻ (Quầy hàng/Sạp hàng/Ki-ốt/Cửa hàng), KHÁC với `type` phía trên (hạng mục tính đơn giá
+      // dịch vụ theo QĐ 480 — giữ nguyên, không đổi) và KHÁC với `cat` (ngành hàng). Khai báo RÕ
+      // RÀNG theo từng khu vực thực tế ngay tại đây (không suy đoán từ `cat`/ngành hàng):
+      //   kiot   = Ki-ốt (đúng nghĩa vật lý — có vách ngăn, cửa riêng, mặt tiền)
+      //   sap    = Sạp hàng (bàn/bục cố định — hàng tươi sống/khô/ăn uống)
+      //   cuahang= Cửa hàng (không gian khép kín, diện tích lớn hơn — bách hóa/may mặc/dịch vụ)
+      //   quay   = Quầy hàng (khu trưng bày nhỏ gọn ngoài nhà lồng)
       floors: [
         {
           id: 'T1', name: 'Tầng 1', desc: 'Lương thực, thực phẩm, thủy hải sản', sections: [
-            { id: 'KA', name: 'Ki-ốt mặt tiền tầng 1', cat: 'Ki-ốt tổng hợp', type: 'kiot', rows: ['A'], per: 20, area: [12, 16], meter: true },
-            { id: 'HS', name: 'Khu thủy hải sản', cat: 'Thủy hải sản', type: 'nhalong', rows: ['A', 'B', 'C'], per: 12, area: [4, 6], meter: true },
-            { id: 'TG', name: 'Khu thịt, gia cầm', cat: 'Thịt, gia cầm', type: 'nhalong', rows: ['A', 'B'], per: 12, area: [4, 6], meter: true },
-            { id: 'RC', name: 'Khu rau củ, trái cây', cat: 'Rau củ, trái cây', type: 'nhalong', rows: ['A', 'B', 'C'], per: 12, area: [3, 5] },
-            { id: 'LT', name: 'Khu lương thực, thực phẩm khô', cat: 'Lương thực, thực phẩm khô', type: 'nhalong', rows: ['A', 'B'], per: 12, area: [4, 8] }
+            { id: 'KA', name: 'Ki-ốt mặt tiền tầng 1', cat: 'Ki-ốt tổng hợp', type: 'kiot', pointType: 'kiot', rows: ['A'], per: 20, area: [12, 16], meter: true },
+            { id: 'HS', name: 'Khu thủy hải sản', cat: 'Thủy hải sản', type: 'nhalong', pointType: 'sap', rows: ['A', 'B', 'C'], per: 12, area: [4, 6], meter: true },
+            { id: 'TG', name: 'Khu thịt, gia cầm', cat: 'Thịt, gia cầm', type: 'nhalong', pointType: 'sap', rows: ['A', 'B'], per: 12, area: [4, 6], meter: true },
+            { id: 'RC', name: 'Khu rau củ, trái cây', cat: 'Rau củ, trái cây', type: 'nhalong', pointType: 'sap', rows: ['A', 'B', 'C'], per: 12, area: [3, 5] },
+            { id: 'LT', name: 'Khu lương thực, thực phẩm khô', cat: 'Lương thực, thực phẩm khô', type: 'nhalong', pointType: 'sap', rows: ['A', 'B'], per: 12, area: [4, 8] }
           ]
         },
         {
           id: 'T2', name: 'Tầng 2', desc: 'Bách hóa tổng hợp, ăn uống, dịch vụ', sections: [
-            { id: 'KB', name: 'Ki-ốt tầng 2', cat: 'Ki-ốt tổng hợp', type: 'kiot', rows: ['A'], per: 16, area: [12, 16], meter: true },
-            { id: 'BH', name: 'Khu bách hóa tổng hợp', cat: 'Bách hóa tổng hợp', type: 'nhalong', rows: ['A', 'B', 'C'], per: 12, area: [4, 8] },
-            { id: 'MM', name: 'Khu may mặc, giày dép', cat: 'May mặc, giày dép', type: 'nhalong', rows: ['A', 'B', 'C'], per: 12, area: [4, 8] },
-            { id: 'AU', name: 'Khu ăn uống', cat: 'Ăn uống', type: 'nhalong', rows: ['A', 'B'], per: 10, area: [6, 10], meter: true },
-            { id: 'DV', name: 'Khu dịch vụ cho thuê', cat: 'Dịch vụ', type: 'nhalong', rows: ['A'], per: 10, area: [8, 12], meter: true }
+            { id: 'KB', name: 'Ki-ốt tầng 2', cat: 'Ki-ốt tổng hợp', type: 'kiot', pointType: 'kiot', rows: ['A'], per: 16, area: [12, 16], meter: true },
+            { id: 'BH', name: 'Khu bách hóa tổng hợp', cat: 'Bách hóa tổng hợp', type: 'nhalong', pointType: 'cuahang', rows: ['A', 'B', 'C'], per: 12, area: [4, 8] },
+            { id: 'MM', name: 'Khu may mặc, giày dép', cat: 'May mặc, giày dép', type: 'nhalong', pointType: 'cuahang', rows: ['A', 'B', 'C'], per: 12, area: [4, 8] },
+            { id: 'AU', name: 'Khu ăn uống', cat: 'Ăn uống', type: 'nhalong', pointType: 'sap', rows: ['A', 'B'], per: 10, area: [6, 10], meter: true },
+            { id: 'DV', name: 'Khu dịch vụ cho thuê', cat: 'Dịch vụ', type: 'nhalong', pointType: 'cuahang', rows: ['A'], per: 10, area: [8, 12], meter: true }
           ]
         },
         {
           id: 'NL', name: 'Ngoài nhà lồng', desc: 'Bán hàng tự sản tự tiêu', sections: [
-            { id: 'TS', name: 'Khu tự sản tự tiêu', cat: 'Nông sản tự sản tự tiêu', type: 'ngoai', rows: ['A', 'B'], per: 15, area: [2, 3] }
+            { id: 'TS', name: 'Khu tự sản tự tiêu', cat: 'Nông sản tự sản tự tiêu', type: 'ngoai', pointType: 'quay', rows: ['A', 'B'], per: 15, area: [2, 3] }
           ]
         },
         { id: 'H', name: 'Tầng hầm', desc: 'Bãi xe và khu kỹ thuật – không bố trí điểm kinh doanh', sections: [], parking: true }
@@ -59,6 +133,7 @@ window.DATA = (function () {
       floors: [
         {
           id: 'KHU', name: 'Khu chợ quê', desc: 'Họp chiều thứ Bảy, 14h–20h', sections: [
+            { id: 'CD', name: 'Khu quầy thuê cố định', cat: 'Quầy cố định tháng/quý', type: 'nhalong', rows: ['A'], per: 8, area: [8, 12], meter: true },
             { id: 'AT', name: 'Khu ẩm thực dân dã', cat: 'Ẩm thực dân dã', type: 'phien', rows: ['A', 'B'], per: 10, area: [6, 9] },
             { id: 'NS', name: 'Khu nông sản, đặc sản', cat: 'Nông sản, đặc sản', type: 'phien', rows: ['A'], per: 7, area: [6, 9] },
             { id: 'TN', name: 'Khu trải nghiệm tự làm món', cat: 'Trải nghiệm', type: 'phien', rows: ['A'], per: 9, area: [6, 9] }
@@ -69,11 +144,19 @@ window.DATA = (function () {
   ];
 
   const STATUS = {
-    thue: { label: 'Đang thuê', color: '#2e9e6a' },
-    no: { label: 'Nợ phí', color: '#d6453b' },
-    ngung: { label: 'Tạm ngừng', color: '#e0a526' },
-    tranhchap: { label: 'Đang tranh chấp', color: '#7b4bc4' },
+    thue: { label: 'Đang thuê', color: '#3aa85b' },
+    no: { label: 'Nợ phí', color: '#de3b3d' },
+    ngung: { label: 'Tạm ngừng', color: '#ef852e' },
+    tranhchap: { label: 'Đang tranh chấp', color: '#7c54cd' },
     trong: { label: 'Còn trống', color: '#c9d3cf' }
+  };
+
+  // "Loại điểm kinh doanh" (màn Điểm kinh doanh, Chợ Cao Lãnh) — xem ghi chú `pointType` ở MARKETS.
+  const POINT_TYPE = {
+    quay: { label: 'Quầy hàng' },
+    sap: { label: 'Sạp hàng' },
+    kiot: { label: 'Ki-ốt' },
+    cuahang: { label: 'Cửa hàng' }
   };
 
   const METHOD = { tm: 'Tiền mặt', qr: 'Quét mã QR', ck: 'Chuyển khoản' };
@@ -95,7 +178,8 @@ window.DATA = (function () {
     { id: 'NV05', name: 'Võ Hoàng Tuấn', role: 'Nhân viên kỹ thuật (điện, nước)', market: 'CL' },
     { id: 'NV06', name: 'Huỳnh Thanh Tâm', role: 'Trưởng Ban Quản lý chợ', market: 'TTD' },
     { id: 'NV07', name: 'Đỗ Thị Kim Yến', role: 'Nhân viên thu phí phiên', market: 'TTD' },
-    { id: 'NV08', name: 'Mai Thị Thanh Xuân', role: 'Kế toán', market: 'TTD' }
+    { id: 'NV08', name: 'Mai Thị Thanh Xuân', role: 'Kế toán', market: 'TTD' },
+    { id: 'NV09', name: 'Nguyễn Hoàng Phúc', role: 'Nhân viên Ban Quản lý chợ', market: 'TTD' }
   ];
 
   const ROLES = [
@@ -144,7 +228,13 @@ window.DATA = (function () {
         else status = r < 0.10 ? 'trong' : r < 0.14 ? 'ngung' : r < 0.21 ? 'no' : r < 0.225 ? 'tranhchap' : 'thue';
         stalls.push({
           id: m.id + '-' + code, code, market: m.id, floor: f.id, section: s.id, sectionName: s.name,
-          row, num: i, type: s.type, cat: s.cat, area, hasMeter: !!s.meter, status, traderId: null, contractId: null, history: []
+          row, num: i, type: s.type, pointType: s.pointType || null, cat: s.cat, area, hasMeter: !!s.meter, status, traderId: null,
+          // sellerId (CHỈ Chợ Cao Lãnh — màn "Điểm kinh doanh"): người TRỰC TIẾP bán tại điểm, THAM
+          // CHIẾU đúng entity `traders` sẵn có (không tạo entity/duplicate tên) — null = "chưa xác
+          // định/giống người thuê hiện hành" (gán cụ thể ở bước tạo tiểu thương bên dưới cho điểm đã
+          // có người thuê). KHÔNG dùng cho bất kỳ logic tài chính/hợp đồng/công nợ nào — các nghiệp
+          // vụ đó GIỮ NGUYÊN gắn với traderId.
+          sellerId: null, contractId: null, history: []
         });
       }
     }))));
@@ -182,9 +272,47 @@ window.DATA = (function () {
       prev = t;
     });
 
+    const cqStall = stalls.find(s => s.market === 'TTD' && s.section === 'CD' && s.row === 'A' && s.num === 1)
+      || stalls.find(s => s.market === 'TTD' && s.type !== 'phien');
+    if (cqStall) {
+      const old = traders.find(t => t.id === cqStall.traderId);
+      if (old) old.stalls = old.stalls.filter(id => id !== cqStall.id);
+      const cqTrader = {
+        id: 'TTD-CQ', name: 'Chí Quyết', phone: '0909000001', cccd: '087093000001',
+        address: 'Khóm Tân Phát, phường Cao Lãnh',
+        market: 'TTD', cat: cqStall.cat, hkd: true, since: '2026-01-01',
+        app: true, bank: true, stalls: [cqStall.id]
+      };
+      traders.push(cqTrader);
+      cqStall.traderId = cqTrader.id;
+      cqStall.status = 'thue';
+    }
+
+    // ---- Người bán thực tế (sellerId, CHỈ Chợ Cao Lãnh — xem ghi chú ở stalls.push()) ----
+    // Mặc định người bán = người thuê (đúng thực tế đa số điểm KD). Sau đó đổi sellerId khác
+    // traderId ở MỘT SỐ ÍT điểm để minh hoạ đúng 2 trường hợp bắt buộc: (a) người thuê nhượng lại
+    // cho người khác trực tiếp bán, (b) một người thuê nhiều điểm nhưng người bán từng điểm khác
+    // nhau. Điểm còn trống KHÔNG gán sellerId (giữ null — không tạo người bán giả để lấp UI).
+    const clOccupied = stalls.filter(s => s.market === 'CL' && s.traderId);
+    clOccupied.forEach(s => { s.sellerId = s.traderId; });
+    const clMultiStallTrader = traders.find(t => t.market === 'CL' && t.stalls.length >= 2);
+    if (clMultiStallTrader) {
+      const othersForMulti = traders.filter(x => x.market === 'CL' && x.id !== clMultiStallTrader.id);
+      const st2 = othersForMulti.length && stalls.find(s => s.id === clMultiStallTrader.stalls[1]);
+      if (st2) st2.sellerId = pick(othersForMulti).id;
+    }
+    let sellerSwaps = 0;
+    clOccupied.forEach(s => {
+      if (sellerSwaps >= 6 || s.sellerId !== s.traderId) return; // bỏ qua điểm đã đổi ở bước trên
+      if (chance(0.03)) {
+        const others = traders.filter(x => x.market === 'CL' && x.id !== s.traderId);
+        if (others.length) { s.sellerId = pick(others).id; sellerSwaps++; }
+      }
+    });
+
     // ---- Hợp đồng ----
     let cSeq = 0;
-    stalls.filter(s => s.traderId).forEach(st => {
+    stalls.filter(s => s.traderId && s.type !== 'phien').forEach(st => {
       const m = st.market;
       let start, end;
       if (m === 'TTD') {
@@ -196,14 +324,15 @@ window.DATA = (function () {
         start = addMonths(new Date(2023, 10, 1), between(0, 32));
         end = addDays(addMonths(start, 36), -1);
       }
-      const unit = m === 'TTD' ? SESSION_FEE : UNIT[st.type];
-      const monthly = m === 'TTD' ? 0 : Math.round(st.area * unit * 30 / 1000) * 1000;
+      const fixedPolicy = RATE_POLICY_SEED.stallPrices.find(x => x.marketId === m && x.marketModel === RATE_MARKET_MODEL.FIXED_MONTHLY && x.status === 'active');
+      const unit = fixedPolicy ? fixedPolicy.amount : UNIT[st.type];
+      const monthly = Math.round(st.area * unit * 30 / 1000) * 1000;
       const c = {
         id: 'HĐ-' + m + '-' + start.getFullYear() + '-' + pad(++cSeq, 4),
         stallId: st.id, traderId: st.traderId, market: m,
-        kind: m === 'TTD' ? 'Đăng ký quầy theo năm' : 'Hợp đồng thuê điểm kinh doanh',
+        kind: 'Hợp đồng thuê cố định quầy tháng/quý',
         start: iso(start), end: iso(end), unit, monthly,
-        deposit: m === 'TTD' ? 0 : monthly, status: 'hieuluc', scanned: chance(0.8)
+        deposit: monthly, status: 'hieuluc', scanned: chance(0.8)
       };
       contracts.push(c);
       st.contractId = c.id;
@@ -227,19 +356,21 @@ window.DATA = (function () {
     let iSeq = 0, rSeq = 0;
 
     function makeItems(st, c, period) {
-      const [y, mo] = period.split('-').map(Number);
       const items = [];
+      items.push({ name: 'Phí quầy cố định tháng/quý (' + st.area + ' m² × ' + c.unit.toLocaleString('vi-VN') + ' đ × 30 ngày)', amount: c.monthly });
+      if (st.hasMeter) {
+        const kwh = between(st.type === 'kiot' ? 120 : 50, st.type === 'kiot' ? 320 : 180);
+        const m3 = between(2, st.section === 'AU' || st.section === 'HS' ? 18 : 6);
+        items.push({ name: 'Tiền điện (' + kwh + ' kWh × ' + ELEC.toLocaleString('vi-VN') + ' đ)', amount: kwh * ELEC });
+        items.push({ name: 'Tiền nước (' + m3 + ' m³ × ' + WATER.toLocaleString('vi-VN') + ' đ)', amount: m3 * WATER });
+      }
       if (st.market === 'TTD') {
-        const n = saturdays(y, mo - 1).length;
-        items.push({ name: 'Phí quầy theo phiên (' + n + ' phiên × ' + SESSION_FEE.toLocaleString('vi-VN') + ' đ)', amount: n * SESSION_FEE });
-      } else {
-        items.push({ name: 'Giá dịch vụ sử dụng diện tích bán hàng (' + st.area + ' m² × ' + c.unit.toLocaleString('vi-VN') + ' đ × 30 ngày)', amount: c.monthly });
-        if (st.hasMeter) {
-          const kwh = between(st.type === 'kiot' ? 120 : 50, st.type === 'kiot' ? 320 : 180);
-          const m3 = between(2, st.section === 'AU' || st.section === 'HS' ? 18 : 6);
-          items.push({ name: 'Tiền điện (' + kwh + ' kWh × ' + ELEC.toLocaleString('vi-VN') + ' đ)', amount: kwh * ELEC });
-          items.push({ name: 'Tiền nước (' + m3 + ' m³ × ' + WATER.toLocaleString('vi-VN') + ' đ)', amount: m3 * WATER });
-        }
+        RATE_POLICY_SEED.extraServices
+          .filter(x => x.status === 'active' && x.marketModel === RATE_MARKET_MODEL.FIXED_MONTHLY && x.marketId === st.market)
+          .forEach(x => {
+            const amount = x.calcMethod === 'area' ? Math.round(st.area * x.amount / 1000) * 1000 : x.amount;
+            items.push({ name: x.name + ' (' + x.unit + ')', amount });
+          });
       }
       return items;
     }
@@ -249,7 +380,7 @@ window.DATA = (function () {
       const debtMonths = st.status === 'no' ? between(1, 4) : 0;
       PERIODS.forEach((p, pi) => {
         const pStart = p + '-01';
-        if (c.start > pStart && st.market === 'CL' && c.start.slice(0, 7) !== p) return;
+        if (c.start > pStart && c.start.slice(0, 7) !== p) return;
         if (st.status === 'ngung' && pi >= 3) return; // tạm ngừng: không phát sinh 2 kỳ gần nhất
         const items = makeItems(st, c, p);
         const amount = items.reduce((a, b) => a + b.amount, 0);
@@ -300,6 +431,7 @@ window.DATA = (function () {
     const mockPhoto = (code, kind, period) => ({ name: code + '-' + kind + '-' + period.slice(5) + '-' + period.slice(0, 4) + '.jpg', type: 'image/jpeg', size: between(180, 420) * 1000, mock: true });
 
     const readings = [];
+    const meterRecorders = { CL: 'NV05', TTD: 'NV09' };
     stalls.filter(s => s.hasMeter && s.traderId && s.status !== 'ngung').forEach(st => {
       const avg = st.type === 'kiot' ? between(150, 260) : between(60, 150);
       const wAvg = between(3, 12);
@@ -329,7 +461,7 @@ window.DATA = (function () {
           elecPrev, elecCur, elecAvg: avg,
           waterPrev, waterCur, waterAvg: wAvg,
           status: done ? 'RECORDED' : 'PENDING',
-          recordedBy: done ? 'NV05' : null,
+          recordedBy: done ? (meterRecorders[st.market] || 'NV05') : null,
           recordedAt: done ? recAt(mo, y, 4, closed ? 9 : 12) : null,
           elecPhoto: done ? mockPhoto(st.code, 'dien', period) : null,
           waterPhoto: done ? mockPhoto(st.code, 'nuoc', period) : null
@@ -468,10 +600,10 @@ window.DATA = (function () {
     return {
       version: VERSION, today: iso(TODAY), stalls, traders, contracts, invoices, payments, readings, incidents,
       notifications, sessions, bank, months, audit, issuedPeriods: PERIODS.slice(), extraLog: [],
-      meterPeriods: METER_PERIODS, meterAdjustRequests: [],
+      meterPeriods: METER_PERIODS, meterAdjustRequests: [], receivableAdjustRequests: [],
       cashDeposits, cashConfirms, billingPeriods: BILLING_PERIODS
     };
   }
 
-  return { VERSION, TODAY, UNIT, SESSION_FEE, ELEC, WATER, BANK_BY_MARKET, MARKETS, STATUS, METHOD, INCIDENT_STATES, STAFF, ROLES, build };
+  return { VERSION, TODAY, UNIT, SESSION_FEE, ELEC, WATER, RATE_MARKET_MODEL, RATE_COLLECTION_CYCLE, RATE_TAX_CLASS, WAIVER_TYPES, RATE_POLICY_SEED, BANK_BY_MARKET, BANKS, BANK_ACCOUNT_SEED, MARKETS, STATUS, POINT_TYPE, METHOD, INCIDENT_STATES, STAFF, ROLES, build };
 })();

@@ -23,6 +23,7 @@
   const STAFF_ROLE_MAP = {
     'Trưởng Ban Quản lý chợ': 'market_manager',
     'Kế toán': 'accountant',
+    'Nhân viên Ban Quản lý chợ': 'market_staff',
     'Nhân viên thu phí': 'collector',
     'Nhân viên kỹ thuật (điện, nước)': 'technician',
     'Tổ quản lý chợ quê': 'market_staff',
@@ -35,12 +36,14 @@
       id: 'AC-' + s.id, code: s.id, fullName: s.name, phone: '',
       accountType: s.role === 'Trưởng Ban Quản lý chợ' ? 'Ban Quản lý chợ' : 'Nhân viên Ban Quản lý chợ',
       title: s.role, roleIds: [STAFF_ROLE_MAP[s.role] || 'market_staff'],
-      organization: 'Ban Quản lý ' + ((D.MARKETS.find(m => m.id === s.market) || {}).short || s.market),
-      marketScopes: [s.market], status: 'active'
+      // Trưởng Ban Quản lý chợ quản lý cả 02 chợ (Chợ Cao Lãnh và Chợ quê); nhân viên gắn với chợ được giao.
+      organization: s.role === 'Trưởng Ban Quản lý chợ' ? 'Ban Quản lý chợ phường Cao Lãnh' : 'Ban Quản lý ' + ((D.MARKETS.find(m => m.id === s.market) || {}).short || s.market),
+      marketScopes: s.role === 'Trưởng Ban Quản lý chợ' ? ['ALL'] : [s.market], status: 'active'
     }));
     list.push(
       { id: 'AC-LD01', code: 'LD01', fullName: 'Nguyễn Văn Phúc', phone: '0909123456', accountType: 'Lãnh đạo UBND phường', title: 'Phó Chủ tịch UBND phường', roleIds: ['ward_leader'], organization: 'UBND phường Cao Lãnh', marketScopes: ['ALL'], status: 'active' },
       { id: 'AC-QT01', code: 'QT01', fullName: 'Đặng Thị Thu', phone: '0909234567', accountType: 'Quản trị hệ thống', title: 'Quản trị hệ thống', roleIds: ['system_admin'], organization: 'UBND phường Cao Lãnh', marketScopes: ['ALL'], status: 'active' },
+      { id: 'AC-CHI-QUYET', code: 'CHI-QUYET', fullName: 'Chí Quyết', phone: '0909000001', accountType: 'Tiểu thương', title: 'Tiểu thương chợ quê', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'active', linkedTraderId: 'TTD-CQ' },
       { id: 'AC-TT-TTD', code: 'TT-TTD', fullName: 'Tiểu thương Chợ quê Tân Thuận Đông', phone: '0909666777', accountType: 'Tiểu thương', title: 'Tiểu thương chợ quê mẫu', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'active' },
       { id: 'AC-TT01', code: 'TT-DEMO1', fullName: 'Nguyễn Thị Hoa', phone: '0909345678', accountType: 'Tiểu thương', title: 'Tiểu thương mẫu', roleIds: ['trader'], organization: 'Chợ Cao Lãnh', marketScopes: ['CL'], status: 'active' },
       { id: 'AC-TT02', code: 'TT-DEMO2', fullName: 'Trần Văn Sáu', phone: '0909456789', accountType: 'Tiểu thương', title: 'Tiểu thương mẫu (đã tạm khoá minh hoạ)', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'disabled' }
@@ -67,6 +70,25 @@
     let changed = accounts.length !== before;
     const ttdManager = defaultAccounts().find(a => a.id === 'AC-NV06');
     const oldTtdStaff = accounts.find(a => a.id === 'AC-NV06');
+    const chiQuyetSeed = defaultAccounts().find(a => a.id === 'AC-CHI-QUYET');
+    const oldChiQuyet = accounts.find(a => a.id === 'AC-CHI-QUYET' || a.fullName === 'Chí Quyết');
+    if (chiQuyetSeed && oldChiQuyet) {
+      Object.assign(oldChiQuyet, {
+        id: chiQuyetSeed.id,
+        code: chiQuyetSeed.code,
+        fullName: chiQuyetSeed.fullName,
+        phone: chiQuyetSeed.phone,
+        accountType: chiQuyetSeed.accountType,
+        title: chiQuyetSeed.title,
+        roleIds: chiQuyetSeed.roleIds,
+        organization: chiQuyetSeed.organization,
+        marketScopes: chiQuyetSeed.marketScopes,
+        status: chiQuyetSeed.status,
+        linkedTraderId: chiQuyetSeed.linkedTraderId
+      });
+      existingIds.add(chiQuyetSeed.id);
+      changed = true;
+    }
     if (ttdManager && oldTtdStaff && oldTtdStaff.roleIds && oldTtdStaff.roleIds[0] !== 'market_manager') {
       Object.assign(oldTtdStaff, {
         accountType: ttdManager.accountType,

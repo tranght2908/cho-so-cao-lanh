@@ -45,7 +45,8 @@
     { key: 'screen:diem-kd', kind: 'screen', group: 'Tiểu thương & hợp đồng', label: 'Điểm kinh doanh' },
     { key: 'screen:tieu-thuong', kind: 'screen', group: 'Tiểu thương & hợp đồng', label: 'Tiểu thương' },
     { key: 'screen:hop-dong', kind: 'screen', group: 'Tiểu thương & hợp đồng', label: 'Hợp đồng' },
-    { key: 'screen:cau-hinh-gia', kind: 'screen', group: 'Tài chính', label: 'Cấu hình giá dịch vụ' },
+    { key: 'screen:cau-hinh-gia', kind: 'screen', group: 'Tài chính / Quản lý khai báo', label: 'Chính sách thu và biểu phí' },
+    { key: 'screen:tai-khoan-ngan-hang', kind: 'screen', group: 'Tài chính / Quản lý khai báo', label: 'Danh sách tài khoản ngân hàng' },
     { key: 'screen:dien-nuoc', kind: 'screen', group: 'Tài chính', label: 'Chỉ số điện, nước' },
     { key: 'screen:phai-thu', kind: 'screen', group: 'Tài chính', label: 'Khoản phải thu' },
     { key: 'screen:thu-tien', kind: 'screen', group: 'Tài chính', label: 'Thu tiền & biên lai' },
@@ -83,6 +84,7 @@
     { key: 'action:phien-cho.reconciliation.view', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Xem đối soát phiên chợ quê' },
     { key: 'action:phien-cho.reconciliation.process', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Chạy đối soát phiên chợ quê' },
     { key: 'action:phien-cho.reconciliation.exception.resolve', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Xử lý ngoại lệ đối soát phiên chợ quê' },
+    { key: 'action:mini-app.stall-registration.create', kind: 'action', group: 'Dành cho tiểu thương', screenId: 'mini-app', label: 'Tiểu thương tự đăng ký quầy chợ quê trong mini app' },
     { key: 'action:tieu-thuong.them-moi', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'tieu-thuong', label: 'Thêm hồ sơ tiểu thương' },
     { key: 'action:hop-dong.tao', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Tạo hợp đồng (từ màn Hợp đồng)' },
     { key: 'action:hop-dong.gia-han', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Gia hạn hợp đồng' },
@@ -91,6 +93,7 @@
     { key: 'action:dien-nuoc.chot-ky', kind: 'action', group: 'Tài chính', screenId: 'dien-nuoc', label: 'Chốt kỳ ghi chỉ số điện, nước' },
     { key: 'action:dien-nuoc.yeu-cau-dieu-chinh', kind: 'action', group: 'Tài chính', screenId: 'dien-nuoc', label: 'Yêu cầu điều chỉnh chỉ số kỳ đã chốt' },
     { key: 'action:phai-thu.phat-hanh', kind: 'action', group: 'Tài chính', screenId: 'phai-thu', label: 'Phát hành khoản phải thu tự động' },
+    { key: 'action:phai-thu.yeu-cau-dieu-chinh', kind: 'action', group: 'Tài chính', screenId: 'phai-thu', label: 'Gửi yêu cầu miễn giảm / điều chỉnh khoản phải thu' },
     { key: 'action:phai-thu.mien-giam', kind: 'action', group: 'Tài chính', screenId: 'phai-thu', label: 'Miễn giảm / điều chỉnh khoản phải thu' },
     { key: 'action:thu-tien.thu', kind: 'action', group: 'Tài chính', screenId: 'thu-tien', label: 'Thu tiền (mọi nơi có nút "Thu tiền")' },
     { key: 'action:doi-soat.xem-ngan-hang', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Xem đối soát ngân hàng / QR' },
@@ -113,6 +116,7 @@
     { key: 'action:cau-hinh-gia.mat-bang', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Thêm/sửa/vô hiệu hoá đơn giá mặt bằng' },
     { key: 'action:cau-hinh-gia.dien-nuoc', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Thêm/sửa/vô hiệu hoá giá điện, nước' },
     { key: 'action:cau-hinh-gia.dich-vu-khac', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Thêm/sửa/vô hiệu hoá dịch vụ khác' },
+    { key: 'action:tai-khoan-ngan-hang.quan-ly', kind: 'action', group: 'Tài chính', screenId: 'tai-khoan-ngan-hang', label: 'Thêm/sửa/xoá/đổi trạng thái tài khoản ngân hàng' },
     { key: 'action:cai-dat.ky-thu', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Cấu hình kỳ thu' },
     { key: 'action:cai-dat.quy-tac-thu-phi', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Cấu hình quy tắc thu phí' },
     { key: 'action:cai-dat.vai-tro.tao', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Tạo vai trò mới' },
@@ -161,7 +165,8 @@
   //
   //    Một số screen còn chịu thêm Market Applicability (Phase 2, xem A.SCREEN_MARKET ở core.js)
   //    độc lập với bảng này — có screen permission KHÔNG có nghĩa luôn vào được nếu selectedMarket
-  //    không applicable: 'phien-cho' chỉ applicable TTD; 'dien-nuoc' chỉ applicable CL.
+  //    không applicable: 'phien-cho' chỉ applicable TTD; 'dien-nuoc' applicable cả CL/TTD khi có
+  //    quầy cố định cần ghi chỉ số.
   // ============================================================
   function defaultRolePermissions() {
     const screenRoles = {
@@ -175,7 +180,12 @@
       'phien-cho': ['ward_leader', 'market_manager', 'market_staff', 'collector'],
       'tieu-thuong': ['system_admin', 'ward_leader', 'market_manager', 'market_staff', 'accountant', 'collector'],
       'hop-dong': ['system_admin', 'ward_leader', 'market_manager', 'market_staff', 'accountant'],
-      'cau-hinh-gia': ['market_manager', 'accountant', 'ward_leader'],
+      'cau-hinh-gia': ['system_admin', 'market_manager', 'accountant', 'ward_leader'],
+      // Cùng bộ role xem với 'cau-hinh-gia' — màn liền kề trong cùng nhóm con 'Quản lý khai báo'.
+      // Các role vận hành/tự phục vụ (market_staff, collector, technician, trader) KHÔNG có trong
+      // yêu cầu gốc ("các vai trò khác chỉ xem" không nêu rõ vai trò nào) — đã xác nhận với người
+      // yêu cầu trước khi implement, không tự suy đoán.
+      'tai-khoan-ngan-hang': ['system_admin', 'market_manager', 'accountant', 'ward_leader'],
       'dien-nuoc': ['market_manager', 'market_staff', 'accountant'],
       'phai-thu': ['ward_leader', 'market_manager', 'market_staff', 'accountant', 'collector'],
       'thu-tien': ['market_manager', 'accountant', 'collector'],
@@ -218,6 +228,7 @@
       'phien-cho.reconciliation.view': ['market_manager'],
       'phien-cho.reconciliation.process': ['market_manager'],
       'phien-cho.reconciliation.exception.resolve': ['market_manager'],
+      'mini-app.stall-registration.create': ['trader'],
       'tieu-thuong.them-moi': ['market_manager', 'market_staff'],
       'hop-dong.tao': ['market_manager', 'market_staff'],
       'hop-dong.gia-han': ['market_manager', 'market_staff'],
@@ -226,6 +237,7 @@
       'dien-nuoc.chot-ky': ['market_manager'],
       'dien-nuoc.yeu-cau-dieu-chinh': ['market_manager', 'market_staff'],
       'phai-thu.phat-hanh': ['market_manager', 'accountant'],
+      'phai-thu.yeu-cau-dieu-chinh': ['market_staff'],
       'phai-thu.mien-giam': ['market_manager'],
       'thu-tien.thu': ['market_manager', 'accountant', 'collector'],
       'doi-soat.xem-ngan-hang': ['ward_leader', 'market_manager', 'accountant'],
@@ -249,13 +261,15 @@
       'tai-khoan.sua': ['system_admin'],
       'tai-khoan.khoa-mo-khoa': ['system_admin'],
       'tai-khoan.gan-quyen': ['system_admin'],
-      // Phase 6 STEP A: giá dịch vụ chuyển sang màn Tài chính, chủ sở hữu nghiệp vụ là
-      // market_manager (không còn system_admin) — xem SERVICE_PRICING_SCREEN_AUDIT.md mục 11.
-      // accountant/ward_leader có screen:cau-hinh-gia (đọc ở screenRoles) nhưng KHÔNG có 3 action
-      // này => chỉ xem, không sửa. system_admin KHÔNG tự động có (không phải business superuser).
-      'cau-hinh-gia.mat-bang': ['market_manager'],
-      'cau-hinh-gia.dien-nuoc': ['market_manager'],
-      'cau-hinh-gia.dich-vu-khac': ['market_manager'],
+      // Chính sách nghiệp vụ biểu phí: chỉ system_admin được tạo phiên bản/vô hiệu hoá.
+      // Đây vẫn là seed động RolePermission; view và handler chỉ gọi A.canDo(), không hard-code role.
+      // market_manager/accountant/ward_leader giữ screen permission để tra cứu read-only.
+      'cau-hinh-gia.mat-bang': ['system_admin'],
+      'cau-hinh-gia.dien-nuoc': ['system_admin'],
+      'cau-hinh-gia.dich-vu-khac': ['system_admin'],
+      // Thêm/sửa/xoá/đổi trạng thái tài khoản ngân hàng: chỉ Quản trị hệ thống (yêu cầu gốc, không
+      // có sắc thái khác nhau giữa 4 hành động nên dùng 1 action key duy nhất).
+      'tai-khoan-ngan-hang.quan-ly': ['system_admin'],
       'cai-dat.ky-thu': ['system_admin'],
       'cai-dat.quy-tac-thu-phi': ['system_admin'],
       'cai-dat.vai-tro.tao': ['system_admin'],
@@ -294,7 +308,7 @@
   //   v2 = Phase 3 (Default Screen Permission Matrix V1 chính thức cho cả 8 role)
   //   v3 = Phase 4B (Default Action Permission Matrix V1 chính thức — 45 action key, xem
   //        defaultRolePermissions() mục 3)
-  //   v4 = Phase 6 STEP A (Cấu hình giá dịch vụ tách khỏi Cài đặt sang Tài chính — thêm
+  //   v4 = Phase 6 STEP A (màn biểu phí tách khỏi Cài đặt sang Tài chính — thêm
   //        screen:cau-hinh-gia + 3 action:cau-hinh-gia.*, xoá 3 action:cai-dat.gia-* cũ. Xem
   //        SERVICE_PRICING_SCREEN_AUDIT.md mục 11/12.)
   //   v5 = Phase 7 (chuẩn hóa RBAC theo UI đã gộp "Thiết lập mặt bằng chợ" + "Sơ đồ mặt bằng":
@@ -311,7 +325,22 @@
   //        system_admin và không bỏ qua SelectedMarket/Business State).
   //   v8 = Phase 10 (Mini app áp dụng theo marketScopes/SelectedMarket; grant screen:mini-app cho
   //        collector để nhân viên thu phí dùng mobile view, mutation vẫn check action:thu-tien.thu).
-  const PERM_SEED_VERSION = 8;
+  //   v9 = Chính sách thu và biểu phí: giữ nguyên permKey/screenId, thêm system_admin vào screen,
+  //        chuyển 3 action biểu phí sang system_admin-only bằng migration tường minh. Migration có
+  //        marker riêng để reconcile được cả state local đã từng ở nhánh Phase 8/9/10.
+  //   v10 = Danh mục "Danh sách tài khoản ngân hàng" (Tài chính > Quản lý khai báo, ngang hàng
+  //        cau-hinh-gia) — thêm HOÀN TOÀN MỚI screen:tai-khoan-ngan-hang (system_admin/
+  //        market_manager/accountant/ward_leader xem) + action:tai-khoan-ngan-hang.quan-ly
+  //        (system_admin). Không phát sinh migration tường minh — 2 permKey này chưa từng tồn tại
+  //        trong bất kỳ state đã lưu nào, nên được thêm bởi đúng bước "tự bổ sung permKey mới theo
+  //        default" đã có sẵn ở cuối mergeIntoCurrentSeed()/loadState() (không cần rewrite/thu hồi
+  //        gì ở permKey khác).
+  //   v11 = Khoản phải thu: thêm action phai-thu.yeu-cau-dieu-chinh cho market_staff gửi
+  //        request PENDING; phai-thu.mien-giam hiện có tiếp tục là quyền phê duyệt của
+  //        market_manager trong phạm vi Account.marketScopes/SelectedMarket.
+  //   v12 = Mini app tiểu thương: thêm action mini-app.stall-registration.create cho role trader
+  //        tự tạo đăng ký quầy chợ quê mock, vẫn bị chặn bởi marketScopes/SelectedMarket/Business State.
+  const PERM_SEED_VERSION = 12;
   function freshState() { return { schemaVersion: A.RBAC_SCHEMA, seedVersion: PERM_SEED_VERSION, roles: defaultRoles(), rolePerms: defaultRolePermissions() }; }
   // Merge state đã lưu (shape còn đúng — schemaVersion khớp) vào seed hiện tại, THAY VÌ reseed toàn
   // bộ, để không xoá mất grant/revoke tuỳ biến của admin cho các permKey KHÔNG đổi giữa 2 bản seed
@@ -389,12 +418,37 @@
     if (!exists) stored.rolePerms.push({ roleId: 'collector', permKey: 'screen:mini-app', grantedAt: 'migrate-v8', grantedBy: 'Hệ thống (Nhân viên thu phí dùng mini app trong phạm vi marketScopes)' });
     stored.collectorMiniAppMigratedV8 = true;
   }
+  function migrateSystemAdminRatePolicy(stored) {
+    if (stored.ratePolicySystemAdminMigratedV9) return;
+    const rateActionKeys = new Set([
+      'action:cau-hinh-gia.mat-bang',
+      'action:cau-hinh-gia.dien-nuoc',
+      'action:cau-hinh-gia.dich-vu-khac'
+    ]);
+    const isSeedGrant = r => r.grantedAt === 'seed' || r.grantedAt === 'seed-v6' || r.grantedBy === 'Hệ thống (seed mặc định)';
+    const hasLegacySeedGrant = stored.rolePerms.some(r => rateActionKeys.has(r.permKey) && r.roleId !== 'system_admin' && isSeedGrant(r));
+    const missingSystemAdminAction = Array.from(rateActionKeys).some(permKey => !stored.rolePerms.some(r => r.roleId === 'system_admin' && r.permKey === permKey));
+    const missingSystemAdminScreen = !stored.rolePerms.some(r => r.roleId === 'system_admin' && r.permKey === 'screen:cau-hinh-gia');
+    if ((stored.seedVersion || 0) < 6 || hasLegacySeedGrant || missingSystemAdminAction || missingSystemAdminScreen) {
+      stored.rolePerms = stored.rolePerms.filter(r => !rateActionKeys.has(r.permKey) || r.roleId === 'system_admin' || !isSeedGrant(r));
+      rateActionKeys.forEach(permKey => {
+        if (!stored.rolePerms.some(r => r.roleId === 'system_admin' && r.permKey === permKey)) {
+          stored.rolePerms.push({ roleId: 'system_admin', permKey: permKey, grantedAt: 'migrate-v9', grantedBy: 'Hệ thống' });
+        }
+      });
+      if (!stored.rolePerms.some(r => r.roleId === 'system_admin' && r.permKey === 'screen:cau-hinh-gia')) {
+        stored.rolePerms.push({ roleId: 'system_admin', permKey: 'screen:cau-hinh-gia', grantedAt: 'migrate-v9', grantedBy: 'Hệ thống' });
+      }
+    }
+    stored.ratePolicySystemAdminMigratedV9 = true;
+  }
   function mergeIntoCurrentSeed(stored) {
     stored.roles = stored.roles.filter(r => RETIRED_ROLE_IDS.indexOf(r.id) === -1);
     stored.rolePerms = stored.rolePerms.filter(r => RETIRED_ROLE_IDS.indexOf(r.roleId) === -1);
     const roleIds = new Set(stored.roles.map(r => r.id));
     defaultRoles().forEach(r => { if (!roleIds.has(r.id)) stored.roles.push(r); });
     migrateMatBangScreen(stored);
+    migrateSystemAdminRatePolicy(stored);
     migrateMarketManagerSessionActions(stored);
     migrateCollectorMiniApp(stored);
     const validKeys = new Set(CATALOG.map(p => p.key));
