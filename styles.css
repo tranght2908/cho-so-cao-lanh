@@ -283,11 +283,30 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 .session-reg-name { min-width: 180px; }
 .session-reg-note { min-width: 180px; max-width: 320px; white-space: normal; }
 .session-reg-actions { display: flex; gap: 6px; flex-wrap: wrap; min-width: 210px; }
+.session-attendance { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 14px; }
+.session-attendance-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.session-attendance-head h4 { font-size: var(--font-size-sm); margin: 0; }
+.session-attendance-summary { display: grid; grid-template-columns: repeat(4, minmax(128px, 1fr)); gap: 8px; margin: 10px 0; }
+.session-attendance-kpi { border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 8px; }
+.session-attendance-kpi.total { background: var(--brand-soft); border-color: #cfe8df; }
+.session-attendance-kpi.attended { background: #eef8f2; border-color: #bfe0cc; }
+.session-attendance-kpi.needs-action { background: var(--warn-soft); border-color: #ead38a; }
+.session-attendance-kpi.absent { background: #fff0f0; border-color: #f0c4c4; }
+.session-attendance-kpi span { display: block; color: var(--muted); font-size: var(--font-size-xs); }
+.session-attendance-kpi b { display: block; margin-top: 3px; font-size: var(--font-size-lg); }
+.session-attendance-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 8px 0; }
+.session-attendance-tab { border: 1px solid var(--line); background: var(--surface-2); color: var(--text); border-radius: 8px; padding: 7px 10px; white-space: nowrap; cursor: pointer; }
+.session-attendance-tab span { display: inline-grid; place-items: center; min-width: 20px; height: 20px; margin-left: 4px; border-radius: 999px; background: #fff; color: var(--muted); font-size: var(--font-size-xs); }
+.session-attendance-tab.active { background: var(--brand-soft); border-color: #bfe0d6; color: var(--brand); font-weight: 600; }
+.session-attendance-tab.active span { background: var(--brand); color: #fff; }
+.session-attendance-table .tbl-wrap { width: 100%; overflow-x: auto; }
+.session-attendance-table .tbl { min-width: 920px; }
 
 @media (max-width: 1180px) {
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .g-main, .g3 { grid-template-columns: 1fr; }
   .mini-wrap { grid-template-columns: 1fr; }
+  .session-attendance-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 860px) {
   .app { grid-template-columns: 1fr; }

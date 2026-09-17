@@ -43,6 +43,20 @@
     postponed: 'Tạm hoãn',
     cancelled: 'Hủy phiên'
   };
+  const ATTENDANCE_STATUS = {
+    pending: 'Chưa điểm danh',
+    present: 'Có mặt',
+    late_notified: 'Xin đến trễ',
+    late_arrived: 'Đã đến trễ',
+    absent_excused: 'Vắng có báo',
+    absent_unexcused: 'Vắng không báo'
+  };
+  const ATTENDANCE_FILTERS = [
+    ['needs_action', 'Cần xử lý'],
+    ['attended', 'Đã có mặt'],
+    ['absent', 'Vắng mặt'],
+    ['all', 'Tất cả']
+  ];
 
   function nowIso() { return new Date().toISOString(); }
   function currentAccountId() { const a = A.currentAccount && A.currentAccount(); return a ? a.id : null; }
@@ -182,6 +196,13 @@
   function ensureSessionRegistrationCollection() {
     if (!Array.isArray(A.db.sessionRegistrations)) A.db.sessionRegistrations = [];
     return A.db.sessionRegistrations;
+  }
+  function sessionAttendances() {
+    return Array.isArray(A.db.sessionAttendances) ? A.db.sessionAttendances : [];
+  }
+  function ensureSessionAttendanceCollection() {
+    if (!Array.isArray(A.db.sessionAttendances)) A.db.sessionAttendances = [];
+    return A.db.sessionAttendances;
   }
   function registrationNow() {
     return parseLocalDateTime(A.__sessionRegistrationNow) || new Date();
@@ -399,6 +420,246 @@
     });
     const empty = pending ? 'Chưa có đăng ký chờ xử lý.' : waitlist ? 'Chưa có hộ trong danh sách dự bị.' : inactive ? 'Chưa có đăng ký bị từ chối hoặc đã rút.' : 'Chưa có đăng ký chính thức.';
     return U.table(cols, body, { empty });
+  }
+  function attendanceId(sessionId, registrationId) {
+    return 'ATT-' + String(sessionId || '').replace(/[^A-Za-z0-9]/g, '') + '-' + String(registrationId || '').replace(/[^A-Za-z0-9]/g, '');
+  }
+  function validAttendanceStatus(status) {
+    return !!ATTENDANCE_STATUS[status] && status !== 'pending';
+  }
+  function attendanceStatusTag(status) {
+    const cls = status === 'present' || status === 'late_arrived' ? 'ok' : status === 'late_notified' ? 'warn' : status === 'absent_excused' || status === 'absent_unexcused' ? 'danger' : 'info';
+    return `<span class="tag ${cls}">${ATTENDANCE_STATUS[status] || ATTENDANCE_STATUS.pending}</span>`;
+  }
+  function attendanceRecordsFor(session, registrationId) {
+    if (!session || !registrationId) return [];
+    return sessionAttendances().filter(a => a && a.sessionId === session.id && a.registrationId === registrationId);
+  }
+  function attendanceTimestamp(value) {
+    const d = parseLocalDateTime(value);
+    return d ? d.getTime() : 0;
+  }
+  function attendanceFingerprint(a) {
+    return ['status', 'checkedAt', 'arrivalAt', 'reason', 'note', 'createdBy', 'updatedBy']
+      .map(k => String((a && a[k]) == null ? '' : a[k])).join('|');
+  }
+  function compareAttendanceRecord(a, b) {
+    const au = attendanceTimestamp(a && a.updatedAt), bu = attendanceTimestamp(b && b.updatedAt);
+    if (au !== bu) return au - bu;
+    const ac = attendanceTimestamp(a && a.createdAt), bc = attendanceTimestamp(b && b.createdAt);
+    if (ac !== bc) return ac - bc;
+    const ai = String(a && a.id || ''), bi = String(b && b.id || '');
+    if (ai !== bi) return ai < bi ? -1 : 1;
+    const af = attendanceFingerprint(a), bf = attendanceFingerprint(b);
+    if (af !== bf) return af < bf ? -1 : 1;
+    return 0;
+  }
+  function canonicalAttendanceRecord(session, registrationId) {
+    return attendanceRecordsFor(session, registrationId)
+      .filter(a => a && ATTENDANCE_STATUS[a.status])
+      .slice()
+      .sort(compareAttendanceRecord)
+      .pop() || null;
+  }
+  function attendanceRecordFor(session, registrationId) {
+    return canonicalAttendanceRecord(session, registrationId);
+  }
+  function officialAttendanceRegistrations(session) {
+    const seen = new Set();
+    return registrationReadModels(session).filter(r => {
+      if (!r || r.sessionId !== session.id || r.market !== TTD_SESSION_MARKET) return false;
+      if (r.status !== 'approved' || r.listType !== 'official') return false;
+      if (!r.point || r.point.market !== TTD_SESSION_MARKET || !r.point.traderId) return false;
+      const trader = traderById(r.point.traderId);
+      if (!trader || trader.market !== TTD_SESSION_MARKET) return false;
+      if (seen.has(r.id)) return false;
+      seen.add(r.id);
+      return true;
+    }).map(r => {
+      const trader = traderById(r.point.traderId);
+      return Object.assign({}, r, { trader, traderId: trader.id });
+    });
+  }
+  function attendanceReadModels(session) {
+    if (!session) return [];
+    return officialAttendanceRegistrations(session).map((r, i) => {
+      const rec = attendanceRecordFor(session, r.id);
+      const status = rec && ATTENDANCE_STATUS[rec.status] ? rec.status : 'pending';
+      return {
+        index: i + 1,
+        session,
+        registration: r,
+        attendance: rec,
+        status,
+        checkedAt: rec && rec.checkedAt,
+        arrivalAt: rec && rec.arrivalAt,
+        reason: rec && rec.reason,
+        note: rec && rec.note,
+        point: r.point,
+        trader: r.trader
+      };
+    });
+  }
+  function attendanceBuckets(rows) {
+    const counts = { total: rows.length, pending: 0, present: 0, late_notified: 0, late_arrived: 0, absent_excused: 0, absent_unexcused: 0 };
+    rows.forEach(r => { counts[r.status] = (counts[r.status] || 0) + 1; });
+    counts.attended = counts.present + counts.late_arrived;
+    counts.needsAction = counts.pending + counts.late_notified;
+    counts.absent = counts.absent_excused + counts.absent_unexcused;
+    counts.processed = counts.attended + counts.absent;
+    return counts;
+  }
+  function attendanceFilterKey(counts) {
+    const map = { pending: 'needs_action', late: 'needs_action', present: 'attended', absent: 'absent', all: 'all', needs_action: 'needs_action', attended: 'attended' };
+    const key = map[ui.sessionAttendanceTab];
+    if (key) return key;
+    return counts && counts.needsAction === 0 ? 'all' : 'needs_action';
+  }
+  function attendanceRowsForFilter(rows, filter) {
+    if (filter === 'needs_action') return rows.filter(r => r.status === 'pending' || r.status === 'late_notified').slice().sort((a, b) => {
+      const order = { pending: 0, late_notified: 1 };
+      return (order[a.status] || 0) - (order[b.status] || 0) || a.index - b.index;
+    });
+    if (filter === 'attended') return rows.filter(r => r.status === 'present' || r.status === 'late_arrived');
+    if (filter === 'absent') return rows.filter(r => r.status === 'absent_excused' || r.status === 'absent_unexcused');
+    return rows;
+  }
+  function attendanceFilterCount(counts, filter) {
+    if (filter === 'needs_action') return counts.needsAction;
+    if (filter === 'attended') return counts.attended;
+    if (filter === 'absent') return counts.absent;
+    return counts.total;
+  }
+  function attendanceEmptyText(filter) {
+    if (filter === 'needs_action') return 'Không còn hộ cần điểm danh hoặc theo dõi đến trễ.';
+    if (filter === 'attended') return 'Chưa ghi nhận hộ nào có mặt.';
+    if (filter === 'absent') return 'Chưa ghi nhận hộ nào vắng mặt.';
+    return 'Chưa có hộ chính thức để điểm danh.';
+  }
+  function canTakeAttendance(session) {
+    return !!(session && session.status === 'preparing' && canDoSessionAction('phien-cho.diem-danh', session));
+  }
+  function attendanceSnapshot() {
+    return {
+      had: Object.prototype.hasOwnProperty.call(A.db, 'sessionAttendances'),
+      value: A.db.sessionAttendances,
+      data: JSON.stringify(A.db.sessionAttendances),
+      log: Array.isArray(A.db.extraLog) ? A.db.extraLog.slice() : null
+    };
+  }
+  function restoreAttendanceSnapshot(snap) {
+    if (snap.had) A.db.sessionAttendances = snap.value;
+    else delete A.db.sessionAttendances;
+    if (snap.had && Array.isArray(snap.value) && snap.data) {
+      snap.value.length = 0;
+      JSON.parse(snap.data).forEach(x => snap.value.push(x));
+    }
+    if (snap.log) {
+      A.db.extraLog.length = 0;
+      snap.log.forEach(x => A.db.extraLog.push(x));
+    }
+  }
+  function validateAttendanceTarget(session, registrationId, status, reason, showToast) {
+    if (!ttdSessionCanMutate('phien-cho.diem-danh', session, showToast)) return null;
+    if (session.status !== 'preparing') { if (showToast) U.toast('Chỉ điểm danh khi phiên đang chuẩn bị'); return null; }
+    if (!validAttendanceStatus(status)) { if (showToast) U.toast('Trạng thái điểm danh không hợp lệ'); return null; }
+    const row = attendanceReadModels(session).find(r => r.registration.id === registrationId);
+    if (!row) { if (showToast) U.toast('Không tìm thấy hộ chính thức hợp lệ để điểm danh'); return null; }
+    if ((status === 'late_notified' || status === 'absent_excused') && !String(reason || '').trim()) {
+      if (showToast) U.toast(status === 'late_notified' ? 'Vui lòng nhập lý do xin đến trễ' : 'Vui lòng nhập lý do vắng có báo');
+      return null;
+    }
+    if (status === 'late_arrived' && row.status !== 'late_notified') {
+      if (showToast) U.toast('Chỉ xác nhận đã đến trễ sau khi hộ đã báo đến trễ');
+      return null;
+    }
+    return row;
+  }
+  function runAttendanceMutation(session, row, status, reason, note, onSuccess) {
+    const snap = attendanceSnapshot();
+    const list = ensureSessionAttendanceCollection();
+    const existing = canonicalAttendanceRecord(session, row.registration.id);
+    const prevStatus = existing && ATTENDANCE_STATUS[existing.status] ? existing.status : 'pending';
+    const now = nowIso();
+    const rec = existing || {
+      id: attendanceId(session.id, row.registration.id),
+      sessionId: session.id,
+      registrationId: row.registration.id,
+      market: TTD_SESSION_MARKET,
+      traderId: row.trader.id,
+      pointId: row.point.id,
+      status: 'pending',
+      checkedAt: null,
+      arrivalAt: null,
+      reason: '',
+      note: '',
+      createdAt: now,
+      createdBy: currentAccountId(),
+      updatedAt: now,
+      updatedBy: currentAccountId()
+    };
+    if (!existing) list.push(rec);
+    rec.traderId = row.trader.id;
+    rec.pointId = row.point.id;
+    rec.status = status;
+    if (status === 'late_arrived') {
+      rec.arrivalAt = now;
+      rec.checkedAt = rec.checkedAt || now;
+      if (reason) rec.reason = reason;
+    } else {
+      rec.checkedAt = now;
+      rec.arrivalAt = null;
+      rec.reason = reason || '';
+    }
+    rec.note = note || '';
+    rec.updatedAt = now;
+    rec.updatedBy = currentAccountId();
+    A.db.sessionAttendances = list.filter(a => !(a && a.sessionId === session.id && a.registrationId === row.registration.id) || a === rec);
+    try {
+      U.log(`Điểm danh phiên ${session.id}: ${row.trader.name} / ${row.point.code} ${ATTENDANCE_STATUS[prevStatus]} -> ${ATTENDANCE_STATUS[status]}`);
+      A.save();
+    } catch (e) {
+      restoreAttendanceSnapshot(snap);
+      U.toast('Không lưu được điểm danh, dữ liệu đã được hoàn tác');
+      return false;
+    }
+    if (onSuccess) onSuccess();
+    return true;
+  }
+  function attendanceStatusOptions(current) {
+    const base = [
+      ['present', 'Có mặt'],
+      ['late_notified', 'Xin đến trễ'],
+      ['absent_excused', 'Vắng có báo'],
+      ['absent_unexcused', 'Vắng không báo']
+    ];
+    if (current === 'late_notified') base.splice(2, 0, ['late_arrived', 'Đã đến trễ']);
+    return base.map(o => `<option value="${o[0]}">${o[1]}</option>`).join('');
+  }
+  function attendanceHtml(session) {
+    if (!session || session.status !== 'preparing') return '';
+    const rows = attendanceReadModels(session);
+    const counts = attendanceBuckets(rows);
+    const canManage = canTakeAttendance(session);
+    const filter = attendanceFilterKey(counts);
+    const shown = attendanceRowsForFilter(rows, filter);
+    const tabs = ATTENDANCE_FILTERS.map(t => `<button class="session-attendance-tab ${filter === t[0] ? 'active' : ''}" data-act="session-attendance-tab" data-tab="${t[0]}" type="button">${t[1]} <span>${attendanceFilterCount(counts, t[0])}</span></button>`).join('');
+    const k = (label, value, cls) => `<div class="session-attendance-kpi ${cls || ''}"><span>${label}</span><b>${value}</b></div>`;
+    const body = shown.map((r, i) => {
+      const time = r.status === 'late_arrived' ? (r.arrivalAt || r.checkedAt) : r.checkedAt;
+      const actions = canManage ? `<td><button class="btn sm ${r.status === 'pending' ? 'primary' : ''}" data-act="attendance-open" data-session="${session.id}" data-reg="${r.registration.id}">${r.status === 'pending' ? 'Ghi nhận' : 'Cập nhật'}</button></td>` : '';
+      return `<tr><td class="num">${i + 1}</td><td class="session-reg-name">${U.esc(r.trader.name)}</td><td>${U.esc(r.point.code)}</td><td>${U.esc(r.point.sectionName || '—')}</td><td>${U.esc(r.point.cat || '—')}</td><td>${attendanceStatusTag(r.status)}</td><td>${formatDateTimeValue(time, '—')}</td><td class="session-reg-note">${U.esc(r.reason || r.note || '') || '—'}</td>${actions}</tr>`;
+    });
+    const cols = [{ t: 'STT', num: true }, { t: 'Hộ/tiểu thương' }, { t: 'Mã điểm' }, { t: 'Khu chức năng' }, { t: 'Mặt hàng' }, { t: 'Trạng thái' }, { t: 'Thời điểm ghi nhận' }, { t: 'Lý do/Ghi chú' }];
+    if (canManage) cols.push({ t: 'Thao tác' });
+    return `<div class="session-attendance">
+      <div class="session-attendance-head"><h4>Điểm danh & điều phối trước phiên</h4><span class="spacer"></span><span class="small muted">Đã xử lý ${counts.processed}/${counts.total} hộ · Còn ${counts.needsAction} hộ cần theo dõi</span></div>
+      <div class="session-attendance-summary">
+        ${k('Chính thức', counts.total, 'total')}${k('Đã có mặt', counts.attended, 'attended')}${k('Cần xử lý', counts.needsAction, 'needs-action')}${k('Vắng mặt', counts.absent, 'absent')}
+      </div>
+      <div class="session-attendance-tabs">${tabs}</div>
+      <div class="session-attendance-table">${U.table(cols, body, { empty: attendanceEmptyText(filter) })}</div>
+    </div>`;
   }
   function sessionRegistrationHtml(session) {
     const b = sessionRegistrationBuckets(session);
@@ -786,6 +1047,7 @@
         ${s.status === 'closed' ? `<div class="small muted" style="margin-top:12px">Đã chốt${s.closedAt ? ' lúc ' + U.esc(s.closedAt) : ''}. Phiên đã chốt chỉ đọc trong PC3A.</div>` : ''}
         <div class="row" style="margin-top:12px">${actions || '<span class="small muted">Không có thao tác phù hợp với quyền và trạng thái hiện tại.</span>'}</div>
         ${sessionRegistrationHtml(s)}
+        ${attendanceHtml(s)}
       </div></div>`;
   }
   A.VIEWS['phien-cho'] = function () {
@@ -819,6 +1081,36 @@
     </div></div></div>`;
   };
   Object.assign(A.ACT, {
+    'session-attendance-tab': el => {
+      const tab = el.dataset.tab;
+      if (!ATTENDANCE_FILTERS.some(t => t[0] === tab)) return;
+      ui.sessionAttendanceTab = tab;
+      A.render();
+    },
+    'attendance-open': el => {
+      const s = sessionById(el.dataset.session);
+      const registrationId = el.dataset.reg;
+      const row = s && attendanceReadModels(s).find(r => r.registration.id === registrationId);
+      if (!row || !canTakeAttendance(s)) { U.toast('Không thể điểm danh hộ này trong ngữ cảnh hiện tại'); return; }
+      A.modal(A.mHead('Lưu ghi nhận điểm danh') + `<div class="modal-b">
+        <dl class="kv"><dt>Hộ/tiểu thương</dt><dd>${U.esc(row.trader.name)}</dd><dt>Điểm kinh doanh</dt><dd>${U.esc(row.point.code)}</dd><dt>Trạng thái hiện tại</dt><dd>${attendanceStatusTag(row.status)}</dd></dl>
+        <div class="form-grid" style="margin-top:10px">
+          <div class="field"><label>Trạng thái điểm danh *</label><select class="input" id="att-status">${attendanceStatusOptions(row.status)}</select></div>
+          <div class="field"><label>Lý do</label><input class="input" id="att-reason" value="${U.esc(row.reason || '')}" placeholder="Bắt buộc với xin đến trễ hoặc vắng có báo"></div>
+        </div>
+        <div class="field" style="margin-top:10px"><label>Ghi chú</label><textarea class="input" id="att-note" rows="2">${U.esc(row.note || '')}</textarea></div>
+      </div><div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="attendance-save" data-session="${s.id}" data-reg="${row.registration.id}">Lưu ghi nhận</button></div>`);
+    },
+    'attendance-save': el => {
+      const s = sessionById(el.dataset.session);
+      const registrationId = el.dataset.reg;
+      const status = A.$('#att-status').value;
+      const reason = A.$('#att-reason').value.trim();
+      const note = A.$('#att-note').value.trim();
+      const row = s && validateAttendanceTarget(s, registrationId, status, reason, true);
+      if (!row) return;
+      runAttendanceMutation(s, row, status, reason, note, () => { A.closeModal(); A.render(); U.toast('Đã lưu ghi nhận điểm danh'); });
+    },
     'session-registration-tab': el => {
       const tab = el.dataset.tab;
       if (['pending', 'official', 'waitlist', 'inactive'].indexOf(tab) === -1) return;
