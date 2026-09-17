@@ -66,6 +66,7 @@
     { key: 'action:phien-cho.tao-phien', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Tạo phiên chợ quê' },
     { key: 'action:phien-cho.mo-dang-ky', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Mở đăng ký phiên chợ quê' },
     { key: 'action:phien-cho.chot-danh-sach', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Chốt danh sách đăng ký phiên chợ quê' },
+    { key: 'action:phien-cho.quan-ly-dang-ky', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Quản lý đăng ký phiên chợ quê' },
     { key: 'action:phien-cho.bat-dau-chuan-bi', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Bắt đầu chuẩn bị phiên chợ quê' },
     { key: 'action:phien-cho.bat-dau-phien', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Bắt đầu phiên chợ quê' },
     { key: 'action:phien-cho.cho-chot', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Chuyển phiên chợ quê sang chờ chốt' },
@@ -192,6 +193,7 @@
       'phien-cho.tao-phien': ['market_manager'],
       'phien-cho.mo-dang-ky': ['market_manager'],
       'phien-cho.chot-danh-sach': ['market_manager'],
+      'phien-cho.quan-ly-dang-ky': ['market_manager'],
       'phien-cho.bat-dau-chuan-bi': ['market_staff'],
       'phien-cho.bat-dau-phien': ['market_staff'],
       'phien-cho.cho-chot': ['market_staff'],
@@ -288,9 +290,11 @@
   //   v6 = PC3A (vòng đời phiên chợ quê): thêm action phien-cho.* mới. Riêng action đã tồn tại
   //        phien-cho.chot-phien không bị migrate lại assignment vì state hiện chưa có metadata phân biệt
   //        seed/custom revoke/custom grant an toàn.
-  const PERM_SEED_VERSION = 6;
+  //   v7 = PC3B-B: thêm action phien-cho.quan-ly-dang-ky để ghi nhận/duyệt danh sách đăng ký.
+  const PERM_SEED_VERSION = 7;
   const PC3A_SESSION_PERM_VERSION = 1;
-  function freshState() { return { schemaVersion: A.RBAC_SCHEMA, seedVersion: PERM_SEED_VERSION, pc3aSessionPermVersion: PC3A_SESSION_PERM_VERSION, roles: defaultRoles(), rolePerms: defaultRolePermissions() }; }
+  const PC3B_REGISTRATION_PERM_VERSION = 1;
+  function freshState() { return { schemaVersion: A.RBAC_SCHEMA, seedVersion: PERM_SEED_VERSION, pc3aSessionPermVersion: PC3A_SESSION_PERM_VERSION, pc3bRegistrationPermVersion: PC3B_REGISTRATION_PERM_VERSION, roles: defaultRoles(), rolePerms: defaultRolePermissions() }; }
   function migratePc3aSessionPerms(stored) {
     if (stored.pc3aSessionPermVersion >= PC3A_SESSION_PERM_VERSION) return false;
     const knownKeys = new Set(stored.rolePerms.map(r => r.permKey));
@@ -300,6 +304,16 @@
       if (!knownKeys.has(r.permKey)) stored.rolePerms.push(r);
     });
     stored.pc3aSessionPermVersion = PC3A_SESSION_PERM_VERSION;
+    return true;
+  }
+  function migratePc3bRegistrationPerms(stored) {
+    if (stored.pc3bRegistrationPermVersion >= PC3B_REGISTRATION_PERM_VERSION) return false;
+    const key = 'action:phien-cho.quan-ly-dang-ky';
+    const hasAny = stored.rolePerms.some(r => r.permKey === key);
+    if (!hasAny) {
+      defaultRolePermissions().filter(r => r.permKey === key).forEach(r => stored.rolePerms.push(r));
+    }
+    stored.pc3bRegistrationPermVersion = PC3B_REGISTRATION_PERM_VERSION;
     return true;
   }
   // Merge state đã lưu (shape còn đúng — schemaVersion khớp) vào seed hiện tại, THAY VÌ reseed toàn
@@ -353,6 +367,7 @@
       if (!knownKeys.has(d.permKey)) stored.rolePerms.push(d);
     });
     migratePc3aSessionPerms(stored);
+    migratePc3bRegistrationPerms(stored);
     stored.seedVersion = PERM_SEED_VERSION;
     return stored;
   }
@@ -397,6 +412,7 @@
       if (!known.has(d.permKey)) s.rolePerms.push(d);
     });
     if (migratePc3aSessionPerms(s)) needSave = true;
+    if (migratePc3bRegistrationPerms(s)) needSave = true;
     // Cùng lý do Hotfix persist migration ở trên: ghi lại NGAY nếu vừa merge (seedVersion đổi),
     // không chờ tới lượt grant/revoke đầu tiên — STATE vẫn đang TDZ nên không gọi saveState().
     if (needSave) { try { localStorage.setItem(PKEY, JSON.stringify(s)); } catch (e) { /* bỏ qua */ } }

@@ -18,14 +18,13 @@
     cancelled: 'Đã hủy'
   };
   const SESSION_PROGRESS_STEPS = [
-    ['draft', 'Tạo phiên'],
-    ['open', 'Mở đăng ký'],
-    ['registration_closed', 'Chốt danh sách'],
-    ['preparing', 'Chuẩn bị'],
-    ['live', 'Đang diễn ra'],
-    ['pending_close', 'Chờ chốt'],
-    ['closed', 'Đã chốt']
+    { key: 'created', label: 'Tạo phiên' },
+    { key: 'registration', label: 'Đăng ký & chốt danh sách' },
+    { key: 'ops', label: 'Điểm danh & điều phối' },
+    { key: 'live', label: 'Đang diễn ra' },
+    { key: 'close', label: 'Chốt phiên' }
   ];
+  const SESSION_PROGRESS_INDEX = { draft: 0, open: 1, registration_closed: 1, preparing: 2, live: 3, pending_close: 4, closed: 4 };
   const SESSION_TRANSITIONS = {
     draft: { open: 'phien-cho.mo-dang-ky', cancelled: 'phien-cho.huy-phien' },
     open: { registration_closed: 'phien-cho.chot-danh-sach', postponed: 'phien-cho.hoan-phien', cancelled: 'phien-cho.huy-phien' },
@@ -184,72 +183,239 @@
     if (!Array.isArray(A.db.sessionRegistrations)) A.db.sessionRegistrations = [];
     return A.db.sessionRegistrations;
   }
+  function registrationNow() {
+    return parseLocalDateTime(A.__sessionRegistrationNow) || new Date();
+  }
+  function registrationWindowState(session, now) {
+    const start = parseLocalDateTime(session && session.registrationStartAt);
+    const end = parseLocalDateTime(session && session.registrationDeadline);
+    if (!start || !end || start >= end) return { ok: false, reason: 'Cửa sổ đăng ký chưa hợp lệ' };
+    const cur = now || registrationNow();
+    if (cur < start) return { ok: false, reason: 'Chưa đến thời gian bắt đầu đăng ký' };
+    if (cur > end) return { ok: false, reason: 'Đã quá hạn đăng ký' };
+    return { ok: true, reason: 'ok' };
+  }
+  function registrationId(sessionId) {
+    return 'REG-' + String(sessionId || 'TTD').replace(/[^A-Za-z0-9]/g, '') + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+  }
   function registrationKey(r) {
     return (r && r.sessionId ? r.sessionId : '') + '|' + (r && r.pointId ? r.pointId : '');
+  }
+  function traderById(id) {
+    return (A.idx && A.idx.trader && A.idx.trader.get(id)) || A.db.traders.find(t => t && t.id === id) || null;
+  }
+  function ttdRegistrationTraders() {
+    const points = ttdBusinessPoints() || [];
+    const ids = new Set(points.map(p => p.traderId).filter(Boolean));
+    return A.db.traders.filter(t => t && t.market === TTD_SESSION_MARKET && ids.has(t.id)).sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'vi'));
+  }
+  function ttdPointById(pointId) {
+    const points = ttdBusinessPoints();
+    if (!points) return null;
+    return points.find(p => p && p.id === pointId) || null;
+  }
+  function activeRegistrationRows(session) {
+    return sessionRegistrations().filter(r => r && r.sessionId === session.id && r.market === TTD_SESSION_MARKET && r.status !== 'rejected' && r.status !== 'withdrawn');
+  }
+  function registrationById(id) {
+    return sessionRegistrations().find(r => r && r.id === id) || null;
   }
   function registrationReadModels(session) {
     if (!session) return [];
     const points = ttdBusinessPoints() || [];
     const pointMap = new Map(points.map(p => [p.id, p]));
-    const seen = new Set();
+    const seenPoints = new Set();
+    const seenTraders = new Set();
     return sessionRegistrations().filter(r => {
       if (!r || r.sessionId !== session.id || r.market !== TTD_SESSION_MARKET) return false;
-      return !!pointMap.get(r.pointId);
+      const trader = traderById(r.traderId);
+      if (!trader || trader.market !== TTD_SESSION_MARKET) return false;
+      if (r.status === 'registered' || r.status === 'rejected' || r.status === 'withdrawn') return !r.pointId || !!pointMap.get(r.pointId);
+      if (r.status === 'approved' || r.listType === 'official') return !!pointMap.get(r.pointId);
+      if (r.status === 'waitlisted' || r.listType === 'waitlist') return !r.pointId || !!pointMap.get(r.pointId);
+      return false;
     }).map(r => {
-      const key = registrationKey(r);
-      const dup = seen.has(key);
-      seen.add(key);
-      const point = pointMap.get(r.pointId);
-      const trader = point && point.traderId ? A.idx.trader.get(point.traderId) : null;
-      return Object.assign({}, r, { point, trader, duplicate: dup });
+      const point = r.pointId ? pointMap.get(r.pointId) : null;
+      const trader = traderById(r.traderId);
+      const active = r.status !== 'rejected' && r.status !== 'withdrawn';
+      const pointKey = registrationKey(r);
+      const duplicatePoint = active && point && seenPoints.has(pointKey);
+      const duplicateTrader = active && seenTraders.has(r.traderId);
+      if (active && point) seenPoints.add(pointKey);
+      if (active) seenTraders.add(r.traderId);
+      return Object.assign({}, r, { point, trader, duplicate: duplicatePoint || duplicateTrader });
     }).filter(r => !r.duplicate);
   }
+  function sessionRegistrationBuckets(session) {
+    const rows = registrationReadModels(session);
+    const pending = rows.filter(r => r.status === 'registered');
+    const official = rows.filter(r => r.listType === 'official' && r.status === 'approved');
+    const waitlist = rows.filter(r => r.listType === 'waitlist' && r.status === 'waitlisted')
+      .sort((a, b) => Number(a.waitlistOrder || 9999) - Number(b.waitlistOrder || 9999));
+    const inactive = rows.filter(r => r.status === 'rejected' || r.status === 'withdrawn');
+    return { rows, pending, official, waitlist, inactive };
+  }
+  function canManageRegistrations(session) {
+    return !!(session && session.status === 'open' && canDoSessionAction('phien-cho.quan-ly-dang-ky', session));
+  }
+  function nextWaitlistOrder(session) {
+    const used = activeRegistrationRows(session).filter(r => r.status === 'waitlisted' && Number.isFinite(Number(r.waitlistOrder)) && Number(r.waitlistOrder) > 0)
+      .map(r => Number(r.waitlistOrder));
+    return used.length ? Math.max.apply(null, used) + 1 : 1;
+  }
+  function registrationSnapshot() {
+    return {
+      had: Object.prototype.hasOwnProperty.call(A.db, 'sessionRegistrations'),
+      value: A.db.sessionRegistrations,
+      data: JSON.stringify(A.db.sessionRegistrations),
+      log: Array.isArray(A.db.extraLog) ? A.db.extraLog.slice() : null
+    };
+  }
+  function restoreRegistrationSnapshot(snap) {
+    if (snap.had) A.db.sessionRegistrations = snap.value;
+    else delete A.db.sessionRegistrations;
+    if (snap.had && Array.isArray(snap.value) && snap.data) {
+      snap.value.length = 0;
+      JSON.parse(snap.data).forEach(x => snap.value.push(x));
+    }
+    if (snap.log) {
+      A.db.extraLog.length = 0;
+      snap.log.forEach(x => A.db.extraLog.push(x));
+    }
+  }
+  function saveRegistrationMutation(logText, onSuccess) {
+    try {
+      U.log(logText);
+      A.save();
+    } catch (e) {
+      return false;
+    }
+    if (onSuccess) onSuccess();
+    return true;
+  }
+  function runRegistrationMutation(mutate, logText, onSuccess) {
+    const snap = registrationSnapshot();
+    ensureSessionRegistrationCollection();
+    mutate(A.db.sessionRegistrations);
+    if (!saveRegistrationMutation(logText, onSuccess)) {
+      restoreRegistrationSnapshot(snap);
+      U.toast('Không lưu được đăng ký phiên, dữ liệu đã được hoàn tác');
+      return false;
+    }
+    return true;
+  }
+  function validateRegistrationManage(session, showToast) {
+    if (!ttdSessionCanMutate('phien-cho.quan-ly-dang-ky', session, showToast)) return false;
+    if (session.status !== 'open') { if (showToast) U.toast('Chỉ quản lý đăng ký khi phiên đang mở đăng ký'); return false; }
+    return true;
+  }
+  function registrationOptions() {
+    const traders = ttdRegistrationTraders();
+    const points = (ttdBusinessPoints() || []).filter(p => p.traderId);
+    return {
+      trader: traders.map(t => `<option value="${t.id}">${U.esc(t.name)}${t.phone ? ' · ' + U.maskPhone(t.phone) : ''}</option>`).join(''),
+      point: points.map(p => `<option value="${p.id}">${U.esc(p.code)} · ${U.esc(p.sectionName || '')} · ${U.esc(p.cat || '')}</option>`).join('')
+    };
+  }
+  function validateRegistrationList(session) {
+    const regs = sessionRegistrations().filter(r => r && r.sessionId === session.id && r.market === TTD_SESSION_MARKET);
+    const active = regs.filter(r => r.status !== 'rejected' && r.status !== 'withdrawn');
+    const traderSet = new Set(), pointSet = new Set(), waitSet = new Set();
+    let officialCount = 0;
+    for (const r of active) {
+      const trader = traderById(r.traderId);
+      if (!trader || trader.market !== TTD_SESSION_MARKET) return { ok: false, reason: 'Có đăng ký không liên kết tiểu thương TTD hợp lệ' };
+      if (traderSet.has(r.traderId)) return { ok: false, reason: 'Có tiểu thương đăng ký trùng trong phiên' };
+      traderSet.add(r.traderId);
+      if (r.status === 'registered') return { ok: false, reason: 'Còn đăng ký chờ xử lý' };
+      if (r.status === 'approved' || r.listType === 'official') {
+        const point = ttdPointById(r.pointId);
+        if (!point) return { ok: false, reason: 'Danh sách chính thức có điểm không hợp lệ' };
+        if (pointSet.has(r.pointId)) return { ok: false, reason: 'Có điểm chính thức bị trùng' };
+        pointSet.add(r.pointId);
+        if (r.status === 'approved' && r.listType === 'official') officialCount += 1;
+      }
+      if (r.status === 'waitlisted' || r.listType === 'waitlist') {
+        const n = Number(r.waitlistOrder);
+        if (!Number.isInteger(n) || n <= 0) return { ok: false, reason: 'Thứ tự dự bị không hợp lệ' };
+        if (waitSet.has(n)) return { ok: false, reason: 'Thứ tự dự bị bị trùng' };
+        waitSet.add(n);
+        if (r.pointId && !ttdPointById(r.pointId)) return { ok: false, reason: 'Danh sách dự bị có điểm không hợp lệ' };
+      }
+    }
+    if (officialCount === 0) return { ok: false, reason: 'Cần có ít nhất một hộ trong danh sách chính thức trước khi chốt.' };
+    return { ok: true, reason: 'ok' };
+  }
   function registrationStatusTag(status) {
-    const labels = { registered: 'Đã đăng ký', approved: 'Đã duyệt', waitlisted: 'Dự bị', rejected: 'Từ chối', withdrawn: 'Rút đăng ký' };
+    const labels = { registered: 'Đã đăng ký', approved: 'Đã duyệt', waitlisted: 'Dự bị', rejected: 'BQL từ chối', withdrawn: 'Hộ đã rút đăng ký' };
     const cls = status === 'approved' ? 'ok' : status === 'waitlisted' ? 'warn' : (status === 'rejected' || status === 'withdrawn') ? 'danger' : 'info';
     return `<span class="tag ${cls}">${labels[status] || U.esc(status || 'Không rõ')}</span>`;
   }
-  function registrationListHtml(rows, waitlist) {
+  function registrationTabKey(buckets) {
+    const valid = { pending: 1, official: 1, waitlist: 1, inactive: 1 };
+    let tab = ui.sessionRegistrationTab;
+    if (!valid[tab]) tab = buckets.pending.length ? 'pending' : buckets.official.length ? 'official' : buckets.waitlist.length ? 'waitlist' : 'pending';
+    return tab;
+  }
+  function registrationTabsHtml(tab, buckets) {
+    const tabs = [
+      ['pending', 'Chờ xử lý', buckets.pending.length],
+      ['official', 'Chính thức', buckets.official.length],
+      ['waitlist', 'Dự bị', buckets.waitlist.length],
+      ['inactive', 'Không tham gia', buckets.inactive.length]
+    ];
+    return `<div class="session-reg-tabs">${tabs.map(t => `<button class="session-reg-tab ${tab === t[0] ? 'active' : ''}" data-act="session-registration-tab" data-tab="${t[0]}" type="button">${t[1]} <span>${t[2]}</span></button>`).join('')}</div>`;
+  }
+  function registrationListHtml(rows, mode, session, canManage) {
+    const waitlist = mode === 'waitlist';
+    const pending = mode === 'pending';
+    const inactive = mode === 'inactive';
+    const official = mode === 'official';
+    const actionCol = canManage && !inactive && !official;
     const cols = waitlist
-      ? [{ t: 'Thứ tự', num: true }, { t: 'Hộ/tiểu thương' }, { t: 'Mã điểm' }, { t: 'Khu chức năng' }, { t: 'Mặt hàng' }, { t: 'Điện thoại' }, { t: 'Thời điểm đăng ký' }, { t: 'Trạng thái' }, { t: 'Ghi chú' }]
-      : [{ t: 'STT', num: true }, { t: 'Hộ/tiểu thương' }, { t: 'Mã điểm' }, { t: 'Khu chức năng' }, { t: 'Mặt hàng' }, { t: 'Thời điểm đăng ký' }, { t: 'Trạng thái' }, { t: 'Ghi chú' }];
+      ? [{ t: 'Thứ tự dự bị', num: true }, { t: 'Hộ/tiểu thương' }, { t: 'Điện thoại' }, { t: 'Nhu cầu đăng ký' }, { t: 'Thời điểm đăng ký' }, { t: 'Trạng thái' }, { t: 'Ghi chú' }]
+      : inactive
+        ? [{ t: 'STT', num: true }, { t: 'Hộ/tiểu thương' }, { t: 'Thời điểm đăng ký' }, { t: 'Trạng thái' }, { t: 'Ghi chú' }]
+        : [{ t: 'STT', num: true }, { t: 'Hộ/tiểu thương' }, { t: 'Mã điểm dự kiến' }, { t: 'Khu chức năng' }, { t: 'Mặt hàng' }, { t: 'Thời điểm đăng ký' }, { t: 'Trạng thái' }, { t: 'Ghi chú' }];
+    if (actionCol) cols.push({ t: 'Thao tác' });
     const body = rows.map((r, i) => {
       const point = r.point, trader = r.trader;
       const idx = waitlist ? (Number.isFinite(Number(r.waitlistOrder)) ? Number(r.waitlistOrder) : i + 1) : i + 1;
-      const common = [
-        `<td>${U.esc(trader ? trader.name : 'Không tìm thấy tiểu thương')}</td>`,
-        `<td>${U.esc(point ? point.code : (r.pointId || '—'))}</td>`,
-        `<td>${U.esc(point ? point.sectionName : 'Không xác định')}</td>`,
-        `<td>${U.esc(point ? point.cat : '—')}</td>`
-      ];
-      const tail = [
-        `<td>${formatDateTimeValue(r.registeredAt || r.createdAt, '—')}</td>`,
-        `<td>${registrationStatusTag(r.status)}</td>`,
-        `<td>${U.esc(r.note || '') || '—'}</td>`
-      ];
-      if (waitlist) common.push(`<td>${U.maskPhone(trader && trader.phone)}</td>`);
-      return `<tr><td class="num">${idx}</td>${common.concat(tail).join('')}</tr>`;
+      const actions = actionCol ? `<td><div class="session-reg-actions">
+        ${pending ? `<button class="btn sm primary" data-act="reg-approve-open" data-id="${r.id}">Duyệt chính thức</button><button class="btn sm" data-act="reg-waitlist" data-id="${r.id}">Chuyển dự bị</button><button class="btn sm" data-act="reg-reject-open" data-id="${r.id}">Khác: Từ chối</button>` : ''}
+        ${waitlist ? `<button class="btn sm" data-act="reg-wait-up" data-id="${r.id}" title="Đưa lên" aria-label="Đưa lên">↑</button><button class="btn sm" data-act="reg-wait-down" data-id="${r.id}" title="Đưa xuống" aria-label="Đưa xuống">↓</button>` : ''}
+        ${pending || waitlist ? `<button class="btn sm" data-act="reg-withdraw-open" data-id="${r.id}">Ghi nhận rút</button>` : ''}
+      </div></td>` : '';
+      const base = [`<td class="num">${idx}</td>`, `<td class="session-reg-name">${U.esc(trader ? trader.name : 'Không tìm thấy tiểu thương')}</td>`];
+      const time = `<td>${formatDateTimeValue(r.registeredAt || r.createdAt, '—')}</td>`;
+      const status = `<td>${registrationStatusTag(r.status)}</td>`;
+      const note = `<td class="session-reg-note">${U.esc(r.note || '') || '—'}</td>`;
+      if (waitlist) {
+        const need = point ? `${point.sectionName || '—'} · ${point.cat || '—'}` : (r.requestedSectionId || '—');
+        return `<tr>${base.join('')}<td>${U.maskPhone(trader && trader.phone)}</td><td>${U.esc(need)}</td>${time}${status}${note}${actions}</tr>`;
+      }
+      if (inactive) return `<tr>${base.join('')}${time}${status}${note}</tr>`;
+      return `<tr>${base.join('')}<td>${U.esc(point ? point.code : (r.pointId || '—'))}</td><td>${U.esc(point ? point.sectionName : (r.requestedSectionId || '—'))}</td><td>${U.esc(point ? point.cat : '—')}</td>${time}${status}${note}${actions}</tr>`;
     });
-    return U.table(cols, body, { empty: waitlist ? 'Chưa có hộ trong danh sách dự bị.' : 'Chưa có đăng ký chính thức.' });
+    const empty = pending ? 'Chưa có đăng ký chờ xử lý.' : waitlist ? 'Chưa có hộ trong danh sách dự bị.' : inactive ? 'Chưa có đăng ký bị từ chối hoặc đã rút.' : 'Chưa có đăng ký chính thức.';
+    return U.table(cols, body, { empty });
   }
   function sessionRegistrationHtml(session) {
-    const rows = registrationReadModels(session);
-    const official = rows.filter(r => r.listType === 'official' && r.status !== 'rejected' && r.status !== 'withdrawn');
-    const waitlist = rows.filter(r => r.listType === 'waitlist' && r.status !== 'rejected' && r.status !== 'withdrawn')
-      .sort((a, b) => Number(a.waitlistOrder || 9999) - Number(b.waitlistOrder || 9999));
-    const inactive = rows.filter(r => r.status === 'rejected' || r.status === 'withdrawn');
+    const b = sessionRegistrationBuckets(session);
+    const canManage = canManageRegistrations(session);
+    const tab = registrationTabKey(b);
+    const rows = b[tab] || b.pending;
+    const add = canManage ? `<button class="btn sm primary" data-act="reg-add-open" data-id="${session.id}">+ Ghi nhận đăng ký</button>` : '';
     return `<div class="session-registrations">
-      <div class="row" style="margin-bottom:10px"><h4>Đăng ký tham gia phiên</h4><span class="spacer"></span>
-        <span class="tag info">Tổng ${rows.length}</span><span class="tag ok">Chính thức ${official.length}</span><span class="tag warn">Dự bị ${waitlist.length}</span>${inactive.length ? `<span class="tag danger">Từ chối/rút ${inactive.length}</span>` : ''}</div>
-      <div class="grid g2">
-        <div><h4>Danh sách chính thức</h4>${registrationListHtml(official, false)}</div>
-        <div><h4>Danh sách dự bị</h4>${registrationListHtml(waitlist, true)}</div>
-      </div>
+      <div class="session-reg-head"><h4>Đăng ký tham gia phiên</h4><span class="spacer"></span>${add}</div>
+      <div class="note info">Prototype: Trưởng Ban/BQL ghi nhận đăng ký đã tiếp nhận từ hộ dân; chưa phải cổng Mini App/backend chính thức.</div>
+      ${registrationTabsHtml(tab, b)}
+      <div class="session-reg-panel">${registrationListHtml(rows, tab, session, canManage)}</div>
     </div>`;
   }
   function applySessionMutation(session, mutate, successLog) {
     const before = JSON.stringify(session);
-    const logLen = Array.isArray(A.db.extraLog) ? A.db.extraLog.length : null;
+    const logBefore = Array.isArray(A.db.extraLog) ? A.db.extraLog.slice() : null;
     mutate();
     try {
       if (successLog) U.log(successLog);
@@ -257,7 +423,10 @@
     } catch (e) {
       Object.keys(session).forEach(k => delete session[k]);
       Object.assign(session, JSON.parse(before));
-      if (logLen != null) A.db.extraLog.length = logLen;
+      if (logBefore) {
+        A.db.extraLog.length = 0;
+        logBefore.forEach(x => A.db.extraLog.push(x));
+      }
       U.toast('Không lưu được phiên chợ quê, dữ liệu đã được hoàn tác');
       return false;
     }
@@ -568,10 +737,12 @@
     if (s.status === 'postponed' || s.status === 'cancelled') {
       return `<div class="session-progress special">${sessionStatusTag(s)}<span class="small muted">Phiên không nằm trên tuyến tiến trình vận hành chuẩn.</span></div>`;
     }
-    const current = SESSION_PROGRESS_STEPS.findIndex(x => x[0] === s.status);
+    const current = SESSION_PROGRESS_INDEX[s.status] == null ? 0 : SESSION_PROGRESS_INDEX[s.status];
     return `<div class="session-progress">${SESSION_PROGRESS_STEPS.map((step, i) => {
-      const cls = i < current ? 'done' : i === current ? 'current' : '';
-      return `<div class="session-step ${cls}"><span>${i + 1}</span><b>${step[1]}</b></div>`;
+      const done = s.status === 'closed' ? i <= current : i < current || (s.status === 'registration_closed' && i === 1);
+      const cls = done ? 'done' : i === current ? 'current' : '';
+      const note = step.key === 'ops' ? '<small>Chi tiết ở bước vận hành</small>' : '';
+      return `<div class="session-step ${cls}"><span>${i + 1}</span><b>${step.label}</b>${note}</div>`;
     }).join('')}</div>`;
   }
   function sessionActionButtons(s) {
@@ -580,7 +751,10 @@
     Object.keys(SESSION_TRANSITIONS[s.status] || {}).forEach(to => {
       const action = actionForTransition(s.status, to);
       if (action === 'phien-cho.chot-phien') return;
-      if (canDoSessionAction(action, s)) outs.push(`<button class="btn sm" data-act="session-transition" data-id="${s.id}" data-to="${to}">${SESSION_ACTION_LABEL[to] || SESSION_STATUS[to]}</button>`);
+      if (canDoSessionAction(action, s)) {
+        const act = to === 'registration_closed' ? 'session-close-list-confirm' : 'session-transition';
+        outs.push(`<button class="btn sm" data-act="${act}" data-id="${s.id}" data-to="${to}">${SESSION_ACTION_LABEL[to] || SESSION_STATUS[to]}</button>`);
+      }
     });
     if (s.status === 'pending_close' && canDoSessionAction('phien-cho.chot-phien', s)) {
       outs.push(`<button class="btn sm primary" data-act="session-open" data-id="${s.id}">Điểm danh & chốt phiên</button>`);
@@ -645,6 +819,170 @@
     </div></div></div>`;
   };
   Object.assign(A.ACT, {
+    'session-registration-tab': el => {
+      const tab = el.dataset.tab;
+      if (['pending', 'official', 'waitlist', 'inactive'].indexOf(tab) === -1) return;
+      ui.sessionRegistrationTab = tab;
+      A.render();
+    },
+    'reg-add-open': el => {
+      const s = sessionById(el.dataset.id);
+      if (!validateRegistrationManage(s, true)) return;
+      const win = registrationWindowState(s);
+      if (!win.ok) { U.toast(win.reason); return; }
+      const opts = registrationOptions();
+      if (!opts.trader) { U.toast('Chưa có tiểu thương TTD hợp lệ để ghi nhận đăng ký'); return; }
+      A.modal(A.mHead('Ghi nhận đăng ký') + `<div class="modal-b"><div class="form-grid">
+        <div class="field"><label>Hộ/tiểu thương *</label><select class="input" id="reg-trader">${opts.trader}</select></div>
+        <div class="field"><label>Loại ghi nhận ban đầu *</label><select class="input" id="reg-kind"><option value="registered">Chờ duyệt</option><option value="waitlist">Dự bị</option></select></div>
+        <div class="field"><label>Thời điểm đăng ký *</label><input class="input" id="reg-at" type="datetime-local" value="${nowIso().slice(0, 16)}"></div>
+        <div class="field"><label>Khu mong muốn</label><input class="input" id="reg-section" placeholder="AT / NS / TN"></div>
+      </div><div class="field" style="margin-top:10px"><label>Ghi chú</label><textarea class="input" id="reg-note" rows="2"></textarea></div></div>
+      <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="reg-add-save" data-id="${s.id}">Lưu đăng ký</button></div>`);
+    },
+    'reg-add-save': el => {
+      const s = sessionById(el.dataset.id);
+      if (!validateRegistrationManage(s, true)) return;
+      const win = registrationWindowState(s);
+      if (!win.ok) { U.toast(win.reason); return; }
+      const traderId = A.$('#reg-trader').value;
+      const kind = A.$('#reg-kind').value;
+      const registeredAt = A.$('#reg-at').value;
+      const note = A.$('#reg-note').value.trim();
+      const requestedSectionId = A.$('#reg-section').value.trim();
+      const trader = traderById(traderId);
+      if (!trader || trader.market !== TTD_SESSION_MARKET) { U.toast('Tiểu thương đăng ký không hợp lệ'); return; }
+      if (!parseLocalDateTime(registeredAt)) { U.toast('Thời điểm đăng ký không hợp lệ'); return; }
+      if (kind !== 'registered' && kind !== 'waitlist') { U.toast('Loại đăng ký không hợp lệ'); return; }
+      if (activeRegistrationRows(s).some(r => r.traderId === traderId)) { U.toast('Tiểu thương đã có đăng ký trong phiên này'); return; }
+      const rec = {
+        id: registrationId(s.id), sessionId: s.id, market: s.market, traderId, pointId: null, requestedSectionId,
+        registeredAt, listType: kind === 'waitlist' ? 'waitlist' : 'official', status: kind === 'waitlist' ? 'waitlisted' : 'registered',
+        waitlistOrder: kind === 'waitlist' ? nextWaitlistOrder(s) : null, note,
+        createdAt: nowIso(), createdBy: currentAccountId(), updatedAt: nowIso(), updatedBy: currentAccountId()
+      };
+      runRegistrationMutation(list => list.push(rec), `Ghi nhận đăng ký phiên ${s.id}: ${rec.id}`, () => { A.closeModal(); A.render(); U.toast('Đã ghi nhận đăng ký'); });
+    },
+    'reg-approve-open': el => {
+      const r = registrationById(el.dataset.id), s = r && sessionById(r.sessionId);
+      if (!r || !validateRegistrationManage(s, true)) return;
+      if (r.status !== 'registered') { U.toast('Chỉ duyệt đăng ký đang chờ xử lý'); return; }
+      const opts = registrationOptions();
+      if (!opts.point) { U.toast('Chưa có điểm TTD hợp lệ để duyệt'); return; }
+      A.modal(A.mHead('Duyệt vào danh sách chính thức') + `<div class="modal-b"><div class="field"><label>Điểm kinh doanh TTD *</label><select class="input" id="reg-point">${opts.point}</select></div>
+        <div class="field" style="margin-top:10px"><label>Ghi chú</label><textarea class="input" id="reg-note" rows="2">${U.esc(r.note || '')}</textarea></div></div>
+        <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="reg-approve-save" data-id="${r.id}">Duyệt chính thức</button></div>`);
+    },
+    'reg-approve-save': el => {
+      const r = registrationById(el.dataset.id), s = r && sessionById(r.sessionId);
+      if (!r || !validateRegistrationManage(s, true)) return;
+      if (r.status !== 'registered') { U.toast('Chỉ duyệt đăng ký đang chờ xử lý'); return; }
+      const pointId = A.$('#reg-point').value, point = ttdPointById(pointId);
+      if (!point) { U.toast('Điểm kinh doanh TTD không hợp lệ'); return; }
+      if (activeRegistrationRows(s).some(x => x.id !== r.id && x.status === 'approved' && x.pointId === pointId)) { U.toast('Điểm này đã nằm trong danh sách chính thức'); return; }
+      const note = A.$('#reg-note').value.trim();
+      runRegistrationMutation(() => {
+        r.pointId = pointId; r.listType = 'official'; r.status = 'approved'; r.waitlistOrder = null; r.note = note;
+        r.updatedAt = nowIso(); r.updatedBy = currentAccountId();
+      }, `Duyệt đăng ký phiên ${s.id}: ${r.id}`, () => { A.closeModal(); A.render(); U.toast('Đã duyệt vào danh sách chính thức'); });
+    },
+    'reg-waitlist': el => {
+      const r = registrationById(el.dataset.id), s = r && sessionById(r.sessionId);
+      if (!r || !validateRegistrationManage(s, true)) return;
+      if (r.status !== 'registered') { U.toast('Chỉ chuyển dự bị từ đăng ký chờ xử lý'); return; }
+      runRegistrationMutation(() => {
+        r.pointId = null; r.listType = 'waitlist'; r.status = 'waitlisted'; r.waitlistOrder = nextWaitlistOrder(s);
+        r.updatedAt = nowIso(); r.updatedBy = currentAccountId();
+      }, `Chuyển dự bị đăng ký phiên ${s.id}: ${r.id}`, () => { A.render(); U.toast('Đã chuyển vào danh sách dự bị'); });
+    },
+    'reg-reject-open': el => {
+      const r = registrationById(el.dataset.id), s = r && sessionById(r.sessionId);
+      if (!r || !validateRegistrationManage(s, true)) return;
+      if (r.status !== 'registered') { U.toast('Chỉ từ chối đăng ký đang chờ xử lý'); return; }
+      A.modal(A.mHead('Từ chối đăng ký') + `<div class="modal-b"><div class="field"><label>Lý do/ghi chú</label><textarea class="input" id="reg-note" rows="3">${U.esc(r.note || '')}</textarea></div></div>
+        <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn danger" data-act="reg-reject-save" data-id="${r.id}">Từ chối</button></div>`);
+    },
+    'reg-reject-save': el => {
+      const r = registrationById(el.dataset.id), s = r && sessionById(r.sessionId);
+      if (!r || !validateRegistrationManage(s, true)) return;
+      if (r.status !== 'registered') { U.toast('Chỉ có thể từ chối đăng ký đang chờ xử lý.'); return; }
+      const note = A.$('#reg-note').value.trim();
+      runRegistrationMutation(() => {
+        r.pointId = null; r.listType = 'official'; r.status = 'rejected'; r.waitlistOrder = null; r.note = note;
+        r.updatedAt = nowIso(); r.updatedBy = currentAccountId();
+      }, `Từ chối đăng ký phiên ${s.id}: ${r.id}`, () => { A.closeModal(); A.render(); U.toast('Đã từ chối đăng ký'); });
+    },
+    'reg-withdraw-open': el => {
+      const r = registrationById(el.dataset.id), s = r && sessionById(r.sessionId);
+      if (!r || !validateRegistrationManage(s, true)) return;
+      if (r.status === 'rejected' || r.status === 'withdrawn') { U.toast('Đăng ký đã ở trạng thái kết thúc'); return; }
+      A.modal(A.mHead('Ghi nhận rút đăng ký') + `<div class="modal-b">
+        <div class="note info">Hộ/tiểu thương là bên chủ động xin rút; Ban Quản lý chỉ ghi nhận yêu cầu này.</div>
+        <div class="field"><label>Lý do hộ xin rút</label><textarea class="input" id="reg-note" rows="3" placeholder="Nhập lý do hộ/tiểu thương xin rút đăng ký">${U.esc(r.note || '')}</textarea></div></div>
+        <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn danger" data-act="reg-withdraw-save" data-id="${r.id}">Ghi nhận rút đăng ký</button></div>`);
+    },
+    'reg-withdraw-save': el => {
+      const r = registrationById(el.dataset.id), s = r && sessionById(r.sessionId);
+      if (!r || !validateRegistrationManage(s, true)) return;
+      if (r.status === 'rejected' || r.status === 'withdrawn') { U.toast('Đăng ký đã ở trạng thái kết thúc'); return; }
+      const note = A.$('#reg-note').value.trim();
+      if (!note) { U.toast('Vui lòng nhập lý do hộ xin rút đăng ký'); return; }
+      runRegistrationMutation(() => {
+        r.pointId = null; r.status = 'withdrawn'; r.waitlistOrder = null; r.note = note;
+        r.updatedAt = nowIso(); r.updatedBy = currentAccountId();
+      }, `Ghi nhận rút đăng ký phiên ${s.id}: ${r.id}`, () => { A.closeModal(); A.render(); U.toast('Đã ghi nhận hộ rút đăng ký'); });
+    },
+    'reg-wait-up': el => {
+      const r = registrationById(el.dataset.id), s = r && sessionById(r.sessionId);
+      if (!r || !validateRegistrationManage(s, true)) return;
+      const rows = sessionRegistrationBuckets(s).waitlist;
+      const i = rows.findIndex(x => x.id === r.id);
+      if (i <= 0) return;
+      const other = registrationById(rows[i - 1].id);
+      if (!other) return;
+      runRegistrationMutation(() => {
+        const a = r.waitlistOrder; r.waitlistOrder = other.waitlistOrder; other.waitlistOrder = a;
+        r.updatedAt = other.updatedAt = nowIso(); r.updatedBy = other.updatedBy = currentAccountId();
+      }, `Sắp xếp dự bị phiên ${s.id}: ${r.id}`, () => { A.render(); U.toast('Đã cập nhật thứ tự dự bị'); });
+    },
+    'reg-wait-down': el => {
+      const r = registrationById(el.dataset.id), s = r && sessionById(r.sessionId);
+      if (!r || !validateRegistrationManage(s, true)) return;
+      const rows = sessionRegistrationBuckets(s).waitlist;
+      const i = rows.findIndex(x => x.id === r.id);
+      if (i < 0 || i >= rows.length - 1) return;
+      const other = registrationById(rows[i + 1].id);
+      if (!other) return;
+      runRegistrationMutation(() => {
+        const a = r.waitlistOrder; r.waitlistOrder = other.waitlistOrder; other.waitlistOrder = a;
+        r.updatedAt = other.updatedAt = nowIso(); r.updatedBy = other.updatedBy = currentAccountId();
+      }, `Sắp xếp dự bị phiên ${s.id}: ${r.id}`, () => { A.render(); U.toast('Đã cập nhật thứ tự dự bị'); });
+    },
+    'session-close-list-confirm': el => {
+      const s = sessionById(el.dataset.id);
+      if (!s || !ttdSessionCanMutate('phien-cho.chot-danh-sach', s, true)) return;
+      if (s.status !== 'open') { U.toast('Chỉ chốt danh sách khi phiên đang mở đăng ký'); return; }
+      const check = validateRegistrationList(s);
+      if (!check.ok) { U.toast(check.reason); return; }
+      const b = sessionRegistrationBuckets(s);
+      A.modal(A.mHead('Chốt danh sách đăng ký') + `<div class="modal-b">
+        <div class="note warn">Danh sách sẽ khóa sau khi chốt. Không tự động chuyển sang chuẩn bị phiên.</div>
+        <div class="grid g3"><div><div class="small muted">Chính thức</div><b>${b.official.length}</b></div><div><div class="small muted">Dự bị</div><b>${b.waitlist.length}</b></div><div><div class="small muted">Từ chối/rút</div><b>${b.inactive.length}</b></div></div>
+      </div><div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="session-close-list-save" data-id="${s.id}">Chốt danh sách</button></div>`);
+    },
+    'session-close-list-save': el => {
+      const s = sessionById(el.dataset.id);
+      if (!s || !ttdSessionCanMutate('phien-cho.chot-danh-sach', s, true)) return;
+      if (s.status !== 'open') { U.toast('Chỉ chốt danh sách khi phiên đang mở đăng ký'); return; }
+      const check = validateRegistrationList(s);
+      if (!check.ok) { U.toast(check.reason); return; }
+      const ok = applySessionMutation(s, () => {
+        s.status = 'registration_closed';
+        s.updatedBy = currentAccountName();
+        s.updatedAt = nowIso();
+      }, `Chốt danh sách đăng ký phiên ${sessionLabel(s)}`);
+      if (ok) { A.closeModal(); A.render(); U.toast('Đã chốt danh sách đăng ký'); }
+    },
     'session-create': () => {
       const fake = { id: 'new', market: TTD_SESSION_MARKET };
       if (!ttdSessionCanMutate('phien-cho.tao-phien', fake, true)) return;
@@ -704,6 +1042,10 @@
       const action = actionForTransition(s.status, to);
       if (!action || !ttdSessionCanMutate(action, s, true)) return;
       if (!canTransition(s.status, to)) { U.toast('Không thể chuyển trạng thái phiên theo yêu cầu'); return; }
+      if (to === 'registration_closed') {
+        const check = validateRegistrationList(s);
+        if (!check.ok) { U.toast(check.reason); return; }
+      }
       const from = s.status;
       const ok = applySessionMutation(s, () => {
         s.status = to;
