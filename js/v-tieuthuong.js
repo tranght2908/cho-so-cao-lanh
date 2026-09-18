@@ -55,6 +55,7 @@
       <td>${U.esc(dkPointTypeLabel(s))}</td>
       <td class="num">${s.area.toLocaleString('vi-VN')}</td>
       <td title="${U.esc(s.cat)}">${U.esc(s.cat)}</td>
+      <td class="nowrap" style="min-width:140px">${U.esc(U.unitLabel(s))}</td>
       <td title="${t ? U.esc(t.name) : ''}">${t ? U.esc(t.name) : '<span class="muted">–</span>'}</td>
       <td title="${seller ? U.esc(seller.name) : ''}">${seller ? U.esc(seller.name) : '<span class="muted">–</span>'}</td>
       <td>${U.statusTag(s.status)}</td>
@@ -73,7 +74,7 @@
       <input class="input" placeholder="Mã điểm / người thuê / người bán" data-in="dkcl-search" value="${U.esc(f.dkclSearch || '')}">
       <button class="btn" data-act="dkcl-clear" ${dkclHasFilter() ? '' : 'disabled'}>↺ Xóa bộ lọc</button>
       <button class="btn" data-act="dkcl-csv">⬇ Xuất Excel</button></div>
-      <div class="card-b">${U.table([{ t: 'Mã điểm' }, { t: 'Khu vực' }, { t: 'Loại điểm' }, { t: 'DT (m²)', num: true }, { t: 'Ngành hàng' }, { t: 'Người thuê' }, { t: 'Người bán thực tế' }, { t: 'Trạng thái' }, { t: 'Thao tác' }],
+      <div class="card-b">${U.table([{ t: 'Mã điểm' }, { t: 'Khu vực' }, { t: 'Loại điểm' }, { t: 'DT (m²)', num: true }, { t: 'Ngành hàng' }, { t: '<span style="display:inline-block;min-width:140px">Đơn giá</span>' }, { t: 'Người thuê' }, { t: 'Người bán thực tế' }, { t: 'Trạng thái' }, { t: 'Thao tác' }],
         rows.slice(pg.start, pg.end).map(dkRowHtmlCL))}${pg.html}</div></div>`;
   }
   A.CH['dkcl-section'] = el => { f.dkclSection = el.value; ui.page.dkcl = 0; A.render(); };
@@ -88,10 +89,10 @@
     ui.page.dkcl = 0;
     A.render();
   };
-  A.ACT['dkcl-csv'] = () => U.csv('diem-kinh-doanh-cho-cao-lanh', ['Mã điểm', 'Khu vực', 'Loại điểm', 'Diện tích m2', 'Ngành hàng', 'Người thuê', 'Người bán thực tế', 'Trạng thái'],
+  A.ACT['dkcl-csv'] = () => U.csv('diem-kinh-doanh-cho-cao-lanh', ['Mã điểm', 'Khu vực', 'Loại điểm', 'Diện tích m2', 'Ngành hàng', 'Đơn giá', 'Người thuê', 'Người bán thực tế', 'Trạng thái'],
     dkRowsCL().map(s => {
       const t = s.traderId ? A.idx.trader.get(s.traderId) : null, seller = dkSeller(s);
-      return [s.code, s.sectionName, dkPointTypeLabel(s), s.area, s.cat, t ? t.name : '', seller ? seller.name : '', D.STATUS[s.status].label];
+      return [s.code, s.sectionName, dkPointTypeLabel(s), s.area, s.cat, U.unitLabel(s), t ? t.name : '', seller ? seller.name : '', D.STATUS[s.status].label];
     }));
   // Drawer chi tiết CL — bố cục theo BUSINESS_POINT_CL_DETAIL_DRAWER_REFACTOR (xem
   // BUSINESS_POINT_CL_DETAIL_DRAWER_REFACTOR_REPORT.md): action đặt NGAY tại khối thông tin mà nó
@@ -2357,7 +2358,7 @@
         ${(()=>{const cs=A.db.contracts.filter(c=>c.traderId===t.id).sort((a,b)=>b.start.localeCompare(a.start));return cs.length?U.table([{t:'Mã HĐ'},{t:'Điểm KD'},{t:'Thời hạn'},{t:'Trạng thái'},{t:''}],cs.map(c=>`<tr><td>${c.id}</td><td>${A.idx.stall.get(c.stallId)?A.idx.stall.get(c.stallId).code:'—'}</td><td>${U.dmy(c.start)} – ${U.dmy(c.end)}</td><td>${c.status==='hieuluc'?'<span class="tag ok">Hiệu lực</span>':'<span class="tag">'+(c.status==='chamdut'?'Đã chấm dứt':'Đã kết thúc')+'</span>'}</td><td><button class="btn sm" data-act="ct-view" data-id="${c.id}">Xem</button></td></tr>`)): '<div class="empty small">Chưa có hợp đồng.</div>';})()}
         </section>
         ${A.VEHICLES ? A.VEHICLES.traderSection(t) : ''}<section class="tt-detail-card">
-        <div class="tt-detail-card-h"><span>${U.icon('money')}</span><div><b>D. Tình trạng công nợ</b><div class="small muted">Tóm tắt các khoản cần theo dõi</div></div></div>
+        <div class="tt-detail-card-h"><span>${U.icon('money')}</span><div><b>E. Tình trạng công nợ</b><div class="small muted">Tóm tắt các khoản cần theo dõi</div></div></div>
         <dl class="kv">
           <dt>Công nợ hiện tại</dt><dd>${debt ? `<b style="color:#df2225">${U.money(debt)}</b>` : '<span class="tag ok">Không nợ</span>'}</dd>
           <dt>Khoản chưa thanh toán</dt><dd>${unpaidCount}</dd>
@@ -2506,7 +2507,7 @@
   const TT_WIZARD_STEP_LABEL = ['', 'Thông tin cá nhân', 'Thông tin kinh doanh', 'Hồ sơ số hóa', 'Kiểm tra & lưu'];
   // Danh mục giấy tờ dùng CHUNG với Section B drawer chi tiết — xem TT_DOCS (định nghĩa phía trên,
   // gần ttDocRow/ttDocRowEdit), KHÔNG tạo danh mục thứ 2.
-  let ttWizardDraft = null; // { step, name, idNo, gender, birth, phone, address, market, hkd, licenseNo, licenseDate, since, docFiles, confirmPhoneWarning }
+  let ttWizardDraft = null; // { step, name, idNo, gender, birth, phone, address, market, hkd, licenseNo, licenseDate, since, docFiles, vehicles, confirmPhoneWarning }
   function ttWizardRerender() { ycSetModal(`<div class="drawer-overlay" data-act="close"></div><div class="drawer drawer-yc">${ttWizardHtml()}</div>`); }
   // Kiểm tra trùng tối thiểu (mục 13 yêu cầu): CCCD trùng CHÍNH XÁC → BLOCK; SĐT trùng (CCCD khác)
   // → WARNING, không tự chặn nhưng bắt xác nhận đã kiểm tra trước khi cho lưu (mục "không silently
@@ -2532,7 +2533,8 @@
         <div class="field"><label>Điện thoại *</label><input class="input" data-in="ttw-phone" value="${U.esc(d.phone)}" placeholder="09xxxxxxxx"></div>
         <div class="field"><label>Địa chỉ</label><input class="input" data-in="ttw-addr" value="${U.esc(d.address)}"></div>
       </div>
-      <div class="note" style="margin-top:12px">Mã tiểu thương do hệ thống tự sinh theo mã <b>TTxxxx</b> khi lưu, không nhập tay.</div>`;
+      <div class="note" style="margin-top:12px">Mã tiểu thương do hệ thống tự sinh theo mã <b>TTxxxx</b> khi lưu, không nhập tay.</div>
+      ${A.VEHICLES ? A.VEHICLES.draftSection(d, { add: 'ttw-vehicle-add', edit: 'ttw-vehicle-edit', remove: 'ttw-vehicle-remove' }) : ''}`;
   }
   function ttWizardStep2Html(d) {
     return `<div class="form-grid">
@@ -2603,7 +2605,7 @@
   A.ACT['tt-new'] = () => {
     if (!A.canDo('tieu-thuong.them-moi', ui.market)) return;
     A.drawerReset();
-    ttWizardDraft = { step: 1, furthestStep: 1, name: '', idNo: '', gender: 'Nữ', birth: '', phone: '', address: '', market: ui.market, hkd: false, licenseNo: '', licenseDate: '', since: A.db.today, docFiles: {}, ocrApplied: false, confirmPhoneWarning: false };
+    ttWizardDraft = { step: 1, furthestStep: 1, name: '', idNo: '', gender: 'Nữ', birth: '', phone: '', address: '', market: ui.market, hkd: false, licenseNo: '', licenseDate: '', since: A.db.today, docFiles: {}, vehicles: [], ocrApplied: false, confirmPhoneWarning: false };
     ttWizardRerender();
     A.render();
   };
@@ -2632,6 +2634,9 @@
   A.CH['ttw-since'] = el => { if (ttWizardDraft) ttWizardDraft.since = el.value; };
   A.CH['ttw-license-date'] = el => { if (ttWizardDraft) ttWizardDraft.licenseDate = el.value; };
   A.CH['ttw-confirm-phone'] = el => { if (ttWizardDraft) { ttWizardDraft.confirmPhoneWarning = el.checked; ttWizardRerender(); } };
+  A.ACT['ttw-vehicle-add'] = () => { if (ttWizardDraft && A.VEHICLES) A.VEHICLES.openDraftModal(ttWizardDraft, null, ttWizardRerender); };
+  A.ACT['ttw-vehicle-edit'] = el => { const i = Number(el.dataset.index); if (ttWizardDraft && A.VEHICLES && Number.isInteger(i)) A.VEHICLES.openDraftModal(ttWizardDraft, i, ttWizardRerender); };
+  A.ACT['ttw-vehicle-remove'] = el => { const i = Number(el.dataset.index); if (!ttWizardDraft || !Number.isInteger(i) || i < 0 || i >= ttWizardDraft.vehicles.length) return; ttWizardDraft.vehicles.splice(i, 1); ttWizardRerender(); };
   A.ACT['tt-wizard-doc-pick'] = el => {
     if (!ttWizardDraft) return;
     const key = el.dataset.key;
@@ -2678,6 +2683,7 @@
       docFiles: Object.assign({}, d.docFiles)
     };
     A.db.traders.push(t); A.idx.trader.set(t.id, t);
+    if (A.VEHICLES) A.VEHICLES.persistDrafts(t, d.vehicles);
     U.log('Thêm hồ sơ tiểu thương ' + t.id + ' – ' + name);
     A.save();
     ttWizardDraft = null;

@@ -71,7 +71,23 @@ window.APP = (function () {
   U.inScope = (x, m) => m === 'ALL' || x.market === m;
   U.staffName = id => { const s = D.STAFF.find(x => x.id === id); return s ? s.name : (id || ''); };
   U.typeLabel = t => ({ kiot: 'Ki-ốt', nhalong: 'Trong nhà lồng', ngoai: 'Ngoài nhà lồng', phien: 'Quầy phiên' }[t]);
-  U.unitLabel = st => st.type === 'phien' ? U.money(D.SESSION_FEE) + '/quầy/phiên' : U.money(D.UNIT[st.type]) + '/m²/ngày';
+  // Đơn giá hiện hành của điểm KD lấy từ "Chính sách thu và biểu phí", không phải
+  // đơn giá snapshot của hợp đồng. NEED_CONFIRMATION: quy tắc mapping biểu phí
+  // theo khu vực/loại điểm cần được nghiệp vụ xác nhận khi có API/backend.
+  U.appliedStallPrice = st => {
+    if (!st) return null;
+    const stallType = { kiot: 'Ki-ốt', nhalong: 'Trong nhà lồng chợ', ngoai: 'Tự sản tự tiêu', phien: 'Quầy theo phiên' }[st.type];
+    if (!stallType) return null;
+    const prices = A.SERVICE_CFG ? A.SERVICE_CFG.list('stallPrices') : ((D.RATE_POLICY_SEED || {}).stallPrices || []);
+    const today = U.today ? U.today() : '';
+    return prices.find(r => r.marketId === st.market && r.stallType === stallType && r.status === 'active'
+      && (!r.effectiveFrom || r.effectiveFrom <= today) && (!r.effectiveTo || r.effectiveTo >= today)) || null;
+  };
+  U.unitLabel = st => {
+    const price = U.appliedStallPrice(st);
+    if (!price) return 'Chưa cấu hình';
+    return U.money(price.amount) + '/' + String(price.unit || '').replace(/^đ\//, '');
+  };
   U.rentalKind = st => st && st.type === 'phien' ? 'session' : 'fixed';
   U.rentalLabel = st => U.rentalKind(st) === 'session' ? 'Quầy thuê theo phiên / khách vãng lai' : 'Quầy thuê cố định tháng/quý';
   U.statusTag = s => `<span class="tag"><span class="dot" style="background:${D.STATUS[s].color}"></span>${D.STATUS[s].label}</span>`;
@@ -253,7 +269,7 @@ window.APP = (function () {
   //   'SYSTEM' = không gate theo market (Tài khoản, Cài đặt = hệ thống).
   A.SCREEN_MARKET = {
     'tong-quan': 'CROSS', 'bao-cao': 'CROSS',
-    'mat-bang': 'BOTH', 'diem-kd': 'BOTH', 'tieu-thuong': 'BOTH', 'hop-dong': 'BOTH',
+    'mat-bang': 'BOTH', 'tai-san': 'CL', 'diem-kd': 'BOTH', 'tieu-thuong': 'BOTH', 'hop-dong': 'BOTH',
     'cau-hinh-gia': 'BOTH',
     'phai-thu': 'BOTH', 'thu-tien': 'TTD', 'doi-soat': 'BOTH', 'cong-no': 'BOTH',
     'su-co': 'BOTH', 'thong-bao': 'BOTH',
@@ -500,6 +516,7 @@ window.APP = (function () {
       // Hash cũ #/so-do, #/cau-truc vẫn redirect an toàn về #/mat-bang (xem A.route()). Xem
       // MARKET_LAYOUT_SCREEN_PERMISSION_AUDIT.md + MARKET_LAYOUT_SCREEN_PERMISSION_IMPLEMENTATION_REPORT.md.
       { id: 'mat-bang', ico: U.icon('map'), label: 'Mặt bằng chợ' },
+      { id: 'tai-san', ico: U.icon('settings'), label: 'Tài sản chợ' },
       { id: 'diem-kd', ico: U.icon('store'), label: 'Điểm kinh doanh' },
       { id: 'phien-cho', ico: U.icon('store'), label: 'Phiên chợ quê' }
     ] },

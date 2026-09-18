@@ -289,12 +289,14 @@
     const mid = qhMarket(), can = mbCan(mid), m = U.market(mid), open = !!ui.mb.treeOpen;
     const isTtd = mid === 'TTD';
     const stats = A.mbMarketStats(mid);
-    const fixedCount = stats.points.filter(st => U.rentalKind(st) === 'fixed').length;
-    const sessionCount = stats.points.filter(st => U.rentalKind(st) === 'session').length;
     const c = k => stats.byStatus[k] || 0;
     const chip = (k, label, extra) => `<span class="mb-chip ${k ? 'mb-chip-' + k : 'mb-chip-total'}">${k ? `<i style="background:${D.STATUS[k].color}"></i>` : ''}<b>${extra != null ? extra : c(k)}</b>${label}</span>`;
     const rentChip = (label, count) => `<span class="mb-chip mb-chip-total"><b>${count}</b>${label}</span>`;
-    const summary = rentChip('quầy cố định tháng/quý', fixedCount) + rentChip('quầy theo phiên/vãng lai', sessionCount) + chip(null, 'điểm kinh doanh', stats.total) + chip('thue', 'đang thuê') + chip('trong', 'còn trống') + chip('no', 'nợ phí') + chip('ngung', 'tạm ngưng') + chip('tranhchap', 'tranh chấp');
+    const rentalSummary = isTtd
+      ? rentChip('quầy cố định tháng/quý', stats.points.filter(st => U.rentalKind(st) === 'fixed').length)
+        + rentChip('quầy theo phiên/vãng lai', stats.points.filter(st => U.rentalKind(st) === 'session').length)
+      : '';
+    const summary = rentalSummary + chip(null, 'điểm kinh doanh', stats.total) + chip('thue', 'đang thuê') + chip('trong', 'còn trống') + chip('no', 'nợ phí') + chip('ngung', 'tạm ngưng') + chip('tranhchap', 'tranh chấp');
     return `<div class="card mb-head"><div class="card-b mb-head-b">
         <div class="mb-head-info"><h3>Mặt bằng chợ</h3><div class="mb-head-sub"><b>${U.esc(m.name)}</b> · ${U.esc(m.hang)}${m.address ? ' · ' + U.esc(m.address) : ''}</div>${m.note ? `<div class="small muted">${U.esc(m.note)}</div>` : ''}</div>
         <div class="mb-summary">${summary}</div></div></div>

@@ -96,6 +96,37 @@ table { border-collapse: collapse; width: 100%; }
 .g4 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .g-main { grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); }
 .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.asset-kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.filters .input { min-width: 150px; flex: 1 1 160px; }
+.asset-tabs { max-width: 100%; overflow-x: auto; flex-wrap: nowrap; }
+.asset-images { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.asset-image { min-height: 90px; border: 1px dashed var(--line); border-radius: 10px; background: var(--surface-2); display: grid; place-items: center; text-align: center; padding: 10px; }
+/* Tài sản chợ: scope riêng, không thay đổi bảng ở các màn khác. */
+.asset-table-card { overflow: hidden; }
+.asset-table-head { min-height: 50px; padding: 12px 16px; align-items: center; }
+.asset-table-head h3 { margin: 0; }
+.asset-table-head .small { margin-left: auto; white-space: nowrap; }
+.asset-table-wrap { overflow-x: auto; }
+.asset-table { width: 100%; min-width: 920px; table-layout: fixed; border-collapse: collapse; }
+.asset-table .asset-col-code { width: 13%; }
+.asset-table .asset-col-name { width: 20%; }
+.asset-table .asset-col-category { width: 11%; }
+.asset-table .asset-col-location { width: 22%; }
+.asset-table .asset-col-status { width: 13%; }
+.asset-table .asset-col-incidents { width: 13%; }
+.asset-table .asset-col-actions { width: 8%; }
+.asset-table th { padding: 10px 12px; background: var(--surface-2); color: var(--ink-2); font-weight: 600; font-size: var(--font-size-sm); line-height: 1.2; vertical-align: middle; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.asset-table td { height: 46px; padding: 8px 12px; vertical-align: middle; border-bottom: 1px solid var(--line); color: var(--ink); }
+.asset-table tbody tr:last-child td { border-bottom: 0; }
+.asset-table-row { cursor: pointer; transition: background .12s ease; }
+.asset-table-row:hover { background: #f7faff; }
+.asset-table .asset-code { font-weight: 600; white-space: nowrap; }
+.asset-table .asset-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asset-table .asset-cell-center { text-align: center; }
+.asset-table .tag { min-width: 86px; min-height: 24px; justify-content: center; padding: 3px 8px; }
+.asset-table .asset-incident { min-width: 0; }
+.asset-table .asset-view-btn { min-width: 48px; height: 28px; padding: 3px 10px; }
 .kpi { padding: 14px 16px; }
 .kpi .k-label { font-size: var(--font-size-sm); color: var(--muted); }
 .kpi .k-value { font-size: var(--font-size-kpi); font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
@@ -507,6 +538,9 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 /* Tất cả màn từng dùng drawer nay dùng một pop-up trung tâm: cùng chiều rộng, shadow, radius,
    overflow và animation với modal hệ thống; các class chuyên biệt chỉ tinh chỉnh bề rộng nội dung. */
 .drawer { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(720px, 94vw); max-height: calc(100vh - 48px); background: #fff; border-radius: 14px; box-shadow: 0 20px 60px rgba(0,0,0,.25); display: flex; flex-direction: column; z-index: 101; overflow: hidden; animation: popupIn .18s ease-out; }
+/* Chi tiết tài sản luôn dùng cùng một canvas để việc đổi tab/nội dung không làm pop-up nhảy chiều cao. */
+.drawer.asset-detail-drawer { width: min(720px, calc(100vw - 32px)); height: min(560px, calc(100vh - 32px)); max-height: none; }
+.asset-detail-drawer .drawer-b { min-height: 0; }
 @keyframes popupIn { from { opacity: 0; transform: translate(-50%, -47%) scale(.98); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
 .drawer-h { padding: 16px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; }
 /* Chuẩn hóa title drawer về đúng token SECTION/CARD TITLE (md) — trước đây mỗi nơi gọi drawer tự

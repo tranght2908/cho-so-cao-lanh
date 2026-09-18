@@ -587,6 +587,48 @@ window.DATA = (function () {
       };
     });
 
+    // Tài sản chợ V1 — prototype FE cho Chợ Cao Lãnh. NEED_CONFIRMATION: danh mục
+    // và taxonomy trạng thái chính thức cần được xác nhận với khách hàng.
+    const marketAssets = [
+      ['AST-CL-001','TS-DEN-01','Đèn chiếu sáng','ELECTRICAL','Khu A - Dãy 1','ACTIVE','2024-03-15','2026-12-15','Đèn lối đi khu A','Hoạt động ổn định sau bảo trì định kỳ.'],
+      ['AST-CL-002','TS-DEN-02','Đèn chiếu sáng','ELECTRICAL','Khu B - Dãy 2','ISSUE','2024-03-15','2026-09-20','Đèn lối đi khu B','Đang liên kết phản ánh hỏng đèn.'],
+      ['AST-CL-003','TS-NUOC-01','Đường ống nước','WATER','Khu A - Tuyến chính','MAINTENANCE','2023-06-20','2026-09-18','Tuyến cấp nước khu A','Đang bảo trì cục bộ.'],
+      ['AST-CL-004','TS-NUOC-02','Vòi nước công cộng','WATER','Khu C - Lối đi','ACTIVE','2025-01-12','2026-10-05','Vòi nước phục vụ vệ sinh',''],
+      ['AST-CL-005','TS-PCCC-01','Bình chữa cháy','FIRE_SAFETY','Khu A - Cổng chính','ACTIVE','2024-01-10','2026-09-28','Bình chữa cháy bột ABC',''],
+      ['AST-CL-006','TS-PCCC-02','Tủ báo cháy','FIRE_SAFETY','Khu B - Hành lang','ISSUE','2024-02-08',null,'Tủ điều khiển báo cháy','Đang có phản ánh cần kiểm tra.'],
+      ['AST-CL-007','TS-CAM-01','Camera giám sát','SECURITY','Khu B - Dãy 3','ACTIVE','2024-05-11','2026-11-15','Camera quan sát lối đi',''],
+      ['AST-CL-008','TS-CAM-02','Camera giám sát','SECURITY','Khu C - Cổng phụ','INACTIVE','2022-08-19',null,'Camera cổng phụ','Ngừng hoạt động, chờ thay thế.'],
+      ['AST-CL-009','TS-QUAT-01','Quạt thông gió','VENTILATION','Nhà lồng A','ACTIVE','2024-07-03','2026-10-10','Quạt thông gió nhà lồng',''],
+      ['AST-CL-010','TS-QUAT-02','Quạt thông gió','VENTILATION','Nhà lồng B','MAINTENANCE','2023-11-25','2026-09-16','Quạt thông gió nhà lồng','Bảo trì motor.'],
+      ['AST-CL-011','TS-VS-01','Thùng rác công cộng','SANITATION','Khu C - Lối đi','ACTIVE','2025-02-14',null,'Thùng rác phân loại',''],
+      ['AST-CL-012','TS-VS-02','Bồn rửa tay','SANITATION','Khu A - Nhà vệ sinh','ISSUE','2024-09-01','2026-09-22','Bồn rửa tay công cộng','Cần kiểm tra van cấp nước.'],
+      ['AST-CL-013','TS-MAI-01','Mái che lối đi','OTHER','Khu B - Dãy ngoài','ACTIVE','2023-04-18','2026-10-01','Mái che lối đi',''],
+      ['AST-CL-014','TS-DIEN-01','Tủ điện tổng','ELECTRICAL','Khu A - Phòng kỹ thuật','ACTIVE','2023-02-27','2026-12-01','Tủ điện phân phối','']
+    ].map(x => ({ id:x[0], code:x[1], name:x[2], category:x[3], market:'CL', locationLabel:x[4], status:x[5], installedAt:x[6], maintenanceDueDate:x[7], description:x[8], note:x[9], maintenanceHistory:[], incidents:[], images:[], createdAt:'2026-01-01', updatedAt:'2026-09-13' }));
+    // Mock detail độc lập của Tài sản chợ V1; KHÔNG phải bản ghi của module Phản ánh & sự cố.
+    const assetDetails = {
+      'AST-CL-001': { lastMaintenanceAt:'2026-06-15', incidents:[
+        {id:'SC-DEMO-001', title:'Đèn chiếu sáng chập chờn', created:'2026-03-10', state:'hoanthanh', assigneeName:'Nguyễn Văn A', description:'Kiểm tra đường dây và thay bóng đèn.'},
+        {id:'SC-DEMO-002', title:'Đèn khu vực không sáng', created:'2026-06-12', state:'dong', assigneeName:'Nguyễn Văn A', description:'Thay bóng và kiểm tra nguồn điện.'}
+      ], maintenanceHistory:[
+        {id:'BT-001', title:'Kiểm tra hệ thống chiếu sáng', date:'2026-03-10', status:'COMPLETED', description:'Kiểm tra nguồn điện, dây dẫn và bóng đèn.'},
+        {id:'BT-002', title:'Thay bóng đèn', date:'2026-06-15', status:'COMPLETED', description:'Thay bóng hỏng và vệ sinh bộ đèn.'},
+        {id:'BT-003', title:'Kiểm tra định kỳ', date:'2026-12-15', status:'PLANNED', description:'Kiểm tra theo lịch dự kiến.'}
+      ], images:['Đèn chiếu sáng - Khu A · Tình trạng sau bảo trì · 15/06/2026','Tủ đèn lối đi - Khu A · 15/06/2026'] },
+      'AST-CL-002': { incidents:[
+        {id:'SC-DEMO-003', title:'Đèn lối đi khu B không hoạt động', created:'2026-09-12', state:'dangxuly', assigneeName:'Nguyễn Văn A', description:'Đang kiểm tra nguồn cấp điện.'},
+        {id:'SC-DEMO-004', title:'Đèn khu B chập chờn', created:'2026-05-20', state:'hoanthanh', assigneeName:'Nguyễn Văn A', description:'Đã thay bóng đèn và kiểm tra đầu nối.'}
+      ], maintenanceHistory:[{id:'BT-004',title:'Kiểm tra nguồn cấp đèn',date:'2026-09-12',status:'IN_PROGRESS',description:'Đang thực hiện.'}] },
+      'AST-CL-003': { incidents:[{id:'SC-DEMO-005',title:'Đường ống nước khu A rò rỉ',created:'2026-09-11',state:'dangxuly',assigneeName:'Trần Văn B',description:'Đang khoanh vùng và thay đoạn ống hỏng.'}], maintenanceHistory:[
+        {id:'BT-005',title:'Kiểm tra đường ống nước',date:'2026-03-10',status:'COMPLETED',description:'Kiểm tra áp lực và mối nối.'},
+        {id:'BT-006',title:'Bảo trì tuyến cấp nước khu A',date:'2026-09-12',status:'IN_PROGRESS',description:'Thay đoạn ống bị rò.'}
+      ] },
+      'AST-CL-005': { lastMaintenanceAt:'2026-06-01', maintenanceHistory:[{id:'BT-007',title:'Kiểm định bình chữa cháy',date:'2026-06-01',status:'COMPLETED',description:'Kiểm tra niêm phong và áp suất bình.'}] },
+      'AST-CL-007': { images:['Camera giám sát - Khu B · Góc quan sát dãy 3 · 01/08/2026','Camera giám sát - Khu B · Tủ kết nối · 01/08/2026'] },
+      'AST-CL-008': { maintenanceHistory:[{id:'BT-008',title:'Kiểm tra camera cổng phụ',date:'2026-08-20',status:'COMPLETED',description:'Ghi nhận thiết bị ngừng hoạt động, chờ thay thế.'}] }
+    };
+    marketAssets.forEach(a => Object.assign(a, assetDetails[a.id] || {}));
+
     // ---- Thông báo đã gửi ----
     const notifications = [
       { id: 'TB-031', at: '2026-09-01', title: 'Phát hành khoản phải thu kỳ 09/2026', group: 'Toàn bộ tiểu thương', channels: ['Mini app', 'Zalo OA'], sent: 0, delivered: 0.97, read: 0.81, auto: true },
@@ -904,7 +946,7 @@ window.DATA = (function () {
       };
     });
     return {
-      version: VERSION, today: iso(TODAY), stalls, traders, contracts, invoices, payments, readings, incidents,
+      version: VERSION, today: iso(TODAY), stalls, traders, contracts, invoices, payments, readings, incidents, marketAssets,
       notifications, sessions, marketSessions, sessionRegistrations, sessionPayments, sessionReceipts, sessionNotifications, sessionAttendances, sessionReplacements, bank, months, audit, issuedPeriods: PERIODS.slice(), extraLog: [],
       meterPeriods: METER_PERIODS, meterAdjustRequests: [], receivableAdjustRequests: [],
       cashDeposits, cashConfirms, billingPeriods: BILLING_PERIODS,

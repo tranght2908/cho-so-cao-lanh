@@ -61,6 +61,41 @@
     </section>`;
   }
 
+  // Draft vehicles have no id or traderId and are never persisted until the
+  // wizard has successfully created its trader profile.
+  function draftSection(draft, actions) {
+    const list = Array.isArray(draft.vehicles) ? draft.vehicles : [];
+    return `<section class="tt-detail-card trader-vehicle-card" style="margin-top:14px">
+      <div class="tt-detail-card-h"><span>🛵</span><div><b>PHƯƠNG TIỆN ĐĂNG KÝ</b><div class="small muted">Không bắt buộc</div></div></div>
+      <div class="small muted" style="margin:8px 0 10px">Có thể khai báo phương tiện của tiểu thương ngay khi tạo hồ sơ. Thông tin này có thể cập nhật sau.</div>
+      ${list.length ? `<div class="vehicle-list">${list.map((v, i) => { const tt = typeOf(v.type); return `<div class="vehicle-row"><span class="vehicle-icon">${tt.icon}</span><div><b>${tt.label}</b><div>${esc(v.plateNumber || 'Không có biển số')}</div>${v.description ? `<small>${esc(v.description)}</small>` : ''}</div><span class="spacer"></span><button class="btn sm" data-act="${actions.edit}" data-index="${i}">Sửa</button><button class="btn sm" data-act="${actions.remove}" data-index="${i}">Xóa</button></div>`; }).join('')}</div>` : '<div class="empty small">Chưa có phương tiện được thêm.</div>'}
+      <div style="margin-top:10px"><button class="btn sm" data-act="${actions.add}">+ Thêm phương tiện</button></div>
+    </section>`;
+  }
+  let draftEditor = null;
+  function openDraftModal(draft, index, onDone) {
+    const list = Array.isArray(draft.vehicles) ? draft.vehicles : (draft.vehicles = []);
+    const editing = Number.isInteger(index) && index >= 0 && index < list.length;
+    const x = editing ? list[index] : { type: 'MOTORBIKE', plateNumber: '', description: '', note: '' };
+    draftEditor = { draft, index: editing ? index : null, onDone };
+    A.modal(A.mHead(editing ? 'Sửa phương tiện' : 'Thêm phương tiện') + `<div class="modal-b"><div class="form-grid"><div class="field"><label>Loại phương tiện *</label><select class="input" id="vehicle-draft-type">${Object.keys(TYPES).map(k => `<option value="${k}" ${x.type === k ? 'selected' : ''}>${TYPES[k].label}</option>`).join('')}</select></div><div class="field"><label>Biển số</label><input class="input" id="vehicle-draft-plate" value="${esc(x.plateNumber)}" placeholder="Ví dụ: 66-P1 123.45"></div><div class="field"><label>Mô tả</label><input class="input" id="vehicle-draft-description" value="${esc(x.description)}" placeholder="Ví dụ: Honda Vision"></div><div class="field"><label>Ghi chú</label><input class="input" id="vehicle-draft-note" value="${esc(x.note)}" placeholder="Không bắt buộc"></div></div><div class="note info">Xe đạp có thể không có biển số. Phương tiện chỉ được lưu cùng hồ sơ sau khi bạn bấm Lưu hồ sơ.</div></div><div class="modal-f"><button class="btn" data-act="vehicle-draft-cancel">Hủy</button><button class="btn primary" data-act="vehicle-draft-save">${editing ? 'Lưu thay đổi' : 'Thêm phương tiện'}</button></div>`, true);
+  }
+  function finishDraftEditor() {
+    const done = draftEditor && draftEditor.onDone;
+    draftEditor = null;
+    if (done) done();
+  }
+  function persistDrafts(trader, drafts) {
+    if (!trader || !trader.id || !Array.isArray(drafts)) return [];
+    const created = [];
+    drafts.forEach(v => {
+      if (!v || !v.type || !TYPES[v.type]) return;
+      const record = { id: nextId(), traderId: trader.id, market: trader.market, type: v.type, plateNumber: String(v.plateNumber || '').trim(), description: String(v.description || '').trim(), note: String(v.note || '').trim(), status: 'ACTIVE', createdAt: U.today(), updatedAt: U.today() };
+      db().push(record); created.push(record);
+    });
+    return created;
+  }
+
   function vehicleModal(v, trader) {
     const isEdit = !!v;
     const canEdit = A.canDo('tieu-thuong.them-moi', trader.market);
@@ -84,6 +119,15 @@
     const v = db().find(x => x.id === el.dataset.id), t = v && A.idx.trader.get(v.traderId);
     if (!v || !t || !A.canDo('tieu-thuong.them-moi', t.market)) return;
     v.status = 'INACTIVE'; v.updatedAt = U.today(); A.save(); reopenTrader(t.id); U.toast('Đã ngừng sử dụng phương tiện; lịch sử vẫn được giữ.');
+  };
+  A.ACT['vehicle-draft-cancel'] = () => finishDraftEditor();
+  A.ACT['vehicle-draft-save'] = () => {
+    if (!draftEditor) return;
+    const type = A.$('#vehicle-draft-type').value;
+    if (!type || !TYPES[type]) return U.toast('Vui lòng chọn loại phương tiện.');
+    const vehicle = { type, plateNumber: A.$('#vehicle-draft-plate').value.trim(), description: A.$('#vehicle-draft-description').value.trim(), note: A.$('#vehicle-draft-note').value.trim() };
+    if (draftEditor.index == null) draftEditor.draft.vehicles.push(vehicle); else draftEditor.draft.vehicles[draftEditor.index] = vehicle;
+    finishDraftEditor();
   };
 
   function selectedVehicleIds() { return Array.from(document.querySelectorAll('#ct-vehicle-panel input[type="checkbox"]:checked')).map(x => x.value); }
@@ -114,6 +158,6 @@
     if (created) { created.vehicleFeeSnapshot = picked; A.save(); }
   };
 
-  A.VEHICLES = { TYPES, list: vehiclesFor, price: vehiclePrice, traderSection, renderContractVehicles };
+  A.VEHICLES = { TYPES, list: vehiclesFor, price: vehiclePrice, traderSection, renderContractVehicles, draftSection, openDraftModal, persistDrafts };
   ensureDemoData();
 })(window.APP);

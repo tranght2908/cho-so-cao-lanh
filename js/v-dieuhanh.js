@@ -1163,7 +1163,14 @@
     const parts = Object.keys(D.STATUS).filter(k => c(k)).map(k => `${c(k)} ${D.STATUS[k].label.toLowerCase()}`);
     return parts.length ? parts.join(' · ') : 'Chưa có điểm kinh doanh';
   }
-  function mbRentalLine(stalls) {
+  // Phân loại mô hình thuê chỉ thuộc Chợ quê Tân Thuận Đông.  Các summary,
+  // tooltip và panel của Mặt bằng chợ đều đi qua các helper này để CL không
+  // vô tình hiện lại terminology fixed/session ở một level drill-down khác.
+  function mbRentalLabel(st) {
+    return st && st.market === 'TTD' ? U.rentalLabel(st) : '';
+  }
+  function mbRentalLine(mid, stalls) {
+    if (mid !== 'TTD') return '';
     const fixed = stalls.filter(st => U.rentalKind(st) === 'fixed').length;
     const session = stalls.filter(st => U.rentalKind(st) === 'session').length;
     const parts = [];
@@ -1171,10 +1178,13 @@
     if (session) parts.push(`${session} quầy theo phiên/vãng lai`);
     return parts.join(' · ');
   }
-  function mbMetaLine(stalls) {
-    const rent = mbRentalLine(stalls);
+  function mbMetaLine(mid, stalls) {
+    const rent = mbRentalLine(mid, stalls);
     const status = mbStatusLine(stalls);
     return rent ? rent + ' · ' + status : status;
+  }
+  function mbPointTitle(st, trader, structural) {
+    return [st.code, mbRentalLabel(st), D.STATUS[st.status].label, trader ? U.esc(trader.name) : '', structural ? 'Đã tách' : ''].filter(Boolean).join(' · ');
   }
   A.mbResolveZoneContext = function (mid, zone) {
     const market = U.market(mid);
@@ -1225,7 +1235,7 @@
     floor.zones.forEach(z => stalls.push.apply(stalls, mbZoneStalls(mid, z)));
     return `<div class="mb-floor-heading">
         <button class="mb-floor-heading-btn" data-act="mb-sel-floor" data-id="${floor.key}">${U.esc(floor.name)}</button>
-        <span class="spacer"></span><span class="mb-floor-heading-meta">${stalls.length} điểm KD · ${mbMetaLine(stalls)}</span>
+        <span class="spacer"></span><span class="mb-floor-heading-meta">${stalls.length} điểm KD · ${mbMetaLine(mid, stalls)}</span>
       </div>${zonesHtml}`;
   }
   // ---- Tổng quan toàn chợ (mục 1/2/3 hotfix — cùng visual language mọi cấp): mỗi khối 1 card,
@@ -1239,7 +1249,7 @@
       b.floors.forEach(f => f.zones.forEach(z => stalls.push.apply(stalls, mbZoneStalls(mid, z))));
       const multi = b.floors.length > 1;
       const body = b.floors.length ? b.floors.map(f => mbFloorGroupHtml(mid, f, multi)).join('') : '<div class="empty small">Chưa có tầng</div>';
-      return `<div class="card"><div class="card-h mb-ov-clickable" data-act="mb-sel-block" data-id="${b.key}"><h3>${U.esc(b.name)}</h3><span class="small muted">${stalls.length} điểm KD${mbRentalLine(stalls) ? ' · ' + mbRentalLine(stalls) : ''}</span></div>
+      return `<div class="card"><div class="card-h mb-ov-clickable" data-act="mb-sel-block" data-id="${b.key}"><h3>${U.esc(b.name)}</h3><span class="small muted">${stalls.length} điểm KD${mbRentalLine(mid, stalls) ? ' · ' + mbRentalLine(mid, stalls) : ''}</span></div>
         <div class="card-b"><div class="plan">${body}</div></div></div>`;
     }).join('')}</div>`;
   };
@@ -1250,7 +1260,7 @@
     block.floors.forEach(f => f.zones.forEach(z => stalls.push.apply(stalls, mbZoneStalls(mid, z))));
     const multi = block.floors.length > 1;
     const body = block.floors.length ? block.floors.map(f => mbFloorGroupHtml(mid, f, multi)).join('') : '<div class="empty small">Chưa có tầng</div>';
-    return `<div class="card"><div class="card-h"><h3>${U.esc(block.name)}</h3><span class="small muted">${stalls.length} điểm KD${mbRentalLine(stalls) ? ' · ' + mbRentalLine(stalls) : ''}</span></div>
+    return `<div class="card"><div class="card-h"><h3>${U.esc(block.name)}</h3><span class="small muted">${stalls.length} điểm KD${mbRentalLine(mid, stalls) ? ' · ' + mbRentalLine(mid, stalls) : ''}</span></div>
       <div class="card-b"><div class="plan">${body}</div></div></div>`;
   };
   // ---- Tầng: sơ đồ TOÀN BỘ điểm KD của TẤT CẢ khu thuộc tầng, mỗi khu tách thành 1 .plan-section
@@ -1259,7 +1269,7 @@
   A.mbFloorHtml = function (mid, floor) {
     const stalls = [];
     floor.zones.forEach(z => stalls.push.apply(stalls, mbZoneStalls(mid, z)));
-    return `<div class="card"><div class="card-h"><h3>${U.esc(floor.name)}</h3><span class="small muted">${stalls.length} điểm KD · ${mbMetaLine(stalls)}</span></div>
+    return `<div class="card"><div class="card-h"><h3>${U.esc(floor.name)}</h3><span class="small muted">${stalls.length} điểm KD · ${mbMetaLine(mid, stalls)}</span></div>
       <div class="card-b"><div class="plan">${mbFloorZonesHtml(mid, floor)}</div></div></div>`;
   };
   // 1 khu, dạng compact (không bọc .card riêng) để nhúng nhiều khu liên tiếp trong view Tầng —
@@ -1278,10 +1288,10 @@
         const t = st.traderId ? A.idx.trader.get(st.traderId) : null;
         // `data-id` stays the technical id; `code` is the human-facing point code.
         const structural = st.structuralStatus === 'SPLIT';
-        return `<button class="cell s-${st.status} ${sec.type === 'kiot' ? 'kiot' : ''} ${structural ? 'dim' : ''}" data-act="stall" data-id="${st.id}" title="${st.code} · ${U.rentalLabel(st)} · ${D.STATUS[st.status].label}${t ? ' · ' + U.esc(t.name) : ''}${structural ? ' · Đã tách' : ''}">${st.code}</button>`;
+        return `<button class="cell s-${st.status} ${sec.type === 'kiot' ? 'kiot' : ''} ${structural ? 'dim' : ''}" data-act="stall" data-id="${st.id}" title="${mbPointTitle(st, t, structural)}">${st.code}</button>`;
       }).join('')}</div></div>`;
     }).join('<div class="aisle"></div>');
-    return `<div class="plan-section">${head}<div class="small muted" style="margin:-4px 0 8px">${stalls.length} điểm · ${mbMetaLine(stalls)}</div>${rows}</div>`;
+    return `<div class="plan-section">${head}<div class="small muted" style="margin:-4px 0 8px">${stalls.length} điểm · ${mbMetaLine(mid, stalls)}</div>${rows}</div>`;
   }
   // ---- Khu (mục 8): giữ đúng hành vi cũ (legend lọc trạng thái + tìm kiếm + sơ đồ đầy đủ). ----
   A.mbZoneDiagramHtml = function (mid, z, canEditZone) {
@@ -1297,20 +1307,22 @@
     const f = resolved.floor, sec = resolved.section;
     const stalls = A.mbBusinessPointsForZone(mid, z);
     const legend = Object.keys(D.STATUS).map(k => `<button class="${ui.hidden[k] ? 'off' : ''}" data-act="legend" data-s="${k}"><span class="sw" style="background:${D.STATUS[k].color}"></span>${D.STATUS[k].label} <b>${stalls.filter(st => st.status === k).length}</b></button>`).join('');
-    const rentalLegend = `<span class="tag">${stalls.filter(st => U.rentalKind(st) === 'fixed').length} quầy cố định tháng/quý</span> <span class="tag">${stalls.filter(st => U.rentalKind(st) === 'session').length} quầy theo phiên/vãng lai</span>`;
+    const rentalLegend = mid === 'TTD'
+      ? `<span class="tag">${stalls.filter(st => U.rentalKind(st) === 'fixed').length} quầy cố định tháng/quý</span> <span class="tag">${stalls.filter(st => U.rentalKind(st) === 'session').length} quầy theo phiên/vãng lai</span>`
+      : '';
     const rows = sec.rows.map(r => {
       const cells = stalls.filter(st => st.row === r);
       return `<div class="plan-row"><span class="rl">${r}</span><div class="cells" style="--n:${sec.per}">${cells.map(st => {
         const t = st.traderId ? A.idx.trader.get(st.traderId) : null;
         // Search filtering and structural history share the existing dim treatment.
         const dim = st.structuralStatus === 'SPLIT' || !stallMatch(st);
-        return `<button class="cell s-${st.status} ${sec.type === 'kiot' ? 'kiot' : ''} ${dim ? 'dim' : ''} ${ui.sel === st.id ? 'sel' : ''}" data-act="stall" data-id="${st.id}" title="${st.code} · ${U.rentalLabel(st)} · ${D.STATUS[st.status].label}${t ? ' · ' + U.esc(t.name) : ''}${st.structuralStatus === 'SPLIT' ? ' · Đã tách' : ''}">${st.code}</button>`;
+        return `<button class="cell s-${st.status} ${sec.type === 'kiot' ? 'kiot' : ''} ${dim ? 'dim' : ''} ${ui.sel === st.id ? 'sel' : ''}" data-act="stall" data-id="${st.id}" title="${mbPointTitle(st, t, st.structuralStatus === 'SPLIT')}">${st.code}</button>`;
       }).join('')}</div></div>`;
     }).join('<div class="aisle"></div>');
     return `<div class="card"><div class="card-h">
         <h3>${U.esc(sec.name)}</h3><span class="small muted">${stalls.length} điểm · ${U.esc(sec.cat)} · ${f.name}</span>
         <span class="spacer"></span>${editBtn}<input class="input" style="width:220px" placeholder="Tìm mã điểm hoặc tên tiểu thương" data-in="plan-search" value="${U.esc(ui.planSearch)}"></div>
-      <div class="card-b"><div class="legend" style="margin-bottom:10px">${legend}</div><div class="small muted" style="margin:-2px 0 10px">${rentalLegend}</div><div class="plan">${rows}</div></div></div>`;
+      <div class="card-b"><div class="legend" style="margin-bottom:10px">${legend}</div>${rentalLegend ? `<div class="small muted" style="margin:-2px 0 10px">${rentalLegend}</div>` : ''}<div class="plan">${rows}</div></div></div>`;
   };
   function stallMatch(st) {
     const q = ui.planSearch.trim().toLowerCase();
@@ -1381,7 +1393,6 @@
     return `<div class="muted small" style="margin:2px 0 12px">${U.esc(st.sectionName)} · ${U.market(st.market).floors.find(f => f.id === st.floor).name} · ${U.esc(U.market(st.market).name)}</div>
       ${sec('A. Thông tin điểm', `<dl class="kv">
         <dt>Loại điểm</dt><dd>${U.esc(mbStallPointTypeLabel(st))}</dd>
-        <dt>Loại quầy</dt><dd>${U.rentalLabel(st)}</dd>
         <dt>Diện tích</dt><dd>${st.area.toLocaleString('vi-VN')} m²</dd>
         <dt>Ngành hàng</dt><dd>${U.esc(st.cat)}</dd>
         <dt>Đơn giá áp dụng</dt><dd>${U.unitLabel(st)}</dd></dl>`)}

@@ -41,6 +41,7 @@
     // (cau-truc.edit/.delete/.reset, so-do.xem-ho-so/.tao-hop-dong/.doi-trang-thai) GIỮ NGUYÊN —
     // chỉ đổi field screenId (metadata group UI) sang 'mat-bang'.
     { key: 'screen:mat-bang', kind: 'screen', group: 'Điều hành', label: 'Mặt bằng chợ' },
+    { key: 'screen:tai-san', kind: 'screen', group: 'Điều hành', label: 'Tài sản chợ' },
     { key: 'screen:phien-cho', kind: 'screen', group: 'Điều hành', label: 'Phiên chợ quê' },
     { key: 'screen:diem-kd', kind: 'screen', group: 'Tiểu thương & hợp đồng', label: 'Điểm kinh doanh' },
     { key: 'screen:tieu-thuong', kind: 'screen', group: 'Tiểu thương & hợp đồng', label: 'Tiểu thương' },
@@ -65,6 +66,9 @@
     { key: 'action:so-do.xem-ho-so', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Xem hồ sơ tiểu thương từ sơ đồ mặt bằng' },
     { key: 'action:so-do.tao-hop-dong', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Tạo hợp đồng từ sơ đồ mặt bằng' },
     { key: 'action:so-do.doi-trang-thai', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Đổi trạng thái điểm kinh doanh' },
+    // NEED_CONFIRMATION: ma trận quản lý tài sản V1 là seed prototype, vẫn có thể cấu hình động.
+    { key: 'action:tai-san.create', kind: 'action', group: 'Điều hành', screenId: 'tai-san', label: 'Thêm tài sản chợ' },
+    { key: 'action:tai-san.edit', kind: 'action', group: 'Điều hành', screenId: 'tai-san', label: 'Chỉnh sửa tài sản chợ' },
     { key: 'action:phien-cho.tao-phien', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Tạo phiên chợ quê' },
     { key: 'action:phien-cho.mo-dang-ky', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Mở đăng ký phiên chợ quê' },
     { key: 'action:phien-cho.chot-danh-sach', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Chốt danh sách đăng ký phiên chợ quê' },
@@ -219,6 +223,8 @@
       // fresh state này) được xử lý bằng migration tường minh trong mergeIntoCurrentSeed() bên dưới,
       // KHÔNG dùng ma trận này để ghi đè tuỳ biến đã có.
       'mat-bang': ['system_admin', 'ward_leader', 'market_manager', 'market_staff', 'accountant', 'collector', 'technician'],
+      // NEED_CONFIRMATION: nhóm được xem tài sản là giả định prototype V1.
+      'tai-san': ['ward_leader', 'market_manager', 'market_staff', 'technician'],
       'diem-kd': ['system_admin', 'ward_leader', 'market_manager', 'market_staff', 'accountant', 'collector'],
       'phien-cho': ['ward_leader', 'market_manager', 'market_staff', 'collector'],
       'tieu-thuong': ['system_admin', 'ward_leader', 'market_manager', 'market_staff', 'accountant', 'collector'],
@@ -252,6 +258,9 @@
       'so-do.xem-ho-so': ['ward_leader', 'market_manager', 'market_staff', 'accountant', 'collector'],
       'so-do.tao-hop-dong': ['market_manager', 'market_staff'],
       'so-do.doi-trang-thai': ['market_manager', 'market_staff'],
+      // NEED_CONFIRMATION: chỉ BQL được thêm/sửa trong prototype; các role khác chỉ xem.
+      'tai-san.create': ['market_manager'],
+      'tai-san.edit': ['market_manager'],
       'phien-cho.tao-phien': ['market_manager'],
       'phien-cho.mo-dang-ky': ['market_manager'],
       'phien-cho.chot-danh-sach': ['market_manager'],
