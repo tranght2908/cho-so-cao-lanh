@@ -107,9 +107,9 @@
     { key: 'action:tai-khoan.sua', kind: 'action', group: 'Vận hành', screenId: 'tai-khoan', label: 'Sửa thông tin tài khoản' },
     { key: 'action:tai-khoan.khoa-mo-khoa', kind: 'action', group: 'Vận hành', screenId: 'tai-khoan', label: 'Khoá / mở khoá tài khoản' },
     { key: 'action:tai-khoan.gan-quyen', kind: 'action', group: 'Vận hành', screenId: 'tai-khoan', label: 'Gán vai trò / phạm vi chợ cho tài khoản' },
-    { key: 'action:cau-hinh-gia.mat-bang', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Thêm/sửa/vô hiệu hoá đơn giá mặt bằng' },
-    { key: 'action:cau-hinh-gia.dien-nuoc', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Thêm/sửa/vô hiệu hoá giá điện, nước' },
-    { key: 'action:cau-hinh-gia.dich-vu-khac', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Thêm/sửa/vô hiệu hoá dịch vụ khác' },
+    { key: 'action:cau-hinh-gia.them-phi', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Thêm phí mới ở trạng thái chưa áp dụng' },
+    { key: 'action:cau-hinh-gia.ap-dung-phi', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Áp dụng phí mới sau khi phí cũ đã khóa' },
+    { key: 'action:cau-hinh-gia.khoa-mo-phi', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Khóa / mở khóa phí' },
     { key: 'action:tai-khoan-ngan-hang.quan-ly', kind: 'action', group: 'Tài chính', screenId: 'tai-khoan-ngan-hang', label: 'Thêm/sửa/xoá/đổi trạng thái tài khoản ngân hàng' },
     { key: 'action:cai-dat.ky-thu', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Cấu hình kỳ thu' },
     { key: 'action:cai-dat.quy-tac-thu-phi', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Cấu hình quy tắc thu phí' },
@@ -249,12 +249,12 @@
       'tai-khoan.sua': ['system_admin'],
       'tai-khoan.khoa-mo-khoa': ['system_admin'],
       'tai-khoan.gan-quyen': ['system_admin'],
-      // Chính sách nghiệp vụ biểu phí: chỉ system_admin được tạo phiên bản/vô hiệu hoá.
-      // Đây vẫn là seed động RolePermission; view và handler chỉ gọi A.canDo(), không hard-code role.
-      // market_manager/accountant/ward_leader giữ screen permission để tra cứu read-only.
-      'cau-hinh-gia.mat-bang': ['system_admin'],
-      'cau-hinh-gia.dien-nuoc': ['system_admin'],
-      'cau-hinh-gia.dich-vu-khac': ['system_admin'],
+      // Chính sách nghiệp vụ biểu phí: trưởng ban quản lý chợ thêm phí / áp dụng / khóa-mở khóa
+      // trong phạm vi Account.marketScopes + selectedMarket. system_admin không tự có toàn bộ quyền
+      // nghiệp vụ biểu phí.
+      'cau-hinh-gia.them-phi': ['market_manager'],
+      'cau-hinh-gia.ap-dung-phi': ['market_manager'],
+      'cau-hinh-gia.khoa-mo-phi': ['market_manager'],
       // Thêm/sửa/xoá/đổi trạng thái tài khoản ngân hàng: chỉ Quản trị hệ thống (yêu cầu gốc, không
       // có sắc thái khác nhau giữa 4 hành động nên dùng 1 action key duy nhất).
       'tai-khoan-ngan-hang.quan-ly': ['system_admin'],
@@ -314,13 +314,16 @@
   //   v13 = giữ các phần ngoài PC3 đã có ở nhánh local: khoản phải thu yêu cầu điều chỉnh và
   //        mini-app.stall-registration.create. Phiên chợ quê dùng action key PC3 từ bản pull.
   //        Bao gồm cả PC3C-B: action điều phối hộ dự bị thay hộ chính thức vắng mặt.
-  const PERM_SEED_VERSION = 13;
+  //   v14 = vòng đời biểu phí theo nghiệp vụ mới: thêm phí ở trạng thái draft, khóa/mở khóa,
+  //        áp dụng phí mới sau khi phí cũ cùng phạm vi đã khóa; cấp mặc định chỉ cho market_manager.
+  const PERM_SEED_VERSION = 14;
   const RATE_POLICY_PERM_VERSION = 1;
   const BANK_ACCOUNT_PERM_VERSION = 1;
   const PC3A_SESSION_PERM_VERSION = 1;
   const PC3B_REGISTRATION_PERM_VERSION = 1;
   const PC3C_ATTENDANCE_PERM_VERSION = 1;
   const PC3C_REPLACEMENT_PERM_VERSION = 1;
+  const FEE_LIFECYCLE_PERM_VERSION = 1;
   function freshState() {
     return {
       schemaVersion: A.RBAC_SCHEMA,
@@ -331,23 +334,32 @@
       pc3bRegistrationPermVersion: PC3B_REGISTRATION_PERM_VERSION,
       pc3cAttendancePermVersion: PC3C_ATTENDANCE_PERM_VERSION,
       pc3cReplacementPermVersion: PC3C_REPLACEMENT_PERM_VERSION,
+      feeLifecyclePermVersion: FEE_LIFECYCLE_PERM_VERSION,
       roles: defaultRoles(),
       rolePerms: defaultRolePermissions()
     };
   }
-  function migrateRatePolicyPerms(stored) {
-    if (stored.ratePolicyPermVersion >= RATE_POLICY_PERM_VERSION) return false;
-    const rateActionKeys = new Set([
+  function migrateFeeLifecyclePerms(stored) {
+    if (stored.feeLifecyclePermVersion >= FEE_LIFECYCLE_PERM_VERSION) return false;
+    const legacyKeys = new Set([
       'action:cau-hinh-gia.mat-bang',
       'action:cau-hinh-gia.dien-nuoc',
       'action:cau-hinh-gia.dich-vu-khac'
     ]);
-    stored.rolePerms = stored.rolePerms.filter(r => !rateActionKeys.has(r.permKey) || r.roleId === 'system_admin');
-    rateActionKeys.forEach(permKey => {
-      if (!stored.rolePerms.some(r => r.roleId === 'system_admin' && r.permKey === permKey)) {
-        stored.rolePerms.push({ roleId: 'system_admin', permKey: permKey, grantedAt: 'migrate-rate-policy', grantedBy: 'Hệ thống' });
-      }
+    const lifecycleKeys = [
+      'action:cau-hinh-gia.them-phi',
+      'action:cau-hinh-gia.ap-dung-phi',
+      'action:cau-hinh-gia.khoa-mo-phi'
+    ];
+    stored.rolePerms = stored.rolePerms.filter(r => legacyKeys.has(r.permKey) === false && lifecycleKeys.indexOf(r.permKey) === -1);
+    lifecycleKeys.forEach(permKey => {
+      stored.rolePerms.push({ roleId: 'market_manager', permKey: permKey, grantedAt: 'migrate-fee-lifecycle', grantedBy: 'Hệ thống' });
     });
+    stored.feeLifecyclePermVersion = FEE_LIFECYCLE_PERM_VERSION;
+    return true;
+  }
+  function migrateRatePolicyPerms(stored) {
+    if (stored.ratePolicyPermVersion >= RATE_POLICY_PERM_VERSION) return false;
     if (!stored.rolePerms.some(r => r.roleId === 'system_admin' && r.permKey === 'screen:cau-hinh-gia')) {
       stored.rolePerms.push({ roleId: 'system_admin', permKey: 'screen:cau-hinh-gia', grantedAt: 'migrate-rate-policy', grantedBy: 'Hệ thống' });
     }
@@ -452,6 +464,7 @@
     migrateMatBangScreen(stored);
     migrateRatePolicyPerms(stored);
     migrateBankAccountPerms(stored);
+    migrateFeeLifecyclePerms(stored);
     const validKeys = new Set(CATALOG.map(p => p.key));
     stored.rolePerms = stored.rolePerms.filter(r => validKeys.has(r.permKey));
     const knownKeys = new Set(stored.rolePerms.map(r => r.permKey));
@@ -513,6 +526,13 @@
     if (migratePc3cReplacementPerms(s)) needSave = true;
     if (migrateRatePolicyPerms(s)) needSave = true;
     if (migrateBankAccountPerms(s)) needSave = true;
+    if (migrateFeeLifecyclePerms(s)) needSave = true;
+    {
+      const validKeys = new Set(CATALOG.map(p => p.key));
+      const before = s.rolePerms.length;
+      s.rolePerms = s.rolePerms.filter(r => validKeys.has(r.permKey));
+      if (s.rolePerms.length !== before) needSave = true;
+    }
     // Cùng lý do Hotfix persist migration ở trên: ghi lại NGAY nếu vừa merge (seedVersion đổi),
     // không chờ tới lượt grant/revoke đầu tiên — STATE vẫn đang TDZ nên không gọi saveState().
     if (needSave) { try { localStorage.setItem(PKEY, JSON.stringify(s)); } catch (e) { /* bỏ qua */ } }

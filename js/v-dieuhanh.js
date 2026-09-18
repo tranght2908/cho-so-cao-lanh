@@ -62,6 +62,7 @@
   function currentAccountId() { const a = A.currentAccount && A.currentAccount(); return a ? a.id : null; }
   function currentAccountName() { const a = A.currentAccount && A.currentAccount(); return a ? a.fullName : 'Không rõ'; }
   function sessionIdForDate(date) { return 'PC-TTD-' + String(date || '').replace(/-/g, ''); }
+  function sessionDateFilter() { return ui.sessionDateFilter || U.today(); }
   function sessionLabel(s) { return U.dmy(s && s.date); }
   function sessionShortLabel(s) { return sessionLabel(s).slice(0, 5); }
   function hasClosingMetrics(s) {
@@ -177,7 +178,20 @@
   function sessionById(id) {
     return A.db.sessions.find(s => s && (s.id === id || (!s.id && s.date && sessionIdForDate(s.date) === id)));
   }
+  function canHardDeleteSession(s) {
+    if (!s || s.market !== TTD_SESSION_MARKET || !canDoSessionAction('phien-cho.huy-phien', s)) return false;
+    const sid = s.id;
+    const regIds = new Set((A.db.sessionRegistrations || []).filter(r => r.sessionId === sid).map(r => r.id));
+    const hasMoney = (A.db.sessionPayments || []).some(p => p.sessionId === sid && p.status !== 'WAITING_PAYMENT' && p.status !== 'WAITING_COLLECTION')
+      || (A.db.sessionReceipts || []).some(r => r.sessionId === sid)
+      || (A.db.payments || []).some(p => p.sessionId === sid)
+      || (A.db.bank || []).some(b => b.sessionId === sid || (b.sourceType === 'SESSION_REGISTRATION' && regIds.has(b.receivableId)));
+    const hasOps = (A.db.sessionAttendances || []).some(a => a.sessionId === sid) || (A.db.sessionReplacements || []).some(r => r.sessionId === sid);
+    return !hasMoney && !hasOps && s.status !== 'closed';
+  }
   function activeTtdSession() {
+    const focused = ui.sessionFocusId && sessionById(ui.sessionFocusId);
+    if (focused && focused.market === TTD_SESSION_MARKET) return sessionReadModel(focused);
     const live = ttdSessionReadModels().filter(s => s.status !== 'closed' && s.status !== 'cancelled')
       .sort((a, b) => a.date.localeCompare(b.date));
     return live[0] || null;
@@ -187,6 +201,9 @@
   }
   function hasSessionDate(date, excludeId) {
     return A.db.sessions.some(s => s && s.date === date && s.id !== excludeId);
+  }
+  function sessionByDate(date) {
+    return ttdSessionReadModels().filter(s => s.date === date).sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
   }
   function registrationDeadlineForDate(date) {
     const d = parseIsoDate(date);
@@ -301,6 +318,9 @@
   function registrationById(id) {
     return sessionRegistrations().find(r => r && r.id === id) || null;
   }
+  function isOfficialRegistration(r) {
+    return !!(r && r.listType === 'official' && (r.status === 'approved' || r.paymentWorkflowStatus === 'CONFIRMED'));
+  }
   function registrationReadModels(session) {
     if (!session) return [];
     const points = ttdBusinessPoints() || [];
@@ -312,7 +332,7 @@
       const trader = traderById(r.traderId);
       if (!trader || trader.market !== TTD_SESSION_MARKET) return false;
       if (r.status === 'registered' || r.status === 'rejected' || r.status === 'withdrawn') return !r.pointId || !!pointMap.get(r.pointId);
-      if (r.status === 'approved' || r.listType === 'official') return !!pointMap.get(r.pointId);
+      if (isOfficialRegistration(r)) return !r.pointId || !!pointMap.get(r.pointId);
       if (r.status === 'waitlisted' || r.listType === 'waitlist') return !r.pointId || !!pointMap.get(r.pointId);
       return false;
     }).map(r => {
@@ -328,9 +348,10 @@
     }).filter(r => !r.duplicate);
   }
   function sessionRegistrationBuckets(session) {
+    if (A.syncPaidSessionRegistrationsToOfficial) A.syncPaidSessionRegistrationsToOfficial();
     const rows = registrationReadModels(session);
     const pending = rows.filter(r => r.status === 'registered');
-    const official = rows.filter(r => r.listType === 'official' && r.status === 'approved');
+    const official = rows.filter(isOfficialRegistration);
     const waitlist = rows.filter(r => r.listType === 'waitlist' && r.status === 'waitlisted')
       .sort((a, b) => Number(a.waitlistOrder || 9999) - Number(b.waitlistOrder || 9999));
     const inactive = rows.filter(r => r.status === 'rejected' || r.status === 'withdrawn');
@@ -409,12 +430,14 @@
       if (traderSet.has(r.traderId)) return { ok: false, reason: 'Có tiểu thương đăng ký trùng trong phiên' };
       traderSet.add(r.traderId);
       if (r.status === 'registered') return { ok: false, reason: 'Còn đăng ký chờ xử lý' };
-      if (r.status === 'approved' || r.listType === 'official') {
-        const point = ttdPointById(r.pointId);
-        if (!point) return { ok: false, reason: 'Danh sách chính thức có điểm không hợp lệ' };
-        if (pointSet.has(r.pointId)) return { ok: false, reason: 'Có điểm chính thức bị trùng' };
-        pointSet.add(r.pointId);
-        if (r.status === 'approved' && r.listType === 'official') officialCount += 1;
+      if (isOfficialRegistration(r)) {
+        if (r.pointId) {
+          const point = ttdPointById(r.pointId);
+          if (!point) return { ok: false, reason: 'Danh sách chính thức có điểm không hợp lệ' };
+          if (pointSet.has(r.pointId)) return { ok: false, reason: 'Có điểm chính thức bị trùng' };
+          pointSet.add(r.pointId);
+        }
+        officialCount += 1;
       }
       if (r.status === 'waitlisted' || r.listType === 'waitlist') {
         const n = Number(r.waitlistOrder);
@@ -1503,6 +1526,28 @@
         ${attendanceHtml(s)}
       </div></div>`;
   }
+  function sessionDayListHtml() {
+    const date = sessionDateFilter();
+    const rows = sessionByDate(date);
+    const canCreate = A.canDo('phien-cho.tao-phien', TTD_SESSION_MARKET);
+    return `<div class="card"><div class="card-h"><div><h3>Phiên trong ngày</h3><div class="small muted">Dùng để kiểm tra các phiên đã có trước khi tạo lại luồng test.</div></div></div>
+      <div class="card-b">
+        <div class="row" style="gap:10px;flex-wrap:wrap;margin-bottom:10px">
+          <div class="field" style="min-width:220px"><label>Ngày phiên</label><input class="input" type="date" data-ch="session-date-filter" value="${U.esc(date)}"></div>
+          ${canCreate ? '<button class="btn sm primary" data-act="session-create">Tạo phiên mới</button>' : ''}
+        </div>
+        ${U.table([{ t: 'Ngày' }, { t: 'Giờ' }, { t: 'Trạng thái' }, { t: 'Đăng ký' }, { t: 'Ghi chú' }, { t: '' }],
+          rows.map(s => {
+            const regs = (A.db.sessionRegistrations || []).filter(r => r.sessionId === s.id);
+            const canDelete = canHardDeleteSession(s);
+            return `<tr><td>${U.dmy(s.date)}</td><td>${U.esc((s.startTime || '—') + ' - ' + (s.endTime || '—'))}</td><td>${sessionStatusTag(s)}</td>
+              <td>${regs.length.toLocaleString('vi-VN')}</td><td class="small">${U.esc(s.note || '—')}</td>
+              <td class="nowrap"><button class="btn sm" data-act="session-focus" data-id="${s.id}">Xem</button>
+                ${canDelete ? `<button class="btn sm danger" data-act="session-delete-open" data-id="${s.id}">Xóa test</button>` : ''}
+              </td></tr>`;
+          }), { empty: 'Chưa có phiên nào trong ngày này.' })}
+      </div></div>`;
+  }
   A.VIEWS['phien-cho'] = function () {
     const ss = ttdSessionReadModels();
     const historical = ss.filter(s => s.status === 'closed').sort((a, b) => a.date.localeCompare(b.date));
@@ -1510,10 +1555,9 @@
     const last = latestClosedSession(ss);
     const active = activeTtdSession();
     const k = (l, v, s) => `<div class="card kpi"><div class="k-label">${l}</div><div class="k-value">${v}</div><div class="k-sub">${s}</div></div>`;
-    const canCreate = A.canDo('phien-cho.tao-phien', TTD_SESSION_MARKET);
     return `
     <div class="note info">Phiên chợ quê được quản lý theo từng ngày phiên: đăng ký quầy, vận hành, điểm danh và chốt kết quả.</div>
-    ${canCreate ? '<div class="row"><button class="btn primary" data-act="session-create">Tạo phiên mới</button></div>' : ''}
+    ${sessionDayListHtml()}
     ${sessionOpsHtml(active)}
     <div class="card"><div class="card-h"><h3>Tổng quan phiên gần nhất đã chốt</h3></div><div class="card-b">
       ${last ? `<div class="kpis">
@@ -1533,7 +1577,39 @@
       </div></div>
     </div></div></div>`;
   };
+  A.CH['session-date-filter'] = el => { ui.sessionDateFilter = el.value || U.today(); A.render(); };
   Object.assign(A.ACT, {
+    'session-focus': el => {
+      const s = sessionById(el.dataset.id);
+      if (!s || s.market !== TTD_SESSION_MARKET) return;
+      ui.sessionFocusId = s.id || sessionIdForDate(s.date);
+      ui.sessionDateFilter = s.date || sessionDateFilter();
+      A.render();
+    },
+    'session-delete-open': el => {
+      const s = sessionById(el.dataset.id);
+      if (!s || !canHardDeleteSession(s)) { U.toast('Chỉ xóa test khi phiên chưa phát sinh thanh toán, biên lai, điểm danh hoặc điều phối'); return; }
+      const regs = (A.db.sessionRegistrations || []).filter(r => r.sessionId === s.id);
+      A.modal(A.mHead('Xóa phiên test') + `<div class="modal-b">
+        <div class="note warn">Thao tác này chỉ dùng cho FE prototype để tạo lại luồng test. Phiên đã phát sinh thanh toán, biên lai, sao kê, điểm danh hoặc điều phối sẽ bị chặn xóa cứng.</div>
+        <dl class="kv" style="margin-top:10px"><dt>Ngày phiên</dt><dd>${U.dmy(s.date)}</dd><dt>Trạng thái</dt><dd>${SESSION_STATUS[s.status] || s.status}</dd><dt>Đăng ký sẽ xóa kèm</dt><dd>${regs.length.toLocaleString('vi-VN')}</dd></dl>
+      </div><div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn danger" data-act="session-delete-save" data-id="${s.id}">Xóa phiên test</button></div>`);
+    },
+    'session-delete-save': el => {
+      const s = sessionById(el.dataset.id);
+      if (!s || !canHardDeleteSession(s)) { U.toast('Không thể xóa: phiên đã phát sinh dữ liệu nghiệp vụ hoặc bạn không có quyền'); return; }
+      const sid = s.id;
+      const regIds = new Set((A.db.sessionRegistrations || []).filter(r => r.sessionId === sid).map(r => r.id));
+      A.db.sessions = (A.db.sessions || []).filter(x => x !== s && x.id !== sid);
+      A.db.marketSessions = (A.db.marketSessions || []).filter(x => x.id !== sid);
+      A.db.sessionRegistrations = (A.db.sessionRegistrations || []).filter(r => r.sessionId !== sid);
+      A.db.sessionPayments = (A.db.sessionPayments || []).filter(p => p.sessionId !== sid && !regIds.has(p.registrationId));
+      A.db.sessionNotifications = (A.db.sessionNotifications || []).filter(n => n.sessionId !== sid);
+      A.db.notifications = (A.db.notifications || []).filter(n => n.sessionId !== sid);
+      if (ui.sessionFocusId === sid) ui.sessionFocusId = null;
+      U.log('Xóa phiên test chợ quê ' + U.dmy(s.date));
+      A.save(); A.closeModal(); A.render(); U.toast('Đã xóa phiên test');
+    },
     'session-attendance-tab': el => {
       const tab = el.dataset.tab;
       if (!ATTENDANCE_FILTERS.some(t => t[0] === tab)) return;
@@ -1815,7 +1891,9 @@
     'session-create': () => {
       const fake = { id: 'new', market: TTD_SESSION_MARKET };
       if (!ttdSessionCanMutate('phien-cho.tao-phien', fake, true)) return;
-      const date = TTD_DEMO_SESSION_DATE, regStart = registrationStartForDate(date), deadline = registrationDeadlineForDate(date);
+      const filteredDate = parseIsoDate(sessionDateFilter());
+      const date = filteredDate && filteredDate.getDay() === 6 ? sessionDateFilter() : TTD_DEMO_SESSION_DATE;
+      const regStart = registrationStartForDate(date), deadline = registrationDeadlineForDate(date);
       A.modal(A.mHead('Tạo phiên chợ quê') + `<div class="modal-b"><div class="form-grid">
         <div class="field"><label>Ngày bắt đầu đăng ký *</label><input class="input" id="ses-reg-start" type="datetime-local" value="${regStart}"></div>
         <div class="field"><label>Hạn đăng ký *</label><input class="input" id="ses-deadline" type="datetime-local" value="${deadline}"></div>

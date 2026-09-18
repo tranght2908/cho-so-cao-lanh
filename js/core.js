@@ -341,6 +341,7 @@ window.APP = (function () {
       const p = {
         id: 'GD' + U.pad(n, 6), invoiceId: inv.id, market: inv.market, traderId: inv.traderId, amount: take, method,
         date: db.today, time, by, receipt: 'BL2609-' + U.pad(n, 6),
+        paymentStatus: 'SUCCESS', paidAt: db.today + ' ' + time, receiptIssuedAt: db.today + ' ' + time,
         lookup: Math.random().toString(36).slice(2, 8).toUpperCase(), reconciled: method === 'tm' ? null : true,
         receiptDelivery: { miniApp: true, sentAt: db.today + ' ' + time, status: 'SENT_MOCK' },
         printStatus: 'PENDING'
@@ -370,7 +371,34 @@ window.APP = (function () {
   A.closeModal = function () { $('#modal-root').innerHTML = ''; };
   A.mHead = t => `<div class="modal-h"><h3>${t}</h3><button class="x" data-act="close" aria-label="Đóng">×</button></div>`;
 
+  function receiptSessionPayment(p) {
+    return p && p.sessionPaymentId && A.db.sessionPayments ? A.db.sessionPayments.find(x => x.id === p.sessionPaymentId) : null;
+  }
+  function receiptSessionRecord(p) {
+    return p && A.db.sessionReceipts ? A.db.sessionReceipts.find(x => x.paymentId === p.id || x.receiptNumber === p.receipt) : null;
+  }
+  function receiptPaymentSuccessAt(p) {
+    if (!p) return null;
+    const sp = receiptSessionPayment(p);
+    if (sp) {
+      if (sp.status !== 'SUCCESS' && sp.status !== 'RECONCILED') return null;
+      return sp.collectedAt || sp.paidAt || sp.reconciledAt || (p.date && p.time ? p.date + ' ' + p.time : null);
+    }
+    if (p.paymentStatus && p.paymentStatus !== 'SUCCESS') return null;
+    return p.paidAt || (p.date && p.time ? p.date + ' ' + p.time : null);
+  }
+  function receiptIssuedAt(p) {
+    if (!p) return null;
+    const rc = receiptSessionRecord(p);
+    return (rc && rc.issuedAt) || p.receiptIssuedAt || (p.date && p.time ? p.date + ' ' + p.time : null);
+  }
+  A.receiptBusinessStateOk = function (p) {
+    const paidAt = receiptPaymentSuccessAt(p), issuedAt = receiptIssuedAt(p);
+    return !!(p && p.receipt && paidAt && issuedAt && issuedAt >= paidAt);
+  };
   A.receiptHtml = function (pays) {
+    pays = (pays || []).filter(A.receiptBusinessStateOk);
+    if (!pays.length) return '<div class="note danger">Bien lai khong hop le: chi phat hanh sau khi thanh toan thanh cong.</div>';
     const p0 = pays[0], t = A.idx.trader.get(p0.traderId), m = U.market(p0.market);
     const rows = pays.map(p => {
       const inv = A.idx.invoice.get(p.invoiceId);
@@ -396,7 +424,8 @@ window.APP = (function () {
       <div class="small muted" style="margin-top:8px">✓ Đã gửi biên lai tới tiểu thương qua Mini app và Zalo OA (mô phỏng)</div></div>`;
   };
   A.showReceipt = function (pays, opts) {
-    if (!pays || !pays.length) return;
+    pays = (pays || []).filter(A.receiptBusinessStateOk);
+    if (!pays.length) { U.toast('Khong the lap/xem bien lai truoc khi thanh toan thanh cong'); return; }
     A.modal(A.mHead('Biên lai điện tử') + `<div class="modal-b">${A.receiptHtml(pays)}</div>
       <div class="modal-f"><button class="btn" data-act="print">In biên lai</button><button class="btn primary" data-act="close">Xong</button></div>`);
     if (opts && opts.autoPrint) {
@@ -589,7 +618,7 @@ window.APP = (function () {
     'xm-scope': el => { ui.xmScope = el.dataset.id; A.render(); },
     page: el => { ui.page[el.dataset.k] = (ui.page[el.dataset.k] || 0) + Number(el.dataset.d); A.render(); },
     go: el => A.go(el.dataset.to),
-    receipt: el => A.showReceipt(A.db.payments.filter(p => p.receipt === el.dataset.id)),
+    receipt: el => A.showReceipt(A.db.payments.filter(p => p.receipt === el.dataset.id && U.inM(p) && A.receiptBusinessStateOk(p))),
     guide: () => A.guide()
   });
 

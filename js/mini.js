@@ -96,6 +96,7 @@
       );
     }
     syncOpsSessionsToMiniRegistrationModel();
+    syncPaidSessionRegistrationsToOfficial();
   }
   function miniSessionPricing(mid) {
     const services = A.SERVICE_CFG && A.SERVICE_CFG.list ? (A.SERVICE_CFG.list('extraServices') || []) : [];
@@ -146,6 +147,15 @@
   function miniAvailableStalls(s) {
     return Math.max(0, s.totalStalls - U.sum(miniSessionRegs(s.id).filter(miniBlocksCapacity), r => r.requestedStalls));
   }
+  function miniReservedPointIds(sessionId) {
+    return new Set(miniSessionRegs(sessionId).filter(r => ['CANCELLED', 'REJECTED', 'PAYMENT_EXPIRED', 'NO_SHOW', 'rejected', 'withdrawn'].indexOf(r.status) === -1).map(r => r.pointId).filter(Boolean));
+  }
+  function miniSessionAvailablePoints(s, cat) {
+    if (!s) return [];
+    const reserved = miniReservedPointIds(s.id);
+    return A.db.stalls.filter(st => st.market === s.marketId && U.rentalKind(st) === 'session' && st.status === 'trong' && !st.traderId && !reserved.has(st.id) && (!cat || st.cat === cat))
+      .sort((a, b) => String(a.code || '').localeCompare(String(b.code || ''), 'vi'));
+  }
   function miniSessionReceiptsForTrader(t) {
     ensureMiniRegistrationModel();
     return A.db.sessionReceipts.filter(rc => rc.merchantId === t.id && rc.marketId === t.market).slice().sort((a, b) => (b.issuedAt || b.collectedAt || '').localeCompare(a.issuedAt || a.collectedAt || ''));
@@ -156,6 +166,26 @@
   function miniSessionCashPaymentForReg(reg) {
     return (A.db.sessionPayments || []).find(p => p.registrationId === reg.id && p.method === 'CASH') || null;
   }
+  function promotePaidSessionRegistration(reg, actor) {
+    if (!reg || reg.paymentWorkflowStatus !== 'CONFIRMED') return false;
+    if (reg.status === 'rejected' || reg.status === 'withdrawn' || reg.status === 'waitlisted') return false;
+    const changed = reg.listType !== 'official' || reg.status !== 'approved' || reg.waitlistOrder != null;
+    if (!changed) return false;
+    reg.listType = 'official';
+    reg.status = 'approved';
+    reg.waitlistOrder = null;
+    reg.updatedAt = A.db.today + ' ' + U.nowTime();
+    reg.updatedBy = actor || 'Hệ thống xác minh thanh toán';
+    const note = 'Hệ thống tự chuyển vào danh sách chính thức sau khi xác minh thanh toán thành công';
+    reg.note = reg.note ? (reg.note.indexOf(note) === -1 ? reg.note + ' · ' + note : reg.note) : note;
+    return changed;
+  }
+  function syncPaidSessionRegistrationsToOfficial() {
+    (A.db.sessionRegistrations || []).forEach(reg => {
+      if (reg && reg.paymentWorkflowStatus === 'CONFIRMED') promotePaidSessionRegistration(reg);
+    });
+  }
+  A.syncPaidSessionRegistrationsToOfficial = syncPaidSessionRegistrationsToOfficial;
   function miniSessionCashDeadline(s) {
     if (!s) return null;
     return (s.sessionDate || s.date || U.today()) + ' ' + (s.attendanceStartTime || s.startTime || '00:00');
@@ -220,11 +250,13 @@
     reg.paymentWorkflowStatus = 'CONFIRMED';
     reg.receiptNumber = receiptNumber;
     reg.confirmedAt = A.db.today + ' ' + time;
+    promotePaidSessionRegistration(reg, actor || 'Mini app');
 
     const ledgerPayment = {
       id: 'GD' + U.pad(payNo, 6), invoiceId: null, market: reg.marketId, traderId: reg.merchantId,
       amount: payment.amount, method: 'qr', date: A.db.today, time, by: actor || 'Mini app',
       receipt: receiptNumber, lookup: Math.random().toString(36).slice(2, 8).toUpperCase(),
+      paymentStatus: 'SUCCESS', paidAt: A.db.today + ' ' + time, receiptIssuedAt: A.db.today + ' ' + time,
       reconciled: true, sourceType: 'SESSION_REGISTRATION', sessionId: session.id,
       registrationId: reg.id, sessionPaymentId: payment.id,
       receiptDelivery: { miniApp: true, sentAt: A.db.today + ' ' + time, status: 'SENT_MOCK' },
@@ -282,11 +314,13 @@
     reg.paymentWorkflowStatus = 'CONFIRMED';
     reg.receiptNumber = receiptNumber;
     reg.confirmedAt = A.db.today + ' ' + time;
+    promotePaidSessionRegistration(reg, actor || collectorActor());
 
     const ledgerPayment = {
       id: 'GD' + U.pad(payNo, 6), invoiceId: null, market: reg.marketId, traderId: reg.merchantId,
       amount: payment.amount, method: 'tm', date: A.db.today, time, by: payment.collectedBy,
       receipt: receiptNumber, lookup: Math.random().toString(36).slice(2, 8).toUpperCase(),
+      paymentStatus: 'SUCCESS', paidAt: A.db.today + ' ' + time, receiptIssuedAt: A.db.today + ' ' + time,
       reconciled: null, sourceType: 'SESSION_REGISTRATION', sessionId: session.id,
       registrationId: reg.id, sessionPaymentId: payment.id,
       receiptDelivery: { miniApp: true, sentAt: A.db.today + ' ' + time, status: 'SENT_MOCK' },
@@ -335,9 +369,13 @@
       const s = A.db.marketSessions.find(x => x.id === form.sessionId);
       const stalls = Number(form.stalls || 1);
       const cat = form.cat || (s && s.allowedBusinessCategories && s.allowedBusinessCategories[0]);
+      const availablePoints = miniSessionAvailablePoints(s, cat);
+      const selectedPoint = availablePoints.find(p => p.id === form.pointId);
       if (!s || s.marketId !== ui.market) reasons.push('Phiên không thuộc chợ đang chọn.');
       if (s && s.status !== 'REGISTRATION_OPEN') reasons.push('Phiên chưa mở đăng ký.');
       if (s && !(s.registrationOpenAt <= U.today() && U.today() <= s.registrationCloseAt)) reasons.push('Ngoài thời gian đăng ký.');
+      if (!availablePoints.length) reasons.push('Không còn điểm kinh doanh trống phù hợp ngành hàng.');
+      if (s && !selectedPoint) reasons.push('Vui lòng chọn điểm kinh doanh còn trống.');
       if (!(stalls > 0)) reasons.push('Số quầy phải lớn hơn 0.');
       if (s && stalls > s.maxStallsPerMerchant) reasons.push('Vượt số quầy tối đa mỗi tiểu thương.');
       if (s && (s.allowedBusinessCategories || []).indexOf(cat) === -1) reasons.push('Ngành hàng không hợp lệ cho phiên.');
@@ -533,7 +571,11 @@
     if (s) form.sessionId = s.id;
     const cat = form.cat || (s && s.allowedBusinessCategories && s.allowedBusinessCategories[0]) || '';
     form.cat = cat;
-    const n = Math.max(1, Number(form.stalls || 1));
+    const availablePoints = miniSessionAvailablePoints(s, cat);
+    if (availablePoints.length && !availablePoints.some(p => p.id === form.pointId)) form.pointId = availablePoints[0].id;
+    const selectedPoint = availablePoints.find(p => p.id === form.pointId) || null;
+    const n = selectedPoint ? 1 : Math.max(1, Number(form.stalls || 1));
+    form.stalls = n;
     const snap = s ? miniSnapshotAmount(n, s.marketId) : null;
     const fixed = fixedMonthlyAmount(form.term || 'MONTH');
     const reasons = miniRegBusinessStateReasons(t, form);
@@ -543,11 +585,11 @@
       <div class="seg" style="margin-top:10px">${[['SESSION', 'Theo phiên'], ['FIXED', 'Tháng/quý']].map(x => `<button class="${form.kind === x[0] ? 'on' : ''}" data-act="mini-reg-kind" data-id="${x[0]}">${x[1]}</button>`).join('')}</div>
       ${form.kind === 'SESSION' ? (sessions.length ? `<div class="field" style="margin-top:10px"><label>Phiên chợ đang mở đăng ký</label><select class="input" data-ch="mini-reg-form" data-k="sessionId">${sessions.map(x => `<option value="${x.id}" ${form.sessionId === x.id ? 'selected' : ''}>${U.dmy(x.sessionDate)} · còn ${miniAvailableStalls(x)} quầy</option>`).join('')}</select></div>
         <div class="form-grid" style="margin-top:8px">
-          <div class="field"><label>Số quầy</label><input class="input" type="number" min="1" data-ch="mini-reg-form" data-k="stalls" value="${n}"></div>
           <div class="field"><label>Ngành hàng</label><select class="input" data-ch="mini-reg-form" data-k="cat">${s ? (s.allowedBusinessCategories || []).map(c => `<option value="${U.esc(c)}" ${cat === c ? 'selected' : ''}>${U.esc(c)}</option>`).join('') : ''}</select></div>
+          <div class="field"><label>Điểm kinh doanh còn trống</label><select class="input" data-ch="mini-reg-form" data-k="pointId">${availablePoints.map(p => `<option value="${p.id}" ${form.pointId === p.id ? 'selected' : ''}>${U.esc(p.code)} · ${U.esc(p.sectionName || '')} · ${Number(p.area || 0).toLocaleString('vi-VN')} m²</option>`).join('')}</select></div>
           <div class="field"><label>Hình thức thanh toán</label><select class="input" data-ch="mini-reg-form" data-k="method"><option value="ONLINE" ${form.method !== 'CASH' ? 'selected' : ''}>QR code thanh toán tự động</option><option value="CASH" ${form.method === 'CASH' ? 'selected' : ''}>Thanh toán tiền mặt</option></select></div>
         </div>
-        <dl class="kv" style="margin-top:10px"><dt>Tạm tính</dt><dd><b>${snap ? U.money(snap.totalAmount) : '-'}</b></dd><dt>Trạng thái phiên</dt><dd>${s ? U.esc(s.status) : '-'}</dd></dl>` : '<div class="note" style="margin-top:10px">Hiện chưa có phiên chợ nào đang mở đăng ký trong phạm vi tài khoản.</div>') : `<div class="field" style="margin-top:10px"><label>Kỳ thuê</label><select class="input" data-ch="mini-reg-form" data-k="term"><option value="MONTH" ${form.term !== 'QUARTER' ? 'selected' : ''}>Theo tháng</option><option value="QUARTER" ${form.term === 'QUARTER' ? 'selected' : ''}>Theo quý</option></select></div>
+        <dl class="kv" style="margin-top:10px"><dt>Điểm đã chọn</dt><dd>${selectedPoint ? U.esc(selectedPoint.code + ' · ' + selectedPoint.sectionName) : '-'}</dd><dt>Tạm tính</dt><dd><b>${snap ? U.money(snap.totalAmount) : '-'}</b></dd><dt>Trạng thái phiên</dt><dd>${s ? U.esc(s.status) : '-'}</dd></dl>` : '<div class="note" style="margin-top:10px">Hiện chưa có phiên chợ nào đang mở đăng ký trong phạm vi tài khoản.</div>') : `<div class="field" style="margin-top:10px"><label>Kỳ thuê</label><select class="input" data-ch="mini-reg-form" data-k="term"><option value="MONTH" ${form.term !== 'QUARTER' ? 'selected' : ''}>Theo tháng</option><option value="QUARTER" ${form.term === 'QUARTER' ? 'selected' : ''}>Theo quý</option></select></div>
         <dl class="kv" style="margin-top:10px"><dt>Thời hạn</dt><dd>${fixed.months} tháng</dd><dt>Tạm tính</dt><dd><b>${U.money(fixed.total)}</b></dd><dt>Trạng thái</dt><dd>Gửi hồ sơ chờ Ban Quản lý duyệt</dd></dl>`}
       ${reasons.length ? `<div class="note" style="margin-top:10px">${reasons.map(U.esc).join('<br>')}</div>` : '<div class="note info" style="margin-top:10px">Đủ điều kiện gửi đăng ký mock trong phạm vi Chợ quê TTĐ.</div>'}
       <button class="m-btn solid" style="margin-top:10px" data-act="mini-reg-submit" ${reasons.length ? 'disabled' : ''}>Gửi đăng ký</button></div>
@@ -605,20 +647,20 @@
             <div class="it"><span>Hạn thu</span><b>Trước điểm danh · ${U.esc(selectedSession.deadline || '')}</b></div>
           </div></div>
         <div class="m-card m-due"><div class="small" style="opacity:.85">Tổng cần thu</div><div class="amt">${U.money(selectedSession.amount)}</div>
-          <button class="m-btn" data-act="mini-session-cash-paid" ${isCollectorMini() ? '' : 'disabled'}>Ghi nhận thu tiền mặt</button></div></div>`;
+          <button class="m-btn" data-act="mini-session-cash-paid" ${isCollectorMini() ? '' : 'disabled'}>Ghi nhận thu phí theo phiên trực tiếp</button></div></div>`;
     } else if (selected) {
       body = `<div class="m-body"><button class="btn sm" style="align-self:flex-start" data-act="mini-collector-home">‹ Quay lại</button>
         <div class="m-card"><b>${U.esc(selected.name)}</b><div class="small muted">${selected.id} · ${U.maskPhone(selected.phone)} · ${U.mShort(selected.market)}</div>
           <div class="m-list" style="margin-top:8px">${due.map(i => `<div class="it"><span>Kỳ ${U.per(i.period)}<div class="small muted">${A.idx.stall.get(i.stallId).code}</div></span><b>${U.money(U.due(i))}</b></div>`).join('') || '<div class="small muted">Không còn khoản phải thu</div>'}</div></div>
         <div class="m-card m-due"><div class="small" style="opacity:.85">Tổng cần thu</div><div class="amt">${U.money(total)}</div>
-          <button class="m-btn" data-act="mini-collect-paid" ${total > 0 && isCollectorMini() && miniCollectingBusinessStateOk(due) ? '' : 'disabled'}>Ghi nhận thu tiền mặt</button></div></div>`;
+          <button class="m-btn" data-act="mini-collect-paid" ${total > 0 && isCollectorMini() && miniCollectingBusinessStateOk(due) ? '' : 'disabled'}>Ghi nhận thu phí cố định trực tiếp</button></div></div>`;
     } else {
       body = `<div class="m-head"><div class="hi">Xin chào,</div><div class="nm">${U.esc(A.currentAccount().fullName)}</div><div class="hi">${U.esc(U.market(ui.market).short)}</div></div>
-        <div class="m-body"><div class="m-card m-due"><div class="small" style="opacity:.85">Cần thu hôm nay</div><div class="amt">${list.length + sessionDues.length}</div><div class="small">Tổng ${U.money(U.sum(list, x => x.amt) + U.sum(sessionDues, x => x.amount))}</div></div>
-        ${sessionDues.length ? `<div class="m-card"><b>Đăng ký phiên chờ thu tiền mặt</b><div class="m-list">${sessionDues.slice(0, 12).map(x => `<button class="it" style="width:100%;text-align:left;background:transparent;border:0;cursor:pointer" data-act="mini-session-cash-open" data-id="${x.reg.id}">
+        <div class="m-body"><div class="m-card m-due"><div class="small" style="opacity:.85">Thu tiền trực tiếp hôm nay</div><div class="amt">${list.length + sessionDues.length}</div><div class="small">Theo phiên ${U.money(U.sum(sessionDues, x => x.amount))} · Cố định ${U.money(U.sum(list, x => x.amt))}</div></div>
+        ${sessionDues.length ? `<div class="m-card"><b>Thu phí theo phiên trực tiếp</b><div class="small muted" style="margin-top:4px">Khoản đăng ký phiên chợ quê TTĐ cần thu trước điểm danh.</div><div class="m-list" style="margin-top:8px">${sessionDues.slice(0, 12).map(x => `<button class="it" style="width:100%;text-align:left;background:transparent;border:0;cursor:pointer" data-act="mini-session-cash-open" data-id="${x.reg.id}">
           <span><b>${U.esc(x.trader.name)}</b><div class="small muted">${U.esc(x.reg.code || x.reg.id)} · trước điểm danh ${U.dmy(x.session.sessionDate)}</div></span>
           <span style="text-align:right"><b>${U.money(x.amount)}</b><div class="small muted">${U.esc(x.deadline || '')}</div></span></button>`).join('')}</div></div>` : ''}
-        <div class="m-card"><b>Danh sách tiểu thương</b><div class="m-list">${list.slice(0, 12).map(x => `<button class="it" style="width:100%;text-align:left;background:transparent;border:0;cursor:pointer" data-act="mini-collect-open" data-id="${x.t.id}">
+        <div class="m-card"><b>Thu phí cố định trực tiếp</b><div class="small muted" style="margin-top:4px">Các khoản phí tháng/quý còn phải thu trong kỳ đang thu.</div><div class="m-list" style="margin-top:8px">${list.slice(0, 12).map(x => `<button class="it" style="width:100%;text-align:left;background:transparent;border:0;cursor:pointer" data-act="mini-collect-open" data-id="${x.t.id}">
           <span><b>${U.esc(x.t.name)}</b><div class="small muted">${x.t.stalls.map(id => A.idx.stall.get(id).code).join(', ')} · ${x.n} khoản</div></span>
           <span style="text-align:right"><b>${U.money(x.amt)}</b>${x.over ? `<div class="small" style="color:#d6453b">Quá hạn ${U.money(x.over)}</div>` : ''}</span></button>`).join('') || '<div class="small muted">Không có khoản cần thu</div>'}</div></div></div>`;
     }
@@ -677,14 +719,14 @@
     },
     'mini-collect-open': el => {
       const t = A.idx.trader.get(el.dataset.id);
-      if (!t || t.market !== ui.market) return;
+      if (!t || t.market !== ui.market || !isCollectorMini() || !A.canDirectCollect(t.market)) return;
       Object.assign(mini(), { collectTraderId: t.id, collectDone: false, lastPays: null });
       A.render();
     },
     'mini-collector-home': () => { Object.assign(mini(), { collectTraderId: null, collectSessionRegId: null, collectDone: false, lastPays: null }); A.render(); },
     'mini-session-cash-open': el => {
       const due = miniSessionCashDues().find(x => x.reg.id === el.dataset.id);
-      if (!due || !isCollectorMini()) return;
+      if (!due || !isCollectorMini() || !A.canDirectCollect(due.payment.marketId)) return;
       Object.assign(mini(), { collectTraderId: null, collectSessionRegId: due.reg.id, collectDone: false, lastPays: null });
       A.render();
     },
@@ -729,14 +771,17 @@
       const reasons = miniRegBusinessStateReasons(t, form);
       if (reasons.length) { U.toast(reasons[0]); return; }
       if (form.kind === 'SESSION') {
-        const s = A.db.marketSessions.find(x => x.id === form.sessionId), n = Math.max(1, Number(form.stalls || 1));
+        const s = A.db.marketSessions.find(x => x.id === form.sessionId);
+        const selectedPoint = miniSessionAvailablePoints(s, form.cat).find(p => p.id === form.pointId);
+        if (!selectedPoint) { U.toast('Vui lòng chọn điểm kinh doanh còn trống'); return; }
+        const n = 1;
         miniEnsureOpsSession(s);
-        const isWaiting = miniAvailableStalls(s) < n;
+        const isWaiting = false;
         const snap = miniSnapshotAmount(n, s.marketId);
         const reg = {
           id: miniSeq('DK', A.db.sessionRegistrations), code: 'DK-' + s.code.slice(-8) + '-' + U.pad(A.db.sessionRegistrations.length + 1, 3),
           sessionId: s.id, market: s.marketId, marketId: s.marketId, traderId: t.id, merchantId: t.id,
-          pointId: null, requestedSectionId: null, requestedStalls: n, businessCategory: form.cat,
+          pointId: selectedPoint.id, requestedSectionId: selectedPoint.section, requestedStalls: n, businessCategory: selectedPoint.cat,
           listType: isWaiting ? 'waitlist' : 'official', status: isWaiting ? 'waitlisted' : 'registered',
           waitlistOrder: isWaiting ? miniSessionRegs(s.id).filter(x => x.listType === 'waitlist' || x.status === 'waitlisted').length + 1 : null,
           paymentMethod: form.method || 'ONLINE', pricingSnapshot: snap, totalAmount: snap.totalAmount,

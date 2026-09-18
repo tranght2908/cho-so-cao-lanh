@@ -118,7 +118,7 @@
       if (!r) return;
       if (r.status === 'expired' && status === 'active') return false;
       r.status = status;
-      SC.log(r, user, status === 'active' ? 'Kích hoạt lại' : 'Vô hiệu hoá', '');
+      SC.log(r, user, status === 'active' ? 'Áp dụng phí' : status === 'draft' ? 'Mở khóa phí' : 'Khóa phí', '');
       return true;
     },
     cycle: () => CFG.billingCycle,

@@ -12,7 +12,8 @@ window.DATA = (function () {
   // dùng tính đơn giá dịch vụ ở các màn tài chính, giữ nguyên) và KHÔNG đổi `cat` (ngành hàng, khái
   // niệm riêng). Bump version để cache localStorage cũ (thiếu field mới) tự rebuild — độc lập với
   // RBAC_SCHEMA/PERM_SEED_VERSION (js/core.js, js/permissions.js — KHÔNG đổi 2 hằng số đó).
-  const VERSION = 10;
+  // v13: add TTĐ overdue debt seed rows for Cong no & nhac no.
+  const VERSION = 13;
   const TODAY = new Date(2026, 8, 13); // 13/09/2026
 
   // Giá dịch vụ sử dụng diện tích bán hàng – QĐ 480/QĐ-UBND ngày 14/02/2026 (đ/m²/ngày, đã gồm VAT)
@@ -241,6 +242,17 @@ window.DATA = (function () {
     }))));
 
     // ---- Tiểu thương ----
+    // Keep session-rental points available for the TTD market-session registration flow.
+    // These stalls remain unassigned, so traders can choose a concrete point in the Mini app.
+    const guaranteedEmptySession = new Set([
+      'TTD-AT-A01', 'TTD-AT-A02', 'TTD-AT-A03', 'TTD-AT-B01', 'TTD-AT-B02',
+      'TTD-NS-A01', 'TTD-NS-A02', 'TTD-NS-A03',
+      'TTD-TN-A01', 'TTD-TN-A02', 'TTD-TN-A03'
+    ]);
+    stalls.forEach(st => {
+      if (guaranteedEmptySession.has(st.id)) st.status = 'trong';
+    });
+
     let tSeq = 0;
     function newTrader(market, cat) {
       const female = chance(0.78);
@@ -419,6 +431,42 @@ window.DATA = (function () {
     });
 
     // Ổn định mã tra cứu theo seed
+    function seedTtdOverdueDebt() {
+      const profiles = [
+        { period: '2026-06', due: '2026-06-15', amount: 120000, reminders: 2 },
+        { period: '2026-07', due: '2026-07-15', amount: 90000, reminders: 1 },
+        { period: '2026-08', due: '2026-08-15', amount: 70000, reminders: 1 },
+        { period: '2026-09', due: '2026-09-10', amount: 40000, reminders: 0 }
+      ];
+      const used = new Set();
+      const rows = contracts
+        .filter(c => c.market === 'TTD' && c.status === 'hieuluc')
+        .map(c => ({ c, st: stalls.find(s => s.id === c.stallId), t: traders.find(t => t.id === c.traderId) }))
+        .filter(x => x.st && x.t && x.t.id !== 'TTD-CQ');
+      profiles.forEach((p, idx) => {
+        const x = rows.find(r => !used.has(r.t.id));
+        if (!x) return;
+        used.add(x.t.id);
+        invoices.push({
+          id: 'PT-TTD-CN-' + pad(idx + 1, 3),
+          period: p.period,
+          market: 'TTD',
+          stallId: x.st.id,
+          traderId: x.t.id,
+          contractId: x.c.id,
+          items: [{ name: 'Phi dich vu cho que con no ky ' + p.period, amount: p.amount }],
+          amount: p.amount,
+          paid: 0,
+          issued: p.period + '-01',
+          due: p.due,
+          status: 'unpaid',
+          adjust: null,
+          reminders: p.reminders
+        });
+      });
+    }
+    seedTtdOverdueDebt();
+
     payments.forEach(p => { p.lookup = (Math.floor(R() * 2176782336)).toString(36).toUpperCase().padStart(6, 'X'); });
 
     // ---- Kỳ ghi chỉ số điện, nước: mỗi tháng là 1 dataset độc lập, liên kết với nhau
