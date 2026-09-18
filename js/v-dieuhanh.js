@@ -1276,7 +1276,9 @@
       const cells = stalls.filter(st => st.row === r);
       return `<div class="plan-row"><span class="rl">${r}</span><div class="cells" style="--n:${sec.per}">${cells.map(st => {
         const t = st.traderId ? A.idx.trader.get(st.traderId) : null;
-        return `<button class="cell s-${st.status} ${sec.type === 'kiot' ? 'kiot' : ''}" data-act="stall" data-id="${st.id}" title="${st.code} · ${U.rentalLabel(st)} · ${D.STATUS[st.status].label}${t ? ' · ' + U.esc(t.name) : ''}">${st.num}</button>`;
+        // `data-id` stays the technical id; `code` is the human-facing point code.
+        const structural = st.structuralStatus === 'SPLIT';
+        return `<button class="cell s-${st.status} ${sec.type === 'kiot' ? 'kiot' : ''} ${structural ? 'dim' : ''}" data-act="stall" data-id="${st.id}" title="${st.code} · ${U.rentalLabel(st)} · ${D.STATUS[st.status].label}${t ? ' · ' + U.esc(t.name) : ''}${structural ? ' · Đã tách' : ''}">${st.code}</button>`;
       }).join('')}</div></div>`;
     }).join('<div class="aisle"></div>');
     return `<div class="plan-section">${head}<div class="small muted" style="margin:-4px 0 8px">${stalls.length} điểm · ${mbMetaLine(stalls)}</div>${rows}</div>`;
@@ -1284,7 +1286,7 @@
   // ---- Khu (mục 8): giữ đúng hành vi cũ (legend lọc trạng thái + tìm kiếm + sơ đồ đầy đủ). ----
   A.mbZoneDiagramHtml = function (mid, z, canEditZone) {
     const resolved = A.mbResolveZoneContext(mid, z);
-    const editBtn = canEditZone ? `<button class="btn sm" data-act="qh-zone-edit-open" data-id="${z.key}">✎ Sửa thông tin khu</button>` : '';
+    const editBtn = canEditZone ? `<button class="btn sm" data-act="qh-zone-edit-open" data-id="${z.key}">${U.icon('edit')}Sửa thông tin khu</button>` : '';
     if (!resolved.matched) {
       const totalQty = U.sum(z.planned, p => Number(p.qty) || 0), totalArea = U.sum(z.planned, p => (Number(p.std) || 0) * (Number(p.qty) || 0));
       return `<div class="card"><div class="card-h"><h3>${U.esc(z.name || '(chưa đặt tên)')}</h3><span class="small muted">${U.esc(z.code || '')} · quy hoạch</span><span class="spacer"></span>${editBtn}</div>
@@ -1300,7 +1302,9 @@
       const cells = stalls.filter(st => st.row === r);
       return `<div class="plan-row"><span class="rl">${r}</span><div class="cells" style="--n:${sec.per}">${cells.map(st => {
         const t = st.traderId ? A.idx.trader.get(st.traderId) : null;
-        return `<button class="cell s-${st.status} ${sec.type === 'kiot' ? 'kiot' : ''} ${stallMatch(st) ? '' : 'dim'} ${ui.sel === st.id ? 'sel' : ''}" data-act="stall" data-id="${st.id}" title="${st.code} · ${U.rentalLabel(st)} · ${D.STATUS[st.status].label}${t ? ' · ' + U.esc(t.name) : ''}">${st.num}</button>`;
+        // Search filtering and structural history share the existing dim treatment.
+        const dim = st.structuralStatus === 'SPLIT' || !stallMatch(st);
+        return `<button class="cell s-${st.status} ${sec.type === 'kiot' ? 'kiot' : ''} ${dim ? 'dim' : ''} ${ui.sel === st.id ? 'sel' : ''}" data-act="stall" data-id="${st.id}" title="${st.code} · ${U.rentalLabel(st)} · ${D.STATUS[st.status].label}${t ? ' · ' + U.esc(t.name) : ''}${st.structuralStatus === 'SPLIT' ? ' · Đã tách' : ''}">${st.code}</button>`;
       }).join('')}</div></div>`;
     }).join('<div class="aisle"></div>');
     return `<div class="card"><div class="card-h">
@@ -1336,7 +1340,7 @@
         <dt>Công nợ</dt><dd>${unpaid.length ? `<b style="color:#df2225">${U.money(U.sum(unpaid, U.due))}</b> <span class="small muted">(${unpaid.length} kỳ)</span>` : '<span class="tag ok">Không nợ</span>'}</dd></dl>`
         : '<div class="note info">Điểm kinh doanh đang trống, có thể cho thuê.</div>'}
       ${(canThuTien || canXemHoSo || canTaoHopDong || canDoiTrangThai) ? `<div class="row" style="margin-top:14px">
-        ${canThuTien && t && unpaid.length ? `<button class="btn primary" data-act="pay-open" data-id="${t.id}">💵 Thu tiền mặt</button>` : ''}
+        ${canThuTien && t && unpaid.length ? `<button class="btn primary" data-act="pay-open" data-id="${t.id}">${U.icon('card')}Thu tiền</button>` : ''}
         ${t ? (canXemHoSo ? `<button class="btn" data-act="trader" data-id="${t.id}">Hồ sơ</button>` : '') : (canTaoHopDong ? `<button class="btn primary" data-act="ct-new" data-id="${st.id}">Tạo hợp đồng</button>` : '')}
         ${canDoiTrangThai ? `<button class="btn" data-act="stall-status" data-id="${st.id}">Đổi trạng thái</button>` : ''}</div>` : ''}
       ${st.history && st.history.length ? `<div class="divider"></div><div class="small"><b>Lịch sử thay đổi</b>${st.history.map(h => `<div class="muted">${h}</div>`).join('')}</div>` : ''}`;
@@ -1403,33 +1407,41 @@
   // model LAYOUT. File này chỉ còn giữ đúng phần thao tác điểm kinh doanh thật (drawer khi click 1
   // điểm trên sơ đồ) dùng chung cho cả route 'mat-bang' lẫn màn "Điểm kinh doanh" (screen:diem-kd,
   // độc lập, không đổi).
-  Object.assign(A.ACT, {
-    legend: el => { ui.hidden[el.dataset.s] = !ui.hidden[el.dataset.s]; A.render(); },
-    stall: el => {
-      ui.sel = el.dataset.id;
-      const st = A.mbBusinessPointById(ui.market, ui.sel);
-      if (!st) { U.toast('Không tìm thấy điểm kinh doanh trong chợ hiện tại'); return; }
-      A.$('#modal-root').innerHTML = `<div class="drawer-overlay" data-act="close"></div><div class="drawer">
+  // Vẽ drawer "xem nhanh" 1 điểm trên sơ đồ Mặt bằng chợ — tách thành hàm THUẦN (không tự
+  // push/reset navigation stack) để dùng lại được cả khi mở làm drawer GỐC (action `stall`) LẪN khi
+  // dùng làm "cách vẽ lại drawer nguồn" cho nút "← Quay lại" (A.drawerPush, xem core.js).
+  function mbOpenStallDrawer(st) {
+    ui.sel = st.id;
+    A.$('#modal-root').innerHTML = `<div class="drawer-overlay" data-act="close"></div><div class="drawer">${A.drawerBackHtml()}
         <div class="drawer-h"><div><h3>${st.code}</h3><div class="small muted" style="margin-top:2px">${U.statusTag(st.status)}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
         <div class="drawer-b">${st.market === 'CL' ? mbStallPanelCL(st) : A.stallPanel(st)}</div></div>`;
-      A.render();
-    },
-    // 2 nút điều hướng "xem sâu" của drawer Mặt bằng CL — tái dùng NGUYÊN A.go() (router hiện có)
-    // + đúng handler đã có sẵn của chính màn đích (A.ACT.trader mở hồ sơ, A.ACT['dk-open'] mở drawer
-    // điểm KD ở màn Điểm kinh doanh) — không tạo màn/modal mới, không duplicate logic.
+    A.render();
+  }
+  Object.assign(A.ACT, {
+    legend: el => { ui.hidden[el.dataset.s] = !ui.hidden[el.dataset.s]; A.render(); },
+    // Click 1 điểm trên sơ đồ = mở drawer GỐC (không phải drill-down từ drawer khác) — luôn reset
+    // navigation stack trước, đảm bảo không hiện "← Quay lại" giả (mục 6 yêu cầu back navigation).
+    stall: el => { A.drawerReset(); mbOpenStallDrawer(A.idx.stall.get(el.dataset.id)); },
+    // 2 nút điều hướng "xem sâu" của drawer Mặt bằng CL — KHÔNG còn A.go() đổi hẳn màn hình nữa
+    // (MARKET_LAYOUT_DRILLDOWN_UX hotfix): ở lại ĐÚNG màn 'mat-bang' nền, chỉ thay #modal-root, và
+    // lưu lại cách vẽ đúng drawer nguồn (mbOpenStallDrawer, label = mã điểm) vào navigation stack
+    // dùng chung (A.drawerPush/A.drawerBackHtml, core.js) để "← Quay lại <mã điểm>" hoạt động đúng
+    // — thay vì quay về danh sách Tiểu thương/Điểm kinh doanh. Tái dùng NGUYÊN A.openTraderDrawer/
+    // A.openDkDrawer đã có sẵn ở js/v-tieuthuong.js (không tạo drawer/model mới).
     'mb-open-trader': el => {
       if (!U.can('tieu-thuong')) return;
       const t = A.idx.trader.get(el.dataset.id);
-      if (!t) return;
-      A.go('tieu-thuong');
-      A.ACT.trader({ dataset: { id: t.id } });
+      const st = A.idx.stall.get(ui.sel);
+      if (!t || !st) return;
+      A.drawerPush(st.code, () => mbOpenStallDrawer(st));
+      A.openTraderDrawer(t);
     },
     'mb-open-diemkd': el => {
       if (!U.can('diem-kd')) return;
       const st = A.idx.stall.get(el.dataset.id);
       if (!st) return;
-      A.go('diem-kd');
-      A.ACT['dk-open']({ dataset: { id: st.id } });
+      A.drawerPush(st.code, () => mbOpenStallDrawer(st));
+      A.openDkDrawer(st);
     },
     'stall-status': el => {
       const st = A.mbBusinessPointById(ui.market, el.dataset.id);

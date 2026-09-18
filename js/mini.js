@@ -412,12 +412,17 @@
     add(scoped.find(t => !U.traderDebt(t.id)));
     return out.filter(t => t.stalls.length);
   }
+  // Giữ nguyên: KHÔNG bắt buộc `t.stalls.length` — 1 trader hợp lệ (tìm được qua tra cứu SĐT, xem
+  // luồng đăng nhập mới bên dưới) vẫn phải "đăng nhập" được dù CHƯA có điểm kinh doanh (mục 9 yêu cầu
+  // correction — hợp đồng/điểm KD xử lý riêng, trader có thể tồn tại trước khi có contract/point).
+  // Không ảnh hưởng dropdown demo hiện có: sampleTraders() vẫn tự lọc chỉ trader có stalls.
   function trader() {
     const m = mini();
     let t = m.traderId ? A.idx.trader.get(m.traderId) : null;
     const acc = A.currentAccount();
-    if (acc && acc.linkedTraderId && (!t || t.id !== acc.linkedTraderId || !inMiniScopeMarket(t.market))) t = A.idx.trader.get(acc.linkedTraderId) || t;
-    if (!t || !t.stalls.length || !inMiniScopeMarket(t.market)) { t = sampleTraders()[0]; if (t) m.traderId = t.id; }
+    const accountTraderId = acc && (acc.traderId || acc.linkedTraderId);
+    if (accountTraderId && (!t || t.id !== accountTraderId || !inMiniScopeMarket(t.market))) t = A.idx.trader.get(accountTraderId) || t;
+    if (!t || !inMiniScopeMarket(t.market)) { t = sampleTraders()[0]; if (t) m.traderId = t.id; }
     return t;
   }
   const unpaid = t => A.db.invoices.filter(i => i.traderId === t.id && i.status !== 'paid').sort((a, b) => a.due.localeCompare(b.due));
@@ -433,18 +438,233 @@
     return Array.from(debtors.values()).sort((a, b) => b.over - a.over || b.amt - a.amt);
   };
 
+  // ---- Tiểu thương gửi yêu cầu Tách điểm (Chợ Cao Lãnh) ----
+  // Dùng CHÍNH A.db.pointRequests + A.pointReq (js/v-tieuthuong.js expose) — KHÔNG tạo mảng dữ liệu
+  // song song. "Ownership" tái dùng ĐÚNG quan hệ t.stalls đã có (không tạo model quan hệ mới) —
+  // trader() ở trên đã là cơ chế xác định trader context self-service sẵn có của Mini App, tái dùng
+  // nguyên, không thêm if (role === 'trader') nào.
+  const miniOwnsStall = (t, st) => t.stalls.indexOf(st.id) !== -1;
+  // Chỉ điểm chưa mang trạng thái kết cấu, hoặc được đánh dấu ACTIVE rõ ràng, mới có thể gửi yêu
+  // cầu mới. Cách kiểm tra này chặn cả SPLIT/MERGED/RETIRED và các trạng thái kết cấu không-active
+  // có thể được bổ sung sau này, thay vì chỉ biết riêng SPLIT.
+  const miniStructurallyActive = st => !st.structuralStatus || st.structuralStatus === 'ACTIVE';
+  // LƯU Ý: hàm này được gọi từ `A.resetMiniRequestState` (core.js `demo-account` — đổi TÀI KHOẢN
+  // DEMO đang dùng để xem web/app, KHÔNG phải đổi "danh tính điện thoại" đang mô phỏng) NGOÀI RA còn
+  // gọi từ `mini-trader`/`mini-logout` bên dưới (đổi tiểu thương mẫu / đăng xuất — đây MỚI thật sự
+  // là đổi danh tính điện thoại).
+  function miniResetRequestState() {
+    Object.assign(mini(), { splitPoint: null, splitDraft: null, mergeDraft: null, convertPoint: null, convertDraft: null, reqView: null, reqFilter: 'all' });
+  }
+  // Reset luồng đăng nhập/kích hoạt Mini App (SĐT → xác nhận → OTP) về bước đầu — gọi khi đổi tiểu
+  // thương mẫu/đăng xuất (đổi danh tính điện thoại thật sự), KHÔNG gọi từ `A.resetMiniRequestState`
+  // (đổi account demo Web/BQL không nên làm mất phiên đăng nhập SĐT đang nhập dở trên "điện thoại").
+  function miniResetLoginFlow() {
+    Object.assign(mini(), { loginStep: 'phone', loginPhone: null, loginTraderId: null });
+  }
+  // Adjacency V1 chỉ dành cho prototype: cùng floor/section, cùng row và num liền kề.
+  // Không có geometry/span trong model nên không suy diễn đây là quy tắc mặt bằng chính thức.
+  function miniMergeCandidates(t, st) { return A.db.stalls.filter(x => x.id !== st.id && x.market === 'CL' && miniOwnsStall(t,x) && miniStructurallyActive(x) && x.floor===st.floor && x.section===st.section && x.row!=null && x.row===st.row && x.num!=null && Math.abs(x.num-st.num)===1 && !A.db.pointRequests.some(r=>r.status!=='REJECTED'&&r.status!=='COMPLETED'&&((r.sourcePointIds||[]).includes(x.id)||r.pointId===x.id))); }
+  // "Chuyển đổi vị trí" (RELOCATE_TO_VACANT_POINT) — KHÔNG cần liền kề/cùng khu vực (khác Gộp điểm),
+  // target là 1 điểm CÒN TRỐNG bất kỳ trong Chợ Cao Lãnh (không thuộc quyền sử dụng của trader — điểm
+  // trống thì không ai đang dùng). Conflict check dùng A.pointReq.convertActiveConflict (expose từ
+  // js/v-tieuthuong.js) — biết cả SPLIT.pointId/MERGE.sourcePointIds/CONVERT.fromPointId|toPointId,
+  // rộng hơn hẳn cách chặn trùng cũ của miniMergeCandidates (chỉ biết SPLIT/MERGE).
+  function miniConvertCandidates(t, st) { return A.pointReq.convertTargetCandidates ? A.pointReq.convertTargetCandidates(st, null) : []; }
+  // Cho phép luồng đổi Account Demo ở core.js xoá state self-service trước khi chuyển route.
+  A.resetMiniRequestState = miniResetRequestState;
+  // Nhãn trạng thái thân thiện cho tiểu thương (mục 11 yêu cầu bổ sung) — CHỈ đổi label hiển thị,
+  // KHÔNG đổi state machine Web (A.db.pointRequests[].status vẫn nguyên giá trị kỹ thuật).
+  const MINI_STATUS_LABEL = {
+    DRAFT: 'Đã gửi — Chờ Ban Quản lý tiếp nhận', STAFF_REVIEW: 'Ban Quản lý đang xử lý',
+    PENDING_APPROVAL: 'Chờ phê duyệt', APPROVED: 'Đã được phê duyệt', IMPLEMENTING: 'Đang thực hiện',
+    COMPLETED: 'Hoàn thành', REJECTED: 'Không được chấp thuận'
+  };
+  const MINI_STATUS_CLASS = {
+    DRAFT: 'info', STAFF_REVIEW: 'info', PENDING_APPROVAL: 'warn', APPROVED: 'info',
+    IMPLEMENTING: 'warn', COMPLETED: 'ok', REJECTED: 'danger'
+  };
+  // Nhãn thân thiện cho từng bước timeline (mục 10 yêu cầu bổ sung) — Mini App CHỈ hiển thị request
+  // nguồn TRADER nên chỉ cần bộ nhãn khớp DKREQ_STEPS_TRADER (v-tieuthuong.js); TRẠNG THÁI từng bước
+  // (done/current/rejected/pending) lấy từ A.pointReq.stepStates(r) — CÙNG 1 nơi tính, không viết lại.
+  const MINI_STEP_LABEL = {
+    created: 'Đã gửi yêu cầu', received: 'Ban Quản lý đã tiếp nhận', planned: 'Ban Quản lý đã lập phương án',
+    submitted: 'Chờ phê duyệt', approved: 'Đã được phê duyệt', implementing: 'Đang thực hiện', completed: 'Hoàn thành'
+  };
+  const MINI_REQ_FILTERS = [['all', 'Tất cả'], ['processing', 'Đang xử lý'], ['done', 'Hoàn thành'], ['rejected', 'Không được chấp thuận']];
+  function miniMyRequests(t) {
+    // Chỉ request Tách điểm CỦA CHÍNH tiểu thương hiện tại (mục 9 yêu cầu bổ sung: source=TRADER +
+    // requestedByTraderId = trader hiện tại) — không cho xem yêu cầu của tiểu thương khác.
+    return A.db.pointRequests.filter(r => (r.type === 'SPLIT' || r.type === 'MERGE' || r.type === 'CONVERT') && r.source === 'TRADER' && r.requestedByTraderId === t.id)
+      .sort((a, b) => b.id.localeCompare(a.id));
+  }
+  function miniReqFilterMatch(r, f) {
+    if (!f || f === 'all') return true;
+    if (f === 'processing') return A.pointReq.isActive(r);
+    if (f === 'done') return r.status === 'COMPLETED';
+    if (f === 'rejected') return r.status === 'REJECTED';
+    return true;
+  }
+  function miniTimelineHtml(r) {
+    return A.pointReq.stepStates(r).map(s => {
+      const ico = s.state === 'done' ? '✓' : s.state === 'rejected' ? '✗' : s.state === 'current' ? '●' : '○';
+      const label = s.state === 'rejected' ? 'Không được chấp thuận' : (MINI_STEP_LABEL[s.key] || s.key);
+      return `<div class="it" style="align-items:flex-start"><span style="width:20px;flex:none">${ico}</span><span style="flex:1">${U.esc(label)}${s.at ? `<div class="small muted">${U.esc(s.at)}</div>` : ''}</span></div>`;
+    }).join('');
+  }
+  // Ghi chú riêng theo trạng thái (mục 12-14 yêu cầu bổ sung) — phân biệt rõ APPROVED (đã duyệt
+  // phương án, CHƯA tách) với COMPLETED (đã tách xong), không được nói "đã tách" khi mới APPROVED.
+  function miniReqStatusNoteHtml(r) {
+    if (r.status === 'REJECTED') {
+      const rej = (r.timeline || []).find(e => e.key === 'approved' && e.note);
+      const reason = rej ? String(rej.note).replace(/^Từ chối:\s*/, '') : '';
+      return `<div class="note" style="margin-top:0">Yêu cầu của bạn không được chấp thuận.${reason ? '<br>Lý do: ' + U.esc(reason) : ''}</div>`;
+    }
+    if (r.status === 'APPROVED') {
+      const label = r.type === 'MERGE' ? 'gộp điểm' : r.type === 'CONVERT' ? 'chuyển đổi vị trí' : 'tách điểm';
+      return `<div class="note info" style="margin-top:0">Phương án ${label} đã được phê duyệt. Ban Quản lý đang chuẩn bị thực hiện.</div>`;
+    }
+    if (r.status === 'COMPLETED' && r.resultPointIds && r.resultPointIds.length) {
+      const st = A.idx.stall.get(r.type === 'CONVERT' ? r.fromPointId : r.pointId);
+      // resultPointIds là INTERNAL ID — lookup rồi hiển thị business point code, KHÔNG dùng code làm
+      // identity (mục 14 yêu cầu bổ sung). Mini App hiện KHÔNG có cơ chế mở "chi tiết điểm" riêng
+      // (không có drawer như Web) nên chỉ hiển thị mã, không tạo nút [Xem ...] giả không có đích đến.
+      const codes = r.resultPointIds.map(id => { const s2 = A.idx.stall.get(id); return s2 ? U.esc(s2.code) : ''; }).filter(Boolean);
+      if (r.type === 'CONVERT') return `<div class="note info" style="margin-top:0">Điểm ${st ? U.esc(st.code) : ''} đã chuyển sang:<br><b>${codes.join(', ')}</b></div>`;
+      return `<div class="note info" style="margin-top:0">${r.type === 'MERGE' ? 'Yêu cầu gộp đã hoàn thành, điểm kết quả:' : 'Điểm ' + (st ? U.esc(st.code) : '') + ' đã được tách thành:'}<br><b>${codes.join(', ')}</b></div>`;
+    }
+    return '';
+  }
+  function miniReqRowHtml(r) {
+    const st = A.idx.stall.get(r.type === 'CONVERT' ? r.fromPointId : r.pointId);
+    const codes = r.type === 'MERGE' ? (r.sourcePointIds || []).map(id => { const x = A.idx.stall.get(id); return x ? x.code : id; }).join(' + ')
+      : r.type === 'CONVERT' ? [r.fromPointId, r.plan && r.plan.toPointId ? r.plan.toPointId : r.toPointId].map(id => { const x = id && A.idx.stall.get(id); return x ? x.code : (id || '?'); }).join(' → ') : null;
+    const title = r.type === 'MERGE' ? 'Gộp điểm ' + codes : r.type === 'CONVERT' ? 'Chuyển đổi vị trí ' + codes : 'Tách điểm ' + (st ? st.code : r.pointId);
+    return `<div class="it" style="flex-wrap:wrap;cursor:pointer" data-act="mini-req-view" data-id="${r.id}">
+      <span>${r.id}<div class="small muted">${title}</div></span>
+      <span style="text-align:right"><span class="tag ${MINI_STATUS_CLASS[r.status] || ''}">${U.esc(MINI_STATUS_LABEL[r.status] || r.status)}</span><div class="small muted" style="margin-top:2px">${U.dmy(r.requestedAt)}</div></span>
+    </div>`;
+  }
+  // Card "Điểm kinh doanh của tôi" (mục 3 yêu cầu bổ sung) — style m-card/m-list/kv sẵn có, KHÔNG tạo
+  // component mới. "Xem chi tiết" tái dùng NGUYÊN action mini-tab có sẵn (chuyển sang tab Hợp đồng,
+  // nơi đã có đủ thông tin hợp đồng chi tiết của điểm) — không tạo màn/route mới chỉ để xem thêm.
+  function miniPointCard(t, st) {
+    const c = st.contractId ? A.idx.contract.get(st.contractId) : null;
+    const active = st.market === 'CL' ? A.pointReq.activeFor(st.id) : null;
+    // Điều kiện hiện nút "Gửi yêu cầu tách điểm" (mục 3 yêu cầu bổ sung): thuộc CL, chưa
+    // structuralStatus SPLIT, thuộc quyền sử dụng của chính trader này, và KHÔNG có request SPLIT
+    // nào đang active cho điểm này (mục 4 yêu cầu bổ sung — chặn tạo trùng).
+    const canSplit = st.market === 'CL' && miniStructurallyActive(st) && miniOwnsStall(t, st) && !active;
+    const canMerge = canSplit && miniMergeCandidates(t,st).length;
+    // "Gửi yêu cầu chuyển vị trí": conflict check RIÊNG (convertActiveConflict — biết cả CONVERT),
+    // KHÔNG dùng chung biến `active` ở trên (chỉ biết SPLIT — xem ghi chú A.pointReq.activeFor,
+    // js/v-tieuthuong.js) để không bỏ sót trường hợp điểm đang dính 1 yêu cầu CONVERT khác.
+    const convertConflict = st.market === 'CL' && A.pointReq.convertActiveConflict && A.pointReq.convertActiveConflict(st.id);
+    const canConvert = st.market === 'CL' && miniStructurallyActive(st) && miniOwnsStall(t, st) && !convertConflict && miniConvertCandidates(t, st).length;
+    return `<div class="m-card"><b>${st.code}</b><div class="small muted" style="margin:2px 0 8px">${U.esc(st.sectionName)}</div>
+      <dl class="kv">
+        <dt>Diện tích</dt><dd>${st.area.toLocaleString('vi-VN')} m²</dd>
+        <dt>Ngành hàng</dt><dd>${U.esc(st.cat) || 'Chưa có thông tin'}</dd>
+        <dt>Hợp đồng</dt><dd>${c ? c.id : 'Chưa có hợp đồng hiệu lực'}</dd>
+        <dt>Trạng thái</dt><dd>${D.STATUS[st.status] ? D.STATUS[st.status].label : st.status}${st.structuralStatus === 'SPLIT' ? ' · Đã tách' : ''}</dd>
+      </dl>
+      <div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn sm" data-act="mini-tab" data-id="contract">Xem chi tiết</button>
+        ${st.market === 'CL' && canConvert ? `<button class="btn sm" data-act="mini-convert-open" data-id="${st.id}">Gửi yêu cầu chuyển vị trí</button>` : ''}
+        ${st.market === 'CL' ? (active
+          ? `<button class="btn sm" data-act="mini-req-view" data-id="${active.id}">Xem yêu cầu đang xử lý</button>`
+          : (canSplit ? `<button class="btn sm" data-act="mini-split-open" data-id="${st.id}">Gửi yêu cầu tách điểm</button>${canMerge?`<button class="btn sm" data-act="mini-merge-open" data-id="${st.id}">Gửi yêu cầu gộp điểm</button>`:''}` : '')
+        ) : ''}
+      </div></div>`;
+  }
+
+  // ==================== ĐĂNG NHẬP / KÍCH HOẠT MINI APP (CORRECTION — SĐT + OTP) ====================
+  // Thay hoàn toàn luồng "đăng ký hồ sơ" cũ: Mini App KHÔNG tạo Trader Profile — chỉ TRA CỨU hồ sơ
+  // đã có sẵn (do NV BQL tạo trước) theo SĐT, rồi gửi OTP giả lập để "kích hoạt/đăng nhập". State
+  // `m.loginStep` ('phone'|'notfound'|'multi'|'confirm'|'otp'|'locked') + `m.loginPhone` (SĐT đang
+  // nhập) + `m.loginTraderId` (id trader vừa tra cứu được, CHỜ xác thực OTP — chưa coi là đã đăng
+  // nhập). Không tạo Trader Profile/Contract/BusinessPoint ở bất kỳ bước nào trong luồng này.
+  function miniNormalizePhone(p) { return String(p || '').replace(/\D/g, ''); }
+  // Tra cứu theo SĐT KHÔNG giới hạn 1 market cụ thể (Mini App phục vụ cả CL/TTD — mục 23 yêu cầu
+  // correction "không phá dữ liệu Chợ quê TTD"); mỗi trader tự mang đúng market của mình, account
+  // tạo sau đó cũng lấy market TỪ trader (ttCreateLinkedAccount), không hard-code CL.
+  function miniFindTradersByPhone(phone) {
+    const norm = miniNormalizePhone(phone);
+    if (!norm) return [];
+    return A.db.traders.filter(t => miniNormalizePhone(t.phone) === norm);
+  }
+  function screenLoginPhone(t) {
+    const m = mini();
+    const val = m.loginPhone != null ? m.loginPhone : (t ? t.phone : '');
+    return `<div class="m-body" style="justify-content:center;text-align:center">
+      <div style="font-size:48px">🪷</div><h3 style="font-size:var(--font-size-lg)">Chợ số Cao Lãnh</h3><div class="small muted">Đăng nhập Mini App</div>
+      <div class="small muted" style="margin-top:6px">Nhập số điện thoại đã đăng ký với Ban Quản lý Chợ Cao Lãnh.</div>
+      <div class="field" style="text-align:left;margin-top:18px"><label>Số điện thoại</label><input class="input" style="padding:12px" data-in="mini-login-phone" value="${U.esc(val)}" placeholder="09xxxxxxxx"></div>
+      <button class="m-btn solid" data-act="mini-login-lookup">Nhận mã đăng nhập</button></div>`;
+  }
+  function screenLoginNotFound() {
+    return `<div class="m-body" style="justify-content:center;text-align:center">
+      <div style="font-size:48px">🔍</div><h3>Không tìm thấy hồ sơ tiểu thương</h3>
+      <div class="m-card" style="text-align:left"><div class="small">Số điện thoại này chưa được đăng ký trong hệ thống quản lý chợ.<br><br>Vui lòng liên hệ Ban Quản lý Chợ để kiểm tra hoặc cập nhật thông tin.</div></div>
+      <button class="btn sm" data-act="mini-login-retry">Nhập lại số điện thoại</button></div>`;
+  }
+  function screenLoginMulti() {
+    return `<div class="m-body" style="justify-content:center;text-align:center">
+      <div style="font-size:48px">⚠️</div><h3>Không thể xác định hồ sơ duy nhất</h3>
+      <div class="m-card"><div class="small">Vui lòng liên hệ Ban Quản lý.</div></div>
+      <button class="btn sm" data-act="mini-login-retry">Nhập lại số điện thoại</button></div>`;
+  }
+  function screenLoginLocked() {
+    return `<div class="m-body" style="justify-content:center;text-align:center">
+      <div style="font-size:48px">🔒</div><h3>Tài khoản đã bị khóa</h3>
+      <div class="m-card"><div class="small">Tài khoản Mini App của bạn đã bị khóa truy cập. Vui lòng liên hệ Ban Quản lý Chợ để được hỗ trợ.</div></div>
+      <button class="btn sm" data-act="mini-login-retry">Nhập lại số điện thoại</button></div>`;
+  }
+  function screenLoginConfirm() {
+    const m = mini(), t = A.idx.trader.get(m.loginTraderId);
+    if (!t) { m.loginStep = 'phone'; return screenLoginPhone(trader()); }
+    return `<div class="m-body" style="justify-content:center;text-align:center">
+      <div style="font-size:40px">✓</div><h3>Đã tìm thấy hồ sơ tiểu thương</h3>
+      <div class="m-card" style="text-align:left"><dl class="kv">
+        <dt>Họ tên</dt><dd>${U.esc(t.name)}</dd>
+        <dt>Mã tiểu thương</dt><dd>${t.id}</dd>
+        <dt>Chợ</dt><dd>${U.mShort(t.market)}</dd>
+        <dt>SĐT</dt><dd>${U.maskPhone(t.phone)}</dd>
+      </dl></div>
+      <button class="m-btn solid" data-act="mini-login-send-otp">Gửi mã đăng nhập</button>
+      <button class="btn sm" style="margin-top:8px" data-act="mini-login-retry">Nhập lại số điện thoại</button></div>`;
+  }
+  function screenLoginOtp() {
+    const m = mini(), t = A.idx.trader.get(m.loginTraderId);
+    return `<div class="m-body" style="justify-content:center;text-align:center">
+      <h3>Xác thực số điện thoại</h3><div class="small muted">Mã đăng nhập đã được gửi tới ${t ? U.maskPhone(t.phone) : ''}</div>
+      <div class="otp" style="margin:16px 0">${'123456'.split('').map(c => `<input value="${c}" readonly>`).join('')}</div>
+      <div class="small muted">(Demo: mã 123456 — OTP GIẢ LẬP, không gửi SMS thật)</div>
+      <button class="m-btn solid" data-act="mini-login-verify">Xác nhận</button></div>`;
+  }
   function screenLogin(t) {
     const m = mini();
-    if (m.step === 'login') return `<div class="m-body" style="justify-content:center;text-align:center">
-      <div style="font-size:48px">🪷</div><h3 style="font-size:var(--font-size-lg)">Chợ số Cao Lãnh</h3><div class="small muted">Ứng dụng dành cho tiểu thương</div>
-      <div class="field" style="text-align:left;margin-top:18px"><label>Số điện thoại</label><input class="input" style="padding:12px" value="${t.phone}" readonly></div>
-      <button class="m-btn solid" data-act="mini-otp">Nhận mã OTP</button>
-      <div class="small muted">Đăng nhập bằng số điện thoại đã đăng ký với Ban Quản lý chợ</div></div>`;
+    const step = m.loginStep || 'phone';
+    if (step === 'notfound') return screenLoginNotFound();
+    if (step === 'multi') return screenLoginMulti();
+    if (step === 'locked') return screenLoginLocked();
+    if (step === 'confirm') return screenLoginConfirm();
+    if (step === 'otp') return screenLoginOtp();
+    return screenLoginPhone(t);
+  }
+  // "Đang chờ"/trạng thái hồ sơ khác ACTIVE (mục 19 yêu cầu correction — Profile lifecycle độc lập
+  // với Account access; giữ màn này CHỈ để hiển thị phòng thủ nếu profileStatus khác ACTIVE do dữ
+  // liệu cũ/thao tác khác — KHÔNG còn hành động "bổ sung & gửi lại" nào ở Mini App nữa vì không còn
+  // luồng nào tạo NEEDS_SUPPLEMENT/PENDING_VERIFICATION từ Mini App).
+  function screenProfileStatus(t) {
+    const status = t.profileStatus;
+    const icon = status === 'NEEDS_SUPPLEMENT' ? '📝' : status === 'INACTIVE' ? '⛔' : '⏳';
+    const title = status === 'NEEDS_SUPPLEMENT' ? 'Hồ sơ cần bổ sung' : status === 'INACTIVE' ? 'Hồ sơ đã ngừng hoạt động' : 'Hồ sơ chưa hoạt động';
+    const body = status === 'NEEDS_SUPPLEMENT' ? (t.supplementNote || 'Vui lòng liên hệ Ban Quản lý chợ để biết chi tiết cần bổ sung.')
+      : 'Vui lòng liên hệ Ban Quản lý Chợ để được hỗ trợ.';
     return `<div class="m-body" style="justify-content:center;text-align:center">
-      <h3>Nhập mã xác thực</h3><div class="small muted">Mã OTP đã gửi tới ${U.maskPhone(t.phone)}</div>
-      <div class="otp" style="margin:16px 0">${'246810'.split('').map(c => `<input value="${c}" readonly>`).join('')}</div>
-      <div class="small muted">(Demo: mã tự điền sẵn)</div>
-      <button class="m-btn solid" data-act="mini-login">Xác nhận</button></div>`;
+      <div style="font-size:48px">${icon}</div><h3>${title}</h3>
+      <div class="m-card" style="text-align:left"><div class="small">${U.esc(body)}</div></div>
+      <button class="btn sm" style="margin-top:8px" data-act="mini-logout">Đăng xuất</button></div>`;
   }
 
   function screenPay(t) {
@@ -496,14 +716,14 @@
 
   function tabHome(t) {
     const list = unpaid(t), total = U.sum(list, U.due), over = list.filter(U.isOver);
-    const c = A.db.contracts.find(x => x.traderId === t.id && x.status === 'hieuluc');
     const notis = notisFor(t).slice(0, 2);
     const mine = A.db.incidents.filter(i => i.traderId === t.id).slice(-2).reverse();
+    // "Điểm kinh doanh" — mỗi điểm 1 card riêng (mục 3 yêu cầu bổ sung), tái dùng miniPointCard()
+    // (thay vì 1 dòng gọn cũ) để có chỗ cho nút "Gửi yêu cầu tách điểm"/"Xem yêu cầu đang xử lý".
     return `<div class="m-card m-due"><div class="small" style="opacity:.85">Tổng cần thanh toán</div><div class="amt">${U.money(total)}</div>
         ${over.length ? `<div class="small" style="background:rgba(255,255,255,.15);padding:6px 10px;border-radius:8px;margin-bottom:10px">⚠ ${over.length} khoản quá hạn – vui lòng thanh toán sớm</div>` : ''}
         ${total ? '<button class="m-btn" data-act="mini-pay">Thanh toán bằng QR</button>' : '<div class="small">Bạn không có khoản nào cần thanh toán 🎉</div>'}</div>
-      <div class="m-card"><b>Điểm kinh doanh</b><div class="m-list">${t.stalls.map(id => { const s = A.idx.stall.get(id); return `<div class="it"><span>${s.code} · ${U.esc(s.sectionName)}</span><span class="muted">${s.area.toLocaleString('vi-VN')} m²</span></div>`; }).join('')}
-        ${c ? `<div class="it"><span class="muted">Hợp đồng đến</span><span>${U.dmy(c.end)} (${U.days(U.today(), c.end)} ngày)</span></div>` : ''}</div></div>
+      ${t.stalls.map(id => miniPointCard(t, A.idx.stall.get(id))).join('')}
       <div class="m-card"><b>Thông báo mới</b><div class="m-list">${notis.map(n => `<div class="it"><span>${U.esc(n.title)}</span><span class="muted small">${U.dmy(n.at).slice(0, 5)}</span></div>`).join('') || '<div class="small muted">Chưa có</div>'}</div></div>
       ${mine.length ? `<div class="m-card"><b>Phản ánh của tôi</b><div class="m-list">${mine.map(i => `<div class="it"><span>${U.esc(i.title)}</span><span class="tag info">${D.INCIDENT_STATES.find(s => s.id === i.state).label}</span></div>`).join('')}</div></div>` : ''}`;
   }
@@ -537,7 +757,7 @@
   }
   function notisFor(t) {
     const debt = U.traderOverdue(t.id) > 0, mk = U.market(t.market).short;
-    const general = A.db.notifications.filter(n => n.group === 'Toàn bộ tiểu thương' || n.group === mk || n.group === 'Ngành hàng: ' + t.cat || (debt && n.group === 'Danh sách nợ phí'));
+    const general = A.db.notifications.filter(n => n.traderId === t.id || n.group === 'Toàn bộ tiểu thương' || n.group === mk || n.group === 'Ngành hàng: ' + t.cat || (debt && n.group === 'Danh sách nợ phí'));
     const session = (A.db.sessionNotifications || []).map(n => {
       const s = (A.db.marketSessions || []).find(x => x.id === n.sessionId);
       if (n.merchantId && n.merchantId !== t.id) return null;
@@ -559,7 +779,110 @@
       <button class="btn" style="margin-top:8px" data-act="mini-attach">${m.attach ? '✓ Đã đính kèm 1 ảnh' : '📷 Chụp / đính kèm ảnh'}</button>
       <button class="m-btn solid" style="margin-top:10px" data-act="mini-report">Gửi phản ánh</button></div>
       ${mine.length ? `<div class="m-card"><b>Phản ánh đã gửi</b><div class="m-list">${mine.map(i => `<div class="it" style="flex-wrap:wrap"><span style="flex:1">${U.esc(i.title)}<div class="small muted">${i.id} · ${U.dmy(i.created)}</div></span><span class="tag info">${D.INCIDENT_STATES.find(s => s.id === i.state).label}</span>
-        ${(i.state === 'hoanthanh' || i.state === 'dong') ? `<div class="stars" style="width:100%">${[1, 2, 3, 4, 5].map(n => `<button class="${i.rating >= n ? 'on' : ''}" data-act="mini-rate" data-id="${i.id}" data-n="${n}" aria-label="${n} sao">★</button>`).join('')}<span class="small muted">${i.rating ? 'Cảm ơn bạn đã đánh giá' : 'Đánh giá dịch vụ'}</span></div>` : ''}</div>`).join('')}</div></div>` : ''}`;
+        ${(i.state === 'hoanthanh' || i.state === 'dong') ? `<div class="stars" style="width:100%">${[1, 2, 3, 4, 5].map(n => `<button class="${i.rating >= n ? 'on' : ''}" data-act="mini-rate" data-id="${i.id}" data-n="${n}" aria-label="${n} sao">★</button>`).join('')}<span class="small muted">${i.rating ? 'Cảm ơn bạn đã đánh giá' : 'Đánh giá dịch vụ'}</span></div>` : ''}</div>`).join('')}</div></div>` : ''}
+      ${tabMyRequests(t)}`;
+  }
+  // "Yêu cầu của tôi" (mục 9 yêu cầu bổ sung) — tích hợp NGAY trong tab "Phản ánh" đã có sẵn kiểu
+  // theo dõi yêu cầu/phản ánh tương tự (mục "Phản ánh đã gửi" ở trên), KHÔNG thêm mục điều hướng
+  // dư thừa (.m-tabs đã cố định 5 cột, không đủ chỗ thêm tab). Chỉ hiển thị request Tách điểm.
+  function tabMyRequests(t) {
+    const f = mini().reqFilter || 'all';
+    const rows = miniMyRequests(t).filter(r => miniReqFilterMatch(r, f));
+    return `<div class="m-card"><b>Yêu cầu của tôi</b>
+      <div class="row" style="gap:4px;margin:8px 0;flex-wrap:wrap">${MINI_REQ_FILTERS.map(x => `<button class="btn sm ${f === x[0] ? 'primary' : ''}" data-act="mini-req-filter" data-id="${x[0]}">${x[1]}</button>`).join('')}</div>
+      <div class="m-list">${rows.length ? rows.map(miniReqRowHtml).join('') : '<div class="small muted">Chưa có yêu cầu tách điểm nào.</div>'}</div></div>`;
+  }
+
+  // "YÊU CẦU TÁCH ĐIỂM" (mục 5-6 yêu cầu bổ sung) — màn con TRONG khung điện thoại (cùng kỹ thuật
+  // swap `body` theo state đã có ở screenPay: m.pay), KHÔNG dùng A.modal() vì modal render ra ngoài
+  // khung điện thoại (#modal-root ở ngoài .phone), phá vỡ ảo giác "trong app". Tiểu thương CHỈ được
+  // nhập lý do/ghi chú/tệp — KHÔNG có bất kỳ field phương án kỹ thuật nào (mã điểm mới/diện tích
+  // từng điểm con/loại điểm/ngành hàng quy hoạch/người xử lý/người phê duyệt — mục 6 yêu cầu bổ sung).
+  function screenSplitForm(t) {
+    const m = mini(), st = A.idx.stall.get(m.splitPoint), d = m.splitDraft;
+    if (!st || !d || st.market !== 'CL' || !miniOwnsStall(t, st)) { m.splitPoint = null; m.splitDraft = null; return tabHome(t); }
+    const c = st.contractId ? A.idx.contract.get(st.contractId) : null;
+    return `<div class="m-body"><button class="btn sm" style="align-self:flex-start" data-act="mini-split-cancel">‹ Quay lại</button>
+      <div class="m-card"><b>Yêu cầu tách điểm</b>
+        <dl class="kv" style="margin-top:8px">
+          <dt>Điểm kinh doanh</dt><dd>${st.code}</dd>
+          <dt>Vị trí</dt><dd>${U.esc(st.sectionName)}</dd>
+          <dt>Diện tích hiện tại</dt><dd>${st.area.toLocaleString('vi-VN')} m²</dd>
+          <dt>Ngành hàng</dt><dd>${U.esc(st.cat) || 'Chưa có thông tin'}</dd>
+          <dt>Hợp đồng hiện hành</dt><dd>${c ? c.id : 'Chưa có hợp đồng hiệu lực'}</dd>
+        </dl></div>
+      <div class="m-card">
+        <div class="field"><label>Lý do muốn tách *</label><textarea class="input" rows="3" id="mini-split-reason" data-in="mini-split-reason" placeholder="Mô tả nhu cầu...">${U.esc(d.reason)}</textarea></div>
+        <div class="field" style="margin-top:8px"><label>Ghi chú</label><textarea class="input" rows="2" id="mini-split-note" data-in="mini-split-note">${U.esc(d.note)}</textarea></div>
+        <div class="field" style="margin-top:8px"><label>Người dự kiến trực tiếp kinh doanh sau khi tách <span class="muted">(không bắt buộc)</span></label><input class="input" data-in="mini-split-proposed-name" value="${U.esc(d.proposedName || '')}" placeholder="Chưa xác định"><div class="small muted" style="margin-top:2px">Chỉ là thông tin dự kiến; không tự trở thành người bán đã xác minh.</div></div>
+        <div class="field" style="margin-top:8px"><label>Hình ảnh / tài liệu kèm theo</label>
+          <div class="row" style="gap:6px;flex-wrap:wrap">${d.files.map((name, i) => `<span class="tag info">${U.esc(name)} <button class="x" style="font-size:14px;line-height:1" data-act="mini-split-file-remove" data-idx="${i}" aria-label="Bỏ tệp ${U.esc(name)}">×</button></span>`).join('')}
+          <button class="btn sm" type="button" data-act="mini-split-file-pick">+ Thêm</button></div>
+          <div class="small muted" style="margin-top:2px">Chỉ mô phỏng chọn tệp minh họa cho prototype, chưa upload lên máy chủ.</div></div>
+      </div>
+      <div class="row" style="gap:8px">
+        <button class="btn" data-act="mini-split-cancel">Hủy</button>
+        <button class="m-btn solid" style="width:auto;flex:1" data-act="mini-split-save">Gửi yêu cầu</button>
+      </div></div>`;
+  }
+  function screenMergeForm(t) {
+    const m=mini(), d=m.mergeDraft, a=d&&A.idx.stall.get(d.a), candidates=a?miniMergeCandidates(t,a):[];
+    if(!d||!a||!miniOwnsStall(t,a)){m.mergeDraft=null;return tabHome(t);}
+    return `<div class="m-body"><button class="btn sm" data-act="mini-merge-cancel">‹ Quay lại</button><div class="m-card"><b>Yêu cầu gộp điểm</b><dl class="kv"><dt>Điểm thứ nhất</dt><dd>${a.code}</dd><dt>Điểm gộp cùng *</dt><dd><select class="input" data-ch="mini-merge-b"><option value="">— Chọn điểm liền kề —</option>${candidates.map(x=>`<option value="${x.id}" ${d.b===x.id?'selected':''}>${x.code} · ${x.area} m²</option>`).join('')}</select></dd></dl><div class="small muted">Chỉ hiện điểm của chính bạn, liền kề theo row/num cùng khu — quy tắc prototype.</div></div>${d.b&&A.idx.stall.get(d.b)?`<div class="m-card"><b>Hai điểm đề nghị gộp</b><div class="small" style="margin-top:8px">${a.code} (${a.area} m²) + ${A.idx.stall.get(d.b).code} (${A.idx.stall.get(d.b).area} m²)</div><div class="field" style="margin-top:10px"><label>Lý do *</label><textarea class="input" data-in="mini-merge-reason">${U.esc(d.reason||'')}</textarea></div><div class="field"><label>Tài liệu minh họa</label><button class="btn sm" data-act="mini-merge-file">+ Thêm (mock)</button></div></div><div class="row"><button class="btn" data-act="mini-merge-cancel">Hủy</button><button class="m-btn solid" style="width:auto;flex:1" data-act="mini-merge-save">Gửi yêu cầu</button></div>`:''}</div>`;
+  }
+  // "Đề nghị chuyển vị trí" (RELOCATE_TO_VACANT_POINT, Mini App) — tiểu thương chọn ĐÚNG điểm hiện
+  // tại của mình + 1 điểm còn trống bất kỳ trong Chợ Cao Lãnh (KHÔNG cần liền kề, khác Gộp điểm) +
+  // lý do/ghi chú/tệp minh họa. KHÔNG có field phương án kỹ thuật nào khác (không sửa area/pointCode/
+  // đơn giá) — giống hệt tinh thần "trader chỉ đề nghị, NV BQL lập phương án" của Tách/Gộp điểm.
+  function screenConvertForm(t) {
+    const m = mini(), st = A.idx.stall.get(m.convertPoint), d = m.convertDraft;
+    if (!st || !d || st.market !== 'CL' || !miniOwnsStall(t, st)) { m.convertPoint = null; m.convertDraft = null; return tabHome(t); }
+    const candidates = miniConvertCandidates(t, st);
+    const target = d.toPointId ? A.idx.stall.get(d.toPointId) : null;
+    return `<div class="m-body"><button class="btn sm" style="align-self:flex-start" data-act="mini-convert-cancel">‹ Quay lại</button>
+      <div class="m-card"><b>Đề nghị chuyển vị trí</b>
+        <dl class="kv" style="margin-top:8px">
+          <dt>Điểm hiện tại</dt><dd>${st.code}</dd>
+          <dt>Vị trí</dt><dd>${U.esc(st.sectionName)}</dd>
+          <dt>Diện tích</dt><dd>${st.area.toLocaleString('vi-VN')} m²</dd>
+        </dl>
+        <div class="field" style="margin-top:8px"><label>Điểm còn trống muốn chuyển đến *</label><select class="input" data-ch="mini-convert-to"><option value="">— Chọn điểm —</option>${candidates.map(x => `<option value="${x.id}" ${d.toPointId === x.id ? 'selected' : ''}>${x.code} · ${U.esc(x.sectionName)} · ${x.area.toLocaleString('vi-VN')} m²</option>`).join('')}</select></div>
+        ${!candidates.length ? '<div class="small muted" style="margin-top:6px">Hiện không có điểm nào còn trống trong Chợ Cao Lãnh.</div>' : ''}
+      </div>
+      ${target ? `<div class="m-card">
+        <div class="small" style="margin-bottom:8px">${st.code} (${st.area} m²) → ${target.code} (${target.area} m²)</div>
+        <div class="field"><label>Lý do muốn chuyển vị trí *</label><textarea class="input" rows="3" data-in="mini-convert-reason" placeholder="Mô tả nhu cầu...">${U.esc(d.reason)}</textarea></div>
+        <div class="field" style="margin-top:8px"><label>Ghi chú</label><textarea class="input" rows="2" data-in="mini-convert-note">${U.esc(d.note)}</textarea></div>
+        <div class="field" style="margin-top:8px"><label>Hình ảnh / tài liệu kèm theo</label><button class="btn sm" type="button" data-act="mini-convert-file">+ Thêm (mock)</button>${d.files.length ? `<div class="small muted" style="margin-top:4px">${d.files.map(n => U.esc(n)).join(', ')}</div>` : ''}</div>
+      </div>
+      <div class="row" style="gap:8px">
+        <button class="btn" data-act="mini-convert-cancel">Hủy</button>
+        <button class="m-btn solid" style="width:auto;flex:1" data-act="mini-convert-save">Gửi yêu cầu</button>
+      </div>` : ''}</div>`;
+  }
+  // "CHI TIẾT YÊU CẦU" (mục 10 yêu cầu bổ sung) — render tiến độ TRỰC TIẾP từ timeline thật của
+  // CHÍNH request (miniTimelineHtml → A.pointReq.stepStates), không tạo timeline riêng không liên
+  // kết với request Web.
+  function screenReqDetail(t) {
+    const m = mini(), r = A.pointReq.find(m.reqView);
+    // Re-check ownership (mục 9 yêu cầu bổ sung: không cho xem yêu cầu của người khác) — phòng thủ
+    // thêm ở nơi RENDER, không chỉ ở handler mở (m.reqView có thể bị chỉnh tay/lưu localStorage cũ).
+    if (!r || r.source !== 'TRADER' || r.requestedByTraderId !== t.id) { m.reqView = null; return tabHome(t); }
+    const st = A.idx.stall.get(r.type === 'CONVERT' ? r.fromPointId : r.pointId);
+    const codes = r.type === 'MERGE' ? (r.sourcePointIds || []).map(id => { const x = A.idx.stall.get(id); return x ? x.code : id; }).join(' + ')
+      : r.type === 'CONVERT' ? [r.fromPointId, r.plan && r.plan.toPointId ? r.plan.toPointId : r.toPointId].map(id => { const x = id && A.idx.stall.get(id); return x ? x.code : (id || 'Chưa chọn'); }).join(' → ') : null;
+    return `<div class="m-body"><button class="btn sm" style="align-self:flex-start" data-act="mini-req-close">‹ Quay lại</button>
+      <div class="m-card"><b>Chi tiết yêu cầu</b>
+        <dl class="kv" style="margin-top:8px">
+          <dt>Mã yêu cầu</dt><dd>${r.id}</dd>
+          <dt>Loại</dt><dd>${r.type==='MERGE'?'Gộp điểm kinh doanh':r.type==='CONVERT'?'Chuyển đổi vị trí điểm kinh doanh':'Tách điểm kinh doanh'}</dd>
+          <dt>Điểm</dt><dd>${r.type==='MERGE'||r.type==='CONVERT'?codes:(st ? st.code : r.pointId)}</dd>
+          <dt>Ngày gửi</dt><dd>${U.dmy(r.requestedAt)}</dd>
+          <dt>Lý do</dt><dd>${U.esc(r.reason) || 'Chưa ghi nhận'}</dd>
+          <dt>Trạng thái hiện tại</dt><dd><span class="tag ${MINI_STATUS_CLASS[r.status] || ''}">${U.esc(MINI_STATUS_LABEL[r.status] || r.status)}</span></dd>
+        </dl></div>
+      ${miniReqStatusNoteHtml(r)}
+      <div class="m-card"><b>Tiến độ xử lý</b><div class="m-list" style="margin-top:6px">${miniTimelineHtml(r)}</div></div></div>`;
   }
   function tabRegister(t) {
     ensureMiniRegistrationModel();
@@ -607,9 +930,20 @@
     const m = mini();
     const TABS = [['home', '🏠', 'Trang chủ'], ['bills', '🧾', 'Hóa đơn'], ['contract', '📄', 'Hợp đồng'], ['register', '🪷', 'Đăng ký'], ['notice', '🔔', 'Thông báo'], ['report', '💬', 'Phản ánh']];
     let body;
+    // CORRECTION: bỏ nhánh regStep/pendingLinkId/supplementDraft (luồng Mini App tự đăng ký đã loại
+    // bỏ — xem TRADER_PROFILE_MINIAPP_CORRECTION_REPORT.md). `m.step !== 'app'` giờ bao trọn luồng
+    // đăng nhập SĐT+OTP mới (screenLogin tự dispatch theo m.loginStep bên trong).
     if (m.step !== 'app') body = screenLogin(t);
     else if (m.sessionPayId) body = screenSessionPay(t);
+    // Hồ sơ CHƯA ACTIVE (NEEDS_SUPPLEMENT/INACTIVE — dữ liệu cũ/gán tay, không còn phát sinh từ Mini
+    // App) → chỉ xem trạng thái, KHÔNG vào app bình thường (mục 19 yêu cầu correction: Profile
+    // lifecycle độc lập với Account access lifecycle).
+    else if (t.profileStatus && t.profileStatus !== 'ACTIVE') body = screenProfileStatus(t);
     else if (m.pay) body = screenPay(t);
+    else if (m.splitPoint) body = screenSplitForm(t);
+    else if (m.mergeDraft) body = screenMergeForm(t);
+    else if (m.convertPoint) body = screenConvertForm(t);
+    else if (m.reqView) body = screenReqDetail(t);
     else {
       const f = { home: tabHome, bills: tabBills, contract: tabContract, register: tabRegister, notice: tabNotice, report: tabReport }[m.tab];
       body = `<div class="m-head"><div class="hi">Xin chào,</div><div class="nm">${U.esc(t.name)}</div><div class="hi">${U.esc(U.market(t.market).short)}</div></div><div class="m-body">${f(t)}</div>
@@ -617,7 +951,6 @@
     }
     return `<div class="phone"><div class="screen"><div class="notch"><span>9:41</span><span>▮▮▮ 4G 🔋</span></div>${body}</div></div>`;
   }
-
   function collectorPhone() {
     const m = mini();
     const list = collectorDebtors();
@@ -690,23 +1023,58 @@
     return `<div class="mini-wrap"><div>${phone(t)}</div>
       <div class="grid" style="align-content:start">
         <div class="card"><div class="card-h"><h3>Mini app tiểu thương</h3></div><div class="card-b">
-          <p class="muted" style="margin-top:0">Ứng dụng cho iOS 14+ và Android 10+ (hoặc mini app trên Zalo). Tiểu thương đăng nhập bằng số điện thoại và mã OTP.</p>
+          <p class="muted" style="margin-top:0">Ứng dụng cho iOS 14+ và Android 10+ (hoặc mini app trên Zalo). Tiểu thương đăng nhập bằng số điện thoại đã đăng ký với Ban Quản lý chợ và mã đăng nhập một lần (OTP giả lập).</p>
           <div class="field"><label>Xem với tư cách tiểu thương mẫu</label><select class="input" data-ch="mini-trader">${list.map(x => `<option value="${x.id}" ${x.id === t.id ? 'selected' : ''}>${U.esc(x.name)} · ${x.stalls.map(id => A.idx.stall.get(id).code).join(', ')} · ${U.mShort(x.market)}${U.traderDebt(x.id) ? ' · nợ ' + U.moneyShort(U.traderDebt(x.id)) : ''}</option>`).join('')}</select></div>
           ${mini().step === 'app' ? '<button class="btn" style="margin-top:10px" data-act="mini-logout">Đăng xuất</button>' : ''}</div></div>
         <div class="card"><div class="card-h"><h3>Kịch bản demo</h3></div><div class="card-b"><ol class="script">
-          <li><div>Bấm <b>Nhận mã OTP</b> → <b>Xác nhận</b> để đăng nhập.</div></li>
+          <li><div>Bấm <b>Nhận mã đăng nhập</b> (SĐT có sẵn của tiểu thương mẫu đang chọn) → <b>Gửi mã đăng nhập</b> → <b>Xác nhận</b> để đăng nhập.</div></li>
           <li><div>Ở Trang chủ, bấm <b>Thanh toán bằng QR</b> → <b>Giả lập: đã chuyển khoản</b>. Hệ thống ghi nhận, phát hành biên lai điện tử, cập nhật công nợ.</div></li>
           <li><div>Mở tab <b>Phản ánh</b>, đính kèm ảnh và <b>Gửi phản ánh</b>.</div></li>
           <li><div>Đổi vai trò sang <b>Ban Quản lý chợ</b> → <b>Phản ánh & sự cố</b>: phản ánh mới nằm ở cột "Tiếp nhận". Chuyển đến "Hoàn thành" rồi quay lại đây để <b>đánh giá sao</b>.</div></li>
         </ol></div></div>      </div></div>`;
   };
 
-  A.CH['mini-trader'] = el => { Object.assign(mini(), { traderId: el.value, step: 'login', tab: 'home', pay: null, bill: null, attach: false }); A.render(); };
-  A.CH['mini-reg-form'] = el => { mini().regForm = mini().regForm || {}; mini().regForm[el.dataset.k] = el.value; A.render(); };
+  A.CH['mini-trader'] = el => { miniResetRequestState(); miniResetLoginFlow(); Object.assign(mini(), { traderId: el.value, step: 'login', tab: 'home', pay: null, bill: null, attach: false }); A.render(); };
+  A.IN['mini-split-reason'] = el => { if (mini().splitDraft) mini().splitDraft.reason = el.value; };
+  A.IN['mini-split-note'] = el => { if (mini().splitDraft) mini().splitDraft.note = el.value; };
+  A.IN['mini-split-proposed-name'] = el => { if (mini().splitDraft) mini().splitDraft.proposedName = el.value; };
+  A.IN['mini-merge-reason'] = el => { if (mini().mergeDraft) mini().mergeDraft.reason = el.value; };
+  A.CH['mini-merge-b'] = el => { if (mini().mergeDraft) { mini().mergeDraft.b=el.value; A.render(); } };
+  A.CH['mini-convert-to'] = el => { if (mini().convertDraft) { mini().convertDraft.toPointId = el.value || null; A.render(); } };
+  A.IN['mini-convert-reason'] = el => { if (mini().convertDraft) mini().convertDraft.reason = el.value; };
+  A.IN['mini-convert-note'] = el => { if (mini().convertDraft) mini().convertDraft.note = el.value; };
+  // ---- Đăng nhập/kích hoạt Mini App (SĐT + OTP) — field binding ----
+  // Render lại ngay khi gõ để nút "Nhận mã đăng nhập" phản ánh đúng giá trị mới nhất khi cần (an
+  // toàn vì A.render() giữ nguyên focus/caret cho input đang gõ, xem A.render() ở core.js).
+  A.IN['mini-login-phone'] = el => { mini().loginPhone = el.value; };
   Object.assign(A.ACT, {
-    'mini-otp': () => { mini().step = 'otp'; A.render(); },
-    'mini-login': () => { mini().step = 'app'; mini().tab = 'home'; A.render(); },
-    'mini-logout': () => { Object.assign(mini(), { step: 'login', pay: null, tab: 'home' }); A.render(); },
+    // Tra cứu Trader Profile theo SĐT (mục 11 yêu cầu correction) — KHÔNG tạo trader/account ở bước
+    // này, chỉ xác định CASE A (không thấy)/CASE B (thấy đúng 1)/nhiều kết quả (mục 22 — ambiguous).
+    'mini-login-lookup': () => {
+      const m = mini();
+      const raw = m.loginPhone != null ? m.loginPhone : trader().phone;
+      if (!String(raw || '').trim()) { U.toast('Vui lòng nhập số điện thoại'); return; }
+      const matches = miniFindTradersByPhone(raw);
+      if (matches.length === 0) { m.loginStep = 'notfound'; A.render(); return; }
+      if (matches.length > 1) { m.loginStep = 'multi'; A.render(); return; }
+      m.loginTraderId = matches[0].id; m.loginStep = 'confirm'; A.render();
+    },
+    'mini-login-retry': () => { miniResetLoginFlow(); A.render(); },
+    'mini-login-send-otp': () => { mini().loginStep = 'otp'; A.render(); },
+    // Xác thực OTP giả lập thành công → tìm-hoặc-tạo Trader Account (mục 14/15 yêu cầu correction:
+    // reuse account đã có, KHÔNG tạo trùng) rồi vào Mini App. Account đã bị khóa → chặn (mục 17 —
+    // "Khóa truy cập" phải thật sự chặn được truy cập, không chỉ là nhãn hiển thị).
+    'mini-login-verify': () => {
+      const m = mini(), t = A.idx.trader.get(m.loginTraderId);
+      if (!t) { m.loginStep = 'phone'; A.render(); return; }
+      const existing = A.ACCOUNTS.byTraderId(t.id);
+      if (existing && existing.status !== 'active') { m.loginStep = 'locked'; A.render(); return; }
+      if (A.createLinkedTraderAccount) A.createLinkedTraderAccount(t, t.phone);
+      Object.assign(m, { traderId: t.id, step: 'app', tab: 'home', loginStep: 'phone', loginPhone: null, loginTraderId: null });
+      A.save();
+      A.render();
+    },
+    'mini-logout': () => { miniResetRequestState(); miniResetLoginFlow(); Object.assign(mini(), { step: 'login', pay: null, tab: 'home' }); A.render(); },
     'mini-tab': el => { mini().tab = el.dataset.id; mini().bill = null; A.render(); },
     'mini-home': () => { mini().pay = null; mini().tab = 'home'; A.render(); },
     'mini-pay': () => { mini().pay = 'qr'; A.render(); },
@@ -821,6 +1189,133 @@
       if (i.state === 'hoanthanh') i.state = 'dong';
       i.log.push({ at: U.today(), text: 'Tiểu thương đánh giá ' + i.rating + ' sao' });
       A.save(); A.render(); U.toast('Cảm ơn bạn đã đánh giá ' + i.rating + ' sao');
+    },
+    'mini-split-open': el => {
+      const t = trader(), st = A.idx.stall.get(el.dataset.id);
+      if (!t || !st || st.market !== 'CL' || !miniOwnsStall(t, st)) {
+        U.toast('Bạn không có quyền gửi yêu cầu cho điểm kinh doanh này.'); return;
+      }
+      const active = A.pointReq.activeFor(st.id);
+      if (active) {
+        Object.assign(mini(), { splitPoint: null, splitDraft: null, reqView: active.id });
+        A.render(); U.toast('Điểm này đã có yêu cầu tách đang được xử lý.'); return;
+      }
+      if (!miniStructurallyActive(st)) {
+        U.toast('Điểm kinh doanh này không còn đủ điều kiện gửi yêu cầu tách.'); return;
+      }
+      Object.assign(mini(), { splitPoint: st.id, splitDraft: { reason: '', note: '', files: [], proposedName: '' }, reqView: null });
+      A.render();
+    },
+    'mini-split-cancel': () => { Object.assign(mini(), { splitPoint: null, splitDraft: null }); A.render(); },
+    'mini-merge-open': el => {
+      const t=trader(), a=A.idx.stall.get(el.dataset.id);
+      if(!t||!a||!miniOwnsStall(t,a)||!miniStructurallyActive(a)||!miniMergeCandidates(t,a).length) return U.toast('Không có điểm liền kề hợp lệ thuộc quyền sử dụng của bạn.');
+      Object.assign(mini(),{splitPoint:null,splitDraft:null,mergeDraft:{a:a.id,b:'',reason:'',files:[]},reqView:null}); A.render();
+    },
+    'mini-merge-cancel': () => { mini().mergeDraft=null; A.render(); },
+    'mini-merge-file': () => { const d=mini().mergeDraft;if(d){d.files.push('tai-lieu-minh-hoa.pdf');A.render();} },
+    'mini-merge-save': () => {
+      const m=mini(),t=trader(),d=m.mergeDraft,a=d&&A.idx.stall.get(d.a),b=d&&A.idx.stall.get(d.b),reason=String(d&&d.reason||'').trim();
+      if(!t||!d||!a||!b||!reason||!miniOwnsStall(t,a)||!miniMergeCandidates(t,a).some(x=>x.id===b.id)) return U.toast('Chọn đúng điểm liền kề và nhập lý do.');
+      const id=A.pointReq.nextId(), r={id,type:'MERGE',market:'CL',source:'TRADER',sourcePointIds:[a.id,b.id],createdBy:t.id,assignedTo:null,requestedByName:t.name,requestedByTraderId:t.id,requestedAt:U.today(),reason,note:'',attachments:d.files.slice(),status:'DRAFT',plan:null,timeline:[{key:'created',at:U.dmy(U.today()),by:t.name+' (Mini app)'}],resultPointIds:[]};
+      A.db.pointRequests.push(r);A.save();Object.assign(m,{mergeDraft:null,reqView:id});A.render();U.toast('Đã gửi yêu cầu '+id+'. Ban Quản lý sẽ tiếp nhận và xử lý.');
+    },
+    // "Đề nghị chuyển vị trí" (RELOCATE_TO_VACANT_POINT) — trader chọn CẢ source (điểm của chính
+    // mình) VÀ target (điểm còn trống bất kỳ trong CL) ngay từ Mini App (khác Tách/Gộp điểm — trader
+    // không tự lập phương án kỹ thuật, nhưng nghiệp vụ chuyển vị trí V1 yêu cầu trader chỉ rõ muốn
+    // chuyển ĐẾN ĐÂU). Request vẫn ở DRAFT/assignedTo=null cho tới khi NV BQL "Tiếp nhận" — cùng
+    // state machine SPLIT/MERGE, KHÔNG tạo cơ chế riêng.
+    'mini-convert-open': el => {
+      const t = trader(), st = A.idx.stall.get(el.dataset.id);
+      if (!t || !st || st.market !== 'CL' || !miniOwnsStall(t, st)) { U.toast('Bạn không có quyền gửi yêu cầu cho điểm kinh doanh này.'); return; }
+      if (A.pointReq.convertActiveConflict && A.pointReq.convertActiveConflict(st.id)) { U.toast('Điểm này đang có 1 yêu cầu thay đổi khác chưa hoàn tất.'); return; }
+      if (!miniStructurallyActive(st)) { U.toast('Điểm kinh doanh này không còn đủ điều kiện gửi yêu cầu.'); return; }
+      if (!miniConvertCandidates(t, st).length) { U.toast('Hiện không có điểm nào còn trống trong Chợ Cao Lãnh.'); return; }
+      Object.assign(mini(), { splitPoint: null, splitDraft: null, mergeDraft: null, convertPoint: st.id, convertDraft: { toPointId: null, reason: '', note: '', files: [] }, reqView: null });
+      A.render();
+    },
+    'mini-convert-cancel': () => { Object.assign(mini(), { convertPoint: null, convertDraft: null }); A.render(); },
+    'mini-convert-file': () => { const d = mini().convertDraft; if (d) { d.files.push('tai-lieu-minh-hoa.pdf'); A.render(); } },
+    'mini-convert-save': () => {
+      const m = mini(), t = trader(), st = A.idx.stall.get(m.convertPoint), d = m.convertDraft;
+      const target = d && d.toPointId ? A.idx.stall.get(d.toPointId) : null;
+      const reason = String(d && d.reason || '').trim();
+      if (!t || !st || !d || !target || !reason || !miniOwnsStall(t, st) || !miniConvertCandidates(t, st).some(x => x.id === target.id)) {
+        U.toast('Chọn đúng điểm còn trống và nhập lý do.'); return;
+      }
+      const id = A.pointReq.nextId();
+      const r = {
+        id, type: 'CONVERT', conversionType: 'RELOCATE_TO_VACANT_POINT', market: 'CL', source: 'TRADER',
+        fromPointId: st.id, toPointId: target.id,
+        requestedByName: t.name, requestedByTraderId: t.id, createdBy: t.id, assignedTo: null,
+        requestedAt: U.today(), reason, note: String(d.note || '').trim(), attachments: d.files.slice(),
+        status: 'DRAFT', plan: null, timeline: [{ key: 'created', at: U.dmy(U.today()), by: t.name + ' (Mini app)' }],
+        resultPointIds: null, postCheck: null
+      };
+      A.db.pointRequests.push(r);
+      A.save();
+      Object.assign(m, { convertPoint: null, convertDraft: null, reqView: id });
+      A.render(); U.toast('Đã gửi yêu cầu ' + id + '. Ban Quản lý sẽ tiếp nhận và xử lý.');
+    },
+    'mini-split-file-pick': () => {
+      const d = mini().splitDraft;
+      if (!d) return;
+      const old = A.$('#mini-split-file-input'); if (old) old.remove();
+      const input = document.createElement('input');
+      input.type = 'file'; input.id = 'mini-split-file-input'; input.accept = 'image/*,.pdf'; input.style.display = 'none';
+      input.addEventListener('change', () => {
+        if (input.files && input.files[0] && mini().splitDraft === d) { d.files.push(input.files[0].name); A.render(); }
+        input.remove();
+      });
+      document.body.appendChild(input);
+      input.click();
+    },
+    'mini-split-file-remove': el => {
+      const d = mini().splitDraft, idx = Number(el.dataset.idx);
+      if (!d || !Number.isInteger(idx) || idx < 0 || idx >= d.files.length) return;
+      d.files.splice(idx, 1); A.render();
+    },
+    'mini-split-save': () => {
+      const m = mini(), t = trader(), st = A.idx.stall.get(m.splitPoint), d = m.splitDraft;
+      if (!t || !st || !d || st.market !== 'CL' || !miniOwnsStall(t, st)) {
+        Object.assign(m, { splitPoint: null, splitDraft: null });
+        A.render(); U.toast('Điểm kinh doanh không hợp lệ hoặc không thuộc quyền sử dụng của bạn.'); return;
+      }
+      const active = A.pointReq.activeFor(st.id);
+      if (active) {
+        Object.assign(m, { splitPoint: null, splitDraft: null, reqView: active.id });
+        A.render(); U.toast('Điểm này đã có yêu cầu tách đang được xử lý.'); return;
+      }
+      if (!miniStructurallyActive(st)) {
+        Object.assign(m, { splitPoint: null, splitDraft: null });
+        A.render(); U.toast('Điểm kinh doanh này không còn đủ điều kiện gửi yêu cầu tách.'); return;
+      }
+      const reason = String(d.reason || '').trim(), note = String(d.note || '').trim();
+      if (!reason) { U.toast('Vui lòng nhập lý do muốn tách điểm.'); return; }
+      const id = A.pointReq.nextId();
+      const r = {
+        id, type: 'SPLIT', market: 'CL', pointId: st.id, source: 'TRADER',
+        requestedByName: t.name, requestedByTraderId: t.id, createdBy: t.id, assignedTo: null,
+        requestedAt: U.today(), reason, note, attachments: d.files.slice(), status: 'DRAFT', plan: null,
+        proposedDirectSeller: String(d.proposedName || '').trim() ? { fullName: String(d.proposedName).trim(), status: 'PROPOSED' } : null,
+        timeline: [{ key: 'created', at: U.dmy(U.today()), by: t.name + ' (Mini app)' }], resultPointIds: null
+      };
+      A.db.pointRequests.push(r);
+      A.save();
+      Object.assign(m, { splitPoint: null, splitDraft: null, reqView: id });
+      A.render(); U.toast('Đã gửi yêu cầu ' + id + '. Ban Quản lý sẽ tiếp nhận và xử lý.');
+    },
+    'mini-req-view': el => {
+      const t = trader(), r = A.pointReq.find(el.dataset.id);
+      if (!t || !r || r.source !== 'TRADER' || r.requestedByTraderId !== t.id) {
+        U.toast('Bạn không có quyền xem yêu cầu này.'); return;
+      }
+      Object.assign(mini(), { reqView: r.id, splitPoint: null, splitDraft: null }); A.render();
+    },
+    'mini-req-close': () => { mini().reqView = null; A.render(); },
+    'mini-req-filter': el => {
+      const allowed = MINI_REQ_FILTERS.some(x => x[0] === el.dataset.id);
+      mini().reqFilter = allowed ? el.dataset.id : 'all'; A.render();
     }
   });
 })(window.APP);

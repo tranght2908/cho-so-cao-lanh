@@ -41,17 +41,53 @@
       marketScopes: s.role === 'Trưởng Ban Quản lý chợ' ? ['CL', 'TTD'] : [s.market], status: 'active'
     }));
     list.push(
-      { id: 'AC-NV08', code: 'BQL-CL-01', fullName: 'Nguyễn Thanh Bình', phone: '', accountType: 'Nhân viên Ban Quản lý chợ', title: 'Nhân viên Ban Quản lý Chợ Cao Lãnh', roleIds: ['market_staff'], organization: 'Ban Quản lý Chợ Cao Lãnh', marketScopes: ['CL'], status: 'active' },
+      { id: 'AC-NV08', code: 'NV08', fullName: 'Nguyễn Văn A', phone: '0909567890', accountType: 'Nhân viên Ban Quản lý chợ', title: 'Nhân viên Ban Quản lý chợ (nghiệp vụ mặt bằng)', roleIds: ['market_staff'], organization: 'Ban Quản lý Chợ Cao Lãnh', marketScopes: ['CL'], status: 'active' },
       { id: 'AC-LD01', code: 'LD01', fullName: 'Nguyễn Văn Phúc', phone: '0909123456', accountType: 'Lãnh đạo UBND phường', title: 'Phó Chủ tịch UBND phường', roleIds: ['ward_leader'], organization: 'UBND phường Cao Lãnh', marketScopes: ['ALL'], status: 'active' },
       { id: 'AC-QT01', code: 'QT01', fullName: 'Đặng Thị Thu', phone: '0909234567', accountType: 'Quản trị hệ thống', title: 'Quản trị hệ thống', roleIds: ['system_admin'], organization: 'UBND phường Cao Lãnh', marketScopes: ['ALL'], status: 'active' },
-      { id: 'AC-CHI-QUYET', code: 'CHI-QUYET', fullName: 'Chí Quyết', phone: '0909000001', accountType: 'Tiểu thương', title: 'Tiểu thương chợ quê', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'active', linkedTraderId: 'TTD-CQ' },
+      { id: 'AC-CHI-QUYET', code: 'CHI-QUYET', fullName: 'Chí Quyết', phone: '0909000001', accountType: 'Tiểu thương', title: 'Tiểu thương chợ quê', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'active', linkedTraderId: 'TTD-CQ', traderId: 'TTD-CQ' },
       { id: 'AC-TT-TTD', code: 'TT-TTD', fullName: 'Tiểu thương Chợ quê Tân Thuận Đông', phone: '0909666777', accountType: 'Tiểu thương', title: 'Tiểu thương chợ quê mẫu', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'active' },
-      { id: 'AC-TT01', code: 'TT-DEMO1', fullName: 'Nguyễn Thị Hoa', phone: '0909345678', accountType: 'Tiểu thương', title: 'Tiểu thương mẫu', roleIds: ['trader'], organization: 'Chợ Cao Lãnh', marketScopes: ['CL'], status: 'active' },
-      { id: 'AC-TT02', code: 'TT-DEMO2', fullName: 'Trần Văn Sáu', phone: '0909456789', accountType: 'Tiểu thương', title: 'Tiểu thương mẫu (đã tạm khoá minh hoạ)', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'disabled' }
+      // BUSINESS_POINT_SPLIT_WORKFLOW supplement (yêu cầu bổ sung — luồng "Trưởng BQL chủ động đề
+      // xuất"): D.STAFF (data.js) KHÔNG có sẵn nhân viên nào mang role V1 `market_staff` VÀ scoped
+      // đúng Chợ Cao Lãnh (chỉ có 'Tổ quản lý chợ quê' → market_staff, nhưng market: 'TTD') — nếu
+      // không có account demo này, bước "Nhân viên BQL tiếp nhận/hoàn thiện phương án" (permKey
+      // `diem-kd.tach-diem.tiep-nhan`) và dropdown "Người xử lý" ở form "Đề xuất tách điểm" (Trưởng
+      // BQL giao việc) không thể demo được cho CL. Thêm ĐÚNG 1 account thủ công (cùng pattern với 4
+      // account tay bên trên/dưới — KHÔNG sửa D.STAFF/data.js), dùng tên "Nguyễn Văn A" khớp với ví
+      // dụ trong yêu cầu bổ sung.
+      // TRADER_PROFILE_AND_MINIAPP_WORKFLOW: `traderId` MỚI — liên kết account Mini App với ĐÚNG 1
+      // Trader Profile (A.db.traders, xem data.js). null = account tồn tại nhưng CHƯA/không còn gắn
+      // với hồ sơ nào (giữ nguyên 2 account demo cũ này ở trạng thái CHƯA LIÊN KẾT — không có cách
+      // nào xác định AN TOÀN chúng "là" trader nào trong A.db.traders vì tên/SĐT hoàn toàn độc lập
+      // với dữ liệu mẫu sinh ngẫu nhiên có seed riêng; auto-link case demo LINKED thật lấy trực tiếp
+      // từ A.db lúc runtime — xem A.ensureMiniAppDemoLink() ở js/core.js).
+      { id: 'AC-TT01', code: 'TT-DEMO1', fullName: 'Nguyễn Thị Hoa', phone: '0909345678', accountType: 'Tiểu thương', title: 'Tiểu thương mẫu', roleIds: ['trader'], organization: 'Chợ Cao Lãnh', marketScopes: ['CL'], status: 'active', traderId: null },
+      { id: 'AC-TT02', code: 'TT-DEMO2', fullName: 'Trần Văn Sáu', phone: '0909456789', accountType: 'Tiểu thương', title: 'Tiểu thương mẫu (đã tạm khoá minh hoạ)', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'disabled', traderId: null }
     );
     return list;
   }
+  // Safe-merge cho account ĐÃ LƯU trong localStorage từ trước khi có field `traderId` (mục tương
+  // tự mergeNewDefaultAccounts — KHÔNG đổi bất kỳ giá trị nào đã có, chỉ bổ sung field còn thiếu).
+  function ensureTraderIdField(list) {
+    let changed = false;
+    list.forEach(a => { if (!('traderId' in a)) { a.traderId = null; changed = true; } });
+    return changed;
+  }
 
+  // Bổ sung AN TOÀN account demo MỚI (vd. AC-NV08 ở trên) vào danh sách account ĐÃ LƯU trong
+  // localStorage của trình duyệt — KHÔNG đụng account nào đã có (kể cả đã bị người dùng tuỳ biến qua
+  // màn "Tài khoản người dùng": đổi tên, khoá/mở khoá, đổi vai trò/phạm vi chợ...). Chỉ thêm những id
+  // hoàn toàn chưa tồn tại trong mảng đã lưu, giống nguyên tắc "merge, không reset" mà
+  // js/permissions.js đã áp dụng cho RolePermission — KHÔNG bump `A.RBAC_SCHEMA` chỉ để thêm 1
+  // account demo (bump RBAC_SCHEMA sẽ kéo theo reseed toàn bộ role/account/ui state, quá rộng so với
+  // thay đổi thật sự cần).
+  function mergeNewDefaultAccounts(stored) {
+    const ids = new Set(stored.map(a => a.id));
+    const additions = defaultAccounts().filter(a => !ids.has(a.id));
+    if (!additions.length) return stored;
+    const merged = stored.concat(additions);
+    try { localStorage.setItem(AKEY, JSON.stringify(merged)); } catch (e) { /* bỏ qua */ }
+    return merged;
+  }
   function loadAccounts() {
     try {
       // RBAC V1 migration: mảng account đã lưu từ bản role cũ (roleIds như 'bql'/'lanhdao'/
@@ -59,7 +95,14 @@
       // seed lại từ defaultAccounts() (đã dùng role id V1).
       if (localStorage.getItem(ASCHEMA_KEY) === String(A.RBAC_SCHEMA)) {
         const s = localStorage.getItem(AKEY);
-        if (s) { const x = JSON.parse(s); if (Array.isArray(x)) return mergeSeedAccounts(x); }
+        if (s) {
+          const x = JSON.parse(s);
+          if (Array.isArray(x)) {
+            const merged = mergeSeedAccounts(x);
+            if (ensureTraderIdField(merged)) { try { localStorage.setItem(AKEY, JSON.stringify(merged)); } catch (e) { /* bỏ qua */ } }
+            return merged;
+          }
+        }
       }
     } catch (e) { /* bỏ qua */ }
     return defaultAccounts();
@@ -160,6 +203,10 @@
     // chỉ cần sửa đúng hàm này (thêm UI chọn role trong account), mọi nơi khác đang gọi hàm này
     // không cần sửa.
     primaryRole: account => (account && account.roleIds && account.roleIds[0]) || null,
+    // Tài khoản Mini App liên kết với 1 traderId (TRADER_PROFILE_AND_MINIAPP_WORKFLOW) — chỉ tìm
+    // trong account role 'trader', KHÔNG giả định 1-1 tuyệt đối ở tầng dữ liệu (phòng thủ dữ liệu
+    // hỏng/nhiều account cùng trỏ 1 traderId) nhưng UI/nghiệp vụ luôn coi là 1-1.
+    byTraderId: traderId => ACCOUNTS.find(a => a.traderId === traderId) || null,
     codeTaken: (code, excludeId) => {
       const c = (code || '').trim().toLowerCase();
       return ACCOUNTS.some(a => a.id !== excludeId && a.code.trim().toLowerCase() === c);
