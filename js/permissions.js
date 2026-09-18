@@ -80,9 +80,19 @@
     { key: 'action:phien-cho.xem-bao-cao', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Xem báo cáo phiên chợ quê' },
     { key: 'action:mini-app.stall-registration.create', kind: 'action', group: 'Dành cho tiểu thương', screenId: 'mini-app', label: 'Tiểu thương tự đăng ký quầy chợ quê trong mini app' },
     { key: 'action:tieu-thuong.them-moi', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'tieu-thuong', label: 'Thêm hồ sơ tiểu thương' },
+    // TRADER_PROFILE_AND_MINIAPP_WORKFLOW — permKey "quản lý truy cập Mini App của tiểu thương".
+    // CORRECTION (xem TRADER_PROFILE_MINIAPP_CORRECTION_REPORT.md): phạm vi ban đầu rộng hơn (xác
+    // nhận hồ sơ đăng ký/liên kết Mini App từ luồng "tự đăng ký" đã bị loại bỏ) — permKey GIỮ
+    // NGUYÊN id (an toàn cho migration, không phát sinh xoá/thêm permKey), chỉ còn dùng cho ĐÚNG 1
+    // hành động thật: khoá/mở khoá truy cập tài khoản Mini App của 1 hồ sơ tiểu thương (Section E,
+    // js/v-tieuthuong.js).
+    { key: 'action:tieu-thuong.xac-minh', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'tieu-thuong', label: 'Khoá/mở khoá truy cập tài khoản Mini App của tiểu thương' },
     { key: 'action:hop-dong.tao', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Tạo hợp đồng (từ màn Hợp đồng)' },
     { key: 'action:hop-dong.gia-han', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Gia hạn hợp đồng' },
     { key: 'action:hop-dong.thanh-ly', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Thanh lý hợp đồng' },
+    { key: 'action:hop-dong.in', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'In hợp đồng giấy' },
+    { key: 'action:hop-dong.cap-nhat-ban-ky', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Cập nhật bản số hóa hợp đồng' },
+    { key: 'action:hop-dong.cham-dut', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Chấm dứt hợp đồng trước hạn' },
     { key: 'action:dien-nuoc.ghi-chi-so', kind: 'action', group: 'Tài chính', screenId: 'dien-nuoc', label: 'Nhập / lưu nháp chỉ số điện, nước' },
     { key: 'action:dien-nuoc.chot-ky', kind: 'action', group: 'Tài chính', screenId: 'dien-nuoc', label: 'Chốt kỳ ghi chỉ số điện, nước' },
     { key: 'action:dien-nuoc.yeu-cau-dieu-chinh', kind: 'action', group: 'Tài chính', screenId: 'dien-nuoc', label: 'Yêu cầu điều chỉnh chỉ số kỳ đã chốt' },
@@ -118,7 +128,46 @@
     { key: 'action:cai-dat.vai-tro.khoa', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Vô hiệu hoá / kích hoạt lại vai trò' },
     { key: 'action:cai-dat.vai-tro.xoa', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Xoá vai trò' },
     { key: 'action:cai-dat.phan-quyen', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Cấp / thu hồi permission cho vai trò' },
-    { key: 'action:cai-dat.reset-demo', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Đặt lại dữ liệu mẫu' }
+    { key: 'action:cai-dat.reset-demo', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Đặt lại dữ liệu mẫu' },
+
+    // Phase 8 — nghiệp vụ "Tách điểm kinh doanh" (BUSINESS_POINT_SPLIT_WORKFLOW_IMPLEMENTATION_
+    // REPORT.md), Chợ Cao Lãnh. 4 action permKey MỚI, screenId 'diem-kd' (cùng màn "Điểm kinh
+    // doanh", tab "Yêu cầu thay đổi") — KHÔNG tái dùng 'cau-truc.edit' (đó là quyền sửa mặt bằng/
+    // cấu trúc quy hoạch nói chung) vì đây là 1 QUY TRÌNH phê duyệt nhiều bước, nhiều vai trò khác
+    // nhau ở từng bước (nhân viên lập/hoàn thiện, Trưởng BQL phê duyệt) — không thể diễn tả bằng 1
+    // permKey duy nhất mà không cấp thừa quyền phê duyệt cho nhân viên. 'tiep-nhan' dùng chung cho
+    // cả 2 việc "tiếp nhận yêu cầu tiểu thương" VÀ "hoàn thiện/sửa phương án" (luôn đi cùng nhau
+    // trong 1 form ở UI — xem báo cáo) để không tăng số lượng permKey quá mức cần thiết.
+    { key: 'action:diem-kd.tach-diem.lap-yeu-cau', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'diem-kd', label: 'Lập yêu cầu tách điểm kinh doanh' },
+    { key: 'action:diem-kd.tach-diem.tiep-nhan', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'diem-kd', label: 'Tiếp nhận yêu cầu tiểu thương / hoàn thiện phương án tách điểm' },
+    { key: 'action:diem-kd.tach-diem.gui-phe-duyet', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'diem-kd', label: 'Gửi yêu cầu tách điểm cho Trưởng Ban Quản lý phê duyệt' },
+    { key: 'action:diem-kd.tach-diem.phe-duyet', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'diem-kd', label: 'Phê duyệt / từ chối yêu cầu tách điểm' },
+    { key: 'action:diem-kd.tach-diem.thuc-hien', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'diem-kd', label: 'Thực hiện tách điểm sau khi được phê duyệt' },
+    // Supplement (source=MANAGER — "Trưởng BQL chủ động đề xuất"): permKey RIÊNG cho hành động "chủ
+    // động đề xuất + giao nhân viên xử lý" — KHÁC với 'lap-yeu-cau' (nhân viên tự lập ĐỦ phương án
+    // kỹ thuật ngay khi tạo). Cần tách riêng vì đây thực sự là 2 mutation khác nhau (tạo request với
+    // `plan: null` + `assignedTo` bắt buộc, so với tạo request với `plan` đầy đủ ngay) — không phải
+    // chỉ đổi label. Nhờ đó form "+ Lập yêu cầu tách điểm" tự chọn đúng loại form theo permission
+    // (có 'tiep-nhan' → form đầy đủ; ngược lại có 'assign' → form đề xuất/giao việc) mà KHÔNG cần
+    // if (ui.role === '...') ở bất kỳ đâu — xem js/v-tieuthuong.js.
+    { key: 'action:diem-kd.tach-diem.assign', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'diem-kd', label: 'Đề xuất tách điểm và giao nhân viên xử lý' }
+    ,{ key: 'action:diem-kd.gop-diem.lap-yeu-cau', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'diem-kd', label: 'Lập yêu cầu gộp điểm kinh doanh' }
+    ,{ key: 'action:diem-kd.gop-diem.tiep-nhan', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'diem-kd', label: 'Tiếp nhận và lập phương án gộp điểm' }
+    ,{ key: 'action:diem-kd.gop-diem.gui-phe-duyet', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'diem-kd', label: 'Gửi phương án gộp điểm phê duyệt' }
+    ,{ key: 'action:diem-kd.gop-diem.phe-duyet', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'diem-kd', label: 'Phê duyệt hoặc từ chối gộp điểm' }
+    ,{ key: 'action:diem-kd.gop-diem.thuc-hien', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'diem-kd', label: 'Thực hiện gộp điểm' }
+    ,{ key: 'action:diem-kd.gop-diem.assign', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'diem-kd', label: 'Đề xuất gộp điểm và giao nhân viên xử lý' }
+
+    // Phase 9 — nghiệp vụ "Chuyển đổi vị trí điểm kinh doanh" (RELOCATE_TO_VACANT_POINT,
+    // BUSINESS_POINT_RELOCATION_WORKFLOW_IMPLEMENTATION_REPORT.md), Chợ Cao Lãnh. 6 permKey MỚI,
+    // cùng pattern least-privilege đã dùng cho tach-diem/gop-diem ở trên — KHÔNG tái dùng permKey
+    // của 2 nghiệp vụ đó (đây là 1 quy trình phê duyệt riêng, dù dùng chung state machine/collection).
+    ,{ key: 'action:diem-kd.chuyen-doi.lap-yeu-cau', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'diem-kd', label: 'Lập yêu cầu chuyển đổi vị trí điểm kinh doanh' }
+    ,{ key: 'action:diem-kd.chuyen-doi.tiep-nhan', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'diem-kd', label: 'Tiếp nhận yêu cầu tiểu thương / lập phương án chuyển đổi vị trí' }
+    ,{ key: 'action:diem-kd.chuyen-doi.gui-phe-duyet', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'diem-kd', label: 'Gửi phương án chuyển đổi vị trí cho Trưởng Ban Quản lý phê duyệt' }
+    ,{ key: 'action:diem-kd.chuyen-doi.phe-duyet', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'diem-kd', label: 'Phê duyệt hoặc từ chối chuyển đổi vị trí' }
+    ,{ key: 'action:diem-kd.chuyen-doi.thuc-hien', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'diem-kd', label: 'Thực hiện chuyển đổi vị trí sau khi được phê duyệt' }
+    ,{ key: 'action:diem-kd.chuyen-doi.assign', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'diem-kd', label: 'Đề xuất chuyển đổi vị trí và giao nhân viên xử lý' }
   ];
 
   // ============================================================
@@ -218,9 +267,16 @@
       'phien-cho.xem-bao-cao': ['ward_leader', 'market_manager', 'market_staff', 'collector'],
       'mini-app.stall-registration.create': ['trader'],
       'tieu-thuong.them-moi': ['market_manager', 'market_staff'],
+      // NEED_CONFIRMATION (báo cáo mục 41): chưa xác nhận "ai ngoài market_staff được quyền xác
+      // minh" — mặc định AN TOÀN dùng đúng ma trận của 'tieu-thuong.them-moi' (cùng nhóm người quản
+      // lý hồ sơ tiểu thương hiện tại), không tự thêm role nào khác.
+      'tieu-thuong.xac-minh': ['market_manager', 'market_staff'],
       'hop-dong.tao': ['market_manager', 'market_staff'],
       'hop-dong.gia-han': ['market_manager', 'market_staff'],
       'hop-dong.thanh-ly': ['market_manager'],
+      'hop-dong.in': ['market_manager', 'market_staff'],
+      'hop-dong.cap-nhat-ban-ky': ['market_manager', 'market_staff'],
+      'hop-dong.cham-dut': ['market_manager'],
       'dien-nuoc.ghi-chi-so': ['market_manager', 'market_staff'],
       'dien-nuoc.chot-ky': ['market_manager'],
       'dien-nuoc.yeu-cau-dieu-chinh': ['market_manager', 'market_staff'],
@@ -265,7 +321,42 @@
       'cai-dat.vai-tro.khoa': ['system_admin'],
       'cai-dat.vai-tro.xoa': ['system_admin'],
       'cai-dat.phan-quyen': ['system_admin'],
-      'cai-dat.reset-demo': ['system_admin']
+      'cai-dat.reset-demo': ['system_admin'],
+
+      // Phase 8 — "Tách điểm kinh doanh": market_manager có cả 'lap-yeu-cau' (mục 10 yêu cầu:
+      // "market_manager: ... lập yêu cầu nếu cần") lẫn 'phe-duyet' (2 permKey riêng biệt — cùng 1
+      // account/role có cả 2 quyền không có nghĩa 2 bước phê duyệt gộp làm 1: UI/handler vẫn bắt
+      // đi qua đúng 2 action rời nhau, xem 'dkreq-submit'/'dkreq-approve' trong báo cáo).
+      // market_staff CHỈ có 3 quyền vận hành đầu (lập/tiếp nhận/gửi phê duyệt) — KHÔNG có 'phe-duyet'
+      // (least-privilege, đúng "KHÔNG phê duyệt" mục 10). 'thuc-hien' cấp cho cả 2 role — cùng phạm
+      // vi thao tác mặt bằng thật với 'cau-truc.edit' đã cấp sẵn cho cả market_manager/market_staff.
+      'diem-kd.tach-diem.lap-yeu-cau': ['market_manager', 'market_staff'],
+      'diem-kd.tach-diem.tiep-nhan': ['market_staff'],
+      'diem-kd.tach-diem.gui-phe-duyet': ['market_manager', 'market_staff'],
+      'diem-kd.tach-diem.phe-duyet': ['market_manager'],
+      'diem-kd.tach-diem.thuc-hien': ['market_manager', 'market_staff'],
+      // Supplement — chỉ market_manager (đúng mục 12 yêu cầu bổ sung: "Trưởng BQL: có thể chủ động
+      // đề xuất; giao xử lý"). market_manager VẪN giữ 'lap-yeu-cau' ở trên (không revoke — tránh
+      // migration ép buộc trên permKey đã tồn tại, mục 17 yêu cầu bổ sung: "ưu tiên thay đổi nhỏ
+      // nhất"); UI quyết định form nào hiển thị bằng cách ưu tiên kiểm tra 'tiep-nhan' (có thể tự lập
+      // phương án kỹ thuật → form đầy đủ) trước 'assign' (chỉ có thể đề xuất/giao việc → form nhẹ),
+      // xem dksr-open ở js/v-tieuthuong.js — market_manager mặc định không có 'tiep-nhan' nên luôn
+      // rơi vào nhánh form đề xuất/giao việc dù vẫn còn 'lap-yeu-cau'.
+      'diem-kd.tach-diem.assign': ['market_manager']
+      ,'diem-kd.gop-diem.lap-yeu-cau': ['market_manager', 'market_staff']
+      ,'diem-kd.gop-diem.tiep-nhan': ['market_staff']
+      ,'diem-kd.gop-diem.gui-phe-duyet': ['market_manager', 'market_staff']
+      ,'diem-kd.gop-diem.phe-duyet': ['market_manager']
+      ,'diem-kd.gop-diem.thuc-hien': ['market_manager', 'market_staff']
+      ,'diem-kd.gop-diem.assign': ['market_manager']
+      // Phase 9 — "Chuyển đổi vị trí điểm kinh doanh": cùng ma trận least-privilege với tach-diem/
+      // gop-diem (market_staff vận hành, market_manager phê duyệt + có thể tự đề xuất/giao việc).
+      ,'diem-kd.chuyen-doi.lap-yeu-cau': ['market_manager', 'market_staff']
+      ,'diem-kd.chuyen-doi.tiep-nhan': ['market_staff']
+      ,'diem-kd.chuyen-doi.gui-phe-duyet': ['market_manager', 'market_staff']
+      ,'diem-kd.chuyen-doi.phe-duyet': ['market_manager']
+      ,'diem-kd.chuyen-doi.thuc-hien': ['market_manager', 'market_staff']
+      ,'diem-kd.chuyen-doi.assign': ['market_manager']
     };
     const rows = [];
     const grant = (roleId, permKey) => rows.push({ roleId: roleId, permKey: permKey, grantedAt: 'seed', grantedBy: 'Hệ thống (seed mặc định)' });

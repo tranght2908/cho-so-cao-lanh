@@ -139,7 +139,7 @@
         <div class="row" style="margin:12px 0">${['Mini app', 'Zalo OA', 'SMS', 'Email'].map((c, k) => `<label class="small"><input type="checkbox" class="tb-ch" value="${c}" ${k < 2 ? 'checked' : ''}> ${c}</label>`).join('')}</div>
         <div class="field"><label>Tiêu đề</label><input class="input" id="tb-title" value="Lịch vệ sinh, khử khuẩn toàn chợ Chủ nhật 20/9"></div>
         <div class="field" style="margin-top:10px"><label>Nội dung</label><textarea class="input" id="tb-content" rows="4">Ban Quản lý chợ thông báo: sáng Chủ nhật 20/9/2026 tổ chức tổng vệ sinh, khử khuẩn. Đề nghị tiểu thương thu dọn hàng hóa trước 6h00.</textarea></div>
-        <div class="row" style="margin-top:12px"><span class="spacer"></span>${A.canDo('thong-bao.gui', ui.market) ? '<button class="btn primary" data-act="tb-send">📣 Gửi ngay</button>' : ''}</div></div></div>
+        <div class="row" style="margin-top:12px"><span class="spacer"></span>${A.canDo('thong-bao.gui', ui.market) ? `<button class="btn primary" data-act="tb-send">${U.icon('bell')}Gửi ngay</button>` : ''}</div></div></div>
       <div class="card"><div class="card-h"><h3>Thông báo tự động theo sự kiện</h3></div><div class="card-b small">
         ${[['Phát hành khoản phải thu', 'Mini app, Zalo OA'], ['Trước hạn nộp 3 ngày', 'Mini app, Zalo OA'], ['Khoản phải thu quá hạn', 'Mini app, Zalo OA, SMS'], ['Hợp đồng còn 30 ngày hết hạn', 'Mini app, Zalo OA'], ['Phản ánh được xử lý xong', 'Mini app'], ['Biên lai điện tử sau khi thanh toán', 'Mini app, Zalo OA']].map(r => `<div class="row" style="padding:7px 0;border-bottom:1px solid #eef2f7"><span class="tag ok">Bật</span><span style="flex:1">${r[0]}</span><span class="muted">${r[1]}</span></div>`).join('')}</div></div></div>
     <div class="card"><div class="card-h"><h3>Lịch sử thông báo</h3></div><div class="card-b">
@@ -313,9 +313,17 @@
   }
   function accRows() {
     const f = ui.acc, q = (f.search || '').toLowerCase();
+    // TRADER_PROFILE_AND_MINIAPP_WORKFLOW (mục 31 yêu cầu — "S"): bảng MẶC ĐỊNH chỉ hiển thị account
+    // nội bộ (system_admin/ward_leader/market_manager/market_staff/accountant/collector/technician),
+    // KHÔNG hiển thị account role 'trader' — account đó được quản lý về nghiệp vụ từ màn Hồ sơ tiểu
+    // thương → Tài khoản Mini App (xem js/v-tieuthuong.js, Section E). Chỉ ẨN mặc định (presentation
+    // filter, KHÔNG xoá account/role) — nếu admin CHỦ ĐỘNG lọc đúng "Tiểu thương" ở ô "Loại tài
+    // khoản" thì vẫn xem được (tra cứu khi cần), không khoá cứng.
+    const hideTraders = f.type !== 'Tiểu thương';
     // Lọc theo A.allowedMarkets() (không phải marketScopes thô) — chỉ có vậy mới lọc đúng cho cả
     // account cũ còn ['ALL'] LẪN account mới ['CL','TTD']/['CL']/['TTD'] (mục 8 yêu cầu Phase 5B).
     return A.ACCOUNTS.list().filter(a =>
+      (!hideTraders || a.accountType !== 'Tiểu thương') &&
       (!f.type || a.accountType === f.type) &&
       (!f.role || (a.roleIds || []).includes(f.role)) &&
       (!f.market || A.allowedMarkets(a).includes(f.market)) &&

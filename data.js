@@ -12,7 +12,35 @@ window.DATA = (function () {
   // dùng tính đơn giá dịch vụ ở các màn tài chính, giữ nguyên) và KHÔNG đổi `cat` (ngành hàng, khái
   // niệm riêng). Bump version để cache localStorage cũ (thiếu field mới) tự rebuild — độc lập với
   // RBAC_SCHEMA/PERM_SEED_VERSION (js/core.js, js/permissions.js — KHÔNG đổi 2 hằng số đó).
-  const VERSION = 10;
+  // v8 (nghiệp vụ "Tách điểm kinh doanh", BUSINESS_POINT_SPLIT_WORKFLOW): thêm mảng MỚI
+  // `pointRequests` (yêu cầu thay đổi điểm kinh doanh — V1 chỉ có type SPLIT) + field MỚI THUẦN HIỂN
+  // THỊ `structuralStatus` trên stall (mặc định không có = chưa từng tách; 'SPLIT' = điểm nguồn đã
+  // được tách, GIỮ NGUYÊN bản ghi để còn lịch sử, không xoá) + 2 field tham chiếu MỚI
+  // `parentPointId`/`splitRequestId` trên các stall được TẠO RA từ tách điểm — không đổi/xoá field
+  // nào đang có của stall hiện tại. Bump version để cache localStorage cũ (thiếu field/mảng mới) tự
+  // rebuild thay vì thiếu `A.db.pointRequests` gây lỗi runtime.
+  // v9 (supplement "Trưởng BQL chủ động đề xuất" — 3 nguồn khởi tạo TRADER/STAFF/MANAGER): mỗi phần
+  // tử `pointRequests` có thêm 2 field MỚI `createdBy` (id account/tiểu thương khởi tạo — account id
+  // cho STAFF/MANAGER, trader id cho TRADER) và `assignedTo` (id account nhân viên đang/được giao xử
+  // lý, null nếu chưa ai nhận) — KHÔNG xoá `requestedByName`/`requestedByTraderId` cũ (vẫn dùng làm
+  // tên hiển thị cache). Bump version để 3 bản ghi mẫu cũ tự sinh lại kèm 2 field mới (localStorage
+  // cũ thiếu field sẽ được rebuild, không vá thủ công).
+  // v10: thay `sellerId` hiển thị đơn lẻ bằng lịch sử assignment người trực tiếp kinh doanh.
+  // sellerId vẫn được giữ để các màn cũ không mất dữ liệu; `directSellerAssignments` là nguồn
+  // nghiệp vụ mới cho drawer Điểm kinh doanh.
+  // v12 (TRADER_PROFILE_AND_MINIAPP_WORKFLOW): thêm field MỚI trên trader — `profileStatus`
+  // ('ACTIVE'|'PENDING_VERIFICATION'|'NEEDS_SUPPLEMENT'|'INACTIVE'), `source` ('STAFF'|'MINI_APP'),
+  // `supplementNote`, `licenseNo`, `licenseDate` — KHÔNG đổi/xoá field nào đang có. Thêm mảng MỚI
+  // `miniLinkRequests` (yêu cầu liên kết tài khoản Mini App với hồ sơ tiểu thương đã có sẵn — CCCD
+  // trùng khớp, KHÔNG tạo trader mới). Bump version để cache localStorage cũ (thiếu field/mảng
+  // mới) tự rebuild.
+  // v13 (CORRECTION — TRADER_PROFILE_MINIAPP_CORRECTION_REPORT.md): bỏ 2 bản ghi demo seed cho flow
+  // "Mini App tự đăng ký hồ sơ" (đã loại khỏi nghiệp vụ) — trader "Nguyễn Thị Mai" PENDING_VERIFICATION
+  // và `miniLinkRequests` seed "LK-0001". `miniLinkRequests` vẫn trả về nhưng LUÔN rỗng. Bump version
+  // để cache cũ (còn 2 bản ghi lỗi thời) tự rebuild sạch.
+  // v13 also retains the upstream session/finance seeds below; the version is a
+  // compatibility marker for the complete combined seed shape.
+  const VERSION = 13;
   const TODAY = new Date(2026, 8, 13); // 13/09/2026
 
   // Giá dịch vụ sử dụng diện tích bán hàng – QĐ 480/QĐ-UBND ngày 14/02/2026 (đ/m²/ngày, đã gồm VAT)
@@ -256,7 +284,11 @@ window.DATA = (function () {
         market, cat, hkd: chance(0.62),
         since: iso(new Date(between(2008, 2025), between(0, 11), between(1, 28))),
         app: chance(market === 'TTD' ? 0.64 : 0.57), bank: chance(0.74),
-        stalls: []
+        stalls: [],
+        // v12 — TRADER_PROFILE_AND_MINIAPP_WORKFLOW: hồ sơ seed/đã có sẵn coi là chính thức
+        // (ACTIVE, nguồn STAFF — do BQL quản lý từ trước, không phải đăng ký qua Mini App).
+        // supplementNote/licenseNo/licenseDate để trống — chỉ dùng khi thật sự có giá trị.
+        profileStatus: 'ACTIVE', source: 'STAFF', supplementNote: '', licenseNo: null, licenseDate: null
       };
       traders.push(t);
       return t;
@@ -701,11 +733,134 @@ window.DATA = (function () {
       { at: '01/09/2026 00:05', who: 'Hệ thống', what: 'Tự động phát hành khoản phải thu kỳ 09/2026' }
     ];
 
+    // ---- Yêu cầu thay đổi điểm kinh doanh — V1 chỉ nghiệp vụ TÁCH ĐIỂM (BUSINESS_POINT_SPLIT_
+    // WORKFLOW), Chợ Cao Lãnh. Dữ liệu mẫu TỐI THIỂU đủ demo ĐỦ 3 nguồn khởi tạo (mục 1/2/14 yêu cầu
+    // bổ sung — TRADER/STAFF/MANAGER):
+    //   YC-0015: nguồn Tiểu thương (Ngô Văn Nam, điểm KA-A01 thật đang thuê) — Nguyễn Văn A (nhân
+    //            viên BQL, account AC-NV08) đã tiếp nhận + hoàn thiện phương án + gửi, đang chờ
+    //            Trưởng BQL phê duyệt.
+    //   YC-0016: nguồn Nhân viên BQL chủ động (Nguyễn Văn A tự lập, tự xử lý) — đã lập phương án,
+    //            đang trong quá trình xử lý (chưa gửi phê duyệt).
+    //   YC-0017: nguồn Tiểu thương, mới gửi mong muốn qua Mini app — CHƯA có phương án cụ thể, CHƯA
+    //            ai nhận (assignedTo null, demo bước "Nhân viên BQL tiếp nhận").
+    //   YC-0018: nguồn Trưởng BQL chủ động đề xuất (Trần Minh Khoa, account AC-NV01) — giao Nguyễn
+    //            Văn A xử lý, CHƯA có phương án (đúng luồng 3: Trưởng BQL KHÔNG tự lập phương án kỹ
+    //            thuật khi tạo đề xuất, xem mục 3 yêu cầu bổ sung).
+    // createdBy: id account (STAFF/MANAGER) hoặc trader id (TRADER) — người KHỞI TẠO. assignedTo: id
+    // account nhân viên đang/được giao XỬ LÝ — KHÔNG giả định createdBy === assignedTo (mục 5 yêu cầu
+    // bổ sung). area 2 điểm mới LUÔN cộng đúng bằng area điểm nguồn thật (đọc từ `stalls` vừa build ở
+    // trên, KHÔNG hard-code số liệu minh họa) để phương án hợp lệ ngay từ đầu.
+    const pointRequests = [];
+    (function seedSplitRequests() {
+      const kaA01 = stalls.find(s => s.id === 'CL-KA-A01');
+      const kaA03 = stalls.find(s => s.id === 'CL-KA-A03');
+      const rcA01 = stalls.find(s => s.id === 'CL-RC-A01');
+      const kbA02 = stalls.find(s => s.id === 'CL-KB-A02');
+      const STAFF_NAME = 'Nguyễn Văn A'; // AC-NV08, market_staff scoped CL — xem js/accounts.js
+      const MANAGER_NAME = 'Trần Minh Khoa'; // AC-NV01, market_manager
+      if (kaA01) {
+        const a1 = 7.0, a2 = +(kaA01.area - a1).toFixed(1);
+        pointRequests.push({
+          id: 'YC-0015', type: 'SPLIT', market: 'CL', pointId: kaA01.id, source: 'TRADER',
+          requestedByName: traders.find(t => t.id === kaA01.traderId).name, requestedByTraderId: kaA01.traderId,
+          createdBy: kaA01.traderId, assignedTo: 'AC-NV08',
+          requestedAt: '2026-09-10',
+          reason: 'Muốn tách điểm để cùng người thân kinh doanh riêng, mỗi người phụ trách một ngành hàng.',
+          note: '', attachments: [],
+          status: 'PENDING_APPROVAL',
+          plan: {
+            a: { code: kaA01.code + 'A', area: a1, pointType: kaA01.pointType, cat: kaA01.cat },
+            b: { code: kaA01.code + 'B', area: a2, pointType: kaA01.pointType, cat: kaA01.cat }
+          },
+          timeline: [
+            { key: 'created', at: '10/09/2026', by: traders.find(t => t.id === kaA01.traderId).name + ' (Mini app)' },
+            { key: 'received', at: '10/09/2026', by: STAFF_NAME },
+            { key: 'planned', at: '11/09/2026', by: STAFF_NAME },
+            { key: 'submitted', at: '12/09/2026', by: STAFF_NAME }
+          ],
+          resultPointIds: null
+        });
+      }
+      if (kaA03) {
+        const a1 = +(kaA03.area / 2 - 0.05).toFixed(1), a2 = +(kaA03.area - a1).toFixed(1);
+        pointRequests.push({
+          id: 'YC-0016', type: 'SPLIT', market: 'CL', pointId: kaA03.id, source: 'STAFF',
+          requestedByName: STAFF_NAME, requestedByTraderId: null,
+          createdBy: 'AC-NV08', assignedTo: 'AC-NV08',
+          requestedAt: '2026-09-12',
+          reason: 'Bố trí lại mặt bằng ki-ốt mặt tiền tầng 1 để tiếp nhận thêm hộ kinh doanh mới đăng ký.',
+          note: '', attachments: [],
+          status: 'STAFF_REVIEW',
+          plan: {
+            a: { code: kaA03.code + 'A', area: a1, pointType: kaA03.pointType, cat: kaA03.cat },
+            b: { code: kaA03.code + 'B', area: a2, pointType: kaA03.pointType, cat: kaA03.cat }
+          },
+          timeline: [{ key: 'created', at: '12/09/2026', by: STAFF_NAME }],
+          resultPointIds: null
+        });
+      }
+      if (rcA01) {
+        pointRequests.push({
+          id: 'YC-0017', type: 'SPLIT', market: 'CL', pointId: rcA01.id, source: 'TRADER',
+          requestedByName: traders.find(t => t.id === rcA01.traderId).name, requestedByTraderId: rcA01.traderId,
+          createdBy: rcA01.traderId, assignedTo: null,
+          requestedAt: '2026-09-13',
+          reason: 'Muốn tách quầy để chia sẻ kinh doanh cùng người thân, mỗi người phụ trách một nửa quầy.',
+          note: '', attachments: [],
+          status: 'DRAFT',
+          plan: null,
+          timeline: [{ key: 'created', at: '13/09/2026', by: traders.find(t => t.id === rcA01.traderId).name + ' (Mini app)' }],
+          resultPointIds: null
+        });
+      }
+      if (kbA02) {
+        pointRequests.push({
+          id: 'YC-0018', type: 'SPLIT', market: 'CL', pointId: kbA02.id, source: 'MANAGER',
+          requestedByName: MANAGER_NAME, requestedByTraderId: null,
+          createdBy: 'AC-NV01', assignedTo: 'AC-NV08',
+          // Ngày dùng '2026-09-13' (đúng "hôm nay" của prototype, xem TODAY ở trên) thay vì ví dụ
+          // minh hoạ '19/09/2026' trong yêu cầu bổ sung — request mới nhất không thể có ngày TRONG
+          // TƯƠNG LAI so với "hôm nay" của hệ thống (nhất quán với YC-0015/16/17 đã seed từ trước).
+          requestedAt: '2026-09-13',
+          reason: 'Đề nghị kiểm tra phương án tách điểm để phục vụ bố trí mặt bằng kỳ tiếp theo.',
+          note: '', attachments: [],
+          status: 'STAFF_REVIEW',
+          plan: null, // Trưởng BQL KHÔNG tự lập phương án kỹ thuật khi tạo đề xuất (mục 3 yêu cầu bổ sung)
+          timeline: [
+            { key: 'created', at: '13/09/2026', by: MANAGER_NAME },
+            { key: 'assigned', at: '13/09/2026', by: MANAGER_NAME, note: 'Giao ' + STAFF_NAME + ' xử lý' }
+          ],
+          resultPointIds: null
+        });
+      }
+    })();
+
+    // CORRECTION (xem TRADER_PROFILE_MINIAPP_CORRECTION_REPORT.md): Mini App KHÔNG còn tự đăng ký hồ
+    // sơ (business flow cũ đã bị loại bỏ) — 2 bản ghi demo "Nguyễn Thị Mai" (PENDING_VERIFICATION) và
+    // "LK-0001" (miniLinkRequests PENDING_LINK) từng seed cho flow cũ KHÔNG còn khớp nghiệp vụ mới
+    // nên đã bỏ. `miniLinkRequests` GIỮ LẠI làm mảng RỖNG (compatibility — vẫn được return ở cuối
+    // build() để tránh lỗi runtime nếu còn chỗ nào đọc `A.db.miniLinkRequests`), không seed nội dung.
+    const miniLinkRequests = [];
+
+    // Migrate dữ liệu mẫu người bán cũ thành assignment ACTIVE có lịch sử. Không sửa/xoá sellerId:
+    // các UI ngoài phạm vi vẫn đọc được quan hệ cũ trong khi V1 mới dùng collection này.
+    const directSellerAssignments = stalls.filter(s => s.market === 'CL' && s.sellerId).map((s, i) => {
+      const person = traders.find(t => t.id === s.sellerId);
+      return {
+        id: 'DSA-' + pad(i + 1, 4), market: s.market, pointId: s.id,
+        traderId: person ? person.id : null, personId: person ? person.id : null,
+        fullName: person ? person.name : 'Chưa xác định', idNumber: person ? person.idNo : '', phone: person ? person.phone : '',
+        relationship: person && person.id === s.traderId ? 'Chủ thể hợp đồng trực tiếp kinh doanh' : 'Người bán thay',
+        startDate: '2026-01-01', endDate: null, status: 'ACTIVE', source: 'SEED_LEGACY',
+        verifiedBy: 'AC-NV01', verifiedAt: '2026-01-01', note: '', createdAt: '2026-01-01', updatedAt: '2026-01-01'
+      };
+    });
     return {
       version: VERSION, today: iso(TODAY), stalls, traders, contracts, invoices, payments, readings, incidents,
       notifications, sessions, marketSessions, sessionRegistrations, sessionPayments, sessionReceipts, sessionNotifications, sessionAttendances, sessionReplacements, bank, months, audit, issuedPeriods: PERIODS.slice(), extraLog: [],
       meterPeriods: METER_PERIODS, meterAdjustRequests: [], receivableAdjustRequests: [],
-      cashDeposits, cashConfirms, billingPeriods: BILLING_PERIODS
+      cashDeposits, cashConfirms, billingPeriods: BILLING_PERIODS,
+      pointRequests, directSellerAssignments, miniLinkRequests
     };
   }
 

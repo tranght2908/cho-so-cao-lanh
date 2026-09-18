@@ -51,6 +51,15 @@ window.APP = (function () {
   U.sum = (arr, f) => arr.reduce((a, x) => a + (f ? f(x) : x), 0);
   U.maskPhone = p => p ? p.slice(0, 3) + '****' + p.slice(-3) : '';
   U.maskId = s => s ? s.slice(0, 3) + '******' + s.slice(-3) : '';
+  // Bộ icon SVG inline dùng chung: không phụ thuộc emoji/font của thiết bị. `title` chỉ dùng khi icon
+  // đứng một mình; icon đi kèm text là decorative để screen reader không đọc lặp lại.
+  const ICON_PATHS = {
+    dashboard: '<path d="M4 13h6V4H4v9Zm0 7h6v-4H4v4Zm10 0h6v-9h-6v9Zm0-16v4h6V4h-6Z"/>',
+    map: '<path d="m9 18-6 3V6l6-3 6 3 6-3v15l-6 3-6-3Zm0-12v12m6-9v12"/>',
+    store: '<path d="M3 10h18M5 10v10h14V10M4 4h16l1 6H3l1-6Zm5 10h6"/>', users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m17-7a4 4 0 1 0 0-8m-7 5a4 4 0 1 0 0-8"/>',
+    file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm0 0v6h6M8 13h8m-8 4h8"/>', money: '<path d="M12 2v20m5-16.5A4 4 0 0 0 13.5 4h-3A3.5 3.5 0 0 0 10.5 11h3a3.5 3.5 0 1 1 0 7h-3A4 4 0 0 1 7 16.5"/>', bank: '<path d="m3 10 9-6 9 6M5 10v8m4-8v8m6-8v8m4-8v8M3 21h18"/>', bolt: '<path d="m13 2-9 12h7l-1 8 9-12h-7l1-8Z"/>', receipt: '<path d="M4 2v20l2-1.5L8 22l2-1.5 2 1.5 2-1.5 2 1.5 2-1.5 2 1.5V2H4Zm4 5h8m-8 4h8m-8 4h5"/>', card: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18m-14 5h3"/>', refresh: '<path d="M20 11a8 8 0 1 0 2 5.3M20 4v7h-7"/>', bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 13h4"/>', chart: '<path d="M3 3v18h18M7 16l4-5 3 3 5-7"/>', settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.1 2.1-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5v.2h-3v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1L6.6 17l.1-.1A1.7 1.7 0 0 0 7 15a1.7 1.7 0 0 0-1.5-1H5v-3h.5A1.7 1.7 0 0 0 7 10a1.7 1.7 0 0 0-.3-1.9l-.1-.1 2.1-2.1.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V4h3v.8a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 8l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.1v3h-.1a1.7 1.7 0 0 0-1.5 1Z"/>', phone: '<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/>', camera: '<path d="M4 7h3l2-3h6l2 3h3v13H4V7Zm8 9a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/>', print: '<path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2m-2-4H8v7h8v-7Z"/>', edit: '<path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Zm10-13 3 3"/>', trash: '<path d="M4 7h16m-10 4v6m4-6v6M9 7V4h6v3m-9 0 1 14h10l1-14"/>', close: '<path d="m6 6 12 12M18 6 6 18"/>', menu: '<path d="M4 6h16M4 12h16M4 18h16"/>', check: '<path d="m5 12 4 4L19 6"/>', warning: '<path d="m12 3 10 18H2L12 3Zm0 6v4m0 4h.01"/>', attachment: '<path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/>'
+  };
+  U.icon = (name, title) => `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${title ? ` role="img" aria-label="${U.esc(title)}"` : ' aria-hidden="true"'}>${ICON_PATHS[name] || ICON_PATHS.file}</svg>`;
   U.market = id => D.MARKETS.find(m => m.id === id);
   U.mShort = id => U.market(id).short;
   // Phase 2: selectedMarket (ui.market) không còn có thể là 'ALL' — luôn là 'CL'/'TTD' cụ thể
@@ -299,12 +308,32 @@ window.APP = (function () {
     A.reindex();
     A.db.stalls.forEach(A.refreshStall);
   };
+  // TRADER_PROFILE_AND_MINIAPP_WORKFLOW — demo case "hồ sơ đã có sẵn + Mini App ĐÃ LIÊN KẾT" (mục
+  // 37 Case 1): account.traderId không thể seed cứng trong js/accounts.js (module đó chạy TRƯỚC
+  // khi A.db tồn tại — data.js chỉ build() khi A.load()/A.fresh() được gọi ở init()) và tên 2
+  // account demo cũ (AC-TT01/02) không khớp bất kỳ trader nào (dữ liệu trader sinh ngẫu nhiên có
+  // seed riêng). Chạy ĐÚNG 1 lần, chỉ khi CHƯA account trader nào có traderId (idempotent — an toàn
+  // gọi lại mỗi lần load): liên kết AC-TT01 với ĐÚNG trader đang thuê KA-A01 thật (deterministic vì
+  // seed RNG trong data.js cố định) — đồng bộ luôn fullName/phone hiển thị của account demo cho
+  // khớp, tránh gây hiểu lầm "AC-TT01 tên khác nhưng lại đại diện cho 1 trader tên khác".
+  A.ensureMiniAppDemoLink = function () {
+    if (!A.ACCOUNTS || !A.db) return;
+    const hasAnyLink = A.ACCOUNTS.list().some(a => A.ACCOUNTS.primaryRole(a) === 'trader' && a.traderId);
+    if (hasAnyLink) return;
+    const acc = A.ACCOUNTS.get('AC-TT01');
+    const kaA01 = A.db.stalls && A.db.stalls.find(s => s.id === 'CL-KA-A01');
+    const trader = kaA01 && A.db.traders.find(t => t.id === kaA01.traderId);
+    if (acc && trader && !acc.traderId) {
+      A.ACCOUNTS.update(acc.id, { traderId: trader.id, fullName: trader.name, phone: trader.phone });
+    }
+  };
   A.load = function () {
     try {
       const s = localStorage.getItem(KEY);
       if (s) { const x = JSON.parse(s); if (x && x.version === D.VERSION) A.db = x; }
     } catch (e) { A.db = null; }
     if (A.db) A.reindex(); else A.fresh();
+    A.ensureMiniAppDemoLink();
     // RBAC V1 migration: ui state cũ (schema khác, hoặc còn giữ shape {role, market} kiểu cũ
     // không có currentDemoAccountId) không tương thích — bỏ qua, để currentDemoAccountId=null rồi
     // A.currentAccount()/A.syncAccountContext() bên dưới tự chọn 1 account ACTIVE + 1 market hợp
@@ -367,8 +396,31 @@ window.APP = (function () {
   A.modal = function (html, wide) {
     $('#modal-root').innerHTML = `<div class="overlay" data-act="overlay"><div class="modal ${wide ? 'wide' : ''}" role="dialog" aria-modal="true">${html}</div></div>`;
   };
-  A.closeModal = function () { $('#modal-root').innerHTML = ''; };
+  A.closeModal = function () { A.drawerReset(); $('#modal-root').innerHTML = ''; };
   A.mHead = t => `<div class="modal-h"><h3>${t}</h3><button class="x" data-act="close" aria-label="Đóng">×</button></div>`;
+
+  // ---------- điều hướng drawer (back stack nhỏ, dùng chung) ----------
+  // Cho phép nút "← Quay lại" hoạt động khi 1 drawer được mở TỪ 1 drawer khác (vd Mặt bằng chợ →
+  // Hồ sơ tiểu thương/Điểm kinh doanh) — KHÔNG phải router mới, KHÔNG hard-code từng cặp biến kiểu
+  // backToTGA04/backToKAA01. Chỉ 1 stack {label, render} dùng chung cho mọi drawer trong app:
+  //   label  : nhãn hiển thị trên nút "← Quay lại <label>" — LẤY ĐỘNG từ chính điểm/đối tượng
+  //            nguồn (vd mã điểm 'TG-A04'), không hard-code theo tên màn hình.
+  //   render : hàm KHÔNG tham số (tự đóng gói qua closure) chỉ để VẼ LẠI đúng drawer nguồn — hàm
+  //            này KHÔNG được tự push/reset stack, để các cấp back xa hơn (nếu có) không bị sai.
+  let drawerStack = [];
+  // Gọi TRƯỚC khi vẽ 1 drawer CON (drill-down từ drawer đang mở).
+  A.drawerPush = function (label, render) { drawerStack.push({ label, render }); };
+  // Gọi khi mở 1 drawer ĐỘC LẬP (không phải drill-down từ drawer khác, vd mở trực tiếp từ 1 dòng
+  // trong bảng danh sách) — đảm bảo không hiện "← Quay lại" giả khi drawer không có drawer cha.
+  A.drawerReset = function () { drawerStack = []; };
+  A.drawerBack = function () { const prev = drawerStack.pop(); if (prev) prev.render(); };
+  // "← Quay lại <label>" — CHỈ trả về khi thực sự có drawer cha (stack không rỗng); rỗng thì không
+  // render gì (không có back giả).
+  A.drawerBackHtml = function () {
+    if (!drawerStack.length) return '';
+    const label = drawerStack[drawerStack.length - 1].label;
+    return `<div class="drawer-back-row"><button class="btn sm" data-act="drawer-back">← Quay lại ${U.esc(label)}</button></div>`;
+  };
 
   A.receiptHtml = function (pays) {
     const p0 = pays[0], t = A.idx.trader.get(p0.traderId), m = U.market(p0.market);
@@ -411,41 +463,41 @@ window.APP = (function () {
   // xem A.PERM (js/permissions.js). Danh sách vai trò cũng lấy động từ A.PERM.activeRoles().
   A.MENU = [
     { group: 'Điều hành', items: [
-      { id: 'tong-quan', ico: '📊', label: 'Tổng quan liên chợ' },
+      { id: 'tong-quan', ico: U.icon('dashboard'), label: 'Tổng quan liên chợ' },
       { sub: 'Hạ tầng chợ' },
       // Phase 7: UI "Thiết lập mặt bằng chợ" + "Sơ đồ mặt bằng" đã gộp thành 1 workspace "Mặt bằng
       // chợ" (MARKET_LAYOUT_UX_HOTFIX_REPORT.md) và nay RBAC cũng chuẩn hóa theo — 2 screen
       // permission cũ 'so-do'/'cau-truc' gộp thành DUY NHẤT 'mat-bang', route chính #/mat-bang.
       // Hash cũ #/so-do, #/cau-truc vẫn redirect an toàn về #/mat-bang (xem A.route()). Xem
       // MARKET_LAYOUT_SCREEN_PERMISSION_AUDIT.md + MARKET_LAYOUT_SCREEN_PERMISSION_IMPLEMENTATION_REPORT.md.
-      { id: 'mat-bang', ico: '🗺️', label: 'Mặt bằng chợ' },
-      { id: 'diem-kd', ico: '🏪', label: 'Điểm kinh doanh' },
-      { id: 'phien-cho', ico: '🪷', label: 'Phiên chợ quê' }
+      { id: 'mat-bang', ico: U.icon('map'), label: 'Mặt bằng chợ' },
+      { id: 'diem-kd', ico: U.icon('store'), label: 'Điểm kinh doanh' },
+      { id: 'phien-cho', ico: U.icon('store'), label: 'Phiên chợ quê' }
     ] },
     { group: 'Tiểu thương & hợp đồng', items: [
-      { id: 'tieu-thuong', ico: '👥', label: 'Tiểu thương' },
-      { id: 'hop-dong', ico: '📄', label: 'Hợp đồng', badge: () => A.db.contracts.filter(c => U.inM(c) && c.status === 'hieuluc' && U.days(U.today(), c.end) <= 30).length }
+      { id: 'tieu-thuong', ico: U.icon('users'), label: 'Tiểu thương' },
+      { id: 'hop-dong', ico: U.icon('file'), label: 'Hợp đồng', badge: () => A.db.contracts.filter(c => U.inM(c) && c.status === 'hieuluc' && U.days(U.today(), c.end) <= 30).length }
     ] },
     { group: 'Tài chính', items: [
       { sub: 'Quản lý khai báo' },
-      { id: 'cau-hinh-gia', ico: '💰', label: 'Chính sách thu và biểu phí' },
-      { id: 'tai-khoan-ngan-hang', ico: '🏦', label: 'Danh sách tài khoản ngân hàng' },
+      { id: 'cau-hinh-gia', ico: U.icon('money'), label: 'Chính sách thu và biểu phí' },
+      { id: 'tai-khoan-ngan-hang', ico: U.icon('bank'), label: 'Danh sách tài khoản ngân hàng' },
       { sub: 'Nghiệp vụ tài chính' },
-      { id: 'dien-nuoc', ico: '⚡', label: 'Chỉ số điện, nước' },
-      { id: 'phai-thu', ico: '🧾', label: 'Khoản phải thu' },
-      { id: 'thu-tien', ico: '💳', label: 'Thu tiền & biên lai' },
-      { id: 'doi-soat', ico: '🔁', label: 'Đối soát', badge: () => A.db.bank.filter(b => !b.matched).length },
+      { id: 'dien-nuoc', ico: U.icon('bolt'), label: 'Chỉ số điện, nước' },
+      { id: 'phai-thu', ico: U.icon('receipt'), label: 'Khoản phải thu' },
+      { id: 'thu-tien', ico: U.icon('card'), label: 'Thu tiền & biên lai' },
+      { id: 'doi-soat', ico: U.icon('refresh'), label: 'Đối soát', badge: () => A.db.bank.filter(b => !b.matched).length },
       { id: 'cong-no', ico: '⏰', label: 'Công nợ & nhắc nợ' }
     ] },
     { group: 'Vận hành', items: [
-      { id: 'su-co', ico: '🛠️', label: 'Phản ánh & sự cố', badge: () => A.db.incidents.filter(i => U.inM(i) && i.state === 'tiepnhan').length },
-      { id: 'thong-bao', ico: '📣', label: 'Thông báo đa kênh' },
-      { id: 'bao-cao', ico: '📈', label: 'Báo cáo thống kê' },
-      { id: 'tai-khoan', ico: '🧑‍💼', label: 'Tài khoản người dùng' },
-      { id: 'cai-dat', ico: '⚙️', label: 'Cài đặt & phân quyền' }
+      { id: 'su-co', ico: U.icon('warning'), label: 'Phản ánh & sự cố', badge: () => A.db.incidents.filter(i => U.inM(i) && i.state === 'tiepnhan').length },
+      { id: 'thong-bao', ico: U.icon('bell'), label: 'Thông báo đa kênh' },
+      { id: 'bao-cao', ico: U.icon('chart'), label: 'Báo cáo thống kê' },
+      { id: 'tai-khoan', ico: U.icon('users'), label: 'Tài khoản người dùng' },
+      { id: 'cai-dat', ico: U.icon('settings'), label: 'Cài đặt & phân quyền' }
     ] },
-    { group: 'Mini app', items: [
-      { id: 'mini-app', ico: '📱', label: 'Mini app' }
+    { group: 'Dành cho tiểu thương', items: [
+      { id: 'mini-app', ico: U.icon('phone'), label: 'Mini app tiểu thương' }
     ] }
   ];
   A.menuItem = id => { for (const g of A.MENU) for (const it of g.items) if (it.id === id) return it; return null; };
@@ -570,6 +622,7 @@ window.APP = (function () {
       // đúng screen (hoặc trạng thái "chưa có quyền") nếu không hợp lệ với account mới.
       const acc = A.ACCOUNTS.get(el.dataset.id);
       if (!acc || acc.status !== 'active') return;
+      if (A.resetMiniRequestState) A.resetMiniRequestState();
       ui.currentDemoAccountId = acc.id;
       A.syncAccountContext();
       A.saveUi();
@@ -590,7 +643,8 @@ window.APP = (function () {
     page: el => { ui.page[el.dataset.k] = (ui.page[el.dataset.k] || 0) + Number(el.dataset.d); A.render(); },
     go: el => A.go(el.dataset.to),
     receipt: el => A.showReceipt(A.db.payments.filter(p => p.receipt === el.dataset.id)),
-    guide: () => A.guide()
+    guide: () => A.guide(),
+    'drawer-back': () => A.drawerBack()
   });
 
   A.guide = function () {
