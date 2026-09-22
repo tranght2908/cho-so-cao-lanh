@@ -1335,7 +1335,7 @@
     const t = st.traderId ? A.idx.trader.get(st.traderId) : null;
     const c = st.contractId ? A.idx.contract.get(st.contractId) : null;
     const unpaid = A.db.invoices.filter(i => i.stallId === st.id && i.status !== 'paid');
-    const canThuTien = A.canDirectCollect(st.market);
+    const canThuTien = A.canCollectReceivable(st.market);
     const canXemHoSo = A.canDo('so-do.xem-ho-so', st.market);
     const canTaoHopDong = A.canDo('so-do.tao-hop-dong', st.market) || A.canDo('hop-dong.tao', st.market);
     const canDoiTrangThai = A.canDo('so-do.doi-trang-thai', st.market);

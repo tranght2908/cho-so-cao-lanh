@@ -578,6 +578,9 @@
   function directCollectAllowedForMarket(market) {
     return A.canDirectCollect(market);
   }
+  function receivableCollectAllowedForMarket(market) {
+    return A.canCollectReceivable(market);
+  }
   function collectingBusinessStateOk(invoices) {
     const p = financePeriod();
     return invoices.length && p && p.status === 'COLLECTING';
@@ -657,7 +660,7 @@
   A.ACT['pay-open'] = el => {
     if (A.current === 'phai-thu') { U.toast('Màn Khoản phải thu chỉ dùng để kiểm tra và gửi yêu cầu điều chỉnh, không thu tiền trực tiếp.'); return; }
     const tid = el.dataset.id, t = A.idx.trader.get(tid);
-    if (!t || !directCollectAllowedForMarket(t.market)) { U.toast('Chỉ được thu trực tiếp tiền mặt cho Chợ quê TTĐ trong phạm vi tài khoản'); return; }
+    if (!t || !receivableCollectAllowedForMarket(t.market)) { U.toast('Không thể thu khoản phải thu trong phạm vi tài khoản hiện tại'); return; }
     const invs = A.db.invoices.filter(i => i.traderId === tid && i.status !== 'paid' && i.market === t.market);
     if (!invs.length) { U.toast('Tiểu thương không còn khoản nào phải thu'); return; }
     if (!collectingBusinessStateOk(invs)) { U.toast('Chỉ thu trực tiếp cho kỳ đang ở trạng thái Đang thu'); return; }
@@ -687,7 +690,7 @@
     if (A.current === 'phai-thu') { U.toast('Màn Khoản phải thu không thực hiện thu tiền trực tiếp.'); A.closeModal(); return; }
     const ps = ui.pay;
     const t = ps && A.idx.trader.get(ps.traderId);
-    if (!t || !directCollectAllowedForMarket(t.market)) { U.toast('Chỉ được thu trực tiếp tiền mặt cho Chợ quê TTĐ trong phạm vi tài khoản'); A.closeModal(); return; }
+    if (!t || !receivableCollectAllowedForMarket(t.market)) { U.toast('Không thể thu khoản phải thu trong phạm vi tài khoản hiện tại'); A.closeModal(); return; }
     const sel = A.db.invoices.filter(i => ps.sel.includes(i.id) && i.traderId === t.id && i.market === t.market && i.status !== 'paid');
     if (!sel.length) { U.toast('Khoản phải thu không còn hợp lệ (đã thu hoặc không thuộc phạm vi)'); A.closeModal(); A.render(); return; }
     if (!collectingBusinessStateOk(sel)) { U.toast('Chỉ thu trực tiếp cho kỳ đang ở trạng thái Đang thu'); return; }
@@ -764,7 +767,7 @@
       <div class="card"><div class="card-h"><div><h3>Thu phí cố định tại quầy</h3><div class="small muted">Các khoản phí tháng/quý còn phải thu của tiểu thương.</div></div><span class="spacer"></span><span class="tag">${list.length} hồ sơ</span></div>
         <div class="card-b">
           ${U.table([{ t: 'Tiểu thương' }, { t: 'Điểm KD' }, { t: 'Còn phải thu', num: true }, { t: 'Trạng thái' }, { t: '' }],
-          list.slice(pg.start, pg.end).map(x => `<tr><td><b>${U.esc(x.t.name)}</b><div class="small muted">${x.t.id} · ${U.maskPhone(x.t.phone)}</div></td><td>${x.t.stalls.map(id => A.idx.stall.get(id).code).join(', ')}</td><td class="num">${U.money(x.amt)}<div class="small muted">${x.n} khoản</div></td><td>${x.over ? `<span class="tag danger">Quá hạn ${U.moneyShort(x.over)}</span>` : '<span class="tag warn">Chờ thu</span>'}</td><td>${directCollectAllowedForMarket(x.t.market) ? `<button class="btn sm primary" data-act="pay-open" data-id="${x.t.id}">Thu tiền mặt</button>` : ''}</td></tr>`), { empty: 'Không còn tiểu thương cần thu' })}${pg.html}
+          list.slice(pg.start, pg.end).map(x => `<tr><td><b>${U.esc(x.t.name)}</b><div class="small muted">${x.t.id} · ${U.maskPhone(x.t.phone)}</div></td><td>${x.t.stalls.map(id => A.idx.stall.get(id).code).join(', ')}</td><td class="num">${U.money(x.amt)}<div class="small muted">${x.n} khoản</div></td><td>${x.over ? `<span class="tag danger">Quá hạn ${U.moneyShort(x.over)}</span>` : '<span class="tag warn">Chờ thu</span>'}</td><td>${receivableCollectAllowedForMarket(x.t.market) ? `<button class="btn sm primary" data-act="pay-open" data-id="${x.t.id}">Thu tiền</button>` : ''}</td></tr>`), { empty: 'Không còn tiểu thương cần thu' })}${pg.html}
         </div></div>
       <div class="card"><div class="card-h"><div><h3>Biên lai & truy vết</h3><div class="small muted">Biên lai chỉ xuất hiện sau khi ghi nhận thu thành công.</div></div><span class="spacer"></span><span class="tag ok">${done} hoàn thành</span><span class="tag">${receipts.length} biên lai</span></div><div class="card-b">
         <div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px">
@@ -846,7 +849,7 @@
           { empty: 'Không có đăng ký phiên chờ thu tiền mặt' })}${spg.html}</div></div>
       <div class="card"><div class="card-h"><div><h3>Thu phí cố định tại quầy</h3><div class="small muted">Các khoản phí tháng/quý còn phải thu của tiểu thương.</div></div><span class="spacer"></span><span class="tag">${list.length} hồ sơ</span></div>
         <div class="card-b">${U.table([{ t: 'Tiểu thương' }, { t: 'Điểm KD' }, { t: 'Còn phải thu', num: true }, { t: 'Trạng thái' }, { t: '' }],
-          list.slice(pg.start, pg.end).map(x => `<tr><td><b>${U.esc(x.t.name)}</b><div class="small muted">${x.t.id} · ${U.maskPhone(x.t.phone)}</div></td><td>${x.t.stalls.map(id => A.idx.stall.get(id).code).join(', ')}</td><td class="num">${U.money(x.amt)}<div class="small muted">${x.n} khoản</div></td><td>${x.over ? `<span class="tag danger">Quá hạn ${U.moneyShort(x.over)}</span>` : '<span class="tag warn">Chờ thu</span>'}</td><td>${directCollectAllowedForMarket(x.t.market) ? `<button class="btn sm primary" data-act="pay-open" data-id="${x.t.id}">Thu tiền mặt</button>` : ''}</td></tr>`),
+          list.slice(pg.start, pg.end).map(x => `<tr><td><b>${U.esc(x.t.name)}</b><div class="small muted">${x.t.id} · ${U.maskPhone(x.t.phone)}</div></td><td>${x.t.stalls.map(id => A.idx.stall.get(id).code).join(', ')}</td><td class="num">${U.money(x.amt)}<div class="small muted">${x.n} khoản</div></td><td>${x.over ? `<span class="tag danger">Quá hạn ${U.moneyShort(x.over)}</span>` : '<span class="tag warn">Chờ thu</span>'}</td><td>${receivableCollectAllowedForMarket(x.t.market) ? `<button class="btn sm primary" data-act="pay-open" data-id="${x.t.id}">Thu tiền</button>` : ''}</td></tr>`),
           { empty: 'Không còn tiểu thương cần thu' })}${pg.html}</div></div>`;
   };
   A.ACT['thu-tab'] = el => { f.thuTab = el.dataset.id; ui.page.thu = 0; ui.page.thuReceipt = 0; A.render(); };
@@ -1418,7 +1421,7 @@
       <div class="card-b">${U.table([{ t: 'Tiểu thương' }, { t: 'Điểm KD' }, { t: 'Số kỳ nợ', num: true }, { t: 'Tổng nợ', num: true }, { t: 'Quá hạn lâu nhất', num: true }, { t: 'Đã nhắc', num: true }, { t: '' }],
         list.slice(pg.start, pg.end).map(x => `<tr><td><b>${U.esc(x.t.name)}</b> <span class="small muted">${x.t.app ? '· có mini app' : '· chưa cài app'}</span></td><td>${x.t.stalls.map(id => A.idx.stall.get(id).code).join(', ')}</td><td class="num">${x.n}</td><td class="num">${U.money(x.amt)}</td>
           <td class="num"><span class="tag ${x.days > 60 ? 'danger' : 'warn'}">${x.days} ngày</span></td><td class="num">${x.rem}</td>
-          <td class="nowrap">${A.canDo('cong-no.nhac-no', x.t.market) ? `<button class="btn sm" data-act="cn-remind" data-id="${x.t.id}">Nhắc nợ</button>` : ''} ${directCollectAllowedForMarket(x.t.market) ? `<button class="btn sm primary" data-act="pay-open" data-id="${x.t.id}">Thu tiền mặt</button>` : ''}</td></tr>`), { empty: 'Không có nợ quá hạn 🎉' })}${pg.html}</div></div>`;
+          <td class="nowrap">${A.canDo('cong-no.nhac-no', x.t.market) ? `<button class="btn sm" data-act="cn-remind" data-id="${x.t.id}">Nhắc nợ</button>` : ''} ${receivableCollectAllowedForMarket(x.t.market) ? `<button class="btn sm primary" data-act="pay-open" data-id="${x.t.id}">Thu tiền</button>` : ''}</td></tr>`), { empty: 'Không có nợ quá hạn 🎉' })}${pg.html}</div></div>`;
   };
   A.CH['cn-asof'] = el => { f.cnAsOf = el.value || U.today(); A.render(); };
   A.CH['cn-origin'] = el => { f.cnOrigin = el.value; A.render(); };

@@ -135,6 +135,10 @@ window.APP = (function () {
   A.canDirectCollect = function (targetMarket) {
     return targetMarket === 'TTD' && ui.market === 'TTD' && U.can('thu-tien') && A.canDo('thu-tien.thu', targetMarket);
   };
+  A.canCollectReceivable = function (targetMarket) {
+    return (targetMarket === 'CL' || targetMarket === 'TTD')
+      && U.can('thu-tien') && A.canDo('thu-tien.thu', targetMarket);
+  };
   U.pager = (key, total, size) => {
     const pages = Math.max(1, Math.ceil(total / size));
     const p = Math.min(ui.page[key] || 0, pages - 1);
@@ -274,7 +278,7 @@ window.APP = (function () {
     'tong-quan': 'CROSS', 'bao-cao': 'CROSS',
     'mat-bang': 'BOTH', 'tai-san': 'CL', 'diem-kd': 'BOTH', 'tieu-thuong': 'BOTH', 'hop-dong': 'BOTH',
     'cau-hinh-gia': 'BOTH',
-    'phai-thu': 'BOTH', 'thu-tien': 'TTD', 'doi-soat': 'BOTH', 'cong-no': 'BOTH',
+    'phai-thu': 'BOTH', 'thu-tien': 'BOTH', 'doi-soat': 'BOTH', 'cong-no': 'BOTH',
     'su-co': 'BOTH', 'thong-bao': 'BOTH',
     'phien-cho': 'TTD',
     'dien-nuoc': 'BOTH',
