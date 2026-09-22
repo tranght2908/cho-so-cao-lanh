@@ -1422,6 +1422,10 @@
   // push/reset navigation stack) để dùng lại được cả khi mở làm drawer GỐC (action `stall`) LẪN khi
   // dùng làm "cách vẽ lại drawer nguồn" cho nút "← Quay lại" (A.drawerPush, xem core.js).
   function mbOpenStallDrawer(st) {
+    if (st && st.market === 'CL') {
+      A.openDkDrawer(st);
+      return;
+    }
     ui.sel = st.id;
     A.$('#modal-root').innerHTML = `<div class="drawer-overlay" data-act="close"></div><div class="drawer">${A.drawerBackHtml()}
         <div class="drawer-h"><div><h3>${st.code}</h3><div class="small muted" style="margin-top:2px">${U.statusTag(st.status)}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>

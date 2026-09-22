@@ -109,7 +109,10 @@ window.APP = (function () {
     const it = A.menuItem(r), role = A.PERM.role(ui.role);
     const acc = A.currentAccount();
     if (!it || !role || !role.active || !acc || acc.status !== 'active') return false;
-    if (!A.PERM.canScreen(ui.role, r)) return false;
+    const screenAllowed = r === 'mat-bang' && ui.market === 'CL'
+      ? (A.PERM.canScreen(ui.role, 'mat-bang') || A.PERM.canScreen(ui.role, 'diem-kd'))
+      : A.PERM.canScreen(ui.role, r);
+    if (!screenAllowed) return false;
     return A.screenMarketOk(r, acc);
   };
   // Phase 4B — CAN_DO_ACTION: điểm kiểm tra DUY NHẤT để THỰC THI 1 action mutation (không chỉ hiển
@@ -517,7 +520,7 @@ window.APP = (function () {
       // MARKET_LAYOUT_SCREEN_PERMISSION_AUDIT.md + MARKET_LAYOUT_SCREEN_PERMISSION_IMPLEMENTATION_REPORT.md.
       { id: 'mat-bang', ico: U.icon('map'), label: 'Mặt bằng chợ' },
       { id: 'tai-san', ico: U.icon('settings'), label: 'Tài sản chợ' },
-      { id: 'diem-kd', ico: U.icon('store'), label: 'Điểm kinh doanh' },
+      { id: 'diem-kd', ico: U.icon('store'), label: 'Điểm kinh doanh', hidden: true },
       { id: 'phien-cho', ico: U.icon('store'), label: 'Phiên chợ quê' }
     ] },
     { group: 'Tiểu thương & hợp đồng', items: [
@@ -565,7 +568,8 @@ window.APP = (function () {
       return `<div class="nav-group">${g.group}</div>` + items.map(it => {
         if (it.sub) return `<div class="nav-subgroup">${it.sub}</div>`;
         const b = it.badge ? it.badge() : 0;
-        return `<a href="#/${it.id}" class="${A.current === it.id ? 'active' : ''}"><span class="ico">${it.ico}</span>${it.label}${b ? `<span class="badge">${b}</span>` : ''}</a>`;
+        const label = it.id === 'mat-bang' && ui.market === 'CL' ? 'Mặt bằng & điểm kinh doanh' : it.label;
+        return `<a href="#/${it.id}" class="${A.current === it.id ? 'active' : ''}"><span class="ico">${it.ico}</span>${label}${b ? `<span class="badge">${b}</span>` : ''}</a>`;
       }).join('');
     }).join('');
     // RBAC V1: topbar không còn cho chọn role trực tiếp — chọn Account Demo, role chỉ hiển thị.
@@ -581,8 +585,9 @@ window.APP = (function () {
       .map(id => `<button class="${ui.market === id ? 'on' : ''}" data-act="market" data-id="${id}">${MARKET_LABELS[id]}</button>`).join('');
     $('#market-wrap').style.display = A.current === 'mini-app' ? 'none' : '';
     const it = A.menuItem(A.current);
-    $('#page-title').textContent = it ? it.label : '';
-    document.title = (it ? it.label + ' · ' : '') + 'Chợ số Cao Lãnh – Prototype';
+    const pageLabel = it && it.id === 'mat-bang' && ui.market === 'CL' ? 'Mặt bằng & điểm kinh doanh' : (it ? it.label : '');
+    $('#page-title').textContent = pageLabel;
+    document.title = (pageLabel ? pageLabel + ' · ' : '') + 'Chợ số Cao Lãnh – Prototype';
   }
 
   A.render = function (scroll) {
@@ -621,7 +626,12 @@ window.APP = (function () {
     // 'mat-bang' NGAY TẠI ĐÂY, trước khi đánh giá U.can(r) — không cần nhánh xử lý riêng, logic
     // fallback U.can(r)/A.firstAccessibleScreen() ngay dưới đây tự áp dụng y hệt mọi route khác
     // (account không có quyền 'mat-bang' thì tự rơi về fallback, không trắng trang/không loop).
-    if (r === 'so-do' || r === 'cau-truc') r = 'mat-bang';
+    if (ui.market === 'CL' && r === 'mat-bang') {
+      ui.dkTab = 'map';
+    } else if (ui.market === 'CL' && (r === 'diem-kd' || r === 'so-do' || r === 'cau-truc')) {
+      ui.dkTab = r === 'diem-kd' ? 'list' : 'map';
+      r = 'mat-bang';
+    } else if (r === 'so-do' || r === 'cau-truc') r = 'mat-bang';
     // NO SCREEN PERMISSION = NO SCREEN RENDER: route yêu cầu (từ hash, kể cả gõ thẳng URL) chỉ
     // được nhận nếu U.can(r) đúng — U.can() đã bao gồm cả permission LẪN market applicability
     // (Phase 2), nên 1 route trước đó hợp lệ (vd. phien-cho khi đang TTD) sẽ tự động bị chặn nếu

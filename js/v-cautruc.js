@@ -298,7 +298,7 @@
       : '';
     const summary = rentalSummary + chip(null, 'điểm kinh doanh', stats.total) + chip('thue', 'đang thuê') + chip('trong', 'còn trống') + chip('no', 'nợ phí') + chip('ngung', 'tạm ngưng') + chip('tranhchap', 'tranh chấp');
     return `<div class="card mb-head"><div class="card-b mb-head-b">
-        <div class="mb-head-info"><h3>Mặt bằng chợ</h3><div class="mb-head-sub"><b>${U.esc(m.name)}</b> · ${U.esc(m.hang)}${m.address ? ' · ' + U.esc(m.address) : ''}</div>${m.note ? `<div class="small muted">${U.esc(m.note)}</div>` : ''}</div>
+      <div class="mb-head-info"><h3>${isTtd ? 'Mặt bằng chợ' : 'Mặt bằng & điểm kinh doanh'}</h3><div class="mb-head-sub"><b>${U.esc(m.name)}</b> · ${U.esc(m.hang)}${m.address ? ' · ' + U.esc(m.address) : ''}</div>${m.note ? `<div class="small muted">${U.esc(m.note)}</div>` : ''}</div>
         <div class="mb-summary">${summary}</div></div></div>
     <button class="btn sm mb-tree-toggle" data-act="mb-toggle-tree">${open ? '✕ Đóng cấu trúc' : '☰ Cấu trúc mặt bằng'}</button>
     <div class="mb-workspace">
@@ -548,5 +548,6 @@
   // Phase 7: #/mat-bang (screen permission 'mat-bang' DUY NHẤT) render workspace này — không còn
   // 2 registration 'so-do'/'cau-truc' riêng, không còn khái niệm "màn edit riêng" (xem ghi chú đầu
   // khối giao diện phía trên).
+  A.mbWorkspaceHtml = mbWorkspaceHtml;
   A.VIEWS['mat-bang'] = mbWorkspaceHtml;
 })(window.APP);

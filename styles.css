@@ -471,6 +471,16 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 .mb-summary { flex-wrap: wrap; gap: 10px 14px; font-size: var(--font-size-base); }
 .mb-summary b { font-variant-numeric: tabular-nums; font-weight: 700; }
 .mb-workspace { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px; align-items: start; }
+
+.cl-layout-point-page { min-width: 0; }
+.cl-layout-point-tabs { display: flex; gap: 4px; overflow-x: auto; margin: 0 0 14px; padding: 4px; border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; }
+.cl-layout-point-tabs button { flex: 0 0 auto; border: 0; border-bottom: 2px solid transparent; border-radius: 6px; background: transparent; color: var(--muted); padding: 9px 14px; cursor: pointer; font: inherit; white-space: nowrap; }
+.cl-layout-point-tabs button.active { border-color: var(--brand); background: #fff; color: var(--brand); font-weight: 700; }
+.cl-layout-point-tabs .badge { display: inline-grid; place-items: center; min-width: 20px; height: 20px; margin-left: 4px; padding: 0 5px; border-radius: 999px; background: var(--brand-soft); color: var(--brand); font-size: var(--font-size-xs); }
+.cl-layout-point-body { min-width: 0; }
+.cl-layout-point-body > .card { min-width: 0; }
+.cl-layout-point-body .tbl-wrap { overflow-x: auto; }
+@media (max-width: 640px) { .cl-layout-point-tabs { margin-bottom: 10px; } .cl-layout-point-tabs button { padding-inline: 11px; } }
 .mb-tree { display: flex; flex-direction: column; gap: 1px; }
 /* Hàng trong cây: có thể là 1 nút full-row (Tổng quan) hoặc 1 hàng chứa nhiều phần tử tương tác
    (caret + tên + action) — action phụ (Sửa/Xóa/+...) mờ mặc định, rõ khi hover/chọn/focus, đúng
