@@ -539,8 +539,70 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
    overflow và animation với modal hệ thống; các class chuyên biệt chỉ tinh chỉnh bề rộng nội dung. */
 .drawer { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(720px, 94vw); max-height: calc(100vh - 48px); background: #fff; border-radius: 14px; box-shadow: 0 20px 60px rgba(0,0,0,.25); display: flex; flex-direction: column; z-index: 101; overflow: hidden; animation: popupIn .18s ease-out; }
 /* Chi tiết tài sản luôn dùng cùng một canvas để việc đổi tab/nội dung không làm pop-up nhảy chiều cao. */
-.drawer.asset-detail-drawer { width: min(720px, calc(100vw - 32px)); height: min(560px, calc(100vh - 32px)); max-height: none; }
+.drawer.asset-detail-drawer { width: min(760px, calc(100vw - 32px)); height: min(700px, calc(100vh - 32px)); max-height: none; }
 .asset-detail-drawer .drawer-b { min-height: 0; }
+.asset-detail-head h3 { display: flex; gap: 5px; align-items: baseline; }
+.asset-detail-head-name { color: var(--muted); font-size: var(--font-size-sm); font-weight: 500; }
+.asset-detail-body { padding: 12px 16px 18px; background: #f8fafc; }
+.asset-detail-content { display: grid; gap: 12px; margin-top: 12px; }
+.asset-detail-section { padding: 12px; border: 1px solid #dce7f2; border-radius: 8px; background: #fff; }
+.asset-detail-section-h { display: flex; gap: 8px; align-items: center; min-height: 24px; margin: -12px -12px 12px; padding: 8px 12px; border-bottom: 1px solid #e4ebf3; background: #f5f9fd; }
+.asset-detail-section-h h4 { margin: 0; font-size: var(--font-size-sm); color: #294567; }
+.asset-detail-section-h .btn { margin-left: auto; }
+.asset-detail-incidents { border-color: #f1d9dd; background: #fffafb; }
+.asset-detail-incidents .asset-detail-section-h { background: #fff5f6; }
+.asset-detail-maintenance { border-color: #dce5fa; }
+.asset-detail-maintenance .asset-detail-section-h { background: #f5f8ff; }
+.asset-detail-gallery { border-color: #e5dbf5; }
+.asset-detail-gallery .asset-detail-section-h { background: #faf7ff; }
+.asset-profile { display: grid; grid-template-columns: 54px 150px minmax(0, 1fr); gap: 12px; align-items: start; }
+.asset-profile-icon { width: 54px; height: 54px; display: grid; place-items: center; border-radius: 9px; background: #edf4fb; font-size: 25px; }
+.asset-profile-name { display: grid; gap: 3px; padding-right: 10px; border-right: 1px solid #e4ebf3; }
+.asset-profile-name b { color: #294567; }
+.asset-profile-name span { font-size: var(--font-size-sm); }
+.asset-profile-name .tag { width: max-content; }
+.asset-profile-kv { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: var(--font-size-sm); }
+.asset-profile-kv dt { color: var(--muted); }
+.asset-profile-kv dd { margin: 0; font-weight: 500; }
+.asset-detail-table table { font-size: var(--font-size-sm); }
+.asset-detail-table th, .asset-detail-table td { padding: 7px 8px; white-space: nowrap; }
+.asset-detail-link { display: block; margin: 9px auto 0; color: var(--brand); border: 0; background: transparent; }
+.asset-detail-images { display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 9px; }
+.asset-detail-image { display: grid; gap: 4px; min-width: 0; font-size: var(--font-size-xs); }
+.asset-detail-image b { font-size: var(--font-size-xs); color: var(--ink-2); }
+.asset-detail-image span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asset-image-placeholder { height: 75px; display: grid; place-items: center; border-radius: 6px; border: 1px solid #dbe5ef; background: linear-gradient(135deg, #dfeaf5, #f8fbff); font-size: 25px; }
+.asset-detail-note { margin-top: 10px; font-size: var(--font-size-xs); color: #657993; }
+/* Phản ánh & sự cố CL: workflow form and detail are scoped to this module. */
+.inc-modal-b { max-height: calc(100vh - 210px); overflow-y: auto; }
+.inc-modal-h, .inc-modal-f { position: sticky; z-index: 2; background: #fff; }
+.inc-modal-h { top: 0; }
+.inc-modal-f { bottom: 0; }
+.inc-section { margin: 0 0 14px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.inc-section:last-child { margin-bottom: 0; }
+.inc-section h4 { margin: 0 0 10px; font-size: var(--font-size-sm); text-transform: uppercase; color: var(--ink-2); }
+.inc-case { display: flex; gap: 8px; align-items: baseline; margin-bottom: 14px; color: var(--ink-2); }
+.inc-case b { color: var(--brand); white-space: nowrap; }
+.inc-asset-preview { display: grid; gap: 3px; padding: 10px; border: 1px solid #dbe5f0; background: #fff; border-radius: 8px; margin-bottom: 8px; }
+.inc-asset-preview span { color: var(--muted); font-size: var(--font-size-sm); }
+.inc-card-actions { display: flex; gap: 6px; margin-top: 10px; }
+.inc-card-actions .btn { min-width: 0; }
+.inc-detail-drawer { width: min(860px, calc(100vw - 32px)); height: min(680px, calc(100vh - 32px)); max-height: none; }
+.inc-detail-drawer .drawer-b { min-height: 0; }
+.inc-detail-content { margin-top: 16px; }
+.inc-image-list, .inc-image-draft { display: flex; flex-wrap: wrap; gap: 8px; }
+.inc-image-thumb { position: relative; width: 116px; min-height: 78px; display: grid; place-items: center; gap: 4px; padding: 8px; border: 1px dashed #b9c9d9; border-radius: 8px; background: #fff; text-align: center; font-size: var(--font-size-xs); overflow: hidden; }
+.inc-image-thumb img { width: 100%; height: 52px; object-fit: cover; border-radius: 5px; }
+.inc-image-thumb .x { position: absolute; right: 2px; top: 1px; background: #fff; }
+.inc-timeline { padding: 6px 4px; }
+.inc-timeline-i { position: relative; display: grid; gap: 3px; padding: 0 0 16px 22px; border-left: 2px solid #cbd9e7; }
+.inc-timeline-i::before { content: ''; position: absolute; left: -6px; top: 3px; width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+.inc-timeline-i:last-child { border-left-color: transparent; }
+.inc-timeline-i b { font-size: var(--font-size-xs); color: var(--muted); }
+.inc-timeline-i strong { font-size: var(--font-size-sm); }
+.inc-timeline-i span { font-size: var(--font-size-sm); color: var(--ink-2); }
+.inc-check { margin: 7px 0; color: #167a3c; font-weight: 600; }
+@media (max-width: 640px) { .inc-detail-drawer { width: calc(100vw - 20px); height: calc(100vh - 20px); } .inc-card-actions { flex-wrap: wrap; } }
 @keyframes popupIn { from { opacity: 0; transform: translate(-50%, -47%) scale(.98); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
 .drawer-h { padding: 16px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; }
 /* Chuẩn hóa title drawer về đúng token SECTION/CARD TITLE (md) — trước đây mỗi nơi gọi drawer tự

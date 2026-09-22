@@ -113,6 +113,7 @@
     { key: 'action:cong-no.nhac-no-hang-loat', kind: 'action', group: 'Tài chính', screenId: 'cong-no', label: 'Nhắc nợ hàng loạt' },
     { key: 'action:su-co.tao-phan-anh', kind: 'action', group: 'Vận hành', screenId: 'su-co', label: 'Tạo phản ánh / sự cố thủ công' },
     { key: 'action:su-co.phan-cong', kind: 'action', group: 'Vận hành', screenId: 'su-co', label: 'Phân công người xử lý' },
+    { key: 'action:su-co.cap-nhat-xu-ly', kind: 'action', group: 'Vận hành', screenId: 'su-co', label: 'Kiểm tra và cập nhật xử lý sự cố' },
     { key: 'action:su-co.chuyen-trang-thai', kind: 'action', group: 'Vận hành', screenId: 'su-co', label: 'Chuyển trạng thái xử lý' },
     { key: 'action:su-co.vuot-cap', kind: 'action', group: 'Vận hành', screenId: 'su-co', label: 'Chuyển phản ánh vượt cấp lên phường' },
     { key: 'action:su-co.chi-dao', kind: 'action', group: 'Vận hành', screenId: 'su-co', label: 'Gửi ý kiến chỉ đạo (cho phản ánh đã vượt cấp)' },
@@ -302,6 +303,7 @@
       'cong-no.nhac-no-hang-loat': ['market_manager', 'accountant'],
       'su-co.tao-phan-anh': ['market_manager', 'market_staff'],
       'su-co.phan-cong': ['market_manager'],
+      'su-co.cap-nhat-xu-ly': ['market_manager', 'market_staff', 'technician'],
       // KHÔNG cấp cho 'technician' ở V1 — quyền hiện tại cho phép chuyển tới cả trạng thái "Đóng"
       // (cuối máy trạng thái), nên nếu cấp sẽ rộng hơn ý định "chỉ cập nhật tiến độ xử lý". Không
       // redesign máy trạng thái sự cố ở Phase 4B — chờ xác nhận nghiệp vụ (PHASE4_ACTION_AUDIT.md

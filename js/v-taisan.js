@@ -26,7 +26,11 @@
   function asset(id) { return assets().find(x => x.id === id); }
   function categoryLabel(key) { return CATEGORIES[key] || key || 'Khác'; }
   function statusTag(status) { const x = STATUSES[status] || ['Chưa xác định', '']; return `<span class="tag ${x[1]}">${x[0]}</span>`; }
-  function relatedIncidents(a) { return Array.isArray(a.incidents) ? a.incidents : []; }
+  function relatedIncidents(a) {
+    // Incident is the source of truth. Retain legacy seed list only until no linked incident exists.
+    const linked = (A.db.incidents || []).filter(i => i.market === 'CL' && i.assetId === a.id);
+    return linked.length ? linked : (Array.isArray(a.incidents) ? a.incidents : []);
+  }
   function dueSoon(a) {
     if (!a.maintenanceDueDate || a.status === 'INACTIVE') return false;
     const days = Math.round((new Date(a.maintenanceDueDate + 'T00:00:00') - new Date(U.today() + 'T00:00:00')) / 86400000);
@@ -60,17 +64,29 @@
 
   function incidentRows(a) {
     const xs = relatedIncidents(a);
-    return xs.length ? `<div class="table-wrap"><table><thead><tr><th>Mã sự cố</th><th>Tiêu đề</th><th>Ngày phản ánh</th><th>Trạng thái</th><th>Người xử lý</th></tr></thead><tbody>${xs.map(i => `<tr><td><b>${i.id}</b></td><td>${U.esc(i.title)}</td><td>${U.dmy(i.created)}</td><td><span class="tag info">${U.esc((D.INCIDENT_STATES.find(s => s.id === i.state) || {}).label || i.state)}</span></td><td>${U.esc(i.assigneeName || U.staffName(i.assignee) || 'Chưa phân công')}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">Chưa có sự cố liên quan.</div>';
+    return xs.length ? `<div class="table-wrap"><table><thead><tr><th>Mã sự cố</th><th>Tiêu đề</th><th>Ngày phản ánh</th><th>Trạng thái</th><th>Người xử lý</th><th></th></tr></thead><tbody>${xs.map(i => `<tr><td><b>${i.id}</b></td><td>${U.esc(i.title)}</td><td>${U.dmy(i.created)}</td><td><span class="tag info">${U.esc((D.INCIDENT_STATES.find(s => s.id === i.state) || {}).label || i.state)}</span></td><td>${U.esc(i.assigneeName || U.staffName(i.assignee) || 'Chưa phân công')}</td><td><button class="btn sm" data-act="inc-open" data-id="${i.id}">Xem hồ sơ sự cố</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">Chưa có sự cố liên quan.</div>';
+  }
+  function maintenanceRows(a) {
+    const xs = a.maintenanceHistory || [];
+    return xs.length ? `<div class="table-wrap asset-detail-table"><table><thead><tr><th>Mã bảo trì</th><th>Nội dung</th><th>Ngày thực hiện</th><th>Trạng thái</th><th>Người thực hiện</th></tr></thead><tbody>${xs.map(m => { const planned=m.status==='PLANNED', progress=m.status==='IN_PROGRESS'; return `<tr><td><b>${U.esc(m.id)}</b></td><td>${U.esc(m.title)}</td><td>${U.dmy(m.date)}</td><td><span class="tag ${planned||progress?'warn':'ok'}">${planned?'Dự kiến':progress?'Đang thực hiện':'Hoàn thành'}</span></td><td>${U.esc(m.by || '—')}</td></tr>`; }).join('')}</tbody></table></div>` : '<div class="empty">Chưa có lịch sử bảo trì.</div>';
+  }
+  function imageGrid(a) {
+    const xs = a.images || [];
+    return xs.length ? `<div class="asset-detail-images">${xs.map((n, idx) => `<div class="asset-detail-image"><div class="asset-image-placeholder">📷</div><b>${idx === 0 ? 'Hình ảnh tình trạng tài sản' : 'Hình ảnh liên quan'}</b><span>${U.esc(n)}</span></div>`).join('')}</div>` : '<div class="empty">Chưa có hình ảnh.</div>';
+  }
+  function overviewHtml(a, canEdit) {
+    const incidents = relatedIncidents(a), maintenance = a.maintenanceHistory || [];
+    return `<section class="asset-detail-section"><div class="asset-detail-section-h"><h4>ⓘ Thông tin tài sản</h4>${canEdit ? `<button class="btn sm" data-act="asset-edit" data-id="${a.id}">✎ Chỉnh sửa</button>` : ''}</div><div class="asset-profile"><div class="asset-profile-icon">💡</div><div class="asset-profile-name"><b>${U.esc(a.code)}</b><span>${U.esc(a.name)}</span>${statusTag(a.status)}</div><dl class="asset-profile-kv"><dt>Nhóm tài sản</dt><dd>${U.esc(categoryLabel(a.category))}</dd><dt>Chợ</dt><dd>${U.esc(U.market(a.market).name)}</dd><dt>Vị trí</dt><dd>${U.esc(a.locationLabel)}</dd><dt>Ngày lắp đặt</dt><dd>${a.installedAt ? U.dmy(a.installedAt) : '—'}</dd><dt>Bảo trì gần nhất</dt><dd>${a.lastMaintenanceAt ? U.dmy(a.lastMaintenanceAt) : '—'}</dd><dt>Bảo trì dự kiến</dt><dd>${a.maintenanceDueDate ? U.dmy(a.maintenanceDueDate) : '—'}</dd><dt>Mô tả</dt><dd>${U.esc(a.description || '—')}</dd><dt>Ghi chú</dt><dd>${U.esc(a.note || '—')}</dd></dl></div></section><section class="asset-detail-section asset-detail-incidents"><div class="asset-detail-section-h"><h4>⚒ Sự cố liên quan (${incidents.length})</h4></div>${incidentRows(a)}${incidents.length ? '<button class="btn sm asset-detail-link" data-act="asset-tab" data-id="'+a.id+'" data-tab="incidents">Xem tất cả sự cố →</button>' : ''}</section><section class="asset-detail-section asset-detail-maintenance"><div class="asset-detail-section-h"><h4>◉ Lịch sử bảo trì (${maintenance.length})</h4></div>${maintenanceRows(a)}</section><section class="asset-detail-section asset-detail-gallery"><div class="asset-detail-section-h"><h4>▣ Hình ảnh (${(a.images || []).length})</h4></div>${imageGrid(a)}<div class="asset-detail-note">ⓘ Ảnh sử dụng cho mục đích tra cứu và quản lý tài sản.</div></section>`;
   }
   function assetDrawer(a) {
     const tab = ui.assetTab || 'overview', canEdit = A.canDo('tai-san.edit', a.market);
     const tabs = [['overview','Tổng quan'],['incidents','Sự cố liên quan'],['maintenance','Lịch sử bảo trì'],['images','Hình ảnh']];
     let body = '';
-    if (tab === 'overview') body = `<dl class="kv"><dt>Mã tài sản</dt><dd>${U.esc(a.code)}</dd><dt>Tên tài sản</dt><dd>${U.esc(a.name)}</dd><dt>Nhóm tài sản</dt><dd>${U.esc(categoryLabel(a.category))}</dd><dt>Chợ</dt><dd>${U.esc(U.market(a.market).name)}</dd><dt>Vị trí</dt><dd>${U.esc(a.locationLabel)}</dd><dt>Ngày lắp đặt</dt><dd>${a.installedAt ? U.dmy(a.installedAt) : '—'}</dd><dt>Trạng thái</dt><dd>${statusTag(a.status)}</dd><dt>Bảo trì gần nhất</dt><dd>${a.lastMaintenanceAt ? U.dmy(a.lastMaintenanceAt) : '—'}</dd><dt>Bảo trì dự kiến</dt><dd>${a.maintenanceDueDate ? U.dmy(a.maintenanceDueDate) : '—'}</dd><dt>Mô tả</dt><dd>${U.esc(a.description || '—')}</dd><dt>Ghi chú</dt><dd>${U.esc(a.note || '—')}</dd></dl>`;
+    if (tab === 'overview') body = overviewHtml(a, canEdit);
     if (tab === 'incidents') body = incidentRows(a);
-    if (tab === 'maintenance') body = a.maintenanceHistory && a.maintenanceHistory.length ? `<div class="table-wrap"><table><thead><tr><th>Mã</th><th>Nội dung</th><th>Ngày</th><th>Trạng thái</th></tr></thead><tbody>${a.maintenanceHistory.map(m => { const planned = m.status === 'PLANNED', progress = m.status === 'IN_PROGRESS'; return `<tr><td><b>${U.esc(m.id)}</b></td><td title="${U.esc(m.description || m.title)}">${U.esc(m.title)}</td><td>${U.dmy(m.date)}</td><td><span class="tag ${planned || progress ? 'warn' : 'ok'}">${planned ? 'Dự kiến' : (progress ? 'Đang thực hiện' : 'Hoàn thành')}</span></td></tr>`; }).join('')}</tbody></table></div>` : '<div class="empty">Chưa có lịch sử bảo trì.</div>';
-    if (tab === 'images') body = a.images && a.images.length ? `<div class="asset-images">${a.images.map(n => `<div class="asset-image">📷<br><span class="small">${U.esc(n)}</span></div>`).join('')}</div>` : '<div class="empty">Chưa có hình ảnh.</div>';
-    return `<div class="drawer-h"><div><h3>${U.esc(a.code)}</h3><div class="small muted">${U.esc(a.name)} · ${statusTag(a.status)}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div><div class="drawer-b"><div class="seg asset-tabs">${tabs.map(t => `<button class="${tab === t[0] ? 'on' : ''}" data-act="asset-tab" data-id="${a.id}" data-tab="${t[0]}">${t[1]}</button>`).join('')}</div><div style="margin-top:16px">${body}</div></div><div class="drawer-f">${canEdit ? `<button class="btn primary" data-act="asset-edit" data-id="${a.id}">Chỉnh sửa</button>` : ''}<button class="btn" data-act="close">Đóng</button></div>`;
+    if (tab === 'maintenance') body = maintenanceRows(a);
+    if (tab === 'images') body = imageGrid(a);
+    return `<div class="drawer-h asset-detail-head"><div><h3>${U.esc(a.code)} <span class="asset-detail-head-name">(${U.esc(a.name)})</span></h3><div class="small muted">${statusTag(a.status)}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div><div class="drawer-b asset-detail-body"><div class="seg asset-tabs">${tabs.map(t => `<button class="${tab === t[0] ? 'on' : ''}" data-act="asset-tab" data-id="${a.id}" data-tab="${t[0]}">${t[1]}</button>`).join('')}</div><div class="asset-detail-content">${body}</div></div><div class="drawer-f"><button class="btn" data-act="close">Đóng</button></div>`;
   }
   function openAsset(a) { if (!a) return; ui.assetOpen = a.id; ui.assetTab = ui.assetTab || 'overview'; A.$('#modal-root').innerHTML = `<div class="drawer-overlay" data-act="close"></div><div class="drawer asset-detail-drawer">${assetDrawer(a)}</div>`; }
   function assetForm(a) {
