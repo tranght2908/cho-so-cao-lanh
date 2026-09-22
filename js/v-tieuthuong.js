@@ -1274,7 +1274,7 @@
   // ---- Màn "Điểm kinh doanh" (CL) — 2 tab: "Danh sách điểm" (dkViewCL(), không đổi) + "Yêu cầu
   // thay đổi" (mục 1 yêu cầu — Tách điểm KHÔNG còn là nút trong drawer chi tiết, chỉ khởi tạo được
   // từ đây) ----
-  function dkScreenCL() {
+  function dkScreenCL(options) {
     const tab = ui.dkTab === 'requests' ? 'requests' : 'list';
     const total = A.db.pointRequests.filter(r => r.market === 'CL').length;
     // Nút dùng chung cho cả Luồng 2 (lap-yeu-cau) lẫn Luồng 3 (assign) — xem A.ACT['dksr-open'].
@@ -1284,9 +1284,33 @@
       <div class="seg"><button class="${tab === 'list' ? 'on' : ''}" data-act="dk-tab" data-id="list">Danh sách điểm</button><button class="${tab === 'requests' ? 'on' : ''}" data-act="dk-tab" data-id="requests">Yêu cầu thay đổi (${total})</button></div>
       ${(canCreate || canMerge || canConvert) ? `<details class="request-create-menu"><summary class="btn primary">+ Lập yêu cầu thay đổi <span aria-hidden="true">⌄</span></summary><div class="request-create-menu-list">${canCreate ? '<button class="request-create-item" data-act="dksr-open"><b>Tách điểm</b><span>Tách một điểm thành nhiều điểm.</span></button>' : ''}${canMerge ? '<button class="request-create-item" data-act="dkmerge-open"><b>Gộp điểm</b><span>Gộp hai điểm liền kề thành một điểm.</span></button>' : ''}${canConvert ? '<button class="request-create-item" data-act="dkconvert-open"><b>Chuyển đổi vị trí</b><span>Chuyển 1 điểm đang sử dụng sang 1 điểm còn trống khác.</span></button>' : ''}</div></details>` : ''}
     </div>`;
-    return bar + (tab === 'list' ? dkViewCL() : dkRequestsViewCL());
+    return (options && options.embed ? bar.replace(/<div class="seg">.*?<\/div>/, '') : bar)
+      + (tab === 'list' ? dkViewCL() : dkRequestsViewCL());
   }
   A.ACT['dk-tab'] = el => { ui.dkTab = el.dataset.id; ui.page.dkreq = 0; A.render(); };
+
+  function clLayoutRequestsCount() {
+    return A.db.pointRequests.filter(r => r.market === 'CL').length;
+  }
+  function clLayoutView() {
+    const tab = ['map', 'list', 'requests'].indexOf(ui.dkTab) >= 0 ? ui.dkTab : 'map';
+    const tabs = `<div class="cl-layout-point-tabs" role="tablist">
+      <button class="${tab === 'map' ? 'active' : ''}" data-act="cl-layout-tab" data-id="map" role="tab">Sơ đồ mặt bằng</button>
+      <button class="${tab === 'list' ? 'active' : ''}" data-act="cl-layout-tab" data-id="list" role="tab">Danh sách điểm</button>
+      <button class="${tab === 'requests' ? 'active' : ''}" data-act="cl-layout-tab" data-id="requests" role="tab">Yêu cầu thay đổi <span class="badge">${clLayoutRequestsCount()}</span></button>
+    </div>`;
+    const body = tab === 'map' ? A.mbWorkspaceHtml() : dkScreenCL({ embed: true });
+    return `<div class="cl-layout-point-page">${tabs}<div class="cl-layout-point-body">${body}</div></div>`;
+  }
+  A.ACT['cl-layout-tab'] = el => {
+    if (ui.market !== 'CL') return;
+    const tab = el.dataset.id;
+    if (['map', 'list', 'requests'].indexOf(tab) < 0) return;
+    ui.dkTab = tab;
+    ui.page.dkcl = 0;
+    ui.page.dkreq = 0;
+    A.render();
+  };
 
   // ---- API dùng chung cho Mini App (js/mini.js) — "TÁCH ĐIỂM tiểu thương gửi từ Mini App" ----
   // Expose ĐÚNG các hàm/hằng số nội bộ đã có của module này qua A.pointReq — KHÔNG tạo mảng dữ liệu
@@ -1990,7 +2014,8 @@
   A.IN['dk-search'] = el => { f.dkSearch = el.value; ui.page.dk = 0; A.render(); };
   A.ACT['dk-csv'] = () => U.csv('diem-kinh-doanh', ['Mã điểm', 'Chợ', 'Khu vực', 'Ngành hàng', 'Loại', 'Diện tích m2', 'Đơn giá', 'Giá dịch vụ/tháng', 'Tiểu thương', 'Trạng thái'], dkRows().map(dkLine));
 
-  A.VIEWS['diem-kd'] = () => ui.market === 'CL' ? dkScreenCL() : dkViewGeneric();
+  A.VIEWS['mat-bang'] = () => ui.market === 'CL' ? clLayoutView() : A.mbWorkspaceHtml();
+  A.VIEWS['diem-kd'] = () => ui.market === 'CL' ? clLayoutView() : dkViewGeneric();
   // Click "Xem" trên bảng danh mục = mở drawer GỐC (không phải drill-down) — reset navigation
   // stack trước khi vẽ (mục 6 yêu cầu back navigation: không hiện "← Quay lại" giả).
   A.ACT['dk-open'] = el => { A.drawerReset(); A.openDkDrawer(A.idx.stall.get(el.dataset.id)); };
