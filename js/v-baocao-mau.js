@@ -17,7 +17,11 @@
     TTD: { ten: 'Chợ quê Cù lao Tân Thuận Đông', loai: 'Nhà lồng bán kiên cố, sân họp chợ', nam: 2021, dat: 3200, san: 1100, haomon: 480000000, nguyengia: 2400000000, baotri: 45000000, hang: 3, quyhoach: true }
   };
   const mk = id => D.MARKETS.find(m => m.id === id);
-  const scopeIds = xm => xm === 'ALL' ? ['CL', 'TTD'] : [xm];
+  // BAO_CAO_THONG_KE_RECOVERY: ASSET chỉ có số liệu khảo sát tài sản cho CL/TTD (10 chợ còn lại mới
+  // có trong danh mục, chưa khảo sát hạ tầng — xem "Hướng dẫn xem"). Dùng A.allowedMarkets() thay vì
+  // hardcode ['CL','TTD'] để không rollback lại danh sách chợ cũ, và lọc theo ASSET[id] để không
+  // crash/sinh dữ liệu giả cho các chợ chưa có khảo sát — báo cáo trả rỗng/0 cho các chợ đó.
+  const scopeIds = xm => (xm === 'ALL' ? A.allowedMarkets(A.currentAccount()) : [xm]).filter(id => ASSET[id]);
   const stallsOf = id => A.db.stalls.filter(s => s.market === id);
   const occupied = id => stallsOf(id).filter(s => s.status === 'thue' || s.status === 'no').length;
   const paidYear = id => U.sum(A.db.payments.filter(p => p.market === id && p.date.startsWith(YEAR)), p => p.amount);

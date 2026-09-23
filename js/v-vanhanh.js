@@ -266,7 +266,10 @@
       congno: { t: 'Công nợ theo khu vực', cols: ['Chợ', 'Khu vực', 'Số tiểu thương nợ', 'Nợ quá hạn (đ)', 'Nợ chưa đến hạn (đ)'],
         rows: secs.map(sc => { const xs = inv.filter(i => i.status !== 'paid' && (i.market + A.idx.stall.get(i.stallId).section) === sc.key); return [U.mShort(sc.m), sc.name, new Set(xs.filter(U.isOver).map(i => i.traderId)).size, U.sum(xs.filter(U.isOver), U.due), U.sum(xs.filter(i => !U.isOver(i)), U.due)]; }) },
       khongtienmat: { t: 'Tỷ lệ thanh toán không dùng tiền mặt', cols: ['Kỳ', 'Tiền mặt (đ)', 'Quét QR (đ)', 'Chuyển khoản (đ)', 'Không tiền mặt %'],
-        rows: periods.map(p => { const xs = pays.filter(x => A.idx.invoice.get(x.invoiceId).period === p), s = m => U.sum(xs.filter(x => x.method === m), x => x.amount), tot = U.sum(xs, x => x.amount); return [U.per(p), s('tm'), s('qr'), s('ck'), U.pct(s('qr') + s('ck'), tot)]; }), chart: 'khongtienmat' },
+        // BAO_CAO_THONG_KE_RECOVERY: thanh toán từ Mini App (phiên chợ quê) có invoiceId: null (không
+        // gắn kỳ phải thu chính thức) — cùng nguyên nhân đã sửa ở revenueSeries() trong v-dieuhanh.js,
+        // ở đây cần guard riêng vì reports() là hàm khác. Payment không có kỳ hợp lệ bị loại khỏi bảng theo kỳ.
+        rows: periods.map(p => { const xs = pays.filter(x => x.invoiceId && A.idx.invoice.get(x.invoiceId) && A.idx.invoice.get(x.invoiceId).period === p), s = m => U.sum(xs.filter(x => x.method === m), x => x.amount), tot = U.sum(xs, x => x.amount); return [U.per(p), s('tm'), s('qr'), s('ck'), U.pct(s('qr') + s('ck'), tot)]; }), chart: 'khongtienmat' },
       doisoat: { t: 'Đối soát ngày ' + U.dmy(U.today()), cols: ['Giờ', 'Mã sao kê', 'Nội dung', 'Số tiền (đ)', 'Trạng thái'],
         rows: db.bank.map(b => [b.time, b.id, b.ref, b.amount, b.matched ? 'Đã khớp' : 'Chưa khớp']) },
       suco: { t: 'Tình hình xử lý phản ánh, sự cố', cols: ['Nhóm', 'Tổng', 'Đã xong', 'Đang xử lý', 'Quá hạn', 'Đánh giá TB'],
@@ -337,8 +340,10 @@
     return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" style="max-height:${H}px">${g}</svg><div class="chart-legend"><span><i style="background:#0961bb"></i>${U.esc(o.name)}</span></div></div>`;
   }
   A.VIEWS['bao-cao'] = function () {
-    // Báo cáo thống kê = màn cross-market (A.SCREEN_MARKET['bao-cao'] === 'CROSS') — dùng bộ lọc
-    // nội bộ A.xmMarket()/A.xmScopeBar() thay vì bị chặn/giới hạn theo selectedMarket (mục 9 Phase 2).
+    // Báo cáo thống kê = màn cross-market (A.SCREEN_MARKET['bao-cao'] === 'CROSS') — không bị chặn
+    // bởi selectedMarket. MARKET_SELECTOR_ALL_UNIFICATION: A.xmMarket() giờ đọc thẳng ui.market —
+    // dropdown "Chợ" trên thanh top (có "Tất cả" cho account GLOBAL) là nơi DUY NHẤT chọn phạm vi
+    // báo cáo, không còn field "Chợ" riêng trong Cấu hình báo cáo (tránh 2 điều khiển cùng 1 state).
     const xmMkt = A.xmMarket();
     const R = reports(xmMkt), SF = A.STATE_FORMS || {}, stateKey = SF[ui.report] ? ui.report : null, key = stateKey ? 'lapday' : (R[ui.report] ? ui.report : 'lapday'), r = R[key];
     const rp = ui.rp || (ui.rp = { from: '2026-09-01', to: U.today() });
@@ -351,8 +356,7 @@
     const numCol = k => k > 0 && typeof (r.rows[0] || [])[k] === 'number';
     const tot = rpTotals(key, r);
     const kpis = rpKpis(key, r.rows);
-    const scopeName = xmMkt === 'ALL' ? 'Chợ Cao Lãnh và Chợ quê Cù lao Tân Thuận Đông' : U.market(xmMkt).name;
-    const allowed = A.allowedMarkets(A.currentAccount());
+    const scopeName = xmMkt === 'ALL' ? A.allowedMarkets(A.currentAccount()).map(U.mShort).join(', ') : U.market(xmMkt).name;
     const who = A.currentAccount ? A.currentAccount() : null;
     return `<div class="rp-page-h"><h2>Báo cáo thống kê</h2><div class="muted">Tạo, xem trước và xuất các báo cáo quản lý chợ</div></div>
     <div class="grid g-report rp-grid">
@@ -361,7 +365,7 @@
         <div class="card no-print"><div class="card-h"><h3>Cấu hình báo cáo</h3></div><div class="card-b rp-cfg">
           <div class="field"><label>Từ ngày</label><input type="date" class="input" data-ch="rp-cfg" data-k="from" value="${rp.from}"></div>
           <div class="field"><label>Đến ngày</label><input type="date" class="input" data-ch="rp-cfg" data-k="to" value="${rp.to}"></div>
-          <div class="field"><label>Chợ</label><select class="input" data-ch="rp-scope" ${allowed.length <= 1 ? 'disabled' : ''}>${allowed.length > 1 ? `<option value="ALL" ${xmMkt === 'ALL' ? 'selected' : ''}>Tất cả chợ</option>` : ''}${allowed.map(id => `<option value="${id}" ${xmMkt === id ? 'selected' : ''}>${U.esc(U.market(id).name)}</option>`).join('')}</select></div>
+          <div class="field"><label>Chợ</label><input class="input" value="${U.esc(scopeName)}" disabled title="Đổi phạm vi ở dropdown &quot;Chợ&quot; trên thanh top"></div>
           <div class="field"><label>Đơn vị lập</label><select class="input"><option>Ban Quản lý chợ</option><option>UBND phường Cao Lãnh</option></select></div>
         </div></div>
         <div class="card rp-card"><div class="card-h no-print"><h3>👁 Xem trước: ${U.esc(stateKey ? SF[stateKey].mau + ' – ' + SF[stateKey].t : r.t)}</h3><span class="spacer"></span><button class="btn" data-act="print">⬇ Xuất PDF</button><button class="btn" data-act="rp-csv">📊 Excel</button><button class="btn" data-act="print">🖨 In</button><button class="btn" data-act="rp-save">💾 Lưu mẫu</button></div>
@@ -375,13 +379,12 @@
               <div class="tbl-wrap"><table class="tbl rp-tbl"><thead><tr><th class="num rp-stt">STT</th>${cols.map((c, k) => `<th class="${numCol(k) ? 'num' : ''}">${U.esc(c)}</th>`).join('')}</tr></thead>
               <tbody>${r.rows.length ? r.rows.map((row, i) => `<tr><td class="num rp-stt">${i + 1}</td>${row.map((v, k) => `<td class="${typeof v === 'number' ? 'num' : ''} ${k === 0 ? 'rp-first' : ''}">${fmtCell(v, r.cols[k])}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length + 1}" class="empty">Không có dữ liệu trong phạm vi đã chọn</td></tr>`}</tbody>
               ${tot ? `<tfoot><tr class="rp-total"><td></td>${tot.map((v, k) => `<td class="${typeof v === 'number' ? 'num' : ''}">${v === '' ? '' : fmtCell(v, r.cols[k])}</td>`).join('')}</tr></tfoot>` : ''}</table></div></div>
-            <div class="rp-sign print-only"><div><div class="rp-sign-t">NGƯỜI LẬP BIỂU</div><div class="rp-sign-s">(Ký, ghi rõ họ tên)</div><div class="rp-sign-n">${U.esc(who && (who.accountType === 'Ban Quản lý chợ' || who.accountType === 'Nhân viên Ban Quản lý chợ') ? who.fullName : 'Lê Thị Ngọc Hân')}</div></div><div><div class="rp-sign-t">TRƯỞNG BAN QUẢN LÝ CHỢ</div><div class="rp-sign-s">(Ký, đóng dấu)</div><div class="rp-sign-n">Trần Minh Khoa</div></div></div>
+            <div class="rp-sign print-only"><div><div class="rp-sign-t">NGƯỜI LẬP BIỂU</div><div class="rp-sign-s">(Ký, ghi rõ họ tên)</div><div class="rp-sign-n">${U.esc(who && ['market_manager', 'collector'].indexOf(A.ACCOUNTS.primaryRole(who)) !== -1 ? who.fullName : 'Lê Thị Ngọc Hân')}</div></div><div><div class="rp-sign-t">TRƯỞNG BAN QUẢN LÝ CHỢ</div><div class="rp-sign-s">(Ký, đóng dấu)</div><div class="rp-sign-n">Trần Minh Khoa</div></div></div>
             <div class="small muted rp-note">Số liệu sinh tự động từ dữ liệu nghiệp vụ của hệ thống lúc ${U.nowTime()} ngày ${U.dmy(U.today())}.</div>
           </div>`}</div></div>
       </div></div>`;
   };
   A.CH['rp-cfg'] = el => { ui.rp[el.dataset.k] = el.value; A.render(); };
-  A.CH['rp-scope'] = el => { A.ACT['xm-scope']({ dataset: { id: el.value } }); };
   A.ACT['rp-save'] = () => U.toast('Đã lưu mẫu báo cáo (mô phỏng)');
   A.ACT.rp = el => { ui.report = el.dataset.id; A.render(); };
   A.ACT['rp-csv'] = () => { if (A.STATE_FORMS && A.STATE_FORMS[ui.report]) { A.stateFormCsv(ui.report, A.xmMarket()); return; } const R = reports(A.xmMarket()), r = R[ui.report] || R.lapday; U.csv('bao-cao-' + (R[ui.report] ? ui.report : 'lapday'), r.cols, r.rows); };
@@ -391,10 +394,15 @@
     const parts = (name || '').trim().split(/\s+/).filter(Boolean);
     return ((parts[0] || '')[0] || '') + ((parts[parts.length - 1] || '')[0] || '');
   }
+  // RBAC_MARKET_SCOPE_MIGRATION mục 21: không liệt kê hết tên chợ nếu account có nhiều chợ (table
+  // sẽ quá cao với market master 12 chợ) — chỉ hiện chợ đầu + "+N chợ", đầy đủ danh sách xem ở
+  // drawer chi tiết account (accDrawerHtml bên dưới vẫn gọi hàm này, nên khi cần liệt kê đủ, sửa ở
+  // đây 1 chỗ là đủ — hiện tại drawer cũng chỉ cần tóm tắt, không có yêu cầu liệt kê đầy đủ riêng).
   function accScopeLabel(scopes) {
     if (!scopes || !scopes.length) return '—';
-    if (scopes.includes('ALL')) return 'Toàn hệ thống';
-    return scopes.map(m => U.mShort(m)).join(', ');
+    if (scopes.includes('ALL')) return 'Toàn bộ ' + D.MARKETS.length + ' chợ';
+    if (scopes.length === 1) return U.mShort(scopes[0]);
+    return U.mShort(scopes[0]) + ' +' + (scopes.length - 1) + ' chợ';
   }
   function accRoleBadges(roleIds) {
     return (roleIds || []).map(rid => { const r = A.PERM.role(rid); return `<span class="tag info">${U.esc(r ? r.name : rid)}</span>`; }).join(' ') || '<span class="muted small">Chưa gán</span>';
@@ -402,14 +410,14 @@
   function accRows() {
     const f = ui.acc, q = (f.search || '').toLowerCase();
     // TRADER_PROFILE_AND_MINIAPP_WORKFLOW (mục 31 yêu cầu — "S"): bảng MẶC ĐỊNH chỉ hiển thị account
-    // nội bộ (system_admin/ward_leader/market_manager/market_staff/accountant/collector/technician),
-    // KHÔNG hiển thị account role 'trader' — account đó được quản lý về nghiệp vụ từ màn Hồ sơ tiểu
-    // thương → Tài khoản Mini App (xem js/v-tieuthuong.js, Section E). Chỉ ẨN mặc định (presentation
-    // filter, KHÔNG xoá account/role) — nếu admin CHỦ ĐỘNG lọc đúng "Tiểu thương" ở ô "Loại tài
-    // khoản" thì vẫn xem được (tra cứu khi cần), không khoá cứng.
+    // nội bộ (system_admin/ward_leader/market_manager/collector/technician), KHÔNG hiển thị account
+    // role 'trader' — account đó được quản lý về nghiệp vụ từ màn Hồ sơ tiểu thương → Tài khoản Mini
+    // App (xem js/v-tieuthuong.js, Section E). Chỉ ẨN mặc định (presentation filter, KHÔNG xoá
+    // account/role) — nếu admin CHỦ ĐỘNG lọc đúng "Tiểu thương" ở ô "Loại tài khoản" thì vẫn xem được
+    // (tra cứu khi cần), không khoá cứng.
     const hideTraders = f.type !== 'Tiểu thương';
     // Lọc theo A.allowedMarkets() (không phải marketScopes thô) — chỉ có vậy mới lọc đúng cho cả
-    // account cũ còn ['ALL'] LẪN account mới ['CL','TTD']/['CL']/['TTD'] (mục 8 yêu cầu Phase 5B).
+    // account GLOBAL ['ALL'] LẪN account MARKET scoped tới bất kỳ (các) chợ nào trong 12 chợ.
     return A.ACCOUNTS.list().filter(a =>
       (!hideTraders || a.accountType !== 'Tiểu thương') &&
       (!f.type || a.accountType === f.type) &&
@@ -449,14 +457,34 @@
       </div>
       <div class="drawer-f">${canEdit ? `<button class="btn primary" data-act="acc-edit" data-id="${a.id}">Chỉnh sửa</button>` : ''}<button class="btn" data-act="close">Đóng</button></div>`;
   }
+  // RBAC_MARKET_SCOPE_MIGRATION mục 20: phần "Phạm vi" đổi theo vai trò đang chọn —
+  //   system_admin → "Toàn hệ thống" (tĩnh, không chọn từng chợ)
+  //   ward_leader  → "Toàn bộ N chợ" (tĩnh, không chọn từng chợ)
+  //   market_manager/collector/technician → multi-select 12 chợ (checkbox)
+  //   trader       → không cho gán qua form này (quản lý qua Hồ sơ tiểu thương → Tài khoản Mini App,
+  //                  "không cho phép dùng marketScopes để vượt qua ownership" — mục 20 yêu cầu)
+  //   chưa chọn vai trò → vẫn hiện multi-select (an toàn mặc định, admin luôn chọn vai trò trước khi
+  //                  Lưu vì acc-form-save đã validate).
+  function afScopeSectionHtml(d, dis) {
+    const roleId = (d.roleIds && d.roleIds[0]) || '';
+    if (roleId === 'system_admin' || roleId === 'ward_leader') {
+      const label = roleId === 'system_admin' ? 'Toàn hệ thống' : 'Toàn bộ ' + D.MARKETS.length + ' chợ';
+      return `<div class="field" style="margin-top:12px"><label>Phạm vi</label><div class="note info">${U.esc(label)} — vai trò này không cần chọn từng chợ.</div></div>`;
+    }
+    if (roleId === 'trader') {
+      return `<div class="field" style="margin-top:12px"><label>Phạm vi</label><div class="note">Tài khoản Tiểu thương được quản lý qua <b>Tiểu thương → Hồ sơ tiểu thương → Tài khoản Mini App</b>, không gán phạm vi chợ trực tiếp ở đây.</div></div>`;
+    }
+    // Legacy ['ALL'] (account cũ) diễn giải qua đúng A.allowedMarkets() hiện có — không tự viết lại
+    // logic 'ALL' ở đây — để checkbox hiển thị đã tick sẵn đúng các chợ; account KHÔNG bị ghi lại
+    // cho tới khi admin thật sự bấm Lưu.
+    const dm = A.allowedMarkets({ marketScopes: d.marketScopes || [] });
+    return `<div class="field" style="margin-top:12px"><label>Phạm vi chợ được phân công</label>
+      <div class="row" style="gap:14px;flex-wrap:wrap;margin-top:4px">${D.MARKETS.map(m => `<label class="small" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" data-ch="af-scope" data-market="${m.id}" ${dm.includes(m.id) ? 'checked' : ''} ${dis}> ${U.esc(m.short)}</label>`).join('')}</div></div>`;
+  }
   function renderAccForm() {
     const d = ui.accForm, isNew = !d.id;
     const canAssign = isNew || A.canDo('tai-khoan.gan-quyen');
     const dis = canAssign ? '' : 'disabled';
-    // Legacy ['ALL'] (account cũ trước Phase 5B) diễn giải qua đúng A.allowedMarkets() hiện có —
-    // không tự viết lại logic 'ALL' ở đây — để checkbox hiển thị đã tick sẵn cả 2 chợ; account
-    // KHÔNG bị ghi lại cho tới khi admin thật sự bấm Lưu (xem mục 3 yêu cầu Phase 5B).
-    const dm = A.allowedMarkets({ marketScopes: d.marketScopes || [] });
     A.modal(A.mHead(isNew ? 'Thêm tài khoản mới' : 'Sửa tài khoản') + `<div class="modal-b"><div class="form-grid">
       <div class="field"><label>Mã tài khoản *</label><input class="input" data-ch="af-code" value="${U.esc(d.code || '')}" ${isNew ? '' : 'disabled'}></div>
       <div class="field"><label>Họ tên *</label><input class="input" data-ch="af-name" value="${U.esc(d.fullName || '')}"></div>
@@ -466,12 +494,7 @@
       <div class="field"><label>Đơn vị</label><input class="input" data-ch="af-org" value="${U.esc(d.organization || '')}"></div>
       <div class="field"><label>Trạng thái</label><select class="input" data-ch="af-status"><option value="active" ${d.status === 'active' ? 'selected' : ''}>Hoạt động</option><option value="disabled" ${d.status === 'disabled' ? 'selected' : ''}>Tạm khoá</option></select></div>
     </div>
-    <div class="field" style="margin-top:12px"><label>Phạm vi chợ được phân công</label>
-      <div class="row" style="gap:16px;flex-wrap:wrap;margin-top:4px">
-        <label class="small" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" data-ch="af-scope-cl" ${dm.includes('CL') ? 'checked' : ''} ${dis}> Chợ Cao Lãnh</label>
-        <label class="small" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" data-ch="af-scope-ttd" ${dm.includes('TTD') ? 'checked' : ''} ${dis}> Chợ quê Tân Thuận Đông</label>
-      </div>
-    </div>
+    ${afScopeSectionHtml(d, dis)}
     ${!canAssign ? '<div class="note" style="margin-top:12px">Bạn không có quyền gán vai trò / phạm vi chợ nên các trường này đang bị khoá.</div>' : ''}
     </div>
     <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="acc-form-save">Lưu</button></div>`);
@@ -529,7 +552,11 @@
   };
   A.ACT['acc-new'] = () => {
     if (!A.canDo('tai-khoan.tao-moi')) return;
-    ui.accForm = { id: null, code: '', fullName: '', phone: '', accountType: A.ACCOUNTS.ACCOUNT_TYPES[3], roleIds: [], organization: '', marketScopes: ['CL', 'TTD'], status: 'active' };
+    // Chưa chọn vai trò → chưa biết chợ nào phù hợp, để trống thay vì mặc định cứng — admin chọn
+    // vai trò trước (A.CH['af-role'] tự hiện đúng dạng Phạm vi), rồi mới tick chợ. "Loại tài khoản"
+    // mặc định ACCOUNT_TYPES[3] = tên role 'collector' (thứ tự cố định theo defaultRoles(),
+    // js/permissions.js) — vai trò vận hành phổ biến nhất, tránh mặc định thiên về quyền cao.
+    ui.accForm = { id: null, code: '', fullName: '', phone: '', accountType: A.ACCOUNTS.ACCOUNT_TYPES[3], roleIds: [], organization: '', marketScopes: [], status: 'active' };
     renderAccForm();
   };
   A.ACT['acc-edit'] = el => {
@@ -547,18 +574,27 @@
   A.CH['af-name'] = el => { ui.accForm.fullName = el.value; };
   A.CH['af-phone'] = el => { ui.accForm.phone = el.value; };
   A.CH['af-type'] = el => { ui.accForm.accountType = el.value; };
-  A.CH['af-role'] = el => { ui.accForm.roleIds = el.value ? [el.value] : []; };
+  // Đổi vai trò làm phần "Phạm vi" hiện đúng dạng tương ứng (mục 20 yêu cầu: GLOBAL/trader/multi-
+  // select 12 chợ) — phải vẽ lại cả form, có tiền lệ an toàn ở v-taichinh.js A.CH['adj-proposed'].
+  // Đồng bộ luôn "Loại tài khoản" theo tên vai trò mới chọn (2 field cùng phản ánh 1 vai trò, tránh
+  // lệch nhãn) — admin vẫn có thể tự đổi lại "Loại tài khoản" sau nếu muốn.
+  A.CH['af-role'] = el => {
+    ui.accForm.roleIds = el.value ? [el.value] : [];
+    const r = el.value ? A.PERM.role(el.value) : null;
+    if (r) ui.accForm.accountType = r.name;
+    renderAccForm();
+  };
   A.CH['af-org'] = el => { ui.accForm.organization = el.value; };
-  // Rebuild ui.accForm.marketScopes CHỈ từ CL/TTD mỗi lần tick/bỏ tick — không bao giờ ghi 'ALL'.
-  // Chuẩn hoá state hiện có qua A.allowedMarkets() trước khi add/remove để 1 account cũ ['ALL']
-  // (hoặc vừa mở form) được diễn giải đúng thành 2 chợ trước khi người dùng bỏ tick 1 trong 2.
+  // Rebuild ui.accForm.marketScopes theo ĐÚNG danh sách D.MARKETS hiện có (12 chợ, không còn hard-
+  // code CL/TTD) mỗi lần tick/bỏ tick 1 checkbox — không bao giờ ghi 'ALL'. Chuẩn hoá state hiện có
+  // qua A.allowedMarkets() trước khi add/remove để 1 account cũ ['ALL'] (hoặc vừa mở form) được diễn
+  // giải đúng thành danh sách chợ cụ thể trước khi người dùng bỏ tick 1 trong số đó.
   function afSetScope(mid, checked) {
     const cur = new Set(A.allowedMarkets({ marketScopes: ui.accForm.marketScopes || [] }));
     if (checked) cur.add(mid); else cur.delete(mid);
-    ui.accForm.marketScopes = ['CL', 'TTD'].filter(m => cur.has(m));
+    ui.accForm.marketScopes = D.MARKETS.map(m => m.id).filter(m => cur.has(m));
   }
-  A.CH['af-scope-cl'] = el => { afSetScope('CL', el.checked); };
-  A.CH['af-scope-ttd'] = el => { afSetScope('TTD', el.checked); };
+  A.CH['af-scope'] = el => { afSetScope(el.dataset.market, el.checked); };
   A.CH['af-status'] = el => { ui.accForm.status = el.value; };
   A.ACT['acc-form-save'] = () => {
     const d = ui.accForm, isNew = !d.id;
@@ -568,8 +604,16 @@
     if (!d.fullName || !d.fullName.trim()) { U.toast('Vui lòng nhập họ tên'); return; }
     if (A.ACCOUNTS.codeTaken(d.code, d.id)) { U.toast('Mã tài khoản "' + d.code + '" đã tồn tại'); return; }
     const existing = d.id ? A.ACCOUNTS.get(d.id) : null;
-    const marketScopes = canAssign ? (d.marketScopes || []) : (existing ? existing.marketScopes : []);
-    if (canAssign && !marketScopes.length) { U.toast('Vui lòng chọn ít nhất một chợ được phân công.'); return; }
+    const roleId = canAssign ? ((d.roleIds && d.roleIds[0]) || '') : (existing && A.ACCOUNTS.primaryRole(existing)) || '';
+    // RBAC_MARKET_SCOPE_MIGRATION mục 20: system_admin/ward_leader luôn GLOBAL ('ALL', không multi-
+    // select); market_manager/collector/technician bắt buộc chọn ít nhất 1 trong 12 chợ; trader
+    // không gán phạm vi ở form này (giữ nguyên phạm vi hiện có — quản lý qua Hồ sơ tiểu thương).
+    let marketScopes = canAssign ? (d.marketScopes || []) : (existing ? existing.marketScopes : []);
+    if (canAssign) {
+      if (roleId === 'system_admin' || roleId === 'ward_leader') marketScopes = ['ALL'];
+      else if (roleId === 'trader') marketScopes = existing ? existing.marketScopes : (d.marketScopes || []);
+      else if (!marketScopes.length) { U.toast('Vui lòng chọn ít nhất một chợ được phân công.'); return; }
+    }
     const patch = { code: d.code.trim(), fullName: d.fullName.trim(), phone: (d.phone || '').trim(), accountType: d.accountType, roleIds: canAssign ? d.roleIds : (existing ? existing.roleIds : []), organization: (d.organization || '').trim(), marketScopes, status: d.status };
     if (d.id) {
       A.ACCOUNTS.update(d.id, patch);
@@ -1439,7 +1483,11 @@
   A.CH['perm-role-select'] = el => { ui.permRole = el.value; A.render(); };
   A.CH['perm-toggle'] = el => {
     if (!A.canDo('cai-dat.phan-quyen')) { A.render(); return; }
-    const actor = ui.role === 'lanhdao' ? 'Lãnh đạo UBND phường' : 'Trần Minh Khoa';
+    // RBAC_MARKET_SCOPE_MIGRATION: 'lanhdao' là role id pre-V1 đã bỏ từ lâu, điều kiện này chưa bao
+    // giờ đúng với bất kỳ role id V1/V2 nào (luôn rơi vào nhánh else) — sửa dùng thẳng tên account
+    // demo đang thao tác thay vì tên cứng, đúng bản chất nhật ký kiểm toán.
+    const currentAcc = A.currentAccount();
+    const actor = currentAcc ? currentAcc.fullName : 'Không rõ';
     const role = A.PERM.role(el.dataset.role), perm = A.PERM.permission(el.dataset.key);
     const roleName = role ? role.name : el.dataset.role, permLabel = perm ? perm.label : el.dataset.key;
     if (el.checked) {

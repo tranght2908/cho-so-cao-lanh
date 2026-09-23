@@ -3,18 +3,19 @@
   'use strict';
   const D = A.D, U = A.U, ui = A.ui;
   const f = ui.f;
-  // Tab đang chọn ở màn "Điểm kinh doanh" (CL) — 'list' (Danh sách điểm, mặc định) | 'requests'
-  // (Yêu cầu thay đổi, BUSINESS_POINT_SPLIT_WORKFLOW). Cùng pattern `if (!ui.xxxTab) ui.xxxTab = ...`
-  // đã dùng cho ui.cfgTab (v-vanhanh.js) — không predeclare trong `ui` gốc ở core.js.
-  if (!ui.dkTab) ui.dkTab = 'list';
+  // MAT_BANG_KHU_TANG_DAY_REDESIGN: ui.dkTab (cũ — 'list'/'requests') đã bỏ, thay bằng ui.mb.view
+  // ('grid'/'table', xem js/v-cautruc.js) dùng chung cho cả workspace Mặt bằng & điểm kinh doanh.
 
   // ---------- Điểm kinh doanh ----------
-  // Chợ Cao Lãnh (selectedMarket = CL): màn danh mục điểm kinh doanh riêng theo yêu cầu
-  // BUSINESS_POINT_CL_SCREEN_REFACTOR (xem BUSINESS_POINT_CL_SCREEN_REFACTOR_REPORT.md) — bảng +
-  // filter + drawer xem nhanh CHUYÊN BIỆT, không lẫn dữ liệu tài chính/hợp đồng chi tiết. Dùng state
-  // filter RIÊNG (f.dkcl*, ui.page.dkcl) — KHÔNG chia sẻ với f.dk*/ui.page.dk bên dưới (dkRows/
-  // dkLine/dkView cũ) để tránh lẫn định dạng giá trị filter giữa 2 luồng.
-  // Chợ quê TTĐ (hoặc market khác 'CL'): GIỮ NGUYÊN bảng tổng quát cũ — ngoài phạm vi task này.
+  // MAT_BANG_KHU_TANG_DAY_REDESIGN: "Danh mục điểm kinh doanh" (bảng CL) nay là CHẾ ĐỘ "Bảng" của
+  // CÙNG workspace Mặt bằng & điểm kinh doanh — dataset LUÔN lấy qua A.mbCurrentPoints('CL')
+  // (js/v-cautruc.js: phạm vi cây Khu/Tầng/Dãy đang chọn + bộ lọc DÙNG CHUNG search/trạng thái/ngành
+  // hàng/loại diện tích với chế độ Sơ đồ), KHÔNG còn state filter riêng (mục 11 yêu cầu redesign:
+  // "không tạo dataset riêng cho UI mới"). MAT_BANG_LOAI_DIEN_TICH: "Loại điểm kinh doanh" (pointType/
+  // D.POINT_TYPE — Ki-ốt/Quầy/Sạp/Cửa hàng) KHÔNG được tài liệu nghiệp vụ xác nhận nên KHÔNG còn dùng
+  // trong bảng/filter màn này — thay bằng "Loại diện tích" (st.areaType, dùng chung ui.mb.filter.areaType,
+  // xem js/v-cautruc.js A.mbMatchesFilter). pointType/D.POINT_TYPE vẫn GIỮ NGUYÊN cho nghiệp vụ tách/
+  // gộp/chuyển đổi điểm (dkPointTypeLabel bên dưới) — KHÔNG xóa field toàn cục, chỉ bỏ khỏi UI bảng.
   function dkSeller(s) {
     const assignment = (A.db.directSellerAssignments || []).find(x => x.pointId === s.id && x.status === 'ACTIVE');
     if (assignment) return assignment.traderId ? A.idx.trader.get(assignment.traderId) : { id: assignment.personId || '', name: assignment.fullName, phone: assignment.phone, idNo: assignment.idNumber };
@@ -24,75 +25,74 @@
   function dkPointTypeLabel(s) {
     return s.pointType && D.POINT_TYPE[s.pointType] ? D.POINT_TYPE[s.pointType].label : 'Chưa có thông tin';
   }
-  function dkSearchMatchCL(s, q) {
-    if (s.code.toLowerCase().includes(q)) return true;
-    const t = s.traderId ? A.idx.trader.get(s.traderId) : null;
-    if (t && t.name.toLowerCase().includes(q)) return true;
-    const seller = dkSeller(s);
-    return !!(seller && seller.name.toLowerCase().includes(q));
+  // "NV thu phí phụ trách" (PHAN_CONG_NHAN_VIEN_THU_PHI) — đọc TRỰC TIẾP s.collectorId (data.js,
+  // gán theo dãy qua popup "Sửa dãy" ở js/v-cautruc.js: A.CH['qh-zone-collector']) — THAM CHIẾU
+  // account.id, REUSE A.ACCOUNTS, KHÔNG tạo field/nguồn dữ liệu trùng nghĩa.
+  function dkCollectorLabel(s) {
+    if (!s.collectorId) return 'Chưa phân công';
+    const acc = A.ACCOUNTS.get(s.collectorId);
+    return acc ? acc.fullName : 'Chưa phân công';
   }
-  // "Xóa bộ lọc": true nếu ít nhất 1 trong 4 filter khác mặc định — quyết định enable/disable nút,
-  // dùng lại ĐÚNG 4 state key filter hiện có (không thêm state song song).
   function dkclHasFilter() {
-    return !!(f.dkclSection || f.dkclType || f.dkclStatus || (f.dkclSearch && f.dkclSearch.trim()));
+    const flt = ui.mb.filter;
+    return !!(flt.areaType || flt.search || flt.status || flt.cat);
   }
-  // Filter kết hợp được (mục 8 yêu cầu): 1 lần lọc duy nhất theo khu vực + loại điểm + trạng thái,
-  // rồi search áp dụng lên ĐÚNG tập kết quả đó (không reset lẫn nhau).
+  // Dataset DUY NHẤT — CHÍNH XÁC cùng nguồn A.mbCurrentPoints('CL') mà chế độ Sơ đồ đang dùng để tô
+  // màu/mờ ô (mục 3/11 yêu cầu redesign) — bộ lọc "Loại diện tích" nay áp dụng NGAY trong
+  // A.mbMatchesFilter (ui.mb.filter.areaType, js/v-cautruc.js) nên không cần lọc thêm ở đây nữa.
   function dkRowsCL() {
-    const q = (f.dkclSearch || '').trim().toLowerCase();
-    return A.db.stalls.filter(s => U.inM(s)
-      && (!f.dkclSection || s.section === f.dkclSection)
-      && (!f.dkclType || s.pointType === f.dkclType)
-      && (!f.dkclStatus || s.status === f.dkclStatus)
-      && (!q || dkSearchMatchCL(s, q)));
+    return A.mbCurrentPoints('CL');
   }
-  function dkRowHtmlCL(s) {
+  function dkRowHtmlCL(s, pos) {
     const t = s.traderId ? A.idx.trader.get(s.traderId) : null;
     const seller = dkSeller(s);
+    const path = A.mbLayoutPathForPoint('CL', s);
+    const collectorLabel = dkCollectorLabel(s);
     return `<tr class="click" data-act="dk-open" data-id="${s.id}">
-      <td><b>${s.code}</b></td>
-      <td title="${U.esc(s.sectionName)}">${U.esc(s.sectionName)}</td>
-      <td>${U.esc(dkPointTypeLabel(s))}</td>
-      <td class="num">${s.area.toLocaleString('vi-VN')}</td>
-      <td title="${U.esc(s.cat)}">${U.esc(s.cat)}</td>
-      <td class="nowrap" style="min-width:140px">${U.esc(U.unitLabel(s))}</td>
-      <td title="${t ? U.esc(t.name) : ''}">${t ? U.esc(t.name) : '<span class="muted">–</span>'}</td>
-      <td title="${seller ? U.esc(seller.name) : ''}">${seller ? U.esc(seller.name) : '<span class="muted">–</span>'}</td>
-      <td>${U.statusTag(s.status)}</td>
-      <td class="nowrap"><button class="btn sm" data-act="dk-open" data-id="${s.id}">Xem</button></td>
+      <td class="mb-col-code"><b>${s.code}</b></td>
+      ${pos.zone ? `<td class="mb-col-zone">${U.esc(path.khu)}</td>` : ''}
+      ${pos.floor ? `<td class="mb-col-floor">${U.esc(path.tang)}</td>` : ''}
+      ${pos.row ? `<td class="mb-col-row" title="${U.esc(s.sectionName)}">${U.esc(path.day)}</td>` : ''}
+      <td class="num mb-col-area">${s.area.toLocaleString('vi-VN')}</td>
+      <td class="mb-col-area-type">${U.esc(U.areaTypeLabel(s.areaType) || 'Chưa có thông tin')}</td>
+      <td class="mb-col-category" title="${U.esc(s.cat)}">${U.esc(s.cat)}</td>
+      <td class="mb-col-trader" title="${t ? U.esc(t.name) : ''}">${t ? U.esc(t.name) : '<span class="muted">–</span>'}</td>
+      <td class="mb-col-seller" title="${seller ? U.esc(seller.name) : ''}">${seller ? U.esc(seller.name) : '<span class="muted">–</span>'}</td>
+      <td class="small mb-col-collector">${U.esc(collectorLabel)}</td>
+      <td class="mb-col-status">${U.statusTag(s.status)}</td>
+      <td class="nowrap mb-col-actions"><button class="btn sm" data-act="dk-open" data-id="${s.id}">Xem</button></td>
     </tr>`;
   }
+  // Bảng — CHẾ ĐỘ "Bảng" của workspace dùng chung (gọi từ A.dkTableHtml, xem A.VIEWS['mat-bang']/
+  // js/v-cautruc.js mbRightHtml). MAT_BANG_TABLE_TOOLBAR_UNIFY (mục 1/2 yêu cầu): search/ngành hàng
+  // (trước ở card header dùng chung, đã bỏ — xem mbWorkspaceHtml js/v-cautruc.js) nay gộp vào ĐÚNG 1
+  // toolbar này cùng "Loại diện tích"/"Xóa bộ lọc"/"Xuất Excel" — tái dùng NGUYÊN
+  // data-in="mb-filter-search"/data-ch="mb-filter-cat"/"mb-filter-area-type" (dùng chung với
+  // js/v-cautruc.js, không tạo control/state mới).
   function dkViewCL() {
-    const rows = dkRowsCL(), pg = U.pager('dkcl', rows.length, 25);
-    const m = U.market('CL');
-    const sections = [];
-    m.floors.forEach(fl => fl.sections.forEach(s => sections.push([s.id, s.name])));
-    return `<div class="card"><div class="card-h"><h3>Danh mục điểm kinh doanh</h3>
-      <select class="input" data-ch="dkcl-section"><option value="">Tất cả khu vực</option>${sections.map(s => `<option value="${s[0]}" ${f.dkclSection === s[0] ? 'selected' : ''}>${U.esc(s[1])}</option>`).join('')}</select>
-      <select class="input" data-ch="dkcl-type"><option value="">Tất cả loại điểm</option>${Object.keys(D.POINT_TYPE).map(k => `<option value="${k}" ${f.dkclType === k ? 'selected' : ''}>${D.POINT_TYPE[k].label}</option>`).join('')}</select>
-      <select class="input" data-ch="dkcl-status"><option value="">Mọi trạng thái</option>${Object.keys(D.STATUS).map(k => `<option value="${k}" ${f.dkclStatus === k ? 'selected' : ''}>${D.STATUS[k].label}</option>`).join('')}</select>
-      <input class="input" placeholder="Mã điểm / người thuê / người bán" data-in="dkcl-search" value="${U.esc(f.dkclSearch || '')}">
+    const rows = dkRowsCL(), pg = U.pager('dkcl', rows.length, 25), flt = ui.mb.filter, cats = A.mbCatOptions('CL'), pos = A.mbPositionColumnVisibility();
+    return `<div class="card mb-table-card"><div class="card-h" style="flex-wrap:wrap">
+      <input class="input" data-in="mb-filter-search" placeholder="Tìm mã điểm / tiểu thương" value="${U.esc(flt.search)}">
+      <select class="input" data-ch="mb-filter-area-type"><option value="">Loại diện tích: Tất cả</option>${U.AREA_TYPE_CODES.map(k => `<option value="${k}" ${flt.areaType === k ? 'selected' : ''}>${U.areaTypeLabel(k)}</option>`).join('')}</select>
+      <select class="input" data-ch="mb-filter-cat"><option value="">Ngành hàng: Tất cả</option>${cats.map(cName => `<option value="${U.esc(cName)}" ${flt.cat === cName ? 'selected' : ''}>${U.esc(cName)}</option>`).join('')}</select>
       <button class="btn" data-act="dkcl-clear" ${dkclHasFilter() ? '' : 'disabled'}>↺ Xóa bộ lọc</button>
+      <span class="spacer"></span>
       <button class="btn" data-act="dkcl-csv">⬇ Xuất Excel</button></div>
-      <div class="card-b">${U.table([{ t: 'Mã điểm' }, { t: 'Khu vực' }, { t: 'Loại điểm' }, { t: 'DT (m²)', num: true }, { t: 'Ngành hàng' }, { t: '<span style="display:inline-block;min-width:140px">Đơn giá</span>' }, { t: 'Người thuê' }, { t: 'Người bán thực tế' }, { t: 'Trạng thái' }, { t: 'Thao tác' }],
-        rows.slice(pg.start, pg.end).map(dkRowHtmlCL))}${pg.html}</div></div>`;
+      <div class="card-b">${U.table([{ t: '<span class="mb-col-code">Mã điểm</span>' }, pos.zone && { t: '<span class="mb-col-zone">Khu</span>' }, pos.floor && { t: '<span class="mb-col-floor">Tầng</span>' }, pos.row && { t: '<span class="mb-col-row">Dãy</span>' }, { t: '<span class="mb-col-area">Diện tích (m²)</span>', num: true }, { t: '<span class="mb-col-area-type">Loại diện tích</span>' }, { t: '<span class="mb-col-category">Ngành hàng</span>' }, { t: '<span class="mb-col-trader">Tiểu thương</span>' }, { t: '<span class="mb-col-seller">Người bán thực tế</span>' }, { t: '<span class="mb-col-collector">NV thu phí</span>' }, { t: '<span class="mb-col-status">Trạng thái</span>' }, { t: '<span class="mb-col-actions">Thao tác</span>' }].filter(Boolean),
+        rows.slice(pg.start, pg.end).map(s => dkRowHtmlCL(s, pos)), { empty: 'Không có điểm kinh doanh phù hợp bộ lọc.' })}${pg.html}</div></div>`;
   }
-  A.CH['dkcl-section'] = el => { f.dkclSection = el.value; ui.page.dkcl = 0; A.render(); };
-  A.CH['dkcl-type'] = el => { f.dkclType = el.value; ui.page.dkcl = 0; A.render(); };
-  A.CH['dkcl-status'] = el => { f.dkclStatus = el.value; ui.page.dkcl = 0; A.render(); };
-  A.IN['dkcl-search'] = el => { f.dkclSearch = el.value; ui.page.dkcl = 0; A.render(); };
-  // "Xóa bộ lọc": reset ĐÚNG 4 state filter hiện có về mặc định + page về 1, rồi render lại qua
-  // pipeline dkRowsCL()/dkViewCL() có sẵn — không phải nghiệp vụ, không đổi dữ liệu/account/market/
-  // permission, nên không cần A.canDo(...) (screen:diem-kd là điều kiện truy cập màn duy nhất).
+  A.dkTableHtml = mid => mid === 'CL' ? dkViewCL() : null;
+  // "Xóa bộ lọc" của bảng: reset TOÀN BỘ bộ lọc dùng chung (search/trạng thái/ngành hàng/loại diện
+  // tích) — KHÔNG đụng ui.mb.sel (phạm vi cây đang chọn, mục 7 yêu cầu: giữ selection).
   A.ACT['dkcl-clear'] = () => {
-    f.dkclSection = ''; f.dkclType = ''; f.dkclStatus = ''; f.dkclSearch = '';
+    ui.mb.filter = { search: '', status: '', cat: '', areaType: '' };
     ui.page.dkcl = 0;
     A.render();
   };
-  A.ACT['dkcl-csv'] = () => U.csv('diem-kinh-doanh-cho-cao-lanh', ['Mã điểm', 'Khu vực', 'Loại điểm', 'Diện tích m2', 'Ngành hàng', 'Đơn giá', 'Người thuê', 'Người bán thực tế', 'Trạng thái'],
+  A.ACT['dkcl-csv'] = () => U.csv('diem-kinh-doanh-cho-cao-lanh', ['Mã điểm', 'Khu', 'Tầng', 'Dãy', 'Diện tích m2', 'Loại diện tích', 'Ngành hàng', 'Người thuê', 'Người bán thực tế', 'NV thu phí', 'Trạng thái'],
     dkRowsCL().map(s => {
-      const t = s.traderId ? A.idx.trader.get(s.traderId) : null, seller = dkSeller(s);
-      return [s.code, s.sectionName, dkPointTypeLabel(s), s.area, s.cat, U.unitLabel(s), t ? t.name : '', seller ? seller.name : '', D.STATUS[s.status].label];
+      const t = s.traderId ? A.idx.trader.get(s.traderId) : null, seller = dkSeller(s), path = A.mbLayoutPathForPoint('CL', s);
+      return [s.code, path.khu, path.tang, path.day, s.area, U.areaTypeLabel(s.areaType) || '', s.cat, t ? t.name : '', seller ? seller.name : '', dkCollectorLabel(s), D.STATUS[s.status].label];
     }));
   // Drawer chi tiết CL — bố cục theo BUSINESS_POINT_CL_DETAIL_DRAWER_REFACTOR (xem
   // BUSINESS_POINT_CL_DETAIL_DRAWER_REFACTOR_REPORT.md): action đặt NGAY tại khối thông tin mà nó
@@ -157,11 +157,11 @@
   }
   function dkDetailTabsHtml(active) {
     const tabs = [['overview','store','Tổng quan'],['contract','file','Hợp đồng'],['directSeller','users','Người trực tiếp kinh doanh'],['history','refresh','Lịch sử thay đổi']];
-    return `<div class="dk-popup-tabs" role="tablist">${tabs.map(x => `<button role="tab" aria-selected="${active === x[0]}" class="${active === x[0] ? 'on' : ''}" data-act="dkdetail-tab" data-id="${x[0]}">${U.icon(x[1])}${x[2]}</button>`).join('')}</div>`;
+    return `<div class="dk-popup-tabs" role="tablist">${tabs.map(x => `<button role="tab" aria-selected="${active === x[0]}" class="${active === x[0] ? 'on' : ''}" data-act="dkdetail-tab" data-id="${x[0]}">${x[2]}</button>`).join('')}</div>`;
   }
   function dkPopupShell(st, m, active, content) {
     const canEdit=A.canDo('cau-truc.edit',st.market);
-    return `<div class="drawer-h dk-popup-head"><div><div class="row" style="gap:10px"><h3>${st.code}</h3>${U.statusTag(st.status)}</div><div class="small muted" style="margin-top:4px">${U.esc(dkPointTypeLabel(st))} · ${U.esc((m.floors.find(fl=>fl.id===st.floor)||{}).name||'')} · ${U.esc(m.name)}</div></div><span class="spacer"></span>${canEdit?`<button class="btn sm" data-act="dkcl-edit-open" data-id="${st.id}">${U.icon('edit')}Chỉnh sửa thông tin</button>`:''}<button class="x" data-act="close" aria-label="Đóng">×</button></div>${dkDetailTabsHtml(active)}<div class="drawer-b dk-detail-body dk-tab-content">${content}</div><div class="drawer-f dk-popup-footer"><button class="btn" data-act="close">Đóng</button></div>`;
+    return `<div class="drawer-h dk-popup-head"><div><div class="row" style="gap:10px"><h3>${st.code}</h3>${U.statusTag(st.status)}</div><div class="small muted dk-popup-meta">${U.esc(dkPointTypeLabel(st))} · ${U.esc((m.floors.find(fl=>fl.id===st.floor)||{}).name||'')} · ${U.esc(m.name)}</div></div><span class="spacer"></span>${canEdit?`<button class="btn sm" data-act="dkcl-edit-open" data-id="${st.id}">Chỉnh sửa thông tin</button>`:''}<button class="x" data-act="close" aria-label="Đóng">×</button></div>${dkDetailTabsHtml(active)}<div class="drawer-b dk-detail-body dk-tab-content">${content}</div><div class="drawer-f dk-popup-footer"><button class="btn" data-act="close">Đóng</button></div>`;
   }
   function dkDirectSellerSummaryHtml(st) {
     const a=dkDirectSellerActive(st);
@@ -185,38 +185,43 @@
     const canEdit = A.canDo('cau-truc.edit', st.market);
     const canXemHoSo = A.canDo('so-do.xem-ho-so', st.market);
     const left = c ? U.days(U.today(), c.end) : null;
+    // MAT_BANG_KHU_TANG_DAY_REDESIGN: vị trí Khu/Tầng/Dãy + người phụ trách (mục 8 yêu cầu redesign).
+    const dkPos = A.mbLayoutPathForPoint('CL', st);
     if (dkDetailActiveTab === 'contract') return dkPopupShell(st, m, 'contract', dkContractTabHtml(st, t, c));
     if (dkDetailActiveTab === 'directSeller') return dkPopupShell(st, m, 'directSeller', `<section class="dk-detail-card dk-single-card"><div class="dk-detail-card-h"><span class="dk-card-icon purple">${U.icon('users')}</span><div><b>Người trực tiếp kinh doanh hiện tại</b><div class="small muted">Thông tin đầy đủ và lịch sử xác minh</div></div></div>${dkDirectSellerSectionHtml(st, canEdit)}</section>`);
     if (dkDetailActiveTab === 'history') return dkPopupShell(st, m, 'history', `<section class="dk-detail-card dk-single-card"><div class="dk-detail-card-h"><span class="dk-card-icon orange">${U.icon('refresh')}</span><div><b>Lịch sử thay đổi</b><div class="small muted">Các thay đổi đã được ghi nhận tại điểm kinh doanh</div></div></div>${dkHistoryHtml(st)}</section>`);
     // Người bán thực tế: CHỈ hiển thị tên (mục 2 yêu cầu BUSINESS_POINT_CL_DETAIL_DRAWER_REDESIGN)
     // — kể cả khi trùng người thuê cũng không kèm chú thích/badge/số điện thoại nào khác, tránh
     // nhồi thông tin giải thích dư thừa vào đúng 1 dòng label/value.
-    return `<div class="drawer-h dk-popup-head"><div><div class="row" style="gap:10px"><h3>${st.code}</h3>${U.statusTag(st.status)}</div><div class="small muted" style="margin-top:4px">${U.esc(dkPointTypeLabel(st))} · ${U.esc(floorName)} · ${U.esc(m.name)}</div></div><span class="spacer"></span>
-        ${canEdit ? `<button class="btn sm" data-act="dkcl-edit-open" data-id="${st.id}">${U.icon('edit')}Chỉnh sửa thông tin</button>` : ''}
+    return `<div class="drawer-h dk-popup-head"><div><div class="row" style="gap:10px"><h3>${st.code}</h3>${U.statusTag(st.status)}</div><div class="small muted dk-popup-meta">${U.esc(dkPointTypeLabel(st))} · ${U.esc(floorName)} · ${U.esc(m.name)}</div></div><span class="spacer"></span>
+        ${canEdit ? `<button class="btn sm" data-act="dkcl-edit-open" data-id="${st.id}">Chỉnh sửa thông tin</button>` : ''}
         <button class="x" data-act="close" aria-label="Đóng">×</button></div>
       ${dkDetailTabsHtml('overview')}
-      <div class="drawer-b dk-detail-body">
+      <div class="drawer-b dk-detail-body dk-overview-body">
         <section class="dk-detail-card">
         <div class="dk-detail-card-h"><span class="dk-card-icon blue">${U.icon('store')}</span><div><b>Thông tin điểm kinh doanh</b><div class="small muted">Thông tin vị trí và đặc tính điểm</div></div></div>
         <dl class="kv">
           <dt>Mã điểm</dt><dd><b>${st.code}</b></dd>
-          <dt>Vị trí</dt><dd>${U.esc(floorName)} → ${U.esc(st.sectionName)}</dd>
-          <dt>Khu vực</dt><dd>${U.esc(st.sectionName)}</dd>
+          <dt>Khu</dt><dd>${U.esc(dkPos.khu)}</dd>
+          <dt>Tầng</dt><dd>${U.esc(dkPos.tang)}</dd>
+          <dt>Dãy</dt><dd>${U.esc(dkPos.day)}</dd>
           <dt>Loại điểm</dt><dd>${U.esc(dkPointTypeLabel(st))}</dd>
           <dt>Diện tích</dt><dd>${st.area.toLocaleString('vi-VN')} m²</dd>
+          <dt>Loại diện tích</dt><dd>${U.esc(U.areaTypeLabel(st.areaType) || 'Chưa có thông tin')}</dd>
           <dt>Ngành hàng</dt><dd>${U.esc(st.cat) || 'Chưa có thông tin'}</dd>
           <dt>Đơn giá áp dụng</dt><dd>${U.unitLabel(st)}</dd>
           <dt>Trạng thái cấu trúc</dt><dd>${st.structuralStatus === 'MERGED' ? '<span class="tag warn">Đã gộp</span>' : st.structuralStatus === 'SPLIT' ? '<span class="tag purple">Đã tách</span>' : '<span class="tag ok">Hoạt động</span>'}</dd>
         </dl>
-        ${st.structuralStatus === 'SPLIT' ? '<div class="note info" style="margin-top:10px">Điểm này đã được tách theo một yêu cầu tách điểm — xem lịch sử ở mục D và yêu cầu tại tab "Yêu cầu thay đổi".</div>' : ''}${st.structuralStatus === 'MERGED' ? `<div class="note info" style="margin-top:10px">Điểm này đã được gộp; bản ghi được giữ lại để truy vết lịch sử.${st.mergedIntoPointId&&A.idx.stall.get(st.mergedIntoPointId)?` <button class="btn sm" data-act="dkmerge-view-point" data-id="${st.mergedIntoPointId}">Xem ${A.idx.stall.get(st.mergedIntoPointId).code}</button>`:''}</div>` : ''}${st.mergeRequestId ? `<div class="note info" style="margin-top:10px">Điểm được tạo từ nghiệp vụ gộp. Điểm nguồn: ${(st.sourcePointIds||[]).map(id=>{const x=A.idx.stall.get(id);return x?`<button class="btn sm" data-act="dkmerge-view-point" data-id="${x.id}">${x.code}</button>`:'';}).join(' ')}<br>Ánh xạ mặt bằng cần được cập nhật tại Cấu hình mặt bằng.</div>` : ''}
+        ${st.structuralStatus === 'SPLIT' ? '<div class="note info" style="margin-top:10px">Điểm này đã được tách theo một yêu cầu tách điểm — xem lịch sử ở mục D.</div>' : ''}${st.structuralStatus === 'MERGED' ? `<div class="note info" style="margin-top:10px">Điểm này đã được gộp; bản ghi được giữ lại để truy vết lịch sử.${st.mergedIntoPointId&&A.idx.stall.get(st.mergedIntoPointId)?` <button class="btn sm" data-act="dkmerge-view-point" data-id="${st.mergedIntoPointId}">Xem ${A.idx.stall.get(st.mergedIntoPointId).code}</button>`:''}</div>` : ''}${st.mergeRequestId ? `<div class="note info" style="margin-top:10px">Điểm được tạo từ nghiệp vụ gộp. Điểm nguồn: ${(st.sourcePointIds||[]).map(id=>{const x=A.idx.stall.get(id);return x?`<button class="btn sm" data-act="dkmerge-view-point" data-id="${x.id}">${x.code}</button>`:'';}).join(' ')}<br>Ánh xạ mặt bằng cần được cập nhật tại Cấu hình mặt bằng.</div>` : ''}
         </section>
         <section class="dk-detail-card">
-        <div class="dk-detail-card-h"><span class="dk-card-icon green">${U.icon('store')}</span><div><b>Tình trạng sử dụng</b><div class="small muted">Hợp đồng và chủ thể đang sử dụng</div></div></div>
+        <div class="dk-detail-card-h"><span class="dk-card-icon green">${U.icon('store')}</span><div><b>Thông tin sử dụng</b><div class="small muted">Hợp đồng và chủ thể đang sử dụng</div></div></div>
         <dl class="kv">
           <dt>Trạng thái</dt><dd>${U.statusTag(st.status)}</dd>
           <dt>Chủ thể hợp đồng</dt><dd>${t ? `${U.esc(t.name)} · ${t.id}` : 'Chưa có'}</dd>
           <dt>Hợp đồng hiện hành</dt><dd>${c ? c.id : 'Chưa có hợp đồng hiệu lực'}</dd>
           ${c ? `<dt>Thời hạn</dt><dd>${U.dmy(c.start)} – ${U.dmy(c.end)}<br><span class="small muted">${left <= 30 ? `<b style="color:#df2225">còn ${left} ngày</b>` : 'còn ' + left + ' ngày'}</span></dd>` : ''}
+          <dt>NV thu phí phụ trách</dt><dd>${U.esc(dkCollectorLabel(st))}</dd>
         </dl>
         ${t && canXemHoSo ? `<div class="row" style="margin-top:10px"><button class="btn sm" data-act="dkcl-open-trader" data-id="${t.id}" data-stall="${st.id}">Xem hồ sơ tiểu thương</button></div>` : ''}
         </section>
@@ -225,7 +230,7 @@
         ${dkDirectSellerSummaryHtml(st)}
         </section>
         <section class="dk-detail-card">
-        <div class="dk-detail-card-h"><span class="dk-card-icon orange">${U.icon('file')}</span><div><b>Ghi chú & lịch sử thay đổi</b><div class="small muted">Các thông tin bổ sung về điểm kinh doanh</div></div></div>
+        <div class="dk-detail-card-h"><span class="dk-card-icon orange">${U.icon('file')}</span><div><b>Ghi chú</b><div class="small muted">Các thông tin bổ sung về điểm kinh doanh</div></div></div>
         <div class="dk-note-box">${st.note ? U.esc(st.note) : 'Chưa có ghi chú.'}</div>
         </section>
       </div><div class="drawer-f dk-popup-footer"><button class="btn" data-act="close">Đóng</button></div>`;
@@ -784,8 +789,8 @@
     A.save();
     dkPlanMode = null; dkPlanDraft = null;
     A.closeModal();
-    ui.dkTab = 'requests';
     A.render();
+    A.ACT['cl-req-open']();
     U.toast('Đã lưu yêu cầu tách điểm ' + st.code + ' (' + r.id + ')');
   };
 
@@ -878,8 +883,8 @@
     A.save();
     dkAssignDraft = null;
     A.closeModal();
-    ui.dkTab = 'requests';
     A.render();
+    A.ACT['cl-req-open']();
     U.toast('Đã giao ' + assignee.fullName + ' xử lý đề xuất tách điểm ' + st.code + ' (' + r.id + ')');
   };
 
@@ -1188,7 +1193,7 @@
     const acc = A.currentAccount(), actorName = acc ? acc.fullName : 'Không rõ';
     const mk = plan => ({
       id: st.market + '-' + plan.code, code: plan.code, market: st.market, floor: st.floor, section: st.section, sectionName: st.sectionName,
-      row: null, num: null, type: st.type, pointType: plan.pointType, cat: plan.cat, area: plan.area, hasMeter: false, status: 'trong',
+      row: null, num: null, type: st.type, areaType: st.areaType, pointType: plan.pointType, cat: plan.cat, area: plan.area, hasMeter: false, status: 'trong',
       traderId: null, sellerId: null, contractId: null,
       history: [`${U.dmy(U.today())}: Tách từ điểm ${st.code} theo yêu cầu ${r.id}`],
       parentPointId: st.id, splitRequestId: r.id
@@ -1271,46 +1276,19 @@
   A.IN['dkreq-search'] = el => { f.dkreqSearch = el.value; ui.page.dkreq = 0; A.render(); };
   A.ACT['dkreq-clear'] = () => { f.dkreqStatus = ''; f.dkreqSource = ''; f.dkreqSearch = ''; ui.page.dkreq = 0; A.render(); };
 
-  // ---- Màn "Điểm kinh doanh" (CL) — 2 tab: "Danh sách điểm" (dkViewCL(), không đổi) + "Yêu cầu
-  // thay đổi" (mục 1 yêu cầu — Tách điểm KHÔNG còn là nút trong drawer chi tiết, chỉ khởi tạo được
-  // từ đây) ----
-  function dkScreenCL(options) {
-    const tab = ui.dkTab === 'requests' ? 'requests' : 'list';
-    const total = A.db.pointRequests.filter(r => r.market === 'CL').length;
-    // Nút dùng chung cho cả Luồng 2 (lap-yeu-cau) lẫn Luồng 3 (assign) — xem A.ACT['dksr-open'].
-    const canCreate = A.canDo('diem-kd.tach-diem.lap-yeu-cau', 'CL') || A.canDo('diem-kd.tach-diem.assign', 'CL'); const canMerge=A.canDo('diem-kd.gop-diem.lap-yeu-cau','CL')||A.canDo('diem-kd.gop-diem.assign','CL');
-    const canConvert = A.canDo('diem-kd.chuyen-doi.lap-yeu-cau', 'CL') || A.canDo('diem-kd.chuyen-doi.assign', 'CL');
-    const bar = `<div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
-      <div class="seg"><button class="${tab === 'list' ? 'on' : ''}" data-act="dk-tab" data-id="list">Danh sách điểm</button><button class="${tab === 'requests' ? 'on' : ''}" data-act="dk-tab" data-id="requests">Yêu cầu thay đổi (${total})</button></div>
-      ${(canCreate || canMerge || canConvert) ? `<details class="request-create-menu"><summary class="btn primary">+ Lập yêu cầu thay đổi <span aria-hidden="true">⌄</span></summary><div class="request-create-menu-list">${canCreate ? '<button class="request-create-item" data-act="dksr-open"><b>Tách điểm</b><span>Tách một điểm thành nhiều điểm.</span></button>' : ''}${canMerge ? '<button class="request-create-item" data-act="dkmerge-open"><b>Gộp điểm</b><span>Gộp hai điểm liền kề thành một điểm.</span></button>' : ''}${canConvert ? '<button class="request-create-item" data-act="dkconvert-open"><b>Chuyển đổi vị trí</b><span>Chuyển 1 điểm đang sử dụng sang 1 điểm còn trống khác.</span></button>' : ''}</div></details>` : ''}
-    </div>`;
-    return (options && options.embed ? bar.replace(/<div class="seg">.*?<\/div>/, '') : bar)
-      + (tab === 'list' ? dkViewCL() : dkRequestsViewCL());
-  }
-  A.ACT['dk-tab'] = el => { ui.dkTab = el.dataset.id; ui.page.dkreq = 0; A.render(); };
-
-  function clLayoutRequestsCount() {
-    return A.db.pointRequests.filter(r => r.market === 'CL').length;
-  }
+  // MAT_BANG_KHU_TANG_DAY_REDESIGN (bản cập nhật cuối): "Mặt bằng & điểm kinh doanh" là DUY NHẤT
+  // 1 workspace với công tắc chế độ hiển thị "▦ Sơ đồ | ☰ Bảng" (A.mbWorkspaceHtml(), xem
+  // js/v-cautruc.js) — KHÔNG còn tab ngang hàng nào khác phía trên workspace này.
+  // "Yêu cầu thay đổi" (Tách/Gộp/Chuyển đổi) đã bị loại bỏ hoàn toàn khỏi UI của màn này theo yêu
+  // cầu mới nhất — không dời sang chỗ khác, không tạo menu mới cho nghiệp vụ này trong phạm vi màn
+  // này. Toàn bộ logic nghiệp vụ (dkReq*/dkMerge*/dkConvert*, A.db.pointRequests, A.pointReq) GIỮ
+  // NGUYÊN 100% vì js/mini.js (Mini App phía tiểu thương) vẫn tiêu thụ trực tiếp — xem khối
+  // "API dùng chung cho Mini App" bên dưới. A.ACT['cl-req-open'] cũng được giữ nguyên (vẫn được
+  // gọi nội bộ sau khi lưu tách/gộp/chuyển-đổi ở nơi khác) dù không còn nút nào trên màn này mở nó.
   function clLayoutView() {
-    const tab = ['map', 'list', 'requests'].indexOf(ui.dkTab) >= 0 ? ui.dkTab : 'map';
-    const tabs = `<div class="cl-layout-point-tabs" role="tablist">
-      <button class="${tab === 'map' ? 'active' : ''}" data-act="cl-layout-tab" data-id="map" role="tab">Sơ đồ mặt bằng</button>
-      <button class="${tab === 'list' ? 'active' : ''}" data-act="cl-layout-tab" data-id="list" role="tab">Danh sách điểm</button>
-      <button class="${tab === 'requests' ? 'active' : ''}" data-act="cl-layout-tab" data-id="requests" role="tab">Yêu cầu thay đổi <span class="badge">${clLayoutRequestsCount()}</span></button>
-    </div>`;
-    const body = tab === 'map' ? A.mbWorkspaceHtml() : dkScreenCL({ embed: true });
-    return `<div class="cl-layout-point-page">${tabs}<div class="cl-layout-point-body">${body}</div></div>`;
+    return A.mbWorkspaceHtml();
   }
-  A.ACT['cl-layout-tab'] = el => {
-    if (ui.market !== 'CL') return;
-    const tab = el.dataset.id;
-    if (['map', 'list', 'requests'].indexOf(tab) < 0) return;
-    ui.dkTab = tab;
-    ui.page.dkcl = 0;
-    ui.page.dkreq = 0;
-    A.render();
-  };
+  A.ACT['cl-req-open'] = () => { A.modal(A.mHead('Yêu cầu thay đổi điểm kinh doanh') + `<div class="modal-b">${dkRequestsViewCL()}</div>`, true); };
 
   // ---- API dùng chung cho Mini App (js/mini.js) — "TÁCH ĐIỂM tiểu thương gửi từ Mini App" ----
   // Expose ĐÚNG các hàm/hằng số nội bộ đã có của module này qua A.pointReq — KHÔNG tạo mảng dữ liệu
@@ -1349,7 +1327,7 @@
   function dkMergeForm() { const d=dkMergeDraft, a=d.a?A.idx.stall.get(d.a):null, cs=dkMergeCandidates(a), b=d.b?A.idx.stall.get(d.b):null, manager=A.canDo('diem-kd.gop-diem.assign','CL')&&!A.canDo('diem-kd.gop-diem.tiep-nhan','CL'); const staff=A.ACCOUNTS.list(); return A.mHead('GỘP ĐIỂM KINH DOANH')+`<div class="modal-b"><div class="field"><label>A. Điểm thứ nhất *</label><select class="input" data-ch="dkmerge-a"><option value="">— Chọn điểm —</option>${A.db.stalls.filter(x=>x.market==='CL'&&dkMergeActive(x)&&x.row!=null).map(x=>`<option value="${x.id}" ${d.a===x.id?'selected':''}>${x.code}</option>`).join('')}</select></div>${a?`<div style="margin-top:10px">${dkMergePointCard(a)}</div><div class="divider"></div><b>B. Chọn điểm gộp cùng</b><div class="small muted">Chỉ hiển thị điểm liền kề cùng hàng/khu (quy tắc prototype).</div><div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap">${cs.length?cs.map(x=>`<button class="btn ${d.b===x.id?'primary':''}" data-act="dkmerge-b" data-id="${x.id}">${x.code} · ${x.area} m²</button>`).join(''):'<span class="note">Không có điểm liền kề phù hợp.</span>'}</div>`:''}${a&&b?`<div class="divider"></div><b>C. Kiểm tra hiện trạng</b><div class="split-result" style="margin-top:8px">${dkMergePointCard(a)}${dkMergePointCard(b)}</div><div class="note ${dkMergeContractState(a,b).resolved?'info':''}" style="margin-top:8px">${dkMergeContractState(a,b).resolved?'⚠ ':'⛔ '}${U.esc(dkMergeContractState(a,b).text)}</div><div class="divider"></div><b>D. Phương án gộp</b><div class="field" style="margin-top:8px"><label>Mã điểm dự kiến</label><input class="input" data-in="dkmerge-code" value="${U.esc(d.code||dkMergeCode(a,b))}"></div><div class="field"><label>Diện tích sau gộp</label><input class="input" value="${+(a.area+b.area).toFixed(1)} m²" disabled></div><div class="field"><label>Lý do gộp *</label><textarea class="input" data-in="dkmerge-reason">${U.esc(d.reason||'')}</textarea></div>${manager?`<div class="field"><label>Người phụ trách *</label><select class="input" data-ch="dkmerge-assignee"><option value="">— Chọn NV BQL —</option>${staff.filter(x=>x.status==='active'&&A.allowedMarkets(x).indexOf('CL')>=0&&A.PERM.canAction(A.ACCOUNTS.primaryRole(x),'diem-kd.gop-diem.tiep-nhan')).map(x=>`<option value="${x.id}" ${d.assignedTo===x.id?'selected':''}>${U.esc(x.fullName)}</option>`).join('')}</select></div>`:''}<div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="dkmerge-save">Lưu yêu cầu</button></div>`:''}</div>`; }
   A.CH['dkmerge-a']=el=>{dkMergeDraft.a=el.value;dkMergeDraft.b='';A.modal(dkMergeForm(),true);}; A.CH['dkmerge-assignee']=el=>{dkMergeDraft.assignedTo=el.value;}; A.IN['dkmerge-code']=el=>{dkMergeDraft.code=el.value;}; A.IN['dkmerge-reason']=el=>{dkMergeDraft.reason=el.value;};
   A.ACT['dkmerge-open']=()=>{if(!A.canDo('diem-kd.gop-diem.lap-yeu-cau','CL')&&!A.canDo('diem-kd.gop-diem.assign','CL'))return;dkMergeDraft={a:'',b:'',code:'',reason:'',assignedTo:''};A.modal(dkMergeForm(),true);}; A.ACT['dkmerge-b']=el=>{dkMergeDraft.b=el.dataset.id;A.modal(dkMergeForm(),true);};
-  A.ACT['dkmerge-save']=()=>{const d=dkMergeDraft,a=A.idx.stall.get(d.a),b=A.idx.stall.get(d.b),acc=A.currentAccount(),manager=A.canDo('diem-kd.gop-diem.assign','CL')&&!A.canDo('diem-kd.gop-diem.tiep-nhan','CL');if(!acc||acc.status!=='active'||ui.market!=='CL'||A.allowedMarkets(acc).indexOf('CL')<0)return U.toast('Tài khoản hoặc phạm vi chợ không hợp lệ');if(!a||!b||!dkMergeCandidates(a).some(x=>x.id===b.id)||!d.reason.trim())return U.toast('Chọn hai điểm liền kề và nhập lý do');const assignee=manager?A.ACCOUNTS.get(d.assignedTo):acc;if(!assignee||assignee.status!=='active'||A.allowedMarkets(assignee).indexOf('CL')<0)return U.toast('Chọn người phụ trách hợp lệ');const cc=dkMergeContractState(a,b);const r={id:dkReqNextId(),type:'MERGE',market:'CL',source:manager?'MANAGER':'STAFF',sourcePointIds:[a.id,b.id],createdBy:acc.id,assignedTo:assignee.id,requestedByName:acc.fullName,requestedByTraderId:null,requestedAt:U.today(),reason:d.reason.trim(),note:'',attachments:[],status:'STAFF_REVIEW',plan:manager?null:{resultCode:(d.code||dkMergeCode(a,b)).trim(),resultArea:+(a.area+b.area).toFixed(1),pointType:a.pointType,category:a.cat,contractCondition:cc.resolved?'RESOLVED':'UNRESOLVED'},timeline:[{key:'created',at:U.dmy(U.today()),by:acc.fullName},{key:'assigned',at:U.dmy(U.today()),by:acc.fullName,note:'Giao '+assignee.fullName}],resultPointIds:[]};A.db.pointRequests.push(r);A.save();A.closeModal();ui.dkTab='requests';A.render();};
+  A.ACT['dkmerge-save']=()=>{const d=dkMergeDraft,a=A.idx.stall.get(d.a),b=A.idx.stall.get(d.b),acc=A.currentAccount(),manager=A.canDo('diem-kd.gop-diem.assign','CL')&&!A.canDo('diem-kd.gop-diem.tiep-nhan','CL');if(!acc||acc.status!=='active'||ui.market!=='CL'||A.allowedMarkets(acc).indexOf('CL')<0)return U.toast('Tài khoản hoặc phạm vi chợ không hợp lệ');if(!a||!b||!dkMergeCandidates(a).some(x=>x.id===b.id)||!d.reason.trim())return U.toast('Chọn hai điểm liền kề và nhập lý do');const assignee=manager?A.ACCOUNTS.get(d.assignedTo):acc;if(!assignee||assignee.status!=='active'||A.allowedMarkets(assignee).indexOf('CL')<0)return U.toast('Chọn người phụ trách hợp lệ');const cc=dkMergeContractState(a,b);const r={id:dkReqNextId(),type:'MERGE',market:'CL',source:manager?'MANAGER':'STAFF',sourcePointIds:[a.id,b.id],createdBy:acc.id,assignedTo:assignee.id,requestedByName:acc.fullName,requestedByTraderId:null,requestedAt:U.today(),reason:d.reason.trim(),note:'',attachments:[],status:'STAFF_REVIEW',plan:manager?null:{resultCode:(d.code||dkMergeCode(a,b)).trim(),resultArea:+(a.area+b.area).toFixed(1),pointType:a.pointType,category:a.cat,contractCondition:cc.resolved?'RESOLVED':'UNRESOLVED'},timeline:[{key:'created',at:U.dmy(U.today()),by:acc.fullName},{key:'assigned',at:U.dmy(U.today()),by:acc.fullName,note:'Giao '+assignee.fullName}],resultPointIds:[]};A.db.pointRequests.push(r);A.save();A.closeModal();A.render();A.ACT['cl-req-open']();};
 
   // Chi tiết/hành động MERGE tách riêng SPLIT nhưng dùng cùng request collection và status machine.
   let dkMergePlanEditId = null, dkMergePlanDraft = null;
@@ -1373,7 +1351,7 @@
   A.ACT['dkmerge-submit']=el=>{const r=dkReqFind(el.dataset.id),s=r&&dkMergeSources(r);if(!r||!dkMergeOwned(r)||r.status!=='STAFF_REVIEW'||!r.plan||!A.canDo('diem-kd.gop-diem.gui-phe-duyet',r.market)||s.length!==2)return U.toast('Phương án gộp chưa hợp lệ');r.status='PENDING_APPROVAL';r.timeline.push({key:'submitted',at:U.dmy(U.today()),by:A.currentAccount().fullName});A.save();dkReqRerenderDrawer(r);A.render();};
   A.ACT['dkmerge-approve']=el=>{const r=dkReqFind(el.dataset.id);if(!r||r.status!=='PENDING_APPROVAL'||!A.canDo('diem-kd.gop-diem.phe-duyet',r.market))return;r.status='APPROVED';r.timeline.push({key:'approved',at:U.dmy(U.today()),by:A.currentAccount().fullName});A.save();dkReqRerenderDrawer(r);A.render();};
   A.ACT['dkmerge-reject']=el=>{const r=dkReqFind(el.dataset.id);if(!r||r.status!=='PENDING_APPROVAL'||!A.canDo('diem-kd.gop-diem.phe-duyet',r.market))return;r.status='REJECTED';r.timeline.push({key:'approved',at:U.dmy(U.today()),by:A.currentAccount().fullName,note:'Từ chối'});A.save();dkReqRerenderDrawer(r);A.render();};
-  A.ACT['dkmerge-execute']=el=>{const r=dkReqFind(el.dataset.id),acc=A.currentAccount();if(!r||r.type!=='MERGE'||!acc||acc.status!=='active'||ui.market!=='CL'||A.allowedMarkets(acc).indexOf('CL')<0||!dkMergeOwned(r)||!A.canDo('diem-kd.gop-diem.thuc-hien',r.market)||r.market!=='CL'||r.status!=='APPROVED'||!r.plan)return U.toast('Bạn không thể thực hiện yêu cầu gộp này');const ids=r.sourcePointIds||[],s=ids.map(id=>A.idx.stall.get(id));if(ids.length!==2||new Set(ids).size!==2||s.some(x=>!x)||s.some(x=>x.market!=='CL'||!dkMergeActive(x,r.id)))return U.toast('Điểm nguồn không còn đủ điều kiện cấu trúc');const [a,b]=s;if(a.floor!==b.floor||a.section!==b.section||a.row==null||a.row!==b.row||a.num==null||b.num==null||Math.abs(a.num-b.num)!==1)return U.toast('Hai điểm không còn liền kề theo quy tắc prototype');if(r.plan.contractCondition!=='RESOLVED')return U.toast('Điều kiện hợp đồng chưa hoàn tất');const code=(r.plan.resultCode||'').trim(),area=+(a.area+b.area).toFixed(1),cats=dkZoneAllowedCats(a);if(!code||A.db.stalls.some(x=>x.code===code)||r.plan.resultArea!==area||(cats.length&&cats.indexOf(r.plan.category)===-1))return U.toast('Phương án kết quả không còn hợp lệ');const result={id:'CL-'+code,code,market:'CL',floor:a.floor,section:a.section,sectionName:a.sectionName,row:null,num:null,type:a.type,pointType:r.plan.pointType,cat:r.plan.category,area,status:'trong',traderId:null,sellerId:null,contractId:null,structuralStatus:'ACTIVE',sourcePointIds:[a.id,b.id],mergeRequestId:r.id,needsFloorplanMapping:true,history:[`${U.dmy(U.today())}: Gộp từ ${a.code} + ${b.code} theo yêu cầu ${r.id}`]};a.structuralStatus='MERGED';b.structuralStatus='MERGED';a.mergedIntoPointId=result.id;b.mergedIntoPointId=result.id;a.history=a.history||[];b.history=b.history||[];a.history.unshift(`${U.dmy(U.today())}: Gộp với ${b.code}, kết quả ${result.code}, yêu cầu ${r.id}`);b.history.unshift(`${U.dmy(U.today())}: Gộp với ${a.code}, kết quả ${result.code}, yêu cầu ${r.id}`);A.db.stalls.push(result);A.idx.stall.set(result.id,result);r.status='COMPLETED';r.resultPointIds=[result.id];r.timeline.push({key:'implementing',at:U.dmy(U.today()),by:acc.fullName},{key:'completed',at:U.dmy(U.today()),by:acc.fullName});A.save();dkReqRerenderDrawer(r);A.render();U.toast(`Đã gộp ${a.code} và ${b.code} thành ${result.code}.`);};
+  A.ACT['dkmerge-execute']=el=>{const r=dkReqFind(el.dataset.id),acc=A.currentAccount();if(!r||r.type!=='MERGE'||!acc||acc.status!=='active'||ui.market!=='CL'||A.allowedMarkets(acc).indexOf('CL')<0||!dkMergeOwned(r)||!A.canDo('diem-kd.gop-diem.thuc-hien',r.market)||r.market!=='CL'||r.status!=='APPROVED'||!r.plan)return U.toast('Bạn không thể thực hiện yêu cầu này');const ids=r.sourcePointIds||[],s=ids.map(id=>A.idx.stall.get(id));if(ids.length!==2||new Set(ids).size!==2||s.some(x=>!x)||s.some(x=>x.market!=='CL'||!dkMergeActive(x,r.id)))return U.toast('Điểm nguồn không còn đủ điều kiện cấu trúc');const [a,b]=s;if(a.floor!==b.floor||a.section!==b.section||a.row==null||a.row!==b.row||a.num==null||b.num==null||Math.abs(a.num-b.num)!==1)return U.toast('Hai điểm không còn liền kề theo quy tắc prototype');if(r.plan.contractCondition!=='RESOLVED')return U.toast('Điều kiện hợp đồng chưa hoàn tất');const code=(r.plan.resultCode||'').trim(),area=+(a.area+b.area).toFixed(1),cats=dkZoneAllowedCats(a);if(!code||A.db.stalls.some(x=>x.code===code)||r.plan.resultArea!==area||(cats.length&&cats.indexOf(r.plan.category)===-1))return U.toast('Phương án kết quả không còn hợp lệ');const result={id:'CL-'+code,code,market:'CL',floor:a.floor,section:a.section,sectionName:a.sectionName,row:null,num:null,type:a.type,areaType:a.areaType,pointType:r.plan.pointType,cat:r.plan.category,area,status:'trong',traderId:null,sellerId:null,contractId:null,structuralStatus:'ACTIVE',sourcePointIds:[a.id,b.id],mergeRequestId:r.id,needsFloorplanMapping:true,history:[`${U.dmy(U.today())}: Gộp từ ${a.code} + ${b.code} theo yêu cầu ${r.id}`]};a.structuralStatus='MERGED';b.structuralStatus='MERGED';a.mergedIntoPointId=result.id;b.mergedIntoPointId=result.id;a.history=a.history||[];b.history=b.history||[];a.history.unshift(`${U.dmy(U.today())}: Gộp với ${b.code}, kết quả ${result.code}, yêu cầu ${r.id}`);b.history.unshift(`${U.dmy(U.today())}: Gộp với ${a.code}, kết quả ${result.code}, yêu cầu ${r.id}`);A.db.stalls.push(result);A.idx.stall.set(result.id,result);r.status='COMPLETED';r.resultPointIds=[result.id];r.timeline.push({key:'implementing',at:U.dmy(U.today()),by:acc.fullName},{key:'completed',at:U.dmy(U.today()),by:acc.fullName});A.save();dkReqRerenderDrawer(r);A.render();U.toast(`Đã gộp ${a.code} và ${b.code} thành ${result.code}.`);};
 
   // ==================== CHUYỂN ĐỔI VỊ TRÍ ĐIỂM KINH DOANH ====================
   // BUSINESS_POINT_RELOCATION_WORKFLOW_IMPLEMENTATION_REPORT.md. V1 CHỈ hỗ trợ conversionType
@@ -1577,8 +1555,8 @@
     A.save();
     dkcvMode = null; dkcvDraft = null;
     A.closeModal();
-    ui.dkTab = 'requests';
     A.render();
+    A.ACT['cl-req-open']();
     U.toast(`Đã lưu yêu cầu chuyển đổi vị trí ${st.code} → ${target.code} (${r.id})`);
   };
 
@@ -1662,8 +1640,8 @@
     A.save();
     dkcvAssignDraft = null;
     A.closeModal();
-    ui.dkTab = 'requests';
     A.render();
+    A.ACT['cl-req-open']();
     U.toast('Đã giao ' + assignee.fullName + ' xử lý đề xuất chuyển đổi vị trí ' + st.code + ' (' + r.id + ')');
   };
 
@@ -2007,7 +1985,7 @@
           const l = dkLine(s);
           return `<tr class="click" data-act="dk-open" data-id="${s.id}"><td><b>${l[0]}</b></td><td>${l[1]}</td><td>${U.esc(l[2])}</td><td>${l[4]}</td><td class="num">${l[5].toLocaleString('vi-VN')}</td><td class="nowrap">${l[6]}</td><td class="num">${l[7] ? U.money(l[7]) : '–'}</td><td>${U.esc(l[8]) || '<span class="muted">–</span>'}</td><td>${U.statusTag(s.status)}</td></tr>`;
         }))}${pg.html}
-        <div class="small muted" style="margin-top:8px">Hỗ trợ tách, gộp, chuyển đổi điểm kinh doanh kèm lưu vết lịch sử (thao tác tại màn hình Sơ đồ mặt bằng).</div></div></div>`;
+        <div class="small muted" style="margin-top:8px">Lịch sử tách, gộp, chuyển đổi điểm kinh doanh (nếu có) được lưu vết đầy đủ trong hồ sơ từng điểm.</div></div></div>`;
   }
   A.CH['dk-section'] = el => { f.dkSection = el.value; ui.page.dk = 0; A.render(); };
   A.CH['dk-status'] = el => { f.dkStatus = el.value; ui.page.dk = 0; A.render(); };
@@ -2154,7 +2132,7 @@
     m.floors.forEach(fl => fl.sections.forEach(s => { sections.push([s.id, s.name]); if (!cats.includes(s.cat)) cats.push(s.cat); }));
     const body = U.table([{ t: 'Mã' }, { t: 'Họ tên' }, { t: 'Khu vực' }, { t: 'Ngành hàng' }, { t: 'Điểm KD' }, { t: 'Trạng thái hồ sơ' }, { t: 'Mini App' }, { t: 'Công nợ', num: true }, { t: 'Thao tác' }],
       rows.slice(pg.start, pg.end).map(ttRowHtmlCL), { empty: 'Không có tiểu thương phù hợp.' });
-    return `<div class="card"><div class="card-h" style="flex-direction:column;align-items:stretch;gap:10px">
+    return `<div class="card trader-table-card"><div class="card-h" style="flex-direction:column;align-items:stretch;gap:10px">
       <div class="row" style="justify-content:space-between;flex-wrap:wrap"><h3 style="margin:0">Hồ sơ tiểu thương</h3>
         ${A.canDo('tieu-thuong.them-moi', ui.market) ? '<button class="btn primary" data-act="tt-new">+ Thêm tiểu thương</button>' : ''}</div>
       <div class="row" style="flex-wrap:wrap;gap:8px">
@@ -2188,7 +2166,7 @@
   }
   function ttViewGeneric() {
     const rows = ttRows(), pg = U.pager('tt', rows.length, 25);
-    return `<div class="card"><div class="card-h"><h3>${ui.role === 'lanhdao' ? 'Tra cứu tiểu thương' : 'Hồ sơ tiểu thương'}</h3>
+    return `<div class="card trader-table-card"><div class="card-h"><h3>${ui.role === 'ward_leader' ? 'Tra cứu tiểu thương' : 'Hồ sơ tiểu thương'}</h3>
       <select class="input" data-ch="tt-app"><option value="">Mini app: tất cả</option><option value="yes" ${f.ttApp === 'yes' ? 'selected' : ''}>Đã cài mini app</option><option value="no" ${f.ttApp === 'no' ? 'selected' : ''}>Chưa cài</option></select>
       <input class="input" placeholder="Tên, SĐT, mã điểm KD" data-in="tt-search" value="${U.esc(f.ttSearch || '')}">
       ${A.canDo('tieu-thuong.them-moi', ui.market) ? '<button class="btn primary" data-act="tt-new">+ Thêm tiểu thương</button>' : ''}</div>
@@ -2962,7 +2940,7 @@
     const rows = all.filter(c => pick(c) && (!q || [c.id, trader(c) && trader(c).name, c.traderId, point(c) && point(c).code].join(' ').toLowerCase().includes(q))).sort((a,b) => a.end.localeCompare(b.end));
     const count = fn => all.filter(fn).length, pg = U.pager('hd' + tab, rows.length, 25);
     const cards = [['all','Tổng hợp đồng',count(()=>true)],['active','Đang hiệu lực',count(active)],['30','Sắp hết hạn ≤ 30 ngày',count(c=>active(c)&&left(c)<=30&&left(c)>15)],['15','Sắp hết hạn ≤ 15 ngày',count(c=>active(c)&&left(c)<=15)],['end','Đã kết thúc',count(c=>!active(c))]];
-    return `<div class="grid g4" style="margin-bottom:14px">${cards.map(x=>`<button class="card" data-act="hd-tab" data-id="${x[0]}" style="text-align:left"><div class="small muted">${x[1]}</div><div style="font-size:24px;font-weight:800;margin-top:5px">${x[2]}</div></button>`).join('')}</div><div class="card"><div class="card-h"><div class="seg">${[['all','Tất cả'],['active','Đang hiệu lực'],['30','Sắp hết hạn'],['15','Sắp hết hạn ≤ 15 ngày'],['end','Đã kết thúc']].map(x=>`<button class="${tab===x[0]?'on':''}" data-act="hd-tab" data-id="${x[0]}">${x[1]}</button>`).join('')}</div><span class="spacer"></span><input class="input" placeholder="Tìm mã HĐ, tên/mã tiểu thương, mã điểm..." data-in="hd-search" value="${U.esc(f.hdSearch||'')}">${A.canDo('hop-dong.tao',ui.market)?'<button class="btn primary" data-act="ct-new">+ Khởi tạo hợp đồng</button>':''}</div><div class="card-b">${U.table([{t:'Mã HĐ'},{t:'Tiểu thương'},{t:'Điểm KD'},{t:'Hiệu lực'},{t:'Hết hạn'},{t:'Đơn giá',num:true},{t:'Thời hạn còn lại'},{t:'Trạng thái'},{t:'Thao tác'}],rows.slice(pg.start,pg.end).map(c=>`<tr><td><b>${c.id}</b></td><td>${trader(c)?U.esc(trader(c).name)+'<div class="small muted">'+c.traderId+'</div>':'—'}</td><td>${point(c)?point(c).code:'—'}</td><td>${U.dmy(c.start)}</td><td>${U.dmy(c.end)}</td><td class="num">${money(c)}</td><td>${active(c)?(warn(c)?`<span class="tag ${left(c)<=15?'danger':'warn'}">${warn(c)} · ${left(c)} ngày</span>`:left(c)+' ngày'):'—'}</td><td>${cTag(c)}</td><td><button class="btn sm" data-act="ct-view" data-id="${c.id}">Xem</button></td></tr>`))}${pg.html}</div></div>`;
+    return `<div class="grid g4" style="margin-bottom:14px">${cards.map(x=>`<button class="card" data-act="hd-tab" data-id="${x[0]}" style="text-align:left"><div class="small muted">${x[1]}</div><div style="font-size:24px;font-weight:800;margin-top:5px">${x[2]}</div></button>`).join('')}</div><div class="card contract-table-card"><div class="card-h"><div class="seg">${[['all','Tất cả'],['active','Đang hiệu lực'],['30','Sắp hết hạn'],['15','Sắp hết hạn ≤ 15 ngày'],['end','Đã kết thúc']].map(x=>`<button class="${tab===x[0]?'on':''}" data-act="hd-tab" data-id="${x[0]}">${x[1]}</button>`).join('')}</div><span class="spacer"></span><input class="input" placeholder="Tìm mã HĐ, tên/mã tiểu thương, mã điểm..." data-in="hd-search" value="${U.esc(f.hdSearch||'')}">${A.canDo('hop-dong.tao',ui.market)?'<button class="btn primary" data-act="ct-new">+ Khởi tạo hợp đồng</button>':''}</div><div class="card-b">${U.table([{t:'Mã HĐ'},{t:'Tiểu thương'},{t:'Điểm KD'},{t:'Hiệu lực'},{t:'Hết hạn'},{t:'Đơn giá',num:true},{t:'Thời hạn còn lại'},{t:'Trạng thái'},{t:'Thao tác'}],rows.slice(pg.start,pg.end).map(c=>`<tr><td><b>${c.id}</b></td><td>${trader(c)?U.esc(trader(c).name)+'<div class="small muted">'+c.traderId+'</div>':'—'}</td><td>${point(c)?point(c).code:'—'}</td><td>${U.dmy(c.start)}</td><td>${U.dmy(c.end)}</td><td class="num">${money(c)}</td><td>${active(c)?(warn(c)?`<span class="tag ${left(c)<=15?'danger':'warn'}">${warn(c)} · ${left(c)} ngày</span>`:left(c)+' ngày'):'—'}</td><td>${cTag(c)}</td><td><button class="btn sm" data-act="ct-view" data-id="${c.id}">Xem</button></td></tr>`))}${pg.html}</div></div>`;
   };
   A.ACT['hd-tab'] = el => { ui.contractTab = el.dataset.id; ui.page['hd' + ui.contractTab] = 0; A.render(); };
   A.IN['hd-search'] = el => { f.hdSearch = el.value; A.render(); };

@@ -1,30 +1,41 @@
 /* Model phân quyền động: Role, Permission, RolePermission, Scope.
  *
- * RBAC V1 — PHASE 4B (Action Permission V1). Xem CURRENT_RBAC_BASELINE.md / RBAC_V1_SPEC.md /
- * PHASE4_ACTION_AUDIT.md.
+ * RBAC V2 — RBAC_MARKET_SCOPE_MIGRATION (thu gọn role master 8 → 6 role + mở rộng market scope
+ * 2 → 12 chợ theo yêu cầu nghiệp vụ mới). Xem CURRENT_RBAC_BASELINE.md / RBAC_V1_SPEC.md /
+ * PHASE4_ACTION_AUDIT.md / RBAC_MARKET_SCOPE_MIGRATION_REPORT.md.
  *
- * Role catalog: 8 role V1 (system_admin, ward_leader, market_manager, market_staff, accountant,
- * collector, technician, trader) — xem defaultRoles() bên dưới. Không còn role id cũ
- * (lanhdao/bql/tieuthuong) ở bất kỳ đâu, không dùng làm authorization source.
+ * Role catalog: ĐÚNG 6 role chính thức (system_admin, ward_leader, market_manager, collector,
+ * technician, trader) — xem defaultRoles() bên dưới. `market_staff` (Nhân viên Ban Quản lý chợ) và
+ * `accountant` (Kế toán) đã LOẠI BỎ HOÀN TOÀN khỏi role master (không còn account/permission nào
+ * tham chiếu 2 role id này — xem RETIRED_ROLE_IDS + migrateRoleMaster6() bên dưới, và mapping cụ thể
+ * ở RBAC_MARKET_SCOPE_MIGRATION_REPORT.md). 6 stable ID GIỮ NGUYÊN như V1 (đã dùng xuyên suốt hàng
+ * chục file khác — system_admin/ward_leader/trader không đổi tên id để tránh regression diện rộng,
+ * dù yêu cầu gợi ý admin/leader/merchant).
  *
- * `screenRoles` (mục 3, defaultRolePermissions()) là DEFAULT SCREEN PERMISSION MATRIX V1 (Phase 3,
- * không đổi ở Phase 4B) — "role có được vào màn nào".
+ * `screenRoles` (mục 3, defaultRolePermissions()) là DEFAULT SCREEN PERMISSION MATRIX — "role có
+ * được vào màn nào".
  *
- * `actionRoles` (mục 3) từ Phase 4B là DEFAULT ACTION PERMISSION MATRIX V1 CHÍNH THỨC (theo đúng
- * bảng đã chốt trong yêu cầu Phase 4B) — "role có được làm gì BÊN TRONG 1 màn". Cả hai đều chỉ là
- * SEED BAN ĐẦU: admin có thể sửa động qua màn "Vai trò & phân quyền" (`A.PERM.grant/revoke`), UI và
- * handler đều đọc lại `STATE` mới ngay — không có ma trận nào bị hard-code cứng trong view.
+ * `actionRoles` (mục 3) là DEFAULT ACTION PERMISSION MATRIX — "role có được làm gì BÊN TRONG 1
+ * màn". Cả hai đều chỉ là SEED BAN ĐẦU: admin có thể sửa động qua màn "Vai trò & phân quyền"
+ * (`A.PERM.grant/revoke`), UI và handler đều đọc lại `STATE` mới ngay — không có ma trận nào bị
+ * hard-code cứng trong view.
  *
- * Nguyên tắc least-privilege đã áp dụng: `technician` KHÔNG có bất kỳ action permission nào ở V1
- * (chỉ có `screen:su-co`/`screen:mat-bang` [tên gọi từ Phase 7, trước đó là `screen:so-do`] — xem
- * được nhưng chưa thao tác được, chờ xác nhận nghiệp vụ ở Phase 5); nhiều mục khác còn
- * NEED_CONFIRMATION (xem PHASE4_ACTION_AUDIT.md mục 9) nên cố tình KHÔNG cấp mặc định cho tới khi
- * có xác nhận nghiệp vụ.
+ * Mapping quyền market_staff/accountant cũ → 6 role mới (RBAC_MARKET_SCOPE_MIGRATION mục 26): quyền
+ * thuộc nghiệp vụ mặt bằng/cấu trúc/điểm kinh doanh (cau-truc.*, so-do.*, diem-kd.tach-diem/gop-diem/
+ * chuyen-doi.*) gộp về market_manager (đúng mục 3.C "Quản lý mặt bằng. Quản lý điểm kinh doanh.");
+ * quyền hồ sơ tiểu thương/hợp đồng/thu tiền/điện nước/công nợ (tieu-thuong.*, hop-dong.*, dien-nuoc.*,
+ * phai-thu.yeu-cau-dieu-chinh, cong-no.*, phien-cho vận hành theo ngày) gộp về collector (đúng mục
+ * 3.D); quyền xử lý sự cố (su-co.cap-nhat-xu-ly/chuyen-trang-thai) gộp về technician (đúng mục 3.E —
+ * technician V1 trước đây 0 action, nay CHÍNH THỨC có action theo yêu cầu mới, không còn
+ * NEED_CONFIRMATION); mọi quyền tài chính trước đây accountant giữ (phai-thu.phat-hanh, doi-soat.*,
+ * v.v.) không có role kế thừa 1:1 → gộp về market_manager (đúng mục 3.C "Duyệt nghiệp vụ theo
+ * permission... Xác nhận tiền nhân viên thu phí nộp về"), KHÔNG tự tạo lại alias "accountant" dưới
+ * tên khác.
  */
 (function (A) {
   'use strict';
   const PKEY = 'choso-caolanh-permissions';
-  const RETIRED_ROLE_IDS = ['session_market_operator_demo'];
+  const RETIRED_ROLE_IDS = ['session_market_operator_demo', 'market_staff', 'accountant'];
 
   // ============================================================
   // 1) PERMISSION — danh mục quyền (catalog). Tương đối tĩnh: chỉ
@@ -34,6 +45,9 @@
   // ============================================================
   const CATALOG = [
     { key: 'screen:tong-quan', kind: 'screen', group: 'Điều hành', label: 'Tổng quan liên chợ' },
+    // Danh mục chợ = quản lý thông tin CẤP CHỢ (tên, mã, địa điểm, hạng, BQL, bảng giá, trạng thái)
+    // — KHÁC screen:mat-bang (cấu trúc BÊN TRONG 1 chợ, không đổi gì ở đó). Xem js/v-danhmuccho.js.
+    { key: 'screen:danh-muc-cho', kind: 'screen', group: 'Điều hành', label: 'Danh mục chợ' },
     // Phase 7 — chuẩn hóa RBAC theo UI đã gộp "Thiết lập mặt bằng chợ" + "Sơ đồ mặt bằng" thành 1
     // workspace (MARKET_LAYOUT_UX_HOTFIX_REPORT.md): 2 screen permission cũ 'cau-truc'/'so-do' gộp
     // thành DUY NHẤT 'mat-bang'. Xem MARKET_LAYOUT_SCREEN_PERMISSION_AUDIT.md +
@@ -60,6 +74,10 @@
     { key: 'screen:cai-dat', kind: 'screen', group: 'Vận hành', label: 'Cài đặt & phân quyền' },
     { key: 'screen:mini-app', kind: 'screen', group: 'Dành cho tiểu thương', label: 'Mini app tiểu thương' },
 
+    // Quản trị hệ thống: tạo/cập nhật chợ trong danh mục. Lãnh đạo UBND chỉ có screen:danh-muc-cho
+    // (xem được) — KHÔNG có 2 action này (chỉ đọc, đúng mục 2 yêu cầu).
+    { key: 'action:danh-muc-cho.tao', kind: 'action', group: 'Điều hành', screenId: 'danh-muc-cho', label: 'Tạo chợ mới trong danh mục' },
+    { key: 'action:danh-muc-cho.sua', kind: 'action', group: 'Điều hành', screenId: 'danh-muc-cho', label: 'Cập nhật thông tin chợ trong danh mục' },
     { key: 'action:cau-truc.edit', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Thêm/sửa khối, tầng, khu, loại điểm; lưu nháp/chính thức' },
     { key: 'action:cau-truc.delete', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Xoá khối, tầng, khu, loại điểm' },
     { key: 'action:cau-truc.reset', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Khôi phục cấu trúc mặc định' },
@@ -184,21 +202,21 @@
   //    selfService: true = hành vi tự phục vụ kiểu tiểu thương (ẩn bộ
   //    chọn "Chợ", mặc định vào thẳng mini-app) — hiện chỉ role 'trader'
   //    có cờ này (xem A.ACT['demo-account']/A.route() ở js/core.js).
-  //    builtin: true = 1 trong 8 role gốc V1, không cho xoá.
+  //    builtin: true = 1 trong 6 role gốc, không cho xoá.
   // ============================================================
   function defaultRoles() {
-    // RBAC V1 — 8 role (RBAC_V1_SPEC.md mục 2). `scope`/`market` ở đây CHỈ còn là metadata mô
-    // tả mặc định (theo quyết định kiến trúc: Account.marketScopes mới là nguồn enforce phạm vi
-    // chợ thật sự, xem js/accounts.js) — không có đoạn code nào đọc field này để chặn dữ liệu.
+    // RBAC_MARKET_SCOPE_MIGRATION — ĐÚNG 6 role chính thức (mục 2 yêu cầu). `scope`/`market` ở đây
+    // CHỈ còn là metadata mô tả mặc định (theo quyết định kiến trúc: Account.marketScopes/scopeType
+    // mới là nguồn enforce phạm vi chợ thật sự, xem js/accounts.js) — không có đoạn code nào đọc
+    // field này để chặn dữ liệu. `market_staff`/`accountant` đã bị xoá khỏi mảng này — xem
+    // RETIRED_ROLE_IDS + comment đầu file.
     return [
-      { id: 'system_admin', name: 'Quản trị hệ thống', desc: 'Quản lý tài khoản, vai trò, phân quyền, cấu hình dịch vụ, tích hợp, nhật ký kiểm toán', scope: 'all', market: null, selfService: false, builtin: true, active: true },
-      { id: 'ward_leader', name: 'Lãnh đạo UBND phường', desc: 'Giám sát liên chợ, dashboard, tra cứu, báo cáo, chỉ đạo xử lý phản ánh vượt cấp', scope: 'all', market: null, selfService: false, builtin: true, active: true },
-      { id: 'market_manager', name: 'Trưởng Ban Quản lý chợ', desc: 'Điều hành và phê duyệt nghiệp vụ trong phạm vi chợ được giao qua tài khoản (account.marketScopes)', scope: 'all', market: null, selfService: false, builtin: true, active: true },
-      { id: 'market_staff', name: 'Nhân viên Ban Quản lý chợ', desc: 'Vận hành hằng ngày trong phạm vi chợ được giao qua tài khoản', scope: 'all', market: null, selfService: false, builtin: true, active: true },
-      { id: 'accountant', name: 'Kế toán', desc: 'Tài chính, đối soát, công nợ trong phạm vi chợ được giao qua tài khoản', scope: 'all', market: null, selfService: false, builtin: true, active: true },
-      { id: 'collector', name: 'Nhân viên thu phí', desc: 'Thu tiền, cập nhật thu/biên lai trong phạm vi chợ được giao qua tài khoản', scope: 'all', market: null, selfService: false, builtin: true, active: true },
-      { id: 'technician', name: 'Nhân viên kỹ thuật', desc: 'Tiếp nhận và xử lý sự cố/kỹ thuật/bảo trì trong phạm vi chợ được giao qua tài khoản', scope: 'all', market: null, selfService: false, builtin: true, active: true },
-      { id: 'trader', name: 'Tiểu thương', desc: 'Tự phục vụ qua mini app: xem, thanh toán, gửi phản ánh cho điểm kinh doanh của mình', scope: 'self', market: null, selfService: true, builtin: true, active: true }
+      { id: 'system_admin', name: 'Quản trị hệ thống', desc: 'Tạo/quản lý tài khoản, vai trò và phân quyền, danh mục 12 chợ, cấu hình dùng chung — phạm vi TOÀN HỆ THỐNG (GLOBAL)', scope: 'all', market: null, selfService: false, builtin: true, active: true },
+      { id: 'ward_leader', name: 'Lãnh đạo UBND phường', desc: 'Xem Tổng quan liên chợ, dữ liệu tổng hợp 12 chợ, báo cáo, giám sát phản ánh quá hạn — phạm vi TOÀN HỆ THỐNG (GLOBAL), không mặc định có quyền chỉnh sửa nghiệp vụ', scope: 'all', market: null, selfService: false, builtin: true, active: true },
+      { id: 'market_manager', name: 'Trưởng Ban Quản lý chợ', desc: 'Quản lý mặt bằng, điểm kinh doanh, hợp đồng, mở/chốt kỳ thu, duyệt nghiệp vụ, xác nhận tiền nhân viên thu phí nộp về, tiếp nhận/phân công phản ánh — trong (các) chợ được giao qua account.marketScopes', scope: 'all', market: null, selfService: false, builtin: true, active: true },
+      { id: 'collector', name: 'Nhân viên thu phí', desc: 'Cập nhật hồ sơ tiểu thương, lập/cập nhật hợp đồng theo permission, ghi nhận thu, nộp tiền về Ban Quản lý, nhắc nợ — trong (các) chợ được giao qua account.marketScopes', scope: 'all', market: null, selfService: false, builtin: true, active: true },
+      { id: 'technician', name: 'Nhân viên kỹ thuật', desc: 'Nhận, cập nhật tiến độ và kết quả xử lý phản ánh/sự cố được giao — trong (các) chợ được giao qua account.marketScopes', scope: 'all', market: null, selfService: false, builtin: true, active: true },
+      { id: 'trader', name: 'Tiểu thương', desc: 'Tự phục vụ qua mini app: xem hồ sơ/điểm kinh doanh/hợp đồng của chính mình, thanh toán, gửi phản ánh — chỉ dữ liệu thuộc merchantId/traderId của chính tài khoản (ownership)', scope: 'self', market: null, selfService: true, builtin: true, active: true }
     ];
   }
 
@@ -207,58 +225,63 @@
   //    Role × Permission. Mỗi dòng = 1 lượt cấp quyền, có mốc thời
   //    gian/người cấp để phục vụ nhật ký kiểm toán.
   //
-  //    DEFAULT SCREEN PERMISSION MATRIX V1 (Phase 3) — "role có được VÀO màn này không", KHÔNG
-  //    quyết định được bấm nút gì bên trong (đó là actionRoles/Phase 4). Đây chỉ là SEED BAN ĐẦU:
-  //    admin sửa được qua màn "Vai trò & phân quyền", không phải giá trị cố định trong code.
+  //    DEFAULT SCREEN PERMISSION MATRIX — "role có được VÀO màn này không", KHÔNG quyết định được
+  //    bấm nút gì bên trong (đó là actionRoles). Đây chỉ là SEED BAN ĐẦU: admin sửa được qua màn
+  //    "Vai trò & phân quyền", không phải giá trị cố định trong code.
   //
   //    Một số screen còn chịu thêm Market Applicability (Phase 2, xem A.SCREEN_MARKET ở core.js)
   //    độc lập với bảng này — có screen permission KHÔNG có nghĩa luôn vào được nếu selectedMarket
-  //    không applicable: 'phien-cho' chỉ applicable TTD; 'dien-nuoc' applicable cả CL/TTD khi có
-  //    quầy cố định cần ghi chỉ số.
+  //    không applicable: 'phien-cho' chỉ applicable TTD; 'tai-san' chỉ applicable CL; 'danh-muc-cho'/
+  //    'tong-quan'/'bao-cao' là CROSS (liên chợ, không bị chặn bởi selectedMarket).
   // ============================================================
   function defaultRolePermissions() {
+    // RBAC_MARKET_SCOPE_MIGRATION — market_staff/accountant đã loại khỏi mọi dòng bên dưới, quyền cũ
+    // của 2 role đó redistribute theo mapping ở comment đầu file (mục 26 yêu cầu). Không role nào
+    // trong 6 role còn lại được cấp thừa quyền chỉ vì "tiện" — mỗi lượt gộp đều khớp đúng 1 dòng mô
+    // tả công việc ở mục 3 yêu cầu.
     const screenRoles = {
       'tong-quan': ['system_admin', 'ward_leader'],
+      'danh-muc-cho': ['system_admin', 'ward_leader'],
       // Phase 7: 'cau-truc' + 'so-do' gộp thành 'mat-bang' — default = hợp (OR) của 2 ma trận cũ,
       // đúng bằng tập cũ của 'so-do' (vì 'cau-truc' vốn là tập con). state cũ đã lưu (không rơi vào
       // fresh state này) được xử lý bằng migration tường minh trong mergeIntoCurrentSeed() bên dưới,
       // KHÔNG dùng ma trận này để ghi đè tuỳ biến đã có.
-      'mat-bang': ['system_admin', 'ward_leader', 'market_manager', 'market_staff', 'accountant', 'collector', 'technician'],
+      'mat-bang': ['system_admin', 'ward_leader', 'market_manager', 'collector', 'technician'],
       // NEED_CONFIRMATION: nhóm được xem tài sản là giả định prototype V1.
-      'tai-san': ['ward_leader', 'market_manager', 'market_staff', 'technician'],
-      'diem-kd': ['system_admin', 'ward_leader', 'market_manager', 'market_staff', 'accountant', 'collector'],
-      'phien-cho': ['ward_leader', 'market_manager', 'market_staff', 'collector'],
-      'tieu-thuong': ['system_admin', 'ward_leader', 'market_manager', 'market_staff', 'accountant', 'collector'],
-      'hop-dong': ['system_admin', 'ward_leader', 'market_manager', 'market_staff', 'accountant'],
-      'cau-hinh-gia': ['system_admin', 'market_manager', 'accountant', 'ward_leader'],
+      'tai-san': ['ward_leader', 'market_manager', 'technician'],
+      'diem-kd': ['system_admin', 'ward_leader', 'market_manager', 'collector'],
+      'phien-cho': ['ward_leader', 'market_manager', 'collector'],
+      'tieu-thuong': ['system_admin', 'ward_leader', 'market_manager', 'collector'],
+      'hop-dong': ['system_admin', 'ward_leader', 'market_manager', 'collector'],
+      'cau-hinh-gia': ['system_admin', 'market_manager', 'ward_leader'],
       // Cùng bộ role xem với 'cau-hinh-gia' — màn liền kề trong cùng nhóm con 'Quản lý khai báo'.
-      // Các role vận hành/tự phục vụ (market_staff, collector, technician, trader) KHÔNG có trong
-      // yêu cầu gốc ("các vai trò khác chỉ xem" không nêu rõ vai trò nào) — đã xác nhận với người
-      // yêu cầu trước khi implement, không tự suy đoán.
-      'tai-khoan-ngan-hang': ['system_admin', 'market_manager', 'accountant', 'ward_leader'],
-      'dien-nuoc': ['market_manager', 'market_staff', 'accountant'],
-      'phai-thu': ['ward_leader', 'market_manager', 'market_staff', 'accountant', 'collector'],
-      'thu-tien': ['market_manager', 'accountant', 'collector'],
-      'doi-soat': ['ward_leader', 'market_manager', 'accountant'],
-      'cong-no': ['ward_leader', 'market_manager', 'market_staff', 'accountant', 'collector'],
-      'su-co': ['ward_leader', 'market_manager', 'market_staff', 'technician'],
-      'thong-bao': ['market_manager', 'market_staff'],
-      'bao-cao': ['system_admin', 'ward_leader', 'market_manager', 'market_staff', 'accountant'],
+      'tai-khoan-ngan-hang': ['system_admin', 'market_manager', 'ward_leader'],
+      'dien-nuoc': ['market_manager', 'collector'],
+      'phai-thu': ['ward_leader', 'market_manager', 'collector'],
+      'thu-tien': ['market_manager', 'collector'],
+      'doi-soat': ['ward_leader', 'market_manager'],
+      'cong-no': ['ward_leader', 'market_manager', 'collector'],
+      'su-co': ['ward_leader', 'market_manager', 'technician'],
+      'thong-bao': ['market_manager'],
+      'bao-cao': ['system_admin', 'ward_leader', 'market_manager'],
       'tai-khoan': ['system_admin'],
       'cai-dat': ['system_admin'],
       'mini-app': ['trader', 'collector']
     };
-    // DEFAULT ACTION PERMISSION MATRIX V1 (Phase 4B) — bám sát đúng ma trận đã chốt trong yêu cầu
-    // Phase 4B, áp dụng least-privilege: 'technician' không có action nào ở V1 (chỉ xem, chờ xác
-    // nhận nghiệp vụ ở Phase 5); những ô còn NEED_CONFIRMATION (xem PHASE4_ACTION_AUDIT.md mục 9)
-    // cố tình để trống, không tự cấp.
+    // DEFAULT ACTION PERMISSION MATRIX — market_staff/accountant đã loại khỏi mọi dòng, quyền cũ
+    // redistribute theo mapping ở comment đầu file. 'technician' nay CHÍNH THỨC có action (cập nhật
+    // tiến độ/kết quả xử lý — mục 3.E yêu cầu mới), không còn NEED_CONFIRMATION như V1.
     const actionRoles = {
-      'cau-truc.edit': ['market_manager', 'market_staff'],
+      'danh-muc-cho.tao': ['system_admin'],
+      'danh-muc-cho.sua': ['system_admin'],
+      // cau-truc.*/so-do.* (mặt bằng, cấu trúc) là nghiệp vụ "Quản lý mặt bằng" — mục 3.C, chỉ
+      // market_manager (market_staff cũ gộp về đây, không còn role thứ 2 nào thao tác cấu trúc).
+      'cau-truc.edit': ['market_manager'],
       'cau-truc.delete': ['market_manager'],
       'cau-truc.reset': ['market_manager'],
-      'so-do.xem-ho-so': ['ward_leader', 'market_manager', 'market_staff', 'accountant', 'collector'],
-      'so-do.tao-hop-dong': ['market_manager', 'market_staff'],
-      'so-do.doi-trang-thai': ['market_manager', 'market_staff'],
+      'so-do.xem-ho-so': ['ward_leader', 'market_manager', 'collector'],
+      'so-do.tao-hop-dong': ['market_manager', 'collector'],
+      'so-do.doi-trang-thai': ['market_manager'],
       // NEED_CONFIRMATION: chỉ BQL được thêm/sửa trong prototype; các role khác chỉ xem.
       'tai-san.create': ['market_manager'],
       'tai-san.edit': ['market_manager'],
@@ -266,49 +289,55 @@
       'phien-cho.mo-dang-ky': ['market_manager'],
       'phien-cho.chot-danh-sach': ['market_manager'],
       'phien-cho.quan-ly-dang-ky': ['market_manager'],
-      'phien-cho.diem-danh': ['market_staff'],
-      'phien-cho.dieu-phoi-du-bi': ['market_staff'],
-      'phien-cho.bat-dau-chuan-bi': ['market_staff'],
-      'phien-cho.bat-dau-phien': ['market_staff'],
-      'phien-cho.cho-chot': ['market_staff'],
-      'phien-cho.chot-phien': ['market_staff'],
+      // 6 action vận hành theo NGÀY diễn ra phiên (market_staff cũ) chuyển sang collector — đúng
+      // mục 3.D ("Ghi nhận thu"/vận hành thu tại phiên) và khớp D.STAFF thực tế ("Nhân viên thu phí
+      // phiên" → collector, xem data.js).
+      'phien-cho.diem-danh': ['collector'],
+      'phien-cho.dieu-phoi-du-bi': ['collector'],
+      'phien-cho.bat-dau-chuan-bi': ['collector'],
+      'phien-cho.bat-dau-phien': ['collector'],
+      'phien-cho.cho-chot': ['collector'],
+      'phien-cho.chot-phien': ['collector'],
       'phien-cho.hoan-phien': ['market_manager'],
       'phien-cho.huy-phien': ['market_manager'],
-      'phien-cho.xem-bao-cao': ['ward_leader', 'market_manager', 'market_staff', 'collector'],
+      'phien-cho.xem-bao-cao': ['ward_leader', 'market_manager', 'collector'],
       'mini-app.stall-registration.create': ['trader'],
-      'tieu-thuong.them-moi': ['market_manager', 'market_staff'],
-      // NEED_CONFIRMATION (báo cáo mục 41): chưa xác nhận "ai ngoài market_staff được quyền xác
-      // minh" — mặc định AN TOÀN dùng đúng ma trận của 'tieu-thuong.them-moi' (cùng nhóm người quản
-      // lý hồ sơ tiểu thương hiện tại), không tự thêm role nào khác.
-      'tieu-thuong.xac-minh': ['market_manager', 'market_staff'],
-      'hop-dong.tao': ['market_manager', 'market_staff'],
-      'hop-dong.gia-han': ['market_manager', 'market_staff'],
+      // Hồ sơ tiểu thương/hợp đồng: đúng mục 3.D "Cập nhật hồ sơ tiểu thương theo permission. Lập/
+      // cập nhật hợp đồng...".
+      'tieu-thuong.them-moi': ['market_manager', 'collector'],
+      'tieu-thuong.xac-minh': ['market_manager', 'collector'],
+      'hop-dong.tao': ['market_manager', 'collector'],
+      'hop-dong.gia-han': ['market_manager', 'collector'],
       'hop-dong.thanh-ly': ['market_manager'],
-      'hop-dong.in': ['market_manager', 'market_staff'],
-      'hop-dong.cap-nhat-ban-ky': ['market_manager', 'market_staff'],
+      'hop-dong.in': ['market_manager', 'collector'],
+      'hop-dong.cap-nhat-ban-ky': ['market_manager', 'collector'],
       'hop-dong.cham-dut': ['market_manager'],
-      'dien-nuoc.ghi-chi-so': ['market_manager', 'market_staff'],
+      'dien-nuoc.ghi-chi-so': ['market_manager', 'collector'],
       'dien-nuoc.chot-ky': ['market_manager'],
-      'dien-nuoc.yeu-cau-dieu-chinh': ['market_manager', 'market_staff'],
-      'phai-thu.phat-hanh': ['market_manager', 'accountant'],
-      'phai-thu.yeu-cau-dieu-chinh': ['market_staff'],
+      'dien-nuoc.yeu-cau-dieu-chinh': ['market_manager', 'collector'],
+      // accountant cũ không có role kế thừa 1:1 — "phát hành khoản phải thu tự động" thuộc "mở/chốt
+      // kỳ thu" (mục 3.C) nên gộp về market_manager, KHÔNG tái lập accountant dưới tên khác.
+      'phai-thu.phat-hanh': ['market_manager'],
+      'phai-thu.yeu-cau-dieu-chinh': ['collector'],
       'phai-thu.mien-giam': ['market_manager'],
-      'thu-tien.thu': ['market_manager', 'accountant', 'collector'],
-      'doi-soat.xem-ngan-hang': ['ward_leader', 'market_manager', 'accountant'],
-      'doi-soat.gan-thu-cong': ['market_manager', 'accountant'],
-      'doi-soat.xem-tien-mat': ['ward_leader', 'market_manager', 'accountant'],
-      'doi-soat.xac-nhan-nop-quy': ['market_manager', 'accountant'],
-      'doi-soat.xem-truy-vet': ['market_manager', 'accountant'],
-      'cong-no.nhac-no': ['market_manager', 'market_staff', 'accountant'],
-      'cong-no.nhac-no-hang-loat': ['market_manager', 'accountant'],
-      'su-co.tao-phan-anh': ['market_manager', 'market_staff'],
+      'thu-tien.thu': ['market_manager', 'collector'],
+      'doi-soat.xem-ngan-hang': ['ward_leader', 'market_manager'],
+      'doi-soat.gan-thu-cong': ['market_manager'],
+      'doi-soat.xem-tien-mat': ['ward_leader', 'market_manager'],
+      // "Xác nhận tiền nhân viên thu phí nộp về" — đúng mục 3.C, chỉ market_manager.
+      'doi-soat.xac-nhan-nop-quy': ['market_manager'],
+      'doi-soat.xem-truy-vet': ['market_manager'],
+      // "Nhắc nợ" — đúng mục 3.D, collector; nhắc hàng loạt vẫn cùng 1 nghiệp vụ (mở rộng số lượng),
+      // không phải quyền mới.
+      'cong-no.nhac-no': ['market_manager', 'collector'],
+      'cong-no.nhac-no-hang-loat': ['market_manager', 'collector'],
+      'su-co.tao-phan-anh': ['market_manager'],
       'su-co.phan-cong': ['market_manager'],
-      'su-co.cap-nhat-xu-ly': ['market_manager', 'market_staff', 'technician'],
-      // KHÔNG cấp cho 'technician' ở V1 — quyền hiện tại cho phép chuyển tới cả trạng thái "Đóng"
-      // (cuối máy trạng thái), nên nếu cấp sẽ rộng hơn ý định "chỉ cập nhật tiến độ xử lý". Không
-      // redesign máy trạng thái sự cố ở Phase 4B — chờ xác nhận nghiệp vụ (PHASE4_ACTION_AUDIT.md
-      // mục 9 câu 9) trước khi cấp granular hơn.
-      'su-co.chuyen-trang-thai': ['market_manager', 'market_staff'],
+      // technician nay CHÍNH THỨC được cập nhật tiến độ/kết quả VÀ chuyển trạng thái xử lý phản ánh
+      // được giao — đúng mục 3.E ("Cập nhật tiến độ. Cập nhật kết quả."), không còn giữ nguyên hạn
+      // chế "0 action" của market_staff/V1.
+      'su-co.cap-nhat-xu-ly': ['market_manager', 'technician'],
+      'su-co.chuyen-trang-thai': ['market_manager', 'technician'],
       'su-co.vuot-cap': ['market_manager'],
       'su-co.chi-dao': ['ward_leader'],
       'thong-bao.gui': ['market_manager'],
@@ -334,39 +363,30 @@
       'cai-dat.phan-quyen': ['system_admin'],
       'cai-dat.reset-demo': ['system_admin'],
 
-      // Phase 8 — "Tách điểm kinh doanh": market_manager có cả 'lap-yeu-cau' (mục 10 yêu cầu:
-      // "market_manager: ... lập yêu cầu nếu cần") lẫn 'phe-duyet' (2 permKey riêng biệt — cùng 1
-      // account/role có cả 2 quyền không có nghĩa 2 bước phê duyệt gộp làm 1: UI/handler vẫn bắt
-      // đi qua đúng 2 action rời nhau, xem 'dkreq-submit'/'dkreq-approve' trong báo cáo).
-      // market_staff CHỈ có 3 quyền vận hành đầu (lập/tiếp nhận/gửi phê duyệt) — KHÔNG có 'phe-duyet'
-      // (least-privilege, đúng "KHÔNG phê duyệt" mục 10). 'thuc-hien' cấp cho cả 2 role — cùng phạm
-      // vi thao tác mặt bằng thật với 'cau-truc.edit' đã cấp sẵn cho cả market_manager/market_staff.
-      'diem-kd.tach-diem.lap-yeu-cau': ['market_manager', 'market_staff'],
-      'diem-kd.tach-diem.tiep-nhan': ['market_staff'],
-      'diem-kd.tach-diem.gui-phe-duyet': ['market_manager', 'market_staff'],
+      // Tách/gộp/chuyển đổi điểm kinh doanh: 3 quy trình phê duyệt nhiều bước vốn dùng market_staff
+      // cho bước vận hành (lập/tiếp nhận/gửi phê duyệt/thực hiện) + market_manager cho bước phê
+      // duyệt. market_staff đã loại bỏ — đây là nghiệp vụ MẶT BẰNG/ĐIỂM KINH DOANH (mục 3.C), không
+      // khớp mô tả công việc của collector/technician, nên TOÀN BỘ bước vận hành gộp về market_manager
+      // (Trưởng BQL tự làm hết, không còn nhân sự "staff" riêng để giao việc qua 'assign' — 'assign'
+      // vẫn giữ lại cho trường hợp 1 chợ có nhiều account market_manager). Xem
+      // RBAC_MARKET_SCOPE_MIGRATION_REPORT.md mục 26.
+      'diem-kd.tach-diem.lap-yeu-cau': ['market_manager'],
+      'diem-kd.tach-diem.tiep-nhan': ['market_manager'],
+      'diem-kd.tach-diem.gui-phe-duyet': ['market_manager'],
       'diem-kd.tach-diem.phe-duyet': ['market_manager'],
-      'diem-kd.tach-diem.thuc-hien': ['market_manager', 'market_staff'],
-      // Supplement — chỉ market_manager (đúng mục 12 yêu cầu bổ sung: "Trưởng BQL: có thể chủ động
-      // đề xuất; giao xử lý"). market_manager VẪN giữ 'lap-yeu-cau' ở trên (không revoke — tránh
-      // migration ép buộc trên permKey đã tồn tại, mục 17 yêu cầu bổ sung: "ưu tiên thay đổi nhỏ
-      // nhất"); UI quyết định form nào hiển thị bằng cách ưu tiên kiểm tra 'tiep-nhan' (có thể tự lập
-      // phương án kỹ thuật → form đầy đủ) trước 'assign' (chỉ có thể đề xuất/giao việc → form nhẹ),
-      // xem dksr-open ở js/v-tieuthuong.js — market_manager mặc định không có 'tiep-nhan' nên luôn
-      // rơi vào nhánh form đề xuất/giao việc dù vẫn còn 'lap-yeu-cau'.
+      'diem-kd.tach-diem.thuc-hien': ['market_manager'],
       'diem-kd.tach-diem.assign': ['market_manager']
-      ,'diem-kd.gop-diem.lap-yeu-cau': ['market_manager', 'market_staff']
-      ,'diem-kd.gop-diem.tiep-nhan': ['market_staff']
-      ,'diem-kd.gop-diem.gui-phe-duyet': ['market_manager', 'market_staff']
+      ,'diem-kd.gop-diem.lap-yeu-cau': ['market_manager']
+      ,'diem-kd.gop-diem.tiep-nhan': ['market_manager']
+      ,'diem-kd.gop-diem.gui-phe-duyet': ['market_manager']
       ,'diem-kd.gop-diem.phe-duyet': ['market_manager']
-      ,'diem-kd.gop-diem.thuc-hien': ['market_manager', 'market_staff']
+      ,'diem-kd.gop-diem.thuc-hien': ['market_manager']
       ,'diem-kd.gop-diem.assign': ['market_manager']
-      // Phase 9 — "Chuyển đổi vị trí điểm kinh doanh": cùng ma trận least-privilege với tach-diem/
-      // gop-diem (market_staff vận hành, market_manager phê duyệt + có thể tự đề xuất/giao việc).
-      ,'diem-kd.chuyen-doi.lap-yeu-cau': ['market_manager', 'market_staff']
-      ,'diem-kd.chuyen-doi.tiep-nhan': ['market_staff']
-      ,'diem-kd.chuyen-doi.gui-phe-duyet': ['market_manager', 'market_staff']
+      ,'diem-kd.chuyen-doi.lap-yeu-cau': ['market_manager']
+      ,'diem-kd.chuyen-doi.tiep-nhan': ['market_manager']
+      ,'diem-kd.chuyen-doi.gui-phe-duyet': ['market_manager']
       ,'diem-kd.chuyen-doi.phe-duyet': ['market_manager']
-      ,'diem-kd.chuyen-doi.thuc-hien': ['market_manager', 'market_staff']
+      ,'diem-kd.chuyen-doi.thuc-hien': ['market_manager']
       ,'diem-kd.chuyen-doi.assign': ['market_manager']
     };
     const rows = [];
@@ -418,7 +438,14 @@
   //        Bao gồm cả PC3C-B: action điều phối hộ dự bị thay hộ chính thức vắng mặt.
   //   v14 = vòng đời biểu phí theo nghiệp vụ mới: thêm phí ở trạng thái draft, khóa/mở khóa,
   //        áp dụng phí mới sau khi phí cũ cùng phạm vi đã khóa; cấp mặc định chỉ cho market_manager.
-  const PERM_SEED_VERSION = 14;
+  //   v15 = RBAC_MARKET_SCOPE_MIGRATION — role master 8 → 6 (xoá market_staff/accountant vĩnh viễn,
+  //        RETIRED_ROLE_IDS lọc sạch mọi rolePerms còn sót của 2 role này). Toàn bộ actionRoles/
+  //        screenRoles redistribute theo mapping ở comment đầu file. Cũng thêm screen:danh-muc-cho +
+  //        2 action:danh-muc-cho.*. LƯU Ý: cùng lúc bump A.RBAC_SCHEMA (core.js) 3 → 4 — schemaVersion
+  //        lệch khiến loadState() đi thẳng nhánh RESEED TOÀN BỘ (freshState(), không qua
+  //        mergeIntoCurrentSeed()), nên seedVersion v15 ở đây chỉ còn ý nghĩa tài liệu/đánh dấu, không
+  //        phải cơ chế migrate chính cho lần đổi này (xem RBAC_MARKET_SCOPE_MIGRATION_REPORT.md).
+  const PERM_SEED_VERSION = 15;
   const RATE_POLICY_PERM_VERSION = 1;
   const BANK_ACCOUNT_PERM_VERSION = 1;
   const PC3A_SESSION_PERM_VERSION = 1;
@@ -519,30 +546,6 @@
     stored.pc3cReplacementPermVersion = PC3C_REPLACEMENT_PERM_VERSION;
     return true;
   }
-  // Merge state đã lưu (shape còn đúng — schemaVersion khớp) vào seed hiện tại, THAY VÌ reseed toàn
-  // bộ, để không xoá mất grant/revoke tuỳ biến của admin cho các permKey KHÔNG đổi giữa 2 bản seed
-  // (Phase 6 STEP A — trước đây mỗi lần bump PERM_SEED_VERSION đều xoá sạch toàn bộ tuỳ biến, xem
-  // ghi chú lịch sử trong SERVICE_PRICING_SCREEN_AUDIT.md mục 12 / PHASE5A...md mục 12):
-  //   1) Role nào có trong defaultRoles() mà chưa có trong `stored.roles` (theo id) → thêm mới;
-  //      role đã tồn tại giữ NGUYÊN mọi field đã lưu (kể cả name/desc/active đã tuỳ biến).
-  //   2) permKey nào KHÔNG còn trong CATALOG hiện tại (bị gỡ khỏi seed lần này, vd 3
-  //      action:cai-dat.gia-*) → xoá khỏi rolePerms của MỌI role — hành động đã mất ý nghĩa, không
-  //      được để tồn tại song song với permKey mới.
-  //   3) permKey nào HOÀN TOÀN MỚI (không còn dòng nào trong rolePerms sau bước 2) → thêm đúng
-  //      grant mặc định theo defaultRolePermissions() hiện tại.
-  //   4) permKey đã tồn tại VÀ vẫn còn trong CATALOG → giữ NGUYÊN, không đụng tới (kể cả khi default
-  //      matrix của permKey đó đổi giữa 2 bản seed — 1 thay đổi default cho permKey đã tồn tại từ
-  //      trước, nếu thật sự cần ép lại, phải là 1 thao tác migrate TƯỜNG MINH riêng, không phải hệ
-  //      quả ngầm của việc bump version).
-  // Phase 7 migration riêng — gộp screen:so-do + screen:cau-truc thành screen:mat-bang. PHẢI chạy
-  // TRƯỚC bước filter/add-default chung bên dưới (đọc rolePerms lúc 2 permKey cũ CÒN NGUYÊN), và
-  // PHẢI tính cho MỌI role hiện có trong stored.roles (builtin lẫn custom, KHÔNG hard-code danh
-  // sách id) dựa trên STORED STATE THỰC TẾ — không phải default matrix mới (MARKET_LAYOUT_
-  // SCREEN_PERMISSION_AUDIT.md mục 10). Đặt cờ `stored.matBangMigratedV5` để 2 vòng "tự bổ sung
-  // permKey hoàn toàn mới theo default" (bước cuối hàm này VÀ vòng tương ứng trong loadState())
-  // không được coi 'screen:mat-bang' là permKey mới rồi tự cấp lại theo default matrix — kể cả khi
-  // kết quả OR-migration là KHÔNG role nào giữ được quyền này (0 dòng rolePerms cho permKey đó vẫn
-  // phải được hiểu là "đã xử lý", không phải "chưa từng thấy").
   function migrateMatBangScreen(stored) {
     const hadLegacyKeys = stored.rolePerms.some(r => r.permKey === 'screen:so-do' || r.permKey === 'screen:cau-truc');
     if (!hadLegacyKeys) return;
