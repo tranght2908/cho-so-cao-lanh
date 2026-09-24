@@ -776,8 +776,13 @@ button.mb-chip.on { outline: 2px solid currentColor; outline-offset: -2px; }
 
 /* ---------- Yêu cầu thay đổi điểm kinh doanh (Tách điểm) ---------- */
 .drawer.drawer-yc { width: min(720px, 94vw); }
+.drawer.drawer-trader-form { width: min(1080px, calc(100vw - 48px)); max-height: calc(100vh - 32px); }
+.drawer-trader-form .drawer-h, .drawer-trader-form .drawer-f { flex: none; }
+.drawer-trader-form .drawer-b { min-height: 0; overflow-y: auto; }
+@media (max-width: 640px) { .drawer.drawer-trader-form { width: calc(100vw - 20px); max-height: calc(100vh - 20px); } .drawer-trader-form .drawer-b { padding-left: 16px !important; padding-right: 16px !important; } }
 /* Các pop-up nghiệp vụ liên quan điểm/tiểu thương dùng cùng language với pop-up chi tiết điểm. */
 .drawer.drawer-yc, .drawer.drawer-tt-cl { width: min(980px, 94vw); border-radius: 14px; }
+.drawer.drawer-trader-form { width: min(1080px, calc(100vw - 48px)); max-height: calc(100vh - 32px); }
 .drawer-yc .drawer-h { padding: 16px 22px; background: #fff; }
 .drawer-yc .drawer-h h3 { font-size: 20px; letter-spacing: -.015em; }
 .drawer-yc .drawer-b { padding: 18px 22px 22px; }
@@ -818,6 +823,58 @@ button.mb-chip.on { outline: 2px solid currentColor; outline-offset: -2px; }
 .drawer-tt-cl .tt-point-tile .kv { grid-template-columns: 130px minmax(0, 1fr); margin-top: 8px; }
 .drawer-tt-cl .tt-point-tile .ui-icon { width: 15px; height: 15px; margin: 0 3px 0 0; }
 @media (max-width: 640px) { .tt-profile-grid, .tt-doc-grid { grid-template-columns: 1fr; } .drawer-tt-cl .tt-profile-grid .kv { grid-template-columns: 1fr; gap: 3px; } }
+/* Popup Chi tiết hồ sơ tiểu thương: chỉ 3 cấp chữ, scope riêng để không đổi typography toàn app. */
+.drawer-tt-cl { --tt-text: var(--ink); --tt-secondary: #536174; --tt-line: #e2e8f0; }
+.drawer-tt-cl .drawer-h { position: sticky; top: 0; z-index: 2; background: #fff; }
+.drawer-tt-cl .drawer-f { position: sticky; bottom: 0; z-index: 2; background: #fff; }
+.drawer-tt-cl .tt-detail-body { gap: 22px; }
+.drawer-tt-cl .tt-detail-card { padding: 18px; background: #fff; border-color: var(--tt-line); }
+.drawer-tt-cl .tt-detail-card-h { margin-bottom: 18px; }
+.drawer-tt-cl .tt-detail-card-h > span,
+.drawer-tt-cl .tt-detail-card:nth-child(2) .tt-detail-card-h > span,
+.drawer-tt-cl .tt-detail-card:nth-child(3) .tt-detail-card-h > span,
+.drawer-tt-cl .tt-detail-card:nth-child(4) .tt-detail-card-h > span { background: #edf3fa; color: #31506f; }
+.drawer-tt-cl .tt-detail-card-h b { color: var(--tt-text); font-size: 16px; font-weight: 600; }
+.drawer-tt-cl .tt-detail-card-h .small,
+.drawer-tt-cl .tt-meta,
+.drawer-tt-cl .tt-point-location,
+.drawer-tt-cl .vehicle-field-label { color: var(--tt-secondary); font-size: 13px; font-weight: 400; }
+.drawer-tt-cl .kv { row-gap: 0; column-gap: 18px; }
+.drawer-tt-cl .kv dt,
+.drawer-tt-cl .kv dd { padding: 6px 0; border-bottom: 1px solid #eef2f6; }
+.drawer-tt-cl .kv dt { color: var(--tt-secondary); font-size: 14px; font-weight: 400; }
+.drawer-tt-cl .kv dd { color: var(--tt-text); font-size: 14px; font-weight: 500; }
+.drawer-tt-cl .tt-profile-layout { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 20px; align-items: start; }
+.drawer-tt-cl .tt-portrait { width: 116px; height: 116px; display: grid; place-items: center; align-content: center; gap: 7px; overflow: hidden; border: 1px dashed #b9c5d2; border-radius: 10px; background: #f5f7fa; color: var(--tt-secondary); text-align: center; }
+.drawer-tt-cl .tt-portrait .ui-icon { width: 28px; height: 28px; }
+.drawer-tt-cl .tt-portrait small { padding: 0 8px; font-size: 12px; line-height: 1.35; }
+.drawer-tt-cl .tt-portrait img { width: 100%; height: 100%; object-fit: cover; }
+.drawer-tt-cl .tt-doc-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.drawer-tt-cl .tt-doc-tile { min-height: 62px; border-color: var(--tt-line); }
+.drawer-tt-cl .tt-doc-tile-icon { background: #f0f4f8; color: #49627c; }
+.drawer-tt-cl .tt-doc-label b { color: var(--tt-text); font-size: 14px; font-weight: 500; }
+.drawer-tt-cl .tt-doc-label small { color: var(--tt-secondary); font-size: 13px; font-weight: 400; }
+.drawer-tt-cl .tt-point-tile { padding: 16px; border-color: var(--tt-line); }
+.drawer-tt-cl .tt-point-title h4 { color: var(--tt-text); font-size: 16px; font-weight: 600; }
+.drawer-tt-cl .tt-point-location { margin: 5px 0 13px; }
+.drawer-tt-cl .tt-point-subhead { margin: 0 0 7px; color: var(--tt-text); font-size: 13px; font-weight: 600; letter-spacing: .02em; }
+.drawer-tt-cl .tt-seller-block { color: var(--tt-text); font-size: 14px; font-weight: 500; }
+.drawer-tt-cl .tt-placement-list { display: grid; gap: 8px; }
+.drawer-tt-cl .tt-placement-row { display: flex; align-items: center; gap: 9px; padding: 8px 0; }
+.drawer-tt-cl .tt-placement-row > .ui-icon { width: 20px; height: 20px; color: #49627c; }
+.drawer-tt-cl .tt-placement-row > div { min-width: 0; flex: 1; }
+.drawer-tt-cl .tt-placement-row b { display: block; color: var(--tt-text); font-size: 14px; font-weight: 500; }
+.drawer-tt-cl .tt-placement-row small { display: block; margin-top: 2px; color: var(--tt-secondary); font-size: 13px; }
+.drawer-tt-cl .tt-point-action { justify-content: flex-end; margin-top: 14px; }
+.drawer-tt-cl .tt-empty-inline { display: grid; gap: 3px; padding: 11px 0; color: var(--tt-secondary); font-size: 14px; font-weight: 400; }
+.drawer-tt-cl .tt-empty-inline span { font-size: 13px; }
+.drawer-tt-cl .vehicle-list { display: grid; gap: 0; }
+.drawer-tt-cl .vehicle-row { display: grid; grid-template-columns: repeat(6, minmax(100px, 1fr)) auto; gap: 12px; align-items: start; padding: 12px 0; }
+.drawer-tt-cl .vehicle-row > div { display: grid; gap: 4px; }
+.drawer-tt-cl .vehicle-row b { color: var(--tt-text); font-size: 14px; font-weight: 500; }
+.drawer-tt-cl .vehicle-actions { display: flex; gap: 6px; align-items: center; }
+.tt-file-preview { display: block; max-width: 100%; max-height: 420px; margin: 12px auto 0; border: 1px solid var(--line); border-radius: 8px; object-fit: contain; }
+@media (max-width: 760px) { .drawer-tt-cl .tt-profile-layout { grid-template-columns: 1fr; } .drawer-tt-cl .tt-doc-list { grid-template-columns: 1fr; } .drawer-tt-cl .vehicle-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } .drawer-tt-cl .vehicle-actions { grid-column: 1 / -1; } }
 /* Chi tiết yêu cầu Gộp điểm: phân nhóm A–D như mockup, không thay đổi action/state workflow. */
 .merge-request-detail { padding: 12px 18px 20px !important; background: #fff; }
 .merge-detail-section { border: 1px solid #e1e9f3; border-radius: 9px; background: #fbfdff; margin-bottom: 10px; overflow: hidden; }

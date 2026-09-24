@@ -2042,6 +2042,34 @@
   // "không duplicate trader data"). v-tieuthuong.js load TRƯỚC mini.js (xem index.html) nên luôn có
   // giá trị khi mini.js thực thi.
   A.ttDocDefs = TT_DOCS;
+  // Attachment của prototype được lưu cùng record sở hữu. Ảnh mới giữ thêm data URL để
+  // có thể xem lại sau reload localStorage; PDF/tệp khác chỉ giữ metadata, không giả preview.
+  function ttCaptureFile(file, done) {
+    const meta = { name: file.name, type: file.type || '', size: Number(file.size || 0), addedAt: U.today(), mock: true };
+    if (!file.type || file.type.indexOf('image/') !== 0) return done(meta);
+    const reader = new FileReader();
+    reader.onload = () => done(Object.assign(meta, { dataUrl: reader.result }));
+    reader.onerror = () => done(meta);
+    reader.readAsDataURL(file);
+  }
+  function ttDocLabel(key) { const doc = TT_DOCS.find(x => x.key === key); return doc ? doc.label : 'Hồ sơ khác'; }
+  function ttFileCanPreview(file) { return !!(file && file.dataUrl && String(file.dataUrl).indexOf('data:image/') === 0); }
+  function ttFileMetaLabel(file) {
+    if (!file) return 'Chưa có';
+    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '')) return 'PDF · Đã tải lên';
+    return ttFileCanPreview(file) ? 'Ảnh · Đã tải lên' : 'Đã tải lên';
+  }
+  function ttFileViewHtml(title, file) {
+    const preview = ttFileCanPreview(file) ? `<img class="tt-file-preview" src="${U.esc(file.dataUrl)}" alt="${U.esc(title)}">` : '<div class="note info">Prototype chỉ có metadata của tệp này, chưa có dữ liệu xem trước.</div>';
+    return A.mHead('Xem tài liệu') + `<div class="modal-b"><p><b>${U.esc(title)}</b></p><p class="small muted">${U.esc(file && file.name || '')}</p>${preview}</div><div class="modal-f"><button class="btn primary" data-act="close">Đóng</button></div>`;
+  }
+  // Hồ sơ sử dụng điểm là adapter bổ sung cho quan hệ sẵn có trader.stalls <->
+  // stall.traderId. Nó giữ dữ liệu theo TỪNG điểm (không thay thế contracts).
+  function ttUsageStore() { return Array.isArray(A.db.pointUsages) ? A.db.pointUsages : (A.db.pointUsages = []); }
+  function ttActiveUsage(pointId) { return ttUsageStore().find(x => x.pointId === pointId && x.status === 'ACTIVE') || null; }
+  function ttUsageFor(t, pointId) { return ttUsageStore().find(x => x.traderId === t.id && x.pointId === pointId && x.status === 'ACTIVE') || null; }
+  function ttUsageStart(t, st) { const u = ttUsageFor(t, st.id); return u ? u.startDate : ((st.contractId && A.idx.contract.get(st.contractId) || {}).start || t.since || ''); }
+  function ttPointPath(st) { const p = A.mbLayoutPathForPoint ? A.mbLayoutPathForPoint(st.market, st) : null; return p ? [p.khu, p.tang, p.day, st.code].filter(x => x && x !== '—').join(' → ') : [st.sectionName, st.code].filter(Boolean).join(' → '); }
   function ttSectionsOf(t) {
     return t.stalls.map(id => A.idx.stall.get(id)).filter(Boolean).map(st => st.section);
   }
@@ -2087,7 +2115,7 @@
   const TT_MINIAPP_CLASS = { NOT_LINKED: '', LINKED: 'ok', LOCKED: 'danger' };
   function ttMiniAppTag(t) { const s = ttMiniAppState(t); return `<span class="tag ${TT_MINIAPP_CLASS[s]}">${TT_MINIAPP_LABEL[s]}</span>`; }
   function ttclHasFilter() {
-    return !!(f.ttclSection || f.ttclCat || f.ttclApp || (f.ttclSearch && f.ttclSearch.trim()));
+    return !!(f.ttclFloor || f.ttclSection || f.ttclCat || f.ttclApp || (f.ttclSearch && f.ttclSearch.trim()));
   }
   // Search theo tên/SĐT/CCCD/mã tiểu thương/mã điểm KD (mục 5 yêu cầu — CCCD ĐƯỢC search dù bảng
   // chính không hiển thị CCCD đầy đủ; kết quả search không làm lộ thêm dữ liệu vì bảng vẫn mask).
@@ -2104,6 +2132,7 @@
   function ttRowsCL() {
     const q = (f.ttclSearch || '').trim().toLowerCase();
     return A.db.traders.filter(t => U.inM(t)
+      && (!f.ttclFloor || t.stalls.some(id => { const st=A.idx.stall.get(id); return st && st.floor===f.ttclFloor; }))
       && (!f.ttclSection || ttSectionsOf(t).includes(f.ttclSection))
       && (!f.ttclCat || ttCatsOf(t).includes(f.ttclCat))
       && (!f.ttclApp || ttMiniAppState(t) === f.ttclApp)
@@ -2114,14 +2143,12 @@
     // Bảng chính bỏ Điện thoại/Địa chỉ/CCCD đầy đủ (mục 4/35 yêu cầu) — dữ liệu model KHÔNG đổi, vẫn
     // xem đủ trong drawer chi tiết (Section A) và vẫn tìm được qua ô search (ttSearchMatchCL).
     const area = ttSectionNamesOf(t).join(', ') || '–';
+    const points = t.stalls.map(id => A.idx.stall.get(id)).filter(Boolean);
+    const pointLabel = points.length > 1 ? points.length + ' điểm' : (points[0] ? points[0].code : '–');
+    const updated = (t.updatedAt || t.since || '').split('-').reverse().join('/');
     return `<tr class="click" data-act="trader" data-id="${t.id}">
-      <td>${t.id}</td><td><b>${U.esc(t.name)}</b></td>
-      <td title="${U.esc(area)}">${U.esc(area)}</td>
-      <td>${U.esc(ttCatsOf(t).join(', '))}</td>
-      <td>${t.stalls.map(id => A.idx.stall.get(id).code).join(', ') || '–'}</td>
-      <td>${ttProfileStatusTag(t)}</td>
-      <td>${ttMiniAppTag(t)}</td>
-      <td class="num" style="${over ? 'color:#df2225;font-weight:600' : ''}">${debt ? U.money(debt) : '–'}</td>
+      <td>${t.id}</td><td><b>${U.esc(t.name)}</b></td><td>${U.maskPhone(t.phone)}</td><td>${U.maskId(t.idNo)}</td>
+      <td title="${U.esc(area)}">${U.esc(pointLabel)}</td><td>${U.esc(ttCatsOf(t).join(', '))}</td><td>${updated || '–'}</td>
       <td class="nowrap"><button class="btn sm" data-act="trader" data-id="${t.id}">Xem</button></td></tr>`;
   }
   function ttViewCL() {
@@ -2130,29 +2157,30 @@
     const m = U.market('CL');
     const sections = [], cats = [];
     m.floors.forEach(fl => fl.sections.forEach(s => { sections.push([s.id, s.name]); if (!cats.includes(s.cat)) cats.push(s.cat); }));
-    const body = U.table([{ t: 'Mã' }, { t: 'Họ tên' }, { t: 'Khu vực' }, { t: 'Ngành hàng' }, { t: 'Điểm KD' }, { t: 'Trạng thái hồ sơ' }, { t: 'Mini App' }, { t: 'Công nợ', num: true }, { t: 'Thao tác' }],
+    const body = U.table([{ t: 'Mã TT' }, { t: 'Họ tên' }, { t: 'Số điện thoại' }, { t: 'Số giấy tờ' }, { t: 'Điểm KD' }, { t: 'Ngành hàng' }, { t: 'Ngày cập nhật' }, { t: 'Thao tác' }],
       rows.slice(pg.start, pg.end).map(ttRowHtmlCL), { empty: 'Không có tiểu thương phù hợp.' });
     return `<div class="card trader-table-card"><div class="card-h" style="flex-direction:column;align-items:stretch;gap:10px">
       <div class="row" style="justify-content:space-between;flex-wrap:wrap"><h3 style="margin:0">Hồ sơ tiểu thương</h3>
-        ${A.canDo('tieu-thuong.them-moi', ui.market) ? '<button class="btn primary" data-act="tt-new">+ Thêm tiểu thương</button>' : ''}</div>
+        ${A.canDo('tieu-thuong.them-moi', ui.market) ? '<button class="btn primary" data-act="tt-new">+ Thêm hồ sơ tiểu thương</button>' : ''}</div>
       <div class="row" style="flex-wrap:wrap;gap:8px">
-        <select class="input" data-ch="ttcl-section"><option value="">Tất cả khu vực</option>${sections.map(s => `<option value="${s[0]}" ${f.ttclSection === s[0] ? 'selected' : ''}>${U.esc(s[1])}</option>`).join('')}</select>
+        <select class="input" data-ch="ttcl-floor"><option value="">Tầng: Tất cả</option>${m.floors.map(x=>`<option value="${x.id}" ${f.ttclFloor===x.id?'selected':''}>${U.esc(x.name)}</option>`).join('')}</select>
+        <select class="input" data-ch="ttcl-section"><option value="">Khu / dãy: Tất cả</option>${sections.map(s => `<option value="${s[0]}" ${f.ttclSection === s[0] ? 'selected' : ''}>${U.esc(s[1])}</option>`).join('')}</select>
         <select class="input" data-ch="ttcl-cat"><option value="">Tất cả ngành hàng</option>${cats.map(c => `<option ${f.ttclCat === c ? 'selected' : ''}>${U.esc(c)}</option>`).join('')}</select>
-        <select class="input" data-ch="ttcl-app"><option value="">Mini App: tất cả</option><option value="LINKED" ${f.ttclApp === 'LINKED' ? 'selected' : ''}>Đã kích hoạt</option><option value="NOT_LINKED" ${f.ttclApp === 'NOT_LINKED' ? 'selected' : ''}>Chưa kích hoạt</option><option value="LOCKED" ${f.ttclApp === 'LOCKED' ? 'selected' : ''}>Đã khóa</option></select>
-        <input class="input" placeholder="Tên, SĐT, CCCD, mã điểm KD" data-in="ttcl-search" value="${U.esc(f.ttclSearch || '')}">
+        <input class="input" placeholder="Tìm tên, SĐT, số giấy tờ, mã TT, mã điểm..." data-in="ttcl-search" value="${U.esc(f.ttclSearch || '')}">
         <button class="btn" data-act="ttcl-clear" ${ttclHasFilter() ? '' : 'disabled'}>↺ Xóa bộ lọc</button>
       </div>
       </div>
       <div class="card-b">${body}${pg.html}
-        <div class="small muted" style="margin-top:8px">Số điện thoại, số giấy tờ được che trên danh sách theo Nghị định 356/2025/NĐ-CP về bảo vệ dữ liệu cá nhân.</div></div></div>`;
+        </div></div>`;
   }
   A.CH['ttcl-section'] = el => { f.ttclSection = el.value; ui.page.ttcl = 0; A.render(); };
+  A.CH['ttcl-floor'] = el => { f.ttclFloor = el.value; ui.page.ttcl = 0; A.render(); };
   A.CH['ttcl-cat'] = el => { f.ttclCat = el.value; ui.page.ttcl = 0; A.render(); };
   A.CH['ttcl-app'] = el => { f.ttclApp = el.value; ui.page.ttcl = 0; A.render(); };
   A.IN['ttcl-search'] = el => { f.ttclSearch = el.value; ui.page.ttcl = 0; A.render(); };
   // "Xóa bộ lọc": reset đúng 4 state filter hiện có, KHÔNG đổi dữ liệu nghiệp vụ.
   A.ACT['ttcl-clear'] = () => {
-    f.ttclSection = ''; f.ttclCat = ''; f.ttclApp = ''; f.ttclSearch = '';
+    f.ttclFloor = ''; f.ttclSection = ''; f.ttclCat = ''; f.ttclApp = ''; f.ttclSearch = '';
     ui.page.ttcl = 0;
     A.render();
   };
@@ -2192,22 +2220,33 @@
   // hard-code "Đã tải lên" cho mọi giấy tờ như bản cũ). Nút "Xem" chỉ hiện khi thật sự có file mock.
   function ttDocRow(t, doc) {
     const f2 = (t.docFiles || {})[doc.key];
-    return `<div class="tt-doc-tile"><span class="tt-doc-tile-icon">${U.icon('file')}</span><span class="tt-doc-label"><b>${U.esc(doc.label)}</b><small>${f2 ? 'Đã tải lên' : 'Chưa có'}</small></span>${f2 ? `<button class="btn sm" data-act="tt-doc-view" data-label="${U.esc(doc.label)}">Xem</button>` : ''}</div>`;
+    return `<div class="tt-doc-tile"><span class="tt-doc-tile-icon">${U.icon('file')}</span><span class="tt-doc-label"><b>${U.esc(doc.label)}</b><small>${ttFileMetaLabel(f2)}${f2 ? ` · ${U.esc(f2.name || '')}` : ''}</small></span>${ttFileCanPreview(f2) ? `<button class="btn sm" data-act="tt-doc-view" data-id="${t.id}" data-key="${doc.key}">Xem</button>` : ''}</div>`;
+  }
+  function ttDetailDocRowsHtml(t) {
+    const files = t.docFiles || {};
+    const keys = Object.keys(files).filter(key => key !== 'avatar');
+    if (!keys.length) return '<div class="tt-empty-inline">Chưa có giấy tờ cá nhân hoặc hồ sơ khác.</div>';
+    return `<div class="tt-doc-list">${keys.map(key => {
+      const file = files[key], label = ttDocLabel(key);
+      return `<div class="tt-doc-tile"><span class="tt-doc-tile-icon">${U.icon('file')}</span><span class="tt-doc-label"><b>${U.esc(label)}</b><small>${ttFileMetaLabel(file)}${file && file.name ? ` · ${U.esc(file.name)}` : ''}</small></span>${ttFileCanPreview(file) ? `<button class="btn sm" data-act="tt-doc-view" data-id="${t.id}" data-key="${key}">Xem</button>` : ''}</div>`;
+    }).join('')}</div>`;
   }
   // EDIT MODE của Hồ sơ số hóa (mục 9-11 yêu cầu hotfix): thêm nút "Thay thế" cạnh "Xem". Giấy tờ
   // nào KHÔNG bấm "Thay thế" thì giữ nguyên file cũ (mục 10) — chỉ hiện dòng "đang chờ thay thế" cho
   // đúng giấy tờ có file mới trong ttPendingDocs, chưa ghi gì vào dữ liệu thật cho tới khi Lưu.
   function ttDocRowEdit(doc) {
     const pending = ttPendingDocs[doc.key];
+    const current = (A.idx.trader.get(ttEditId) || {}).docFiles || {};
+    const file = pending || current[doc.key];
     return `<div style="padding:7px 0;border-bottom:1px solid #eef2f7">
       <div class="row" style="justify-content:space-between">
         <span class="tt-doc-label">${doc.label}</span>
         <span class="row" style="gap:6px">
-          <button class="btn sm" data-act="tt-doc-view" data-label="${U.esc(doc.label)}">Xem</button>
+          ${ttFileCanPreview(file) && !pending ? `<button class="btn sm" data-act="tt-doc-view" data-id="${ttEditId}" data-key="${doc.key}">Xem</button>` : ''}
           <button class="btn sm" data-act="tt-doc-replace" data-key="${doc.key}">Thay thế</button>
         </span>
       </div>
-      ${pending ? `<div class="small" style="color:var(--brand);margin-top:4px">Đang chờ thay thế bằng "${U.esc(pending.fileName)}" — áp dụng khi bấm "Lưu thay đổi"</div>` : ''}
+      ${pending ? `<div class="small" style="color:var(--brand);margin-top:4px">Đang chờ thay thế bằng "${U.esc(pending.name)}" — áp dụng khi bấm "Lưu thay đổi"</div>` : ''}
     </div>`;
   }
   // Section C — mỗi điểm kinh doanh 1 card riêng (mục 7 yêu cầu), người trực tiếp kinh doanh của
@@ -2228,7 +2267,7 @@
   function ttPointCardHtml(t, stallId) {
     const st = A.idx.stall.get(stallId);
     if (!st) return '';
-    const c = st.contractId ? A.idx.contract.get(st.contractId) : null;
+    const usage = ttUsageFor(t, st.id);
     const seller = dkSeller(st);
     const sameSellerRenter = !!(seller && seller.id === t.id);
     const sellerCell = !seller
@@ -2236,56 +2275,36 @@
       : sameSellerRenter
         ? U.esc(seller.name)
       : seller.id ? `<a href="#" data-act="tt-seller-view" data-id="${seller.id}">${U.esc(seller.name)}</a>` : U.esc(seller.name);
+    const placement = usage && Array.isArray(usage.placementFiles) ? usage.placementFiles : [];
     return `<div class="plan-section tt-point-tile">
-      <div class="row" style="justify-content:space-between"><h4>${st.code}</h4>${U.statusTag(st.status)}</div>
+      <div class="row tt-point-title"><h4>${st.code}</h4>${U.statusTag(st.status)}</div>
+      <div class="tt-point-location">${U.esc(ttPointPath(st))}</div>
       <dl class="kv">
-        <dt>Vị trí</dt><dd>${U.esc(st.sectionName)}</dd>
-        <dt>Hợp đồng hiện hành</dt><dd>${c ? `<a href="#" data-act="tt-open-contract" data-id="${c.id}">${c.id}</a>` : 'Chưa có hợp đồng hiệu lực'}</dd>
-        ${c ? `<dt>Thời hạn</dt><dd>${U.dmy(c.start)} – ${U.dmy(c.end)}</dd>` : ''}
+        <dt>Ngành hàng</dt><dd>${U.esc(usage ? usage.category : st.cat)}</dd>
+        <dt>Diện tích</dt><dd>${st.area.toLocaleString('vi-VN')} m²</dd>
+        <dt>Ngày bắt đầu</dt><dd>${U.dmy(ttUsageStart(t, st))}</dd>
+        <dt>Loại diện tích</dt><dd>${U.esc(U.areaTypeLabel(st.areaType) || 'Chưa có thông tin')}</dd>
       </dl>
       <div class="divider"></div>
-      <dl class="kv">
-        <dt>Vai trò tại điểm</dt><dd>${seller ? (sameSellerRenter ? 'Chủ thể hợp đồng · Trực tiếp kinh doanh' : 'Chủ thể hợp đồng; Người trực tiếp KD: ' + sellerCell) : 'Chủ thể hợp đồng · Người trực tiếp KD: Chưa đăng ký'}</dd>
-      </dl><div class="row" style="justify-content:flex-end;margin-top:10px"><button class="btn sm" data-act="tt-open-point" data-id="${st.id}" data-trader="${t.id}">${U.icon('store')}Xem chi tiết điểm kinh doanh</button></div>
+      <div class="tt-point-subhead">NGƯỜI BÁN TRỰC TIẾP</div><div class="tt-seller-block">${seller ? `${sellerCell}<div class="tt-meta">${seller.phone ? U.maskPhone(seller.phone) + ' · ' : ''}${sameSellerRenter ? 'Chính tiểu thương trực tiếp bán' : 'Người trực tiếp bán'}</div>` : 'Chưa ghi nhận'}</div>
+      <div class="divider"></div>
+      <div class="tt-point-subhead">HỒ SƠ BỐ TRÍ</div>${placement.length ? `<div class="tt-placement-list">${placement.map((x,i) => `<div class="tt-placement-row"><span>${U.icon('file')}</span><div><b>${U.esc(x.name)}</b><small>${ttFileMetaLabel(x)}</small></div>${ttFileCanPreview(x) ? `<button class="btn sm" data-act="tt-placement-view" data-point="${st.id}" data-file="${i}">Xem</button>` : ''}</div>`).join('')}</div>` : '<div class="tt-empty-inline">Chưa có tệp</div>'}
+      <div class="row tt-point-action"><button class="btn sm" data-act="tt-open-point" data-id="${st.id}" data-trader="${t.id}">${U.icon('store')}Xem chi tiết điểm kinh doanh</button></div>
     </div>`;
   }
   // Section A — VIEW MODE (mặc định khi mở drawer).
   function ttSectionAViewHtml(t) {
-    return `<div class="tt-profile-grid"><dl class="kv">
-      <dt>Mã tiểu thương</dt><dd>${t.id}</dd>
-      <dt>Họ tên</dt><dd>${U.esc(t.name)}</dd>
-      <dt>Giới tính</dt><dd>${U.esc(t.gender)}</dd>
-      <dt>Năm sinh</dt><dd>${U.esc(String(t.birth || ''))}</dd>
-      <dt>Điện thoại</dt><dd>${U.maskPhone(t.phone)}</dd>
-      <dt>CCCD</dt><dd>${U.maskId(t.idNo)}</dd>
-      </dl><dl class="kv">
-      <dt>Địa chỉ</dt><dd>${U.esc(t.address)}</dd>
-      <dt>Hình thức hộ kinh doanh</dt><dd>${t.hkd ? 'Có giấy CN ĐKKD' : 'Cá nhân kinh doanh'}</dd>
-      ${t.hkd && t.licenseNo ? `<dt>Số GCN ĐKKD</dt><dd>${U.esc(t.licenseNo)}</dd>` : ''}
-      <dt>Kinh doanh từ</dt><dd>${U.dmy(t.since)}</dd>
-      <dt>Mini App</dt><dd>${ttMiniAppTag(t)}</dd>
-    </dl></div>`;
+    const portrait = (t.docFiles || {}).avatar;
+    const portraitHtml = ttFileCanPreview(portrait)
+      ? `<img src="${U.esc(portrait.dataUrl)}" alt="Ảnh chân dung ${U.esc(t.name)}">`
+      : `<span>${U.icon('users')}</span><small>${portrait ? 'Đã tải ảnh, chưa có dữ liệu xem trước' : 'Chưa có ảnh chân dung'}</small>`;
+    return `<div class="tt-profile-layout"><div class="tt-portrait ${ttFileCanPreview(portrait) ? 'has-image' : ''}">${portraitHtml}</div><dl class="kv"><dt>Mã tiểu thương</dt><dd>${t.id}</dd><dt>Họ và tên</dt><dd>${U.esc(t.name)}</dd><dt>Số điện thoại</dt><dd>${U.maskPhone(t.phone)}</dd><dt>Loại giấy tờ</dt><dd>${U.esc(t.idType || 'CCCD')}</dd><dt>Số giấy tờ</dt><dd>${U.maskId(t.idNo)}</dd></dl></div>`;
   }
   // Section A — EDIT MODE (mục 2 yêu cầu hotfix): chỉnh ngay trong drawer, KHÔNG mở modal/drawer thứ
   // hai. Mã tiểu thương là identifier — KHÔNG đưa vào form (mục 2). Mini app không thuộc form chỉnh
   // sửa này (chưa có nghiệp vụ bật/tắt mini app từ phía BQL — giữ nguyên, ngoài phạm vi hotfix).
   function ttSectionAEditHtml(t) {
-    return `<div class="form-grid">
-      <div class="field"><label>Họ tên *</label><input class="input" id="tte-name" value="${U.esc(t.name)}"></div>
-      <div class="field"><label>Giới tính</label><select class="input" id="tte-gender">
-        <option value="Nam" ${t.gender === 'Nam' ? 'selected' : ''}>Nam</option>
-        <option value="Nữ" ${t.gender === 'Nữ' ? 'selected' : ''}>Nữ</option>
-      </select></div>
-      <div class="field"><label>Năm sinh</label><input class="input" id="tte-birth" value="${U.esc(String(t.birth || ''))}"></div>
-      <div class="field"><label>Điện thoại *</label><input class="input" id="tte-phone" value="${U.esc(t.phone)}"></div>
-      <div class="field"><label>CCCD *</label><input class="input" id="tte-idno" value="${U.esc(t.idNo)}"></div>
-      <div class="field"><label>Địa chỉ</label><input class="input" id="tte-addr" value="${U.esc(t.address)}"></div>
-      <div class="field"><label>Hình thức hộ kinh doanh</label><select class="input" id="tte-hkd">
-        <option value="0" ${!t.hkd ? 'selected' : ''}>Cá nhân kinh doanh</option>
-        <option value="1" ${t.hkd ? 'selected' : ''}>Có giấy CN ĐKKD</option>
-      </select></div>
-      <div class="field"><label>Kinh doanh từ</label><input class="input" type="date" id="tte-since" value="${t.since || ''}"></div>
-    </div>
+    return `<div class="form-grid"><div class="field"><label>Họ tên *</label><input class="input" id="tte-name" value="${U.esc(t.name)}"></div><div class="field"><label>Số điện thoại *</label><input class="input" id="tte-phone" value="${U.esc(t.phone)}"></div><div class="field"><label>Loại giấy tờ *</label><select class="input" id="tte-idtype"><option value="CCCD" ${(!t.idType||t.idType==='CCCD')?'selected':''}>CCCD</option><option value="CMND" ${t.idType==='CMND'?'selected':''}>CMND</option><option value="Hộ chiếu" ${t.idType==='Hộ chiếu'?'selected':''}>Hộ chiếu</option></select></div><div class="field"><label>Số giấy tờ *</label><input class="input" id="tte-idno" value="${U.esc(t.idNo)}"></div></div>
     <div class="row" style="justify-content:flex-end;margin-top:14px">
       <button class="btn" data-act="tt-edit-cancel" data-id="${t.id}">Hủy</button>
       <button class="btn primary" data-act="tt-edit-save" data-id="${t.id}">Lưu thay đổi</button>
@@ -2332,7 +2351,8 @@
     if (!t || !A.canDo('tieu-thuong.xac-minh', t.market)) return;
     U.toast('Đã sao chép hướng dẫn kích hoạt Mini App (SĐT ' + U.maskPhone(t.phone) + ') — minh họa.');
   };
-  function ttDrawerHtmlCL(t) {
+  // Renderer cũ được giữ làm tham chiếu compatibility; popup hiện dùng renderer bên dưới.
+  function ttDrawerHtmlLegacy(t) {
     const canEdit = A.canDo('tieu-thuong.them-moi', t.market);
     const editing = canEdit && ttEditId === t.id;
     const canCongNo = U.can('cong-no');
@@ -2374,10 +2394,24 @@
         </section>
       </div><div class="drawer-f detail-form-footer"><button class="btn" data-act="close">Đóng</button></div>`;
   }
+  // Chi tiết hồ sơ theo mô hình mới: dữ liệu kinh doanh nằm theo từng điểm,
+  // không còn đưa Contract hoặc Mini App vào popup hồ sơ.
+  function ttDrawerHtmlCL(t) {
+    const canEdit=A.canDo('tieu-thuong.them-moi',t.market), editing=canEdit&&ttEditId===t.id, debt=U.traderDebt(t.id), unpaid=A.db.invoices.filter(i=>i.traderId===t.id&&i.status!=='paid').length;
+    return `<div class="drawer-h detail-form-head"><div><div class="row" style="gap:9px"><h3>${U.esc(t.name)}</h3>${ttProfileStatusTag(t)}</div><div class="small muted">${t.id} · ${U.esc(U.mShort(t.market))}</div></div><span class="spacer"></span>${canEdit&&!editing?`<button class="btn sm" data-act="tt-edit-open" data-id="${t.id}">${U.icon('edit')}Chỉnh sửa thông tin</button>`:''}<button class="x" data-act="close" aria-label="Đóng">×</button></div><div class="drawer-b tt-detail-body"><section class="tt-detail-card"><div class="tt-detail-card-h"><span>${U.icon('users')}</span><div><b>A. Thông tin tiểu thương</b><div class="small muted">Thông tin nhận dạng và liên hệ</div></div></div>${editing?ttSectionAEditHtml(t):ttSectionAViewHtml(t)}</section><section class="tt-detail-card"><div class="tt-detail-card-h"><span>${U.icon('file')}</span><div><b>B. Giấy tờ & hồ sơ đính kèm</b><div class="small muted">Giấy tờ cá nhân và tài liệu liên quan</div></div></div>${editing?`<div class="tt-doc-grid">${TT_DOCS.map(x=>ttDocRowEdit(x)).join('')}</div>`:ttDetailDocRowsHtml(t)}</section><section class="tt-detail-card tt-points-card"><div class="tt-detail-card-h"><span>${U.icon('store')}</span><div><b>C. Điểm kinh doanh đang sử dụng</b><div class="small muted">Thông tin kinh doanh tại từng điểm</div></div></div><div class="plan">${t.stalls.length?t.stalls.map(id=>ttPointCardHtml(t,id)).join(''):'<div class="empty small">Tiểu thương chưa có điểm kinh doanh đang sử dụng.</div>'}</div></section>${A.VEHICLES?A.VEHICLES.traderSection(t):''}<section class="tt-detail-card"><div class="tt-detail-card-h"><span>${U.icon('money')}</span><div><b>E. Tình trạng công nợ</b><div class="small muted">Tóm tắt các khoản cần theo dõi</div></div></div><dl class="kv"><dt>Công nợ hiện tại</dt><dd>${debt?`<b class="tt-debt-value">${U.money(debt)}</b>`:'<span class="tag ok">Không nợ</span>'}</dd><dt>Khoản chưa thanh toán</dt><dd>${unpaid}</dd></dl>${U.can('cong-no')?`<div class="row" style="margin-top:8px"><button class="btn sm" data-act="tt-open-congno">Xem chi tiết công nợ</button></div>`:''}</section></div><div class="drawer-f"><button class="btn" data-act="close">Đóng</button></div>`;
+  }
+  A.ACT['tt-placement-view'] = el => {
+    const st = A.idx.stall.get(el.dataset.point);
+    const usage = st && ttActiveUsage(st.id);
+    const file = usage && (usage.placementFiles || [])[Number(el.dataset.file)];
+    if (!file) return U.toast('Không tìm thấy tệp hồ sơ bố trí.');
+    A.modal(ttFileViewHtml('Hồ sơ bố trí · ' + st.code, file));
+  };
   A.ACT['tt-doc-view'] = el => {
-    A.modal(A.mHead('Xem tài liệu') + `<div class="modal-b"><p>${U.esc(el.dataset.label)}</p>
-      <div class="note info">Bản scan minh họa cho prototype — hệ thống chưa có kho lưu trữ tài liệu thật.</div></div>
-      <div class="modal-f"><button class="btn primary" data-act="close">Đóng</button></div>`);
+    const t = A.idx.trader.get(el.dataset.id);
+    const file = t && (t.docFiles || {})[el.dataset.key];
+    if (!file) return U.toast('Không tìm thấy tệp hồ sơ.');
+    A.modal(ttFileViewHtml(ttDocLabel(el.dataset.key), file));
   };
   // "Thay thế" giấy tờ (mục 9 yêu cầu hotfix) — FE prototype: chỉ mở file picker cục bộ (input
   // type=file, KHÔNG upload server/storage thật), lưu tên file vào state tạm ttPendingDocs. Chưa
@@ -2395,10 +2429,7 @@
     const input = document.createElement('input');
     input.type = 'file'; input.id = 'tt-doc-replace-input'; input.accept = 'image/*,.pdf'; input.style.display = 'none';
     input.addEventListener('change', () => {
-      if (input.files && input.files[0]) {
-        ttPendingDocs[key] = { fileName: input.files[0].name };
-        ttRerenderDrawer(t);
-      }
+      if (input.files && input.files[0]) ttCaptureFile(input.files[0], meta => { ttPendingDocs[key] = meta; ttRerenderDrawer(t); });
       input.remove();
     });
     document.body.appendChild(input);
@@ -2507,16 +2538,16 @@
     return 'TT' + U.pad((nums.length ? Math.max.apply(null, nums) : 0) + 1, 4);
   }
   const TT_OCR_SAMPLE = { name: 'Nguyễn Thị Mỹ Duyên', idNo: '087196012345', birth: '1988', gender: 'Nữ', address: 'Khóm 3, phường Cao Lãnh' };
-  const TT_WIZARD_STEP_LABEL = ['', 'Thông tin cá nhân', 'Thông tin kinh doanh', 'Hồ sơ số hóa', 'Kiểm tra & lưu'];
+  const TT_WIZARD_STEP_LABEL = ['', 'Thông tin tiểu thương', 'Điểm kinh doanh', 'Người bán & phương tiện', 'Hồ sơ & xác nhận'];
   // Danh mục giấy tờ dùng CHUNG với Section B drawer chi tiết — xem TT_DOCS (định nghĩa phía trên,
   // gần ttDocRow/ttDocRowEdit), KHÔNG tạo danh mục thứ 2.
   let ttWizardDraft = null; // { step, name, idNo, gender, birth, phone, address, market, hkd, licenseNo, licenseDate, since, docFiles, vehicles, confirmPhoneWarning }
-  function ttWizardRerender() { ycSetModal(`<div class="drawer-overlay" data-act="close"></div><div class="drawer drawer-yc">${ttWizardHtml()}</div>`); }
+  function ttWizardRerender() { ycSetModal(`<div class="drawer-overlay" data-act="close"></div><div class="drawer drawer-yc drawer-trader-form">${ttWizardHtml()}</div>`); }
   // Kiểm tra trùng tối thiểu (mục 13 yêu cầu): CCCD trùng CHÍNH XÁC → BLOCK; SĐT trùng (CCCD khác)
   // → WARNING, không tự chặn nhưng bắt xác nhận đã kiểm tra trước khi cho lưu (mục "không silently
   // create duplicate").
   function ttDuplicateCheck(idNo, phone) {
-    const cccdMatch = idNo ? A.db.traders.find(t => t.idNo === idNo) : null;
+    const cccdMatch = idNo ? A.db.traders.find(t => t.market === ui.market && t.idNo === idNo) : null;
     if (cccdMatch) return { level: 'BLOCK', trader: cccdMatch };
     const phoneMatch = phone ? A.db.traders.find(t => t.phone === phone) : null;
     if (phoneMatch) return { level: 'WARNING', trader: phoneMatch };
@@ -2588,34 +2619,44 @@
       ${errs.length ? `<div class="note" style="margin-top:12px">${errs.map(e => U.esc(e)).join('<br>')}</div>` : ''}
       ${dupHtml}`;
   }
-  function ttWizardHtml() {
-    const d = ttWizardDraft;
-    const dup = ttDuplicateCheck(d.idNo.trim(), d.phone.trim());
-    const step1Ok = d.name.trim() && d.idNo.trim() && d.phone.trim();
-    const canNext = d.step === 1 ? step1Ok : true;
-    const canSave = d.step === 4 && step1Ok && dup.level !== 'BLOCK' && (dup.level !== 'WARNING' || d.confirmPhoneWarning);
-    const body = d.step === 1 ? ttWizardStep1Html(d) : d.step === 2 ? ttWizardStep2Html(d) : d.step === 3 ? ttWizardStep3Html(d) : ttWizardStep4Html(d);
-    return `<div class="drawer-h"><div><h3>Thêm tiểu thương</h3><div class="small muted" style="margin-top:2px">${U.mShort(d.market)}</div></div><span class="spacer"></span>
-        <button class="x" data-act="tt-wizard-cancel" aria-label="Đóng">×</button></div>
-      <div class="drawer-b">${ttWizardStepperHtml(d.step)}${body}</div>
-      <div class="drawer-f">
-        <button class="btn" data-act="tt-wizard-cancel">Hủy</button>
-        <span class="spacer"></span>
-        ${d.step > 1 ? `<button class="btn" data-act="tt-wizard-back">← Quay lại</button>` : ''}
-        ${d.step < 4 ? `<button class="btn primary" data-act="tt-wizard-next" ${canNext ? '' : 'disabled'}>Tiếp theo →</button>` : `<button class="btn primary" data-act="tt-wizard-save" ${canSave ? '' : 'disabled'}>Lưu hồ sơ</button>`}
-      </div>`;
+  // Wizard nghiệp vụ mới: profile và quan hệ sử dụng một điểm được nhập cùng
+  // phiên, nhưng chỉ tạo dữ liệu khi xác nhận ở bước 4.
+  function ttUsageWizardStep1(d) {
+    return `<div class="form-grid"><div class="field"><label>Mã tiểu thương</label><input class="input" value="${ttNextId()}" disabled></div><div class="field"><label>Họ và tên *</label><input class="input" data-in="ttw-name" value="${U.esc(d.name)}"></div><div class="field"><label>Số điện thoại *</label><input class="input" data-in="ttw-phone" value="${U.esc(d.phone)}"></div><div class="field"><label>Loại giấy tờ *</label><select class="input" data-ch="ttw-idtype"><option value="CCCD" ${d.idType==='CCCD'?'selected':''}>CCCD</option><option value="CMND" ${d.idType==='CMND'?'selected':''}>CMND</option><option value="Hộ chiếu" ${d.idType==='Hộ chiếu'?'selected':''}>Hộ chiếu</option></select></div><div class="field"><label>Số giấy tờ *</label><input class="input" data-in="ttw-idno" value="${U.esc(d.idNo)}"></div><div class="field"><label>Ngành hàng *</label><input class="input" data-in="ttw-cat" value="${U.esc(d.cat)}" placeholder="Ví dụ: Rau củ"></div></div>`;
   }
+  function ttUsageWizardStep2(d) {
+    const vacant=A.db.stalls.filter(s=>s.market===d.market&&s.status==='trong');
+    const st=vacant.find(s=>s.id===d.pointId)||null;
+    return `<div class="form-grid"><div class="field"><label>Chợ</label><input class="input" value="${U.esc(U.mShort(d.market))}" disabled></div><div class="field"><label>Điểm kinh doanh *</label><select class="input" data-ch="ttw-point"><option value="">— Chọn điểm còn trống —</option>${vacant.map(s=>`<option value="${s.id}" ${d.pointId===s.id?'selected':''}>${s.code} · ${U.esc(s.sectionName)} · ${s.area} m²</option>`).join('')}</select></div><div class="field"><label>Ngày bắt đầu *</label><input class="input" type="date" data-ch="ttw-start" value="${d.startDate}"></div><div class="field"><label>Ngành hàng tại điểm *</label><input class="input" data-in="ttw-point-cat" value="${U.esc(d.pointCat||d.cat)}"></div></div>${st?`<div class="note info" style="margin-top:12px"><b>${st.code}</b><br>${U.esc(ttPointPath(st))}<br>${st.area} m² · ${U.esc(U.areaTypeLabel(st.areaType)||'Chưa có thông tin')}<br>Trạng thái: Còn trống</div>`:''}`;
+  }
+  function ttUsageWizardStep3(d) {
+    const seller=d.sellerKind==='other'?`<div class="form-grid" style="margin-top:10px"><div class="field"><label>Họ tên *</label><input class="input" data-in="ttw-seller-name" value="${U.esc(d.sellerName)}"></div><div class="field"><label>Số điện thoại *</label><input class="input" data-in="ttw-seller-phone" value="${U.esc(d.sellerPhone)}"></div><div class="field"><label>Ngày bắt đầu *</label><input class="input" type="date" data-ch="ttw-seller-start" value="${d.sellerStartDate}"></div></div>`:'';
+    return `<section class="tt-detail-card"><div class="tt-detail-card-h"><span>${U.icon('users')}</span><div><b>A. Người bán trực tiếp</b></div></div><label class="row" style="gap:8px"><input type="radio" name="seller" data-ch="ttw-seller-kind" value="owner" ${d.sellerKind==='owner'?'checked':''}> Chính tiểu thương trực tiếp bán</label><label class="row" style="gap:8px;margin-top:8px"><input type="radio" name="seller" data-ch="ttw-seller-kind" value="other" ${d.sellerKind==='other'?'checked':''}> Người khác trực tiếp bán</label>${seller}</section>${A.VEHICLES?A.VEHICLES.draftSection(d,{add:'ttw-vehicle-add',edit:'ttw-vehicle-edit',remove:'ttw-vehicle-remove'}):''}`;
+  }
+  function ttUsageWizardStep4(d) {
+    const st=A.idx.stall.get(d.pointId), docs=Object.keys(d.docFiles||{}).length, attachments=(d.placementFiles||[]);
+    return `<section class="tt-detail-card"><div class="tt-detail-card-h"><span>${U.icon('file')}</span><div><b>GIẤY TỜ CÁ NHÂN</b></div></div><div class="tt-doc-grid">${TT_DOCS.map(x=>ttWizardDocCardHtml(x,d)).join('')}</div></section><section class="tt-detail-card"><div class="tt-detail-card-h"><span>${U.icon('attachment')}</span><div><b>HỢP ĐỒNG / QUYẾT ĐỊNH BỐ TRÍ ĐIỂM</b><div class="small muted">Tệp đính kèm của việc bố trí điểm, không tạo hợp đồng độc lập.</div></div></div>${attachments.length?attachments.map((x,i)=>`<div class="row"><span style="flex:1">${U.esc(x.name)}</span><button class="btn sm" data-act="ttw-placement-remove" data-index="${i}">Xóa</button></div>`).join(''):'<div class="small muted">Chưa có tệp đính kèm.</div>'}<button class="btn sm" style="margin-top:8px" data-act="ttw-placement-pick">+ Tải tệp</button></section><section class="tt-detail-card"><div class="tt-detail-card-h"><span>${U.icon('check')}</span><div><b>XÁC NHẬN</b></div></div><dl class="kv"><dt>Tiểu thương</dt><dd>${U.esc(d.name)} · ${U.esc(d.phone)} · ${U.esc(d.idNo)}</dd><dt>Điểm kinh doanh</dt><dd>${st?st.code+' · '+U.esc(ttPointPath(st)):'Chưa chọn'}</dd><dt>Ngày bắt đầu</dt><dd>${U.dmy(d.startDate)}</dd><dt>Người bán</dt><dd>${d.sellerKind==='owner'?'Chính tiểu thương':U.esc(d.sellerName||'Chưa nhập')}</dd><dt>Phương tiện</dt><dd>${(d.vehicles||[]).length} bản ghi</dd><dt>Hồ sơ</dt><dd>${docs} tệp giấy tờ; ${attachments.length} tệp QĐ/HĐ</dd></dl></section>`;
+  }
+  function ttFormError(d, key) { return d.errors && d.errors[key] ? `<div class="small" style="color:#c73737;margin-top:5px">⚠ ${U.esc(d.errors[key])}</div>` : ''; }
+  function ttSingleFormHtml(d) {
+    const dup = ttDuplicateCheck(d.idNo.trim(), d.phone.trim());
+    const cats = Array.from(new Set(A.db.stalls.filter(s => s.market === d.market).map(s => s.cat).filter(Boolean))).sort();
+    const points = d.cat ? A.db.stalls.filter(s => s.market === d.market && s.status === 'trong' && s.cat === d.cat) : [];
+    const st = A.idx.stall.get(d.pointId);
+    const docRows = TT_DOCS.map(doc => { const x=(d.docFiles||{})[doc.key]; return `<div class="row" style="padding:5px 0"><span style="flex:1">${U.esc(doc.label)}${x?`: ${U.esc(x.name)}`:''}</span>${x?`<button class="btn sm" data-act="tt-wizard-doc-view" data-key="${doc.key}">Xem</button><button class="btn sm" data-act="ttw-doc-remove" data-key="${doc.key}">Xóa</button>`:`<button class="btn sm" data-act="tt-wizard-doc-pick" data-key="${doc.key}">+ Chọn tệp</button>`}</div>`; }).join('');
+    const placement = (d.placementFiles||[]).map((x,i)=>`<div class="row" style="padding:5px 0"><span style="flex:1">${U.esc(x.name)}</span><button class="btn sm" data-act="ttw-placement-remove" data-index="${i}">Xóa</button></div>`).join('');
+    const vehicleBlock = d.hasVehicles ? `${A.VEHICLES ? A.VEHICLES.draftSection(d,{add:'ttw-vehicle-add',edit:'ttw-vehicle-edit',remove:'ttw-vehicle-remove'}) : ''}` : '';
+    return `<div class="drawer-h"><div><h3>THÊM HỒ SƠ TIỂU THƯƠNG</h3><div class="small muted" style="margin-top:2px">${U.esc(U.mShort(d.market))}</div></div><span class="spacer"></span><button class="x" data-act="tt-wizard-cancel" aria-label="Đóng">×</button></div><div class="drawer-b" style="padding:24px 30px"><section><h3>1. Thông tin tiểu thương</h3><div class="divider"></div><div class="form-grid"><div class="field"><label>Mã tiểu thương</label><input class="input" value="${ttNextId()}" disabled><div class="small muted">Hệ thống tự sinh</div></div><div class="field"><label>Họ và tên *</label><input id="ttw-name-field" class="input" data-in="ttw-name" value="${U.esc(d.name)}">${ttFormError(d,'name')}</div><div class="field"><label>Số điện thoại *</label><input class="input" data-in="ttw-phone" value="${U.esc(d.phone)}">${ttFormError(d,'phone')}</div><div class="field"><label>Loại giấy tờ *</label><select class="input" data-ch="ttw-idtype"><option value="CCCD" ${d.idType==='CCCD'?'selected':''}>CCCD</option><option value="CMND" ${d.idType==='CMND'?'selected':''}>CMND</option><option value="Hộ chiếu" ${d.idType==='Hộ chiếu'?'selected':''}>Hộ chiếu</option></select></div><div class="field"><label>Số giấy tờ *</label><input id="ttw-idno-field" class="input" data-in="ttw-idno" value="${U.esc(d.idNo)}">${dup.level==='OK'&&d.idNo?`<div class="small" style="color:#267a45;margin-top:5px">✓ Số giấy tờ chưa tồn tại trong ${U.esc(U.mShort(d.market))}</div>`:''}${dup.level==='BLOCK'?`<div class="small" style="color:#c73737;margin-top:5px">⚠ Số giấy tờ này đã tồn tại trong ${U.esc(U.mShort(d.market))}.<br><b>${dup.trader.id} - ${U.esc(dup.trader.name)}</b> · ${U.maskPhone(dup.trader.phone)}<br><button class="btn sm" style="margin-top:5px" data-act="tt-wizard-view-existing" data-id="${dup.trader.id}">Xem hồ sơ hiện có</button></div>`:ttFormError(d,'idNo')}</div></div></section><section style="margin-top:28px"><h3>2. Thông tin kinh doanh</h3><div class="divider"></div><div class="form-grid"><div class="field"><label>Ngành hàng *</label><select class="input" data-ch="ttw-cat"><option value="">— Chọn ngành hàng —</option>${cats.map(x=>`<option value="${U.esc(x)}" ${d.cat===x?'selected':''}>${U.esc(x)}</option>`).join('')}</select>${ttFormError(d,'cat')}</div><div class="field"><label>Điểm kinh doanh *</label><select class="input" data-ch="ttw-point" ${d.cat?'':'disabled'}><option value="">${d.cat?'— Chọn điểm kinh doanh —':'Vui lòng chọn ngành hàng trước'}</option>${points.map(x=>`<option value="${x.id}" ${d.pointId===x.id?'selected':''}>${x.code} · ${U.esc(ttPointPath(x))} · ${x.area} m²</option>`).join('')}</select>${d.cat&&!points.length?`<div class="small" style="color:#8a5b00;margin-top:5px">Không còn điểm kinh doanh trống phù hợp với ngành hàng ${U.esc(d.cat)}.</div>`:ttFormError(d,'point')}</div><div class="field"><label>Ngày bắt đầu *</label><input class="input" type="date" data-ch="ttw-start" value="${d.startDate}">${ttFormError(d,'startDate')}</div></div>${st?`<div class="note info" style="margin-top:12px"><div class="row"><b style="flex:1">${st.code}</b>${U.statusTag(st.status)}</div><div style="margin-top:6px">${U.esc(ttPointPath(st))}</div><div class="small" style="margin-top:5px">${st.area} m² · ${U.esc(U.areaTypeLabel(st.areaType)||'Chưa có thông tin')} · ${U.esc(st.cat)}</div></div>`:''}</section><section style="margin-top:28px"><h3>3. Người bán trực tiếp</h3><div class="divider"></div><div class="small" style="margin-bottom:10px">Người trực tiếp kinh doanh tại điểm có thể là chính tiểu thương hoặc người được tiểu thương bố trí.</div><label class="row" style="gap:8px"><input type="radio" name="seller" data-ch="ttw-seller-kind" value="owner" ${d.sellerKind==='owner'?'checked':''}> Chính tiểu thương trực tiếp bán</label><label class="row" style="gap:8px;margin-top:8px"><input type="radio" name="seller" data-ch="ttw-seller-kind" value="other" ${d.sellerKind==='other'?'checked':''}> Người khác trực tiếp bán</label>${d.sellerKind==='other'?`<div class="form-grid" style="margin-top:14px"><div class="field"><label>Họ tên *</label><input class="input" data-in="ttw-seller-name" value="${U.esc(d.sellerName)}">${ttFormError(d,'sellerName')}</div><div class="field"><label>Số điện thoại *</label><input class="input" data-in="ttw-seller-phone" value="${U.esc(d.sellerPhone)}">${ttFormError(d,'sellerPhone')}</div><div class="field"><label>Ngày bắt đầu *</label><input class="input" type="date" data-ch="ttw-seller-start" value="${d.sellerStartDate}">${ttFormError(d,'sellerStartDate')}</div></div>`:''}</section><section style="margin-top:28px"><h3>4. Phương tiện đăng ký</h3><div class="divider"></div><label class="row" style="gap:8px"><input type="checkbox" data-ch="ttw-has-vehicles" ${d.hasVehicles?'checked':''}> Có đăng ký phương tiện</label>${vehicleBlock}</section><section style="margin-top:28px"><h3>5. Hồ sơ đính kèm</h3><div class="divider"></div><div class="grid g2"><div><b>Giấy tờ cá nhân</b><div style="margin-top:8px">${docRows}</div></div><div><b>Hợp đồng / Quyết định bố trí điểm kinh doanh</b><div class="small muted" style="margin:5px 0">Tệp đính kèm của việc sử dụng điểm.</div>${placement||'<div class="small muted">Chưa có tệp.</div>'}<button class="btn sm" style="margin-top:8px" data-act="ttw-placement-pick">+ Chọn ảnh / tệp</button></div></div></section></div><div class="drawer-f"><button class="btn" data-act="tt-wizard-cancel">Hủy</button><span class="spacer"></span><button class="btn primary" data-act="tt-wizard-save">Lưu hồ sơ</button></div>`;
+  }
+  function ttWizardHtml() { return ttSingleFormHtml(ttWizardDraft); }
   A.ACT['tt-new'] = () => {
     if (!A.canDo('tieu-thuong.them-moi', ui.market)) return;
     A.drawerReset();
-    ttWizardDraft = { step: 1, furthestStep: 1, name: '', idNo: '', gender: 'Nữ', birth: '', phone: '', address: '', market: ui.market, hkd: false, licenseNo: '', licenseDate: '', since: A.db.today, docFiles: {}, vehicles: [], ocrApplied: false, confirmPhoneWarning: false };
+    ttWizardDraft = { name: '', idNo: '', idType: 'CCCD', phone: '', cat: '', market: ui.market, pointId: '', startDate: A.db.today, pointCat: '', sellerKind: 'owner', sellerName: '', sellerPhone: '', sellerStartDate: A.db.today, docFiles: {}, placementFiles: [], vehicles: [], hasVehicles: false, confirmPhoneWarning: false, errors: {} };
     ttWizardRerender();
     A.render();
   };
   A.ACT['tt-wizard-cancel'] = () => { ttWizardDraft = null; A.closeModal(); A.render(); };
-  A.ACT['tt-wizard-next'] = () => { if (!ttWizardDraft) return; ttWizardDraft.step = Math.min(4, ttWizardDraft.step + 1); ttWizardDraft.furthestStep = Math.max(ttWizardDraft.furthestStep, ttWizardDraft.step); ttWizardRerender(); };
-  A.ACT['tt-wizard-back'] = () => { if (!ttWizardDraft) return; ttWizardDraft.step = Math.max(1, ttWizardDraft.step - 1); ttWizardRerender(); };
-  A.ACT['tt-wizard-goto'] = el => { if (!ttWizardDraft) return; const n = Number(el.dataset.id); if (n > ttWizardDraft.furthestStep) return; ttWizardDraft.step = n; ttWizardRerender(); };
   A.ACT['tt-wizard-ocr'] = () => {
     if (!ttWizardDraft) return;
     Object.assign(ttWizardDraft, TT_OCR_SAMPLE, { ocrApplied: true });
@@ -2628,11 +2669,22 @@
   // nguyên focus/caret cho input đang gõ (ycSetModal), an toàn gọi lại mỗi keystroke.
   A.IN['ttw-name'] = el => { if (ttWizardDraft) { ttWizardDraft.name = el.value; ttWizardRerender(); } };
   A.IN['ttw-idno'] = el => { if (ttWizardDraft) { ttWizardDraft.idNo = el.value; ttWizardRerender(); } };
+  A.IN['ttw-cat'] = el => { if (ttWizardDraft) { ttWizardDraft.cat = el.value; ttWizardDraft.pointCat = el.value; ttWizardRerender(); } };
+  A.IN['ttw-point-cat'] = el => { if (ttWizardDraft) ttWizardDraft.pointCat = el.value; };
+  A.IN['ttw-seller-name'] = el => { if (ttWizardDraft) ttWizardDraft.sellerName = el.value; };
+  A.IN['ttw-seller-phone'] = el => { if (ttWizardDraft) ttWizardDraft.sellerPhone = el.value; };
   A.IN['ttw-birth'] = el => { if (ttWizardDraft) ttWizardDraft.birth = el.value; };
   A.IN['ttw-phone'] = el => { if (ttWizardDraft) { ttWizardDraft.phone = el.value; ttWizardRerender(); } };
   A.IN['ttw-addr'] = el => { if (ttWizardDraft) ttWizardDraft.address = el.value; };
   A.IN['ttw-license'] = el => { if (ttWizardDraft) ttWizardDraft.licenseNo = el.value; };
   A.CH['ttw-gender'] = el => { if (ttWizardDraft) ttWizardDraft.gender = el.value; };
+  A.CH['ttw-idtype'] = el => { if (ttWizardDraft) ttWizardDraft.idType = el.value; };
+  A.CH['ttw-cat'] = el => { if (!ttWizardDraft) return; ttWizardDraft.cat=el.value; ttWizardDraft.pointCat=el.value; const st=A.idx.stall.get(ttWizardDraft.pointId); if(st && st.cat!==el.value) ttWizardDraft.pointId=''; ttWizardRerender(); };
+  A.CH['ttw-point'] = el => { if (ttWizardDraft) { ttWizardDraft.pointId = el.value; ttWizardRerender(); } };
+  A.CH['ttw-start'] = el => { if (ttWizardDraft) ttWizardDraft.startDate = el.value; };
+  A.CH['ttw-seller-kind'] = el => { if (ttWizardDraft) { ttWizardDraft.sellerKind = el.value; ttWizardRerender(); } };
+  A.CH['ttw-seller-start'] = el => { if (ttWizardDraft) ttWizardDraft.sellerStartDate = el.value; };
+  A.CH['ttw-has-vehicles'] = el => { if (ttWizardDraft) { ttWizardDraft.hasVehicles=el.checked; ttWizardRerender(); } };
   A.CH['ttw-hkd'] = el => { if (ttWizardDraft) { ttWizardDraft.hkd = el.value === '1'; ttWizardRerender(); } };
   A.CH['ttw-since'] = el => { if (ttWizardDraft) ttWizardDraft.since = el.value; };
   A.CH['ttw-license-date'] = el => { if (ttWizardDraft) ttWizardDraft.licenseDate = el.value; };
@@ -2647,7 +2699,7 @@
     const input = document.createElement('input');
     input.type = 'file'; input.id = 'tt-wizard-file-input'; input.accept = 'image/*,.pdf'; input.style.display = 'none';
     input.addEventListener('change', () => {
-      if (input.files && input.files[0] && ttWizardDraft) { ttWizardDraft.docFiles[key] = { name: input.files[0].name }; ttWizardRerender(); }
+      if (input.files && input.files[0] && ttWizardDraft) ttCaptureFile(input.files[0], meta => { if (ttWizardDraft) { ttWizardDraft.docFiles[key] = meta; ttWizardRerender(); } });
       input.remove();
     });
     document.body.appendChild(input);
@@ -2656,10 +2708,11 @@
   A.ACT['tt-wizard-doc-view'] = el => {
     const key = el.dataset.key, doc = TT_DOCS.find(x => x.key === key);
     const f2 = ttWizardDraft && ttWizardDraft.docFiles[key];
-    A.modal(A.mHead('Xem tài liệu') + `<div class="modal-b"><p>${U.esc(doc ? doc.label : '')}</p><p class="small muted">${U.esc(f2 ? f2.name : '')}</p>
-      <div class="note info">Bản scan minh họa cho prototype — hệ thống chưa có kho lưu trữ tài liệu thật.</div></div>
-      <div class="modal-f"><button class="btn primary" data-act="close">Đóng</button></div>`);
+    if (f2) A.modal(ttFileViewHtml(doc ? doc.label : 'Tài liệu', f2));
   };
+  A.ACT['ttw-placement-pick'] = () => { if (!ttWizardDraft) return; const input=document.createElement('input'); input.type='file'; input.accept='image/*,.pdf'; input.style.display='none'; input.onchange=()=>{if(input.files[0])ttCaptureFile(input.files[0], meta=>{if(ttWizardDraft){ttWizardDraft.placementFiles.push(meta);ttWizardRerender();}});input.remove();}; document.body.appendChild(input); input.click(); };
+  A.ACT['ttw-placement-remove'] = el => { if (!ttWizardDraft) return; ttWizardDraft.placementFiles.splice(Number(el.dataset.index),1); ttWizardRerender(); };
+  A.ACT['ttw-doc-remove'] = el => { if (!ttWizardDraft) return; delete ttWizardDraft.docFiles[el.dataset.key]; ttWizardRerender(); };
   A.ACT['tt-wizard-view-existing'] = el => {
     const t = A.idx.trader.get(el.dataset.id);
     if (!t) return;
@@ -2671,27 +2724,52 @@
     if (!A.canDo('tieu-thuong.them-moi', ui.market)) return;
     const d = ttWizardDraft;
     if (!d) return;
+    const errors = {};
+    const selected = A.idx.stall.get(d.pointId);
+    if (!d.name.trim()) errors.name = 'Vui lòng nhập họ và tên.';
+    if (!d.phone.trim()) errors.phone = 'Vui lòng nhập số điện thoại.';
+    if (!d.idNo.trim()) errors.idNo = 'Vui lòng nhập số giấy tờ.';
+    if (!d.cat) errors.cat = 'Vui lòng chọn ngành hàng.';
+    if (!d.pointId) errors.point = 'Vui lòng chọn điểm kinh doanh.';
+    else if (!selected || selected.market !== d.market || selected.status !== 'trong' || selected.cat !== d.cat) errors.point = 'Điểm kinh doanh không còn trống hoặc không phù hợp ngành hàng.';
+    if (!d.startDate) errors.startDate = 'Vui lòng chọn ngày bắt đầu.';
+    if (d.sellerKind === 'other') { if (!d.sellerName.trim()) errors.sellerName='Vui lòng nhập họ tên người bán.'; if (!d.sellerPhone.trim()) errors.sellerPhone='Vui lòng nhập số điện thoại người bán.'; if (!d.sellerStartDate) errors.sellerStartDate='Vui lòng chọn ngày bắt đầu.'; }
+    const duplicateNow = ttDuplicateCheck(d.idNo.trim(), d.phone.trim());
+    if (duplicateNow.level === 'BLOCK') errors.idNo = 'Số giấy tờ đã tồn tại trong chợ.';
+    if (Object.keys(errors).length) { d.errors = errors; const firstKey=Object.keys(errors)[0], selector={name:'#ttw-name-field',phone:'[data-in="ttw-phone"]',idNo:'#ttw-idno-field',cat:'[data-ch="ttw-cat"]',point:'[data-ch="ttw-point"]',startDate:'[data-ch="ttw-start"]',sellerName:'[data-in="ttw-seller-name"]',sellerPhone:'[data-in="ttw-seller-phone"]',sellerStartDate:'[data-ch="ttw-seller-start"]'}[firstKey]; ttWizardRerender(); setTimeout(() => { const first = selector && document.querySelector(selector); if (first) { first.scrollIntoView({ block:'center' }); first.focus(); } }, 0); return; }
+    d.errors = {};
     const name = d.name.trim(), idNo = d.idNo.trim(), phone = d.phone.trim();
     if (!name || !idNo || !phone) { U.toast('Vui lòng nhập đủ họ tên, số CCCD và điện thoại'); return; }
     const dup = ttDuplicateCheck(idNo, phone);
     if (dup.level === 'BLOCK') { U.toast('Phát hiện hồ sơ tiểu thương đã tồn tại — không thể tạo hồ sơ mới'); return; }
     if (dup.level === 'WARNING' && !d.confirmPhoneWarning) { U.toast('Vui lòng xác nhận đã kiểm tra số điện thoại trùng trước khi lưu'); return; }
-    // NEED_CONFIRMATION (báo cáo mục 41): hồ sơ do NV BQL nhập thủ công coi là ACTIVE ngay (nguồn
-    // đáng tin cậy, khác luồng Mini App tự đăng ký luôn cần PENDING_VERIFICATION).
+    const st = A.idx.stall.get(d.pointId);
+    if (!st || st.market !== d.market || st.status !== 'trong') { U.toast('Điểm kinh doanh đã không còn trống. Vui lòng chọn lại.'); return; }
+    if (!d.cat || !d.pointCat || !d.startDate || (d.sellerKind === 'other' && (!d.sellerName.trim() || !d.sellerPhone.trim() || !d.sellerStartDate))) { U.toast('Vui lòng hoàn tất thông tin điểm kinh doanh và người bán.'); return; }
+    // Hồ sơ do NV BQL nhập thủ công coi là ACTIVE ngay. Quan hệ mới được lưu
+    // ở pointUsages, đồng thời cập nhật link legacy để toàn bộ tài chính/sơ đồ
+    // hiện hữu tiếp tục đọc đúng một trader/point như trước.
     const t = {
-      id: ttNextId(), name, gender: d.gender, phone, idNo, birth: d.birth || '', address: d.address,
-      market: d.market, cat: 'Chưa gán', hkd: d.hkd, since: d.since || A.db.today, app: false, bank: false, stalls: [],
+      id: ttNextId(), name, phone, idNo, idType: d.idType || 'CCCD',
+      market: d.market, cat: d.cat.trim(), hkd: false, since: d.startDate, app: false, bank: false, stalls: [st.id],
       profileStatus: 'ACTIVE', source: 'STAFF', supplementNote: '',
-      licenseNo: d.hkd ? (d.licenseNo || null) : null, licenseDate: d.hkd ? (d.licenseDate || null) : null,
+      licenseNo: null, licenseDate: null,
       docFiles: Object.assign({}, d.docFiles)
     };
     A.db.traders.push(t); A.idx.trader.set(t.id, t);
-    if (A.VEHICLES) A.VEHICLES.persistDrafts(t, d.vehicles);
-    U.log('Thêm hồ sơ tiểu thương ' + t.id + ' – ' + name);
+    st.traderId = t.id; st.sellerId = d.sellerKind === 'owner' ? t.id : null; st.status = 'thue'; st.cat = d.pointCat.trim();
+    st.history = st.history || []; st.history.unshift(`${U.dmy(d.startDate)}: bố trí ${t.id} · ${t.name}`);
+    ttUsageStore().push({ id:'PU-'+U.pad(ttUsageStore().length+1,4), market:st.market, pointId:st.id, traderId:t.id, startDate:d.startDate, category:st.cat, placementFiles:(d.placementFiles||[]).slice(), status:'ACTIVE', createdAt:U.today(), updatedAt:U.today() });
+    const seller = d.sellerKind === 'owner' ? { traderId:t.id, personId:t.id, fullName:t.name, phone:t.phone, relationship:'Chính tiểu thương trực tiếp bán', startDate:d.startDate } : { traderId:null, personId:null, fullName:d.sellerName.trim(), phone:d.sellerPhone.trim(), relationship:'Người bán thay', startDate:d.sellerStartDate };
+    A.db.directSellerAssignments = A.db.directSellerAssignments || [];
+    A.db.directSellerAssignments.filter(x=>x.pointId===st.id&&x.status==='ACTIVE').forEach(x=>{x.status='ENDED';x.endDate=U.today();x.updatedAt=U.today();});
+    A.db.directSellerAssignments.push(Object.assign({id:'DSA-'+U.pad(A.db.directSellerAssignments.length+1,4),market:st.market,pointId:st.id,idNumber:'',endDate:null,status:'ACTIVE',source:'TRADER_PROFILE_WIZARD',createdAt:U.today(),updatedAt:U.today()},seller));
+    if (A.VEHICLES) A.VEHICLES.persistDrafts(t, d.vehicles, { pointId: st.id, startDate: d.startDate });
+    t.updatedAt=U.today(); U.log('Thêm hồ sơ tiểu thương ' + t.id + ' và bố trí điểm ' + st.code);
     A.save();
     ttWizardDraft = null;
     A.closeModal(); A.render();
-    U.toast('Đã lưu hồ sơ ' + t.id + '. Mini App: chưa liên kết. Có thể tạo hợp đồng tại màn hình Hợp đồng.');
+    U.toast('Đã lưu hồ sơ ' + t.id + ' và bố trí điểm ' + st.code + '.');
   };
   // "Chỉnh sửa thông tin tiểu thương" (CL, HOTFIX mục 1-2 yêu cầu) — reuse ĐÚNG action permission
   // 'tieu-thuong.them-moi' đã có (cùng phạm vi "quản lý hồ sơ tiểu thương"), không tạo permission
@@ -2722,18 +2800,14 @@
     if (!name || !idNo || !phone) { U.toast('Vui lòng nhập đủ họ tên, số CCCD và điện thoại'); return; }
     if (A.db.traders.some(x => x.idNo === idNo && x.id !== t.id)) { U.toast('Số CCCD đã tồn tại trong hệ thống'); return; }
     t.name = name; t.idNo = idNo; t.phone = phone;
-    t.gender = A.$('#tte-gender').value;
-    t.birth = A.$('#tte-birth').value.trim();
-    t.address = A.$('#tte-addr').value;
-    t.hkd = A.$('#tte-hkd').value === '1';
-    t.since = A.$('#tte-since').value || t.since;
+    t.idType = A.$('#tte-idtype').value;
     // Hồ sơ số hóa: CHỈ ghi đè đúng giấy tờ có file thay thế đang chờ (mục 10 yêu cầu) — giấy tờ
     // không bấm "Thay thế" giữ nguyên tham chiếu cũ, không bắt upload lại toàn bộ khi chỉ sửa field
     // thông tin khác.
     const pendingKeys = Object.keys(ttPendingDocs);
     if (pendingKeys.length) {
       t.docFiles = t.docFiles || {};
-      pendingKeys.forEach(key => { t.docFiles[key] = { name: ttPendingDocs[key].fileName, updatedAt: U.today() }; });
+      pendingKeys.forEach(key => { t.docFiles[key] = Object.assign({}, ttPendingDocs[key], { updatedAt: U.today() }); });
     }
     U.log('Cập nhật hồ sơ tiểu thương ' + t.id + ' – ' + name);
     A.save();

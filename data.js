@@ -202,7 +202,9 @@ window.DATA = (function () {
   ];
 
   const STATUS = {
-    thue: { label: 'Đang thuê', color: '#3aa85b' },
+    // Giữ nguyên mã trạng thái `thue` để tương thích dữ liệu/contracts cũ;
+    // chỉ chuẩn hóa nhãn hiển thị theo nghiệp vụ bố trí điểm mới.
+    thue: { label: 'Đang kinh doanh', color: '#3aa85b' },
     no: { label: 'Nợ phí', color: '#de3b3d' },
     ngung: { label: 'Tạm ngừng', color: '#ef852e' },
     tranhchap: { label: 'Đang tranh chấp', color: '#7c54cd' },

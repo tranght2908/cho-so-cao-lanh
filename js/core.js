@@ -71,6 +71,7 @@ window.APP = (function () {
   // đứng một mình; icon đi kèm text là decorative để screen reader không đọc lặp lại.
   const ICON_PATHS = {
     dashboard: '<path d="M4 13h6V4H4v9Zm0 7h6v-4H4v4Zm10 0h6v-9h-6v9Zm0-16v4h6V4h-6Z"/>',
+    vehicle: '<path d="M3 16v-3l2-5h14l2 5v3M5 16v3m14-3v3M3 13h18M7 16h.01M17 16h.01"/>',
     map: '<path d="m9 18-6 3V6l6-3 6 3 6-3v15l-6 3-6-3Zm0-12v12m6-9v12"/>',
     store: '<path d="M3 10h18M5 10v10h14V10M4 4h16l1 6H3l1-6Zm5 10h6"/>', users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m17-7a4 4 0 1 0 0-8m-7 5a4 4 0 1 0 0-8"/>',
     file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm0 0v6h6M8 13h8m-8 4h8"/>', money: '<path d="M12 2v20m5-16.5A4 4 0 0 0 13.5 4h-3A3.5 3.5 0 0 0 10.5 11h3a3.5 3.5 0 1 1 0 7h-3A4 4 0 0 1 7 16.5"/>', bank: '<path d="m3 10 9-6 9 6M5 10v8m4-8v8m6-8v8m4-8v8M3 21h18"/>', bolt: '<path d="m13 2-9 12h7l-1 8 9-12h-7l1-8Z"/>', receipt: '<path d="M4 2v20l2-1.5L8 22l2-1.5 2 1.5 2-1.5 2 1.5 2-1.5 2 1.5V2H4Zm4 5h8m-8 4h8m-8 4h5"/>', card: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18m-14 5h3"/>', refresh: '<path d="M20 11a8 8 0 1 0 2 5.3M20 4v7h-7"/>', bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 13h4"/>', chart: '<path d="M3 3v18h18M7 16l4-5 3 3 5-7"/>', settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.1 2.1-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5v.2h-3v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1L6.6 17l.1-.1A1.7 1.7 0 0 0 7 15a1.7 1.7 0 0 0-1.5-1H5v-3h.5A1.7 1.7 0 0 0 7 10a1.7 1.7 0 0 0-.3-1.9l-.1-.1 2.1-2.1.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V4h3v.8a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 8l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.1v3h-.1a1.7 1.7 0 0 0-1.5 1Z"/>', phone: '<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/>', camera: '<path d="M4 7h3l2-3h6l2 3h3v13H4V7Zm8 9a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/>', print: '<path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2m-2-4H8v7h8v-7Z"/>', edit: '<path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Zm10-13 3 3"/>', trash: '<path d="M4 7h16m-10 4v6m4-6v6M9 7V4h6v3m-9 0 1 14h10l1-14"/>', close: '<path d="m6 6 12 12M18 6 6 18"/>', menu: '<path d="M4 6h16M4 12h16M4 18h16"/>', check: '<path d="m5 12 4 4L19 6"/>', warning: '<path d="m12 3 10 18H2L12 3Zm0 6v4m0 4h.01"/>', attachment: '<path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/>'
@@ -587,9 +588,8 @@ window.APP = (function () {
       { id: 'diem-kd', ico: U.icon('store'), label: 'Điểm kinh doanh', hidden: true },
       { id: 'phien-cho', ico: U.icon('store'), label: 'Phiên chợ quê' }
     ] },
-    { group: 'Tiểu thương & hợp đồng', items: [
-      { id: 'tieu-thuong', ico: U.icon('users'), label: 'Tiểu thương' },
-      { id: 'hop-dong', ico: U.icon('file'), label: 'Hợp đồng', badge: () => A.db.contracts.filter(c => U.inM(c) && c.status === 'hieuluc' && U.days(U.today(), c.end) <= 30).length }
+    { group: 'Tiểu thương', items: [
+      { id: 'tieu-thuong', ico: U.icon('users'), label: 'Hồ sơ tiểu thương' }
     ] },
     { group: 'Tài chính', items: [
       { sub: 'Quản lý khai báo' },
@@ -751,6 +751,10 @@ window.APP = (function () {
     // đổi account/market mà chưa qua chrome() lần nào.
     A.syncAccountContext();
     let r = (location.hash || '').replace(/^#\/?/, '');
+    // Hợp đồng không còn là màn nghiệp vụ độc lập. Giữ route/view cũ và các
+    // permission liên quan cho tương thích dữ liệu/phụ thuộc nội bộ, nhưng mọi
+    // truy cập hash cũ đều quay về Hồ sơ tiểu thương.
+    if (r === 'hop-dong') r = 'tieu-thuong';
     // Phase 7 — tương thích ngược 2 hash cũ trước khi chuẩn hóa screen permission (so-do/cau-truc
     // → mat-bang, xem MARKET_LAYOUT_SCREEN_PERMISSION_IMPLEMENTATION_REPORT.md): đổi thẳng sang
     // 'mat-bang' NGAY TẠI ĐÂY, trước khi đánh giá U.can(r) — không cần nhánh xử lý riêng, logic
