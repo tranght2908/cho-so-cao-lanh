@@ -550,7 +550,7 @@ window.APP = (function () {
       { id: 'cai-dat', ico: U.icon('settings'), label: 'Cài đặt & phân quyền' }
     ] },
     { group: 'Dành cho tiểu thương', items: [
-      { id: 'mini-app', ico: U.icon('phone'), label: 'Mini app tiểu thương' }
+      { id: 'mini-app', ico: U.icon('warning'), label: 'Gửi phản ánh' }
     ] }
   ];
   A.menuItem = id => { for (const g of A.MENU) for (const it of g.items) if (it.id === id) return it; return null; };

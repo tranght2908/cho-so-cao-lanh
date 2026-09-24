@@ -1018,20 +1018,27 @@
     if (!isTraderMini()) {
       return '<div class="empty">Mini app nhân viên thu phí chỉ áp dụng cho luồng thu tiền mặt Chợ quê TTĐ, đúng phạm vi tài khoản và kỳ đang thu.</div>';
     }
-    const t = trader(), list = sampleTraders();
+    const t = trader(), list = sampleTraders(), mine = A.db.incidents.filter(i => i.traderId === t.id).reverse();
     if (!t) return '<div class="empty">Không có tiểu thương trong phạm vi tài khoản mini app.</div>';
-    return `<div class="mini-wrap"><div>${phone(t)}</div>
-      <div class="grid" style="align-content:start">
-        <div class="card"><div class="card-h"><h3>Mini app tiểu thương</h3></div><div class="card-b">
-          <p class="muted" style="margin-top:0">Ứng dụng cho iOS 14+ và Android 10+ (hoặc mini app trên Zalo). Tiểu thương đăng nhập bằng số điện thoại đã đăng ký với Ban Quản lý chợ và mã đăng nhập một lần (OTP giả lập).</p>
-          <div class="field"><label>Xem với tư cách tiểu thương mẫu</label><select class="input" data-ch="mini-trader">${list.map(x => `<option value="${x.id}" ${x.id === t.id ? 'selected' : ''}>${U.esc(x.name)} · ${x.stalls.map(id => A.idx.stall.get(id).code).join(', ')} · ${U.mShort(x.market)}${U.traderDebt(x.id) ? ' · nợ ' + U.moneyShort(U.traderDebt(x.id)) : ''}</option>`).join('')}</select></div>
-          ${mini().step === 'app' ? '<button class="btn" style="margin-top:10px" data-act="mini-logout">Đăng xuất</button>' : ''}</div></div>
-        <div class="card"><div class="card-h"><h3>Kịch bản demo</h3></div><div class="card-b"><ol class="script">
-          <li><div>Bấm <b>Nhận mã đăng nhập</b> (SĐT có sẵn của tiểu thương mẫu đang chọn) → <b>Gửi mã đăng nhập</b> → <b>Xác nhận</b> để đăng nhập.</div></li>
-          <li><div>Ở Trang chủ, bấm <b>Thanh toán bằng QR</b> → <b>Giả lập: đã chuyển khoản</b>. Hệ thống ghi nhận, phát hành biên lai điện tử, cập nhật công nợ.</div></li>
-          <li><div>Mở tab <b>Phản ánh</b>, đính kèm ảnh và <b>Gửi phản ánh</b>.</div></li>
-          <li><div>Đổi vai trò sang <b>Ban Quản lý chợ</b> → <b>Phản ánh & sự cố</b>: phản ánh mới nằm ở cột "Tiếp nhận". Chuyển đến "Hoàn thành" rồi quay lại đây để <b>đánh giá sao</b>.</div></li>
-        </ol></div></div>      </div></div>`;
+    return `<div class="page-head"><div><h2>Gửi phản ánh</h2><p class="muted">Tiểu thương gửi phản ánh, kiến nghị cho điểm kinh doanh thuộc phạm vi tài khoản.</p></div></div>
+      <div class="grid g2" style="align-items:start">
+        <div class="card"><div class="card-h"><h3>Thông tin người gửi</h3></div><div class="card-b">
+          <div class="field"><label>Tiểu thương</label><select class="input" data-ch="mini-trader">${list.map(x => `<option value="${x.id}" ${x.id === t.id ? 'selected' : ''}>${U.esc(x.name)} · ${x.stalls.map(id => A.idx.stall.get(id).code).join(', ')} · ${U.mShort(x.market)}</option>`).join('')}</select></div>
+          <dl class="kv" style="margin-top:12px"><dt>Chợ</dt><dd>${U.esc(U.mShort(t.market))}</dd><dt>Số điện thoại</dt><dd>${U.maskPhone(t.phone)}</dd><dt>Điểm kinh doanh</dt><dd>${t.stalls.map(id => U.esc((A.idx.stall.get(id) || {}).code || id)).join(', ')}</dd></dl>
+          <div class="note info" style="margin-top:12px">Phản ánh sau khi gửi sẽ vào màn <b>Phản ánh & sự cố</b> để Ban Quản lý tiếp nhận và phân công xử lý.</div>
+        </div></div>
+        <div class="card"><div class="card-h"><h3>Nội dung phản ánh</h3></div><div class="card-b">
+          <div class="field"><label>Nhóm</label><select class="input" id="mr-cat">${['Điện', 'Cấp thoát nước', 'Vệ sinh', 'An ninh trật tự', 'PCCC', 'Hạ tầng', 'Khác'].map(c => `<option>${c}</option>`).join('')}</select></div>
+          <div class="field" style="margin-top:10px"><label>Điểm kinh doanh</label><select class="input" id="mr-stall">${t.stalls.map(id => `<option value="${id}">${U.esc((A.idx.stall.get(id) || {}).code || id)}</option>`).join('')}</select></div>
+          <div class="field" style="margin-top:10px"><label>Nội dung</label><textarea class="input" id="mr-text" rows="5" placeholder="Nhập nội dung phản ánh, kiến nghị cần Ban Quản lý xử lý..."></textarea></div>
+          <div class="row" style="margin-top:12px;gap:8px;flex-wrap:wrap"><button class="btn" data-act="mini-attach">${mini().attach ? '✓ Đã đính kèm 1 ảnh' : 'Đính kèm ảnh minh họa'}</button><span class="spacer"></span><button class="btn primary" data-act="mini-report">Gửi phản ánh</button></div>
+        </div></div>
+      </div>
+      <div class="card" style="margin-top:14px"><div class="card-h"><h3>Phản ánh đã gửi</h3></div><div class="card-b">
+        ${U.table([{ t: 'Mã' }, { t: 'Ngày gửi' }, { t: 'Điểm KD' }, { t: 'Nhóm' }, { t: 'Nội dung' }, { t: 'Trạng thái' }],
+          mine.map(i => `<tr><td><b>${i.id}</b></td><td>${U.dmy(i.created)}</td><td>${U.esc((A.idx.stall.get(i.stallId) || {}).code || '—')}</td><td>${U.esc(i.cat)}</td><td>${U.esc(i.title)}</td><td><span class="tag info">${U.esc((D.INCIDENT_STATES.find(s => s.id === i.state) || {}).label || i.state)}</span></td></tr>`),
+          { empty: 'Chưa có phản ánh nào.' })}
+      </div></div>`;
   };
 
   A.CH['mini-trader'] = el => { miniResetRequestState(); miniResetLoginFlow(); Object.assign(mini(), { traderId: el.value, step: 'login', tab: 'home', pay: null, bill: null, attach: false }); A.render(); };
@@ -1126,10 +1133,15 @@
     'mini-pdf': () => U.toast('Mở bản số hóa hợp đồng (PDF) – minh họa'),
     'mini-attach': () => { mini().attach = !mini().attach; A.render(); },
     'mini-report': () => {
+      const t = trader(), stall = A.idx.stall.get(A.$('#mr-stall').value);
+      if (!U.can('mini-app') || !isTraderMini() || !t || !stall || !miniOwnsStall(t, stall) || !inMiniScopeMarket(stall.market) || (t.profileStatus && t.profileStatus !== 'ACTIVE')) {
+        U.toast('Không có quyền gửi phản ánh cho điểm kinh doanh này.');
+        return;
+      }
       const text = A.$('#mr-text').value.trim();
       if (!text) { U.toast('Vui lòng nhập nội dung'); return; }
       const title = text.length > 60 ? text.slice(0, 57) + '…' : text;
-      const i = A.addIncident(A.$('#mr-stall').value, A.$('#mr-cat').value, title, text, 'Mini app tiểu thương', mini().attach);
+      const i = A.addIncident(stall.id, A.$('#mr-cat').value, title, text, 'Mini app tiểu thương', mini().attach);
       mini().attach = false; A.render();
       U.toast('Đã gửi ' + i.id + '. Ban Quản lý đã tiếp nhận phản ánh của bạn.');
     },

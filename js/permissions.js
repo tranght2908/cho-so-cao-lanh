@@ -15,11 +15,9 @@
  * SEED BAN ĐẦU: admin có thể sửa động qua màn "Vai trò & phân quyền" (`A.PERM.grant/revoke`), UI và
  * handler đều đọc lại `STATE` mới ngay — không có ma trận nào bị hard-code cứng trong view.
  *
- * Nguyên tắc least-privilege đã áp dụng: `technician` KHÔNG có bất kỳ action permission nào ở V1
- * (chỉ có `screen:su-co`/`screen:mat-bang` [tên gọi từ Phase 7, trước đó là `screen:so-do`] — xem
- * được nhưng chưa thao tác được, chờ xác nhận nghiệp vụ ở Phase 5); nhiều mục khác còn
- * NEED_CONFIRMATION (xem PHASE4_ACTION_AUDIT.md mục 9) nên cố tình KHÔNG cấp mặc định cho tới khi
- * có xác nhận nghiệp vụ.
+ * Nguyên tắc least-privilege đã áp dụng: `technician` chỉ có action xử lý kỹ thuật đã được xác nhận
+ * (`action:su-co.cap-nhat-xu-ly`) trong màn phản ánh/sự cố; phạm vi bản ghi tiếp tục được kiểm tra
+ * theo Account.marketScopes, SelectedMarket và người được phân công trong handler nghiệp vụ.
  */
 (function (A) {
   'use strict';
@@ -58,7 +56,7 @@
     { key: 'screen:bao-cao', kind: 'screen', group: 'Vận hành', label: 'Báo cáo thống kê' },
     { key: 'screen:tai-khoan', kind: 'screen', group: 'Vận hành', label: 'Tài khoản người dùng' },
     { key: 'screen:cai-dat', kind: 'screen', group: 'Vận hành', label: 'Cài đặt & phân quyền' },
-    { key: 'screen:mini-app', kind: 'screen', group: 'Dành cho tiểu thương', label: 'Mini app tiểu thương' },
+    { key: 'screen:mini-app', kind: 'screen', group: 'Dành cho tiểu thương', label: 'Gửi phản ánh' },
 
     { key: 'action:cau-truc.edit', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Thêm/sửa khối, tầng, khu, loại điểm; lưu nháp/chính thức' },
     { key: 'action:cau-truc.delete', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Xoá khối, tầng, khu, loại điểm' },
@@ -248,10 +246,9 @@
       'cai-dat': ['system_admin'],
       'mini-app': ['trader', 'collector']
     };
-    // DEFAULT ACTION PERMISSION MATRIX V1 (Phase 4B) — bám sát đúng ma trận đã chốt trong yêu cầu
-    // Phase 4B, áp dụng least-privilege: 'technician' không có action nào ở V1 (chỉ xem, chờ xác
-    // nhận nghiệp vụ ở Phase 5); những ô còn NEED_CONFIRMATION (xem PHASE4_ACTION_AUDIT.md mục 9)
-    // cố tình để trống, không tự cấp.
+    // DEFAULT ACTION PERMISSION MATRIX V1 — áp dụng least-privilege: 'technician' chỉ được cấp
+    // action cập nhật xử lý sự cố; handler màn su-co tiếp tục giới hạn đúng hồ sơ đã phân công.
+    // Những ô còn NEED_CONFIRMATION cố tình để trống, không tự cấp.
     const actionRoles = {
       'cau-truc.edit': ['market_manager', 'market_staff'],
       'cau-truc.delete': ['market_manager'],
@@ -304,10 +301,8 @@
       'su-co.tao-phan-anh': ['market_manager', 'market_staff'],
       'su-co.phan-cong': ['market_manager'],
       'su-co.cap-nhat-xu-ly': ['market_manager', 'market_staff', 'technician'],
-      // KHÔNG cấp cho 'technician' ở V1 — quyền hiện tại cho phép chuyển tới cả trạng thái "Đóng"
-      // (cuối máy trạng thái), nên nếu cấp sẽ rộng hơn ý định "chỉ cập nhật tiến độ xử lý". Không
-      // redesign máy trạng thái sự cố ở Phase 4B — chờ xác nhận nghiệp vụ (PHASE4_ACTION_AUDIT.md
-      // mục 9 câu 9) trước khi cấp granular hơn.
+      // Không cấp 'su-co.chuyen-trang-thai' cho technician: kỹ thuật viên chỉ cập nhật tiến độ/kết quả
+      // trên hồ sơ được giao; các chuyển trạng thái quản lý khác vẫn thuộc BQL theo action riêng.
       'su-co.chuyen-trang-thai': ['market_manager', 'market_staff'],
       'su-co.vuot-cap': ['market_manager'],
       'su-co.chi-dao': ['ward_leader'],
