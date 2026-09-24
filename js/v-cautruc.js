@@ -1,8 +1,18 @@
 /* Điều hành – UC01.1: Thiết lập cấu trúc và phân khu mặt bằng.
- * Module này tự quản lý dữ liệu riêng (Khối/Nhà chợ → Tầng → Khu, quy hoạch loại điểm dự kiến),
- * lưu ở localStorage riêng, KHÔNG đọc/ghi vào MARKETS hay stalls của data.js.
+ * Module này tự quản lý dữ liệu riêng (mô hình LAYOUT nội bộ: block → floor → zone, quy hoạch loại
+ * điểm dự kiến), lưu ở localStorage riêng, KHÔNG đọc/ghi vào MARKETS hay stalls của data.js.
  * UC này chỉ quy hoạch số lượng/loại điểm dự kiến theo khu – chưa tạo điểm kinh doanh cụ thể
  * (việc đó thuộc màn "Điểm kinh doanh").
+ *
+ * MAT_BANG_KHU_TANG_DAY_REDESIGN: field nội bộ block/floor/zone GIỮ NGUYÊN (không đổi tên field,
+ * không đổi shape LAYOUT, không tạo source-of-truth mặt bằng thứ hai) — CHỈ đổi NHÃN hiển thị cho
+ * khớp thuật ngữ nghiệp vụ mới, đúng 1 chỗ duy nhất tại tầng UI (không rải rác):
+ *   block (LAYOUT, trước hiển thị "Khối/Nhà chợ") → hiển thị "Khu"      (Chợ → Khu)
+ *   floor (LAYOUT, "Tầng")                        → hiển thị "Tầng"    (không đổi)
+ *   zone  (LAYOUT, trước hiển thị "Khu")           → hiển thị "Dãy"    (Tầng → Dãy → Điểm KD)
+ * Cấu trúc hiển thị: Chợ → Khu → Tầng → Dãy → Điểm kinh doanh (mục 2 yêu cầu redesign). Ngành hàng
+ * (`catMain`/`cat`) vẫn là THUỘC TÍNH của dãy/điểm, KHÔNG dùng thay cấp Dãy — Dãy luôn định danh bằng
+ * mã + tên riêng (z.code/z.name), độc lập với ngành hàng.
  */
 (function (A) {
   'use strict';
@@ -33,7 +43,7 @@
           floor.zones.push({
             key: newKey('z'), code: s.id, name: s.name, blockId: block.key, floorId: floor.key,
             catMain: s.cat, catSub: '', area: Math.round(avg * qty), note: '', status: 'chinhthuc',
-            planned: [{ key: newKey('p'), name: U.typeLabel(s.type), std: avg, qty: qty }]
+            planned: [{ key: newKey('p'), name: U.areaTypeLabel(({ kiot: 'covered', nhalong: 'covered', ngoai: 'self_produced', phien: 'session' }[s.type] || 'covered')), std: avg, qty: qty }]
           });
         });
         block.floors.push(floor);
@@ -96,7 +106,8 @@
     else if (codeTaken(qhMarket(), z.code, z.key)) errs.push('Mã khu "' + z.code + '" đã tồn tại trong chợ này.');
     if (!z.name || !z.name.trim()) errs.push('Chưa nhập Tên khu.');
     if (!z.blockId || !z.floorId) errs.push('Khu chưa được gán vào khối/tầng hợp lệ.');
-    if (!z.catMain) errs.push('Chưa chọn Ngành hàng chính.');
+    // MAT_BANG_NGANH_HANG_CAP_DIEM: "Ngành hàng" là thuộc tính của ĐIỂM kinh doanh, không phải của
+    // Dãy — catMain nay là "Ngành hàng định hướng" (không bắt buộc), bỏ validate required.
     if (!(Number(z.area) > 0)) errs.push('Diện tích khu phải lớn hơn 0.');
     const totalArea = U.sum(z.planned, p => (Number(p.std) || 0) * (Number(p.qty) || 0));
     if (totalArea > Number(z.area)) errs.push('Tổng diện tích điểm kinh doanh dự kiến (' + totalArea.toLocaleString('vi-VN') + ' m²) vượt quá diện tích của khu (' + Number(z.area || 0).toLocaleString('vi-VN') + ' m²).');
@@ -117,7 +128,105 @@
   // là navigation, KHÔNG cần cau-truc.edit). 'collapsed' = khối/tầng nào đang thu gọn trên cây,
   // 'treeOpen' = hiện cây trên mobile.
   if (!ui.mb) ui.mb = { sel: null, collapsed: {}, treeOpen: false };
+  // MAT_BANG_KHU_TANG_DAY_REDESIGN — state MỚI, thuần UI (không persist, giống ui.mb.sel):
+  //   view   : 'grid' (Sơ đồ) | 'table' (Bảng) — 2 CHẾ ĐỘ HIỂN THỊ của CÙNG 1 tập dữ liệu, không
+  //            phải 2 route/tab nghiệp vụ riêng (mục 4 yêu cầu redesign).
+  //   filter : { search, status, cat, areaType } — bộ lọc DÙNG CHUNG cho cả Sơ đồ lẫn Bảng (mục 7 yêu
+  //            cầu), áp dụng CÙNG với phạm vi đang chọn trên cây (ui.mb.sel) — không tạo dataset riêng.
+  //            areaType (MAT_BANG_LOAI_DIEN_TICH) lọc theo st.areaType ("Loại diện tích") — thay cho
+  //            f.dkclType/pointType cũ (CHỈ có ở CL) — filter mới áp dụng ĐỒNG NHẤT mọi chợ vì st.type
+  //            là field gốc trên mọi điểm kinh doanh, không riêng CL.
+  if (!ui.mb.view) ui.mb.view = 'grid';
+  if (!ui.mb.filter) ui.mb.filter = { search: '', status: '', cat: '', areaType: '' };
+
+  // ---- API dùng chung cho phần "Sơ đồ/Bảng" (js/v-dieuhanh.js, js/v-tieuthuong.js) — resolve
+  // phạm vi đang chọn trên cây (ui.mb.sel) thành ĐÚNG tập điểm kinh doanh THẬT (A.db.stalls), rồi áp
+  // bộ lọc dùng chung. KHÔNG tạo dataset/mảng điểm mới — luôn gọi lại A.mbBusinessPointsFor* (nguồn
+  // đã có, js/v-dieuhanh.js) tại thời điểm cần, nên Sơ đồ/Bảng/mọi nơi dùng hàm này luôn thấy CÙNG 1
+  // kết quả tại CÙNG 1 thời điểm.
+  function mbZonePoints(mid, z) { return A.mbBusinessPointsForZone(mid, z); }
+  function mbFloorPoints(mid, floor) { return floor.zones.reduce((acc, z) => acc.concat(mbZonePoints(mid, z)), []); }
+  function mbBlockPoints(mid, block) { return block.floors.reduce((acc, f) => acc.concat(mbFloorPoints(mid, f)), []); }
+  A.mbSelectedStalls = function (mid) {
+    const sel = ui.mb.sel;
+    if (sel && sel.k === 'zone') { const z = findZone(mid, sel.id); return z ? mbZonePoints(mid, z) : []; }
+    if (sel && sel.k === 'floor') { const found = findFloorAny(mid, sel.id); return found ? mbFloorPoints(mid, found.floor) : []; }
+    if (sel && sel.k === 'block') { const b = findBlock(mid, sel.id); return b ? mbBlockPoints(mid, b) : []; }
+    return A.mbBusinessPointsForMarket(mid);
+  };
+  // LAYOUT uses block/floor/zone internally; the table uses the business labels Khu/Tầng/Dãy.
+  A.mbSelectedLevel = function () {
+    const sel = ui.mb.sel;
+    return !sel ? 'overview' : sel.k === 'block' ? 'zone' : sel.k === 'floor' ? 'floor' : 'row';
+  };
+  A.mbPositionColumnVisibility = function () {
+    const level = A.mbSelectedLevel();
+    return { level, zone: level === 'overview', floor: level === 'overview' || level === 'zone', row: level !== 'row' };
+  };
+  // Quy về đúng {Khu, Tầng, Dãy} hiển thị cho 1 điểm kinh doanh thật — tra theo mã khu vực thật
+  // (st.section) khớp z.code trong LAYOUT (đúng cơ chế mbMatchRealSection đã có ở js/v-dieuhanh.js,
+  // chỉ đi CHIỀU NGƯỢC LẠI: từ điểm thật → node cây). Trả về nhãn hiển thị, KHÔNG trả về key LAYOUT.
+  A.mbLayoutPathForPoint = function (mid, st) {
+    for (const b of blocksOf(mid)) for (const f of b.floors) for (const z of f.zones)
+      if (z.code === st.section) return { khu: b.name, tang: f.name, day: z.name || z.code };
+    // Chưa khớp LAYOUT (khu vực thật chưa được quy hoạch trong cây) — vẫn hiển thị được nhờ dữ liệu
+    // gốc trên chính điểm kinh doanh (st.sectionName + tên tầng thật), không để trống.
+    const flReal = U.market(mid).floors.find(x => x.id === st.floor);
+    return { khu: '—', tang: flReal ? flReal.name : '—', day: st.sectionName || st.section };
+  };
+  // Bộ lọc dùng chung — trạng thái (badge chip) áp dụng ở CẢ Sơ đồ lẫn Bảng (không đổi). Tìm
+  // mã điểm/tiểu thương + ngành hàng (thanh filter) nay CHỈ hiển thị ở Bảng (MAT_BANG_SEARCH_FILTER_
+  // TABLE_ONLY — mục 1/8 yêu cầu) nên cũng CHỈ áp dụng khi ui.mb.view === 'table' — Sơ đồ không bị
+  // "lọc ngầm" bởi search/ngành hàng đang ẩn, chỉ còn phạm vi cây (Khu/Tầng/Dãy) + trạng thái quyết
+  // định hiển thị. KHÔNG reset flt.search/flt.cat khi ẩn — giữ nguyên giá trị, quay lại Bảng vẫn áp
+  // dụng lại được (mục 7 yêu cầu: không rewrite state management chỉ để reset filter).
+  A.mbMatchesFilter = function (st) {
+    const flt = ui.mb.filter;
+    if (flt.status && st.status !== flt.status) return false;
+    if (ui.mb.view !== 'table') return true;
+    if (flt.cat && st.cat !== flt.cat) return false;
+    if (flt.areaType && st.areaType !== flt.areaType) return false;
+    const q = (flt.search || '').trim().toLowerCase();
+    if (q) {
+      const t = st.traderId ? A.idx.trader.get(st.traderId) : null;
+      if (!st.code.toLowerCase().includes(q) && !(t && t.name.toLowerCase().includes(q))) return false;
+    }
+    return true;
+  };
+  // Dataset DUY NHẤT cho cả Sơ đồ lẫn Bảng (mục 11 yêu cầu: "không hardcode 1 dataset riêng cho UI
+  // mới") — phạm vi cây + bộ lọc dùng chung, áp dụng 1 LẦN, mọi nơi hiển thị (grid/table) render lại
+  // TỪ đúng mảng này.
+  A.mbCurrentPoints = function (mid) { return A.mbSelectedStalls(mid).filter(A.mbMatchesFilter); };
+  // Ngành hàng có thật trong chợ (data-driven — không hard-code danh sách CATS quy hoạch) để đổ vào
+  // dropdown lọc ngành hàng.
+  A.mbCatOptions = function (mid) { return Array.from(new Set(A.mbBusinessPointsForMarket(mid).map(st => st.cat).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'vi')); };
   function mbCan(mid) { return { edit: A.canDo('cau-truc.edit', mid), del: A.canDo('cau-truc.delete', mid), reset: A.canDo('cau-truc.reset', mid) }; }
+  // PHAN_CONG_NHAN_VIEN_THU_PHI: tài khoản demo role 'collector' (Nhân viên thu phí) thuộc phạm vi
+  // chợ mid — REUSE A.ACCOUNTS (mục 1 yêu cầu: không tạo danh sách nhân viên riêng), cùng cách lọc
+  // dkCollectorLabel() đã có ở js/v-tieuthuong.js (không dùng D.STAFF — đó là roster cũ, khác nguồn).
+  function mbCollectorAccounts(mid) {
+    return A.ACCOUNTS.list().filter(a => a.status === 'active' && A.ACCOUNTS.primaryRole(a) === 'collector' && A.allowedMarkets(a).indexOf(mid) !== -1);
+  }
+  // Trạng thái phân công NV thu phí của 1 dãy — suy TỪ collectorId trên CHÍNH các điểm kinh doanh
+  // thật thuộc dãy (mục 2 yêu cầu: "dãy chỉ là cách chọn nhanh", KHÔNG lưu field riêng ở cấp dãy):
+  //   null     = dãy chưa có điểm thật (đang quy hoạch)
+  //   ''       = có điểm thật nhưng chưa điểm nào được phân công
+  //   'MIXED'  = các điểm trong dãy đang có nhiều NV khác nhau
+  //   <acc id> = mọi điểm trong dãy cùng 1 NV
+  function mbZoneCollectorId(mid, z) {
+    const pts = mbZonePoints(mid, z);
+    if (!pts.length) return null;
+    const ids = Array.from(new Set(pts.map(p => p.collectorId || '')));
+    return ids.length === 1 ? ids[0] : 'MIXED';
+  }
+  function mbZoneCollectorLabel(mid, z) {
+    const id = mbZoneCollectorId(mid, z);
+    if (id === null || id === '') return id === null ? null : 'Chưa phân công';
+    if (id === 'MIXED') return 'Nhiều NV phụ trách';
+    const acc = A.ACCOUNTS.get(id);
+    return acc ? acc.fullName : 'Chưa phân công';
+  }
+  A.mbZoneCollectorLabel = mbZoneCollectorLabel;
   function mbActions(list) { list = list.filter(Boolean); return list.length ? `<span class="mb-actions">${list.join('')}</span>` : ''; }
   // Chợ chỉ có đúng 1 khối + 1 tầng (vd. chợ quê TTĐ — xem defaultLayout()): cây gộp 2 cấp Khối/Tầng
   // thành 1 hàng (mục 11 — suy ra từ CHÍNH cấu trúc dữ liệu, không hard-code theo market id), nên
@@ -164,32 +273,52 @@
     const totalQty = U.sum(z.planned, p => Number(p.qty) || 0);
     const totalArea = U.sum(z.planned, p => (Number(p.std) || 0) * (Number(p.qty) || 0));
     const over = totalArea > Number(z.area || 0);
-    return `<div class="drawer-h"><div><h3>Sửa khu</h3><div class="small muted" style="margin-top:2px">${z.status === 'nhap' ? '<span class="tag warn">Nháp</span>' : '<span class="tag ok">Chính thức</span>'}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
+    return `<div class="drawer-h"><div><h3>Sửa dãy</h3><div class="small muted" style="margin-top:2px">${z.status === 'nhap' ? '<span class="tag warn">Nháp</span>' : '<span class="tag ok">Chính thức</span>'}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
       <div class="drawer-b">
       <div class="form-grid">
-        <div class="field"><label>Mã khu *</label><input class="input" ${dis} data-ch="qh-zone-field" data-zone="${z.key}" data-k="code" value="${U.esc(z.code || '')}"></div>
-        <div class="field"><label>Tên khu *</label><input class="input" ${dis} data-ch="qh-zone-field" data-zone="${z.key}" data-k="name" value="${U.esc(z.name || '')}"></div>
-        ${isTtd ? '' : `<div class="field"><label>Thuộc khối/nhà chợ</label><select class="input" ${dis} data-ch="qh-zone-field" data-zone="${z.key}" data-k="blockId">${blocks.map(b => `<option value="${b.key}" ${b.key === z.blockId ? 'selected' : ''}>${U.esc(b.name)}</option>`).join('')}</select></div>
+        <div class="field"><label>Mã dãy *</label><input class="input" ${dis} data-ch="qh-zone-field" data-zone="${z.key}" data-k="code" value="${U.esc(z.code || '')}"></div>
+        <div class="field"><label>Tên dãy *</label><input class="input" ${dis} data-ch="qh-zone-field" data-zone="${z.key}" data-k="name" value="${U.esc(z.name || '')}"></div>
+        ${isTtd ? '' : `<div class="field"><label>Thuộc khu</label><select class="input" ${dis} data-ch="qh-zone-field" data-zone="${z.key}" data-k="blockId">${blocks.map(b => `<option value="${b.key}" ${b.key === z.blockId ? 'selected' : ''}>${U.esc(b.name)}</option>`).join('')}</select></div>
         <div class="field"><label>Tầng</label><select class="input" ${dis} data-ch="qh-zone-field" data-zone="${z.key}" data-k="floorId">${floors.map(f => `<option value="${f.key}" ${f.key === z.floorId ? 'selected' : ''}>${U.esc(f.name)}</option>`).join('')}</select></div>`}
-        <div class="field"><label>Ngành hàng chính *</label><select class="input" ${dis} data-ch="qh-zone-field" data-zone="${z.key}" data-k="catMain"><option value="">— Chọn ngành hàng —</option>${CATS.map(c => `<option ${c === z.catMain ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+        <div class="field"><label>Ngành hàng định hướng</label><select class="input" ${dis} data-ch="qh-zone-field" data-zone="${z.key}" data-k="catMain"><option value="">— Chưa xác định —</option>${CATS.map(c => `<option ${c === z.catMain ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
         <div class="field"><label>Ngành hàng phụ</label><input class="input" ${dis} data-ch="qh-zone-field" data-zone="${z.key}" data-k="catSub" value="${U.esc(z.catSub || '')}"></div>
-        <div class="field"><label>Diện tích khu (m²) *</label><input class="input" ${dis} type="number" min="0" data-ch="qh-zone-field" data-zone="${z.key}" data-k="area" value="${z.area || 0}"></div>
+        <div class="field"><label>Diện tích dãy (m²) *</label><input class="input" ${dis} type="number" min="0" data-ch="qh-zone-field" data-zone="${z.key}" data-k="area" value="${z.area || 0}"></div>
       </div>
       <div class="field" style="margin-top:10px"><label>Ghi chú</label><textarea class="input" ${dis} rows="2" data-ch="qh-zone-field" data-zone="${z.key}" data-k="note">${U.esc(z.note || '')}</textarea></div>
       <div class="divider"></div>
-      <div class="row"><h4 style="margin:0;font-size:var(--font-size-sm)">Quy hoạch loại điểm kinh doanh dự kiến</h4><span class="spacer"></span>${can.edit ? `<button class="btn sm primary" data-act="qh-pt-add" data-id="${z.key}">+ Thêm loại điểm</button>` : ''}</div>
-      <div style="margin-top:8px">${U.table([{ t: 'Loại điểm' }, { t: 'DT chuẩn (m²)', num: true }, { t: 'Số lượng', num: true }, { t: 'Diện tích (m²)', num: true }, { t: '' }],
+      <div class="row"><h4 style="margin:0;font-size:var(--font-size-sm)">Quy hoạch điểm kinh doanh trong dãy</h4><span class="spacer"></span>${can.edit ? `<button class="btn sm primary" data-act="qh-pt-add" data-id="${z.key}">+ Thêm loại diện tích</button>` : ''}</div>
+      <div style="margin-top:8px">${U.table([{ t: 'Loại diện tích' }, { t: 'DT chuẩn (m²)', num: true }, { t: 'Số lượng', num: true }, { t: 'Diện tích (m²)', num: true }, { t: '' }],
         z.planned.map(p => `<tr>
-          <td><input class="input" ${dis} data-ch="qh-pt-field" data-zone="${z.key}" data-pt="${p.key}" data-k="name" value="${U.esc(p.name || '')}" placeholder="VD: Sạp nhỏ"></td>
+          <td><select class="input" ${dis} data-ch="qh-pt-field" data-zone="${z.key}" data-pt="${p.key}" data-k="name"><option value="">— Chọn loại diện tích —</option>${U.AREA_TYPE_CODES.map(k => `<option ${p.name === U.areaTypeLabel(k) ? 'selected' : ''}>${U.areaTypeLabel(k)}</option>`).join('')}</select></td>
           <td><input class="input num" style="width:90px" ${dis} type="number" min="0" data-ch="qh-pt-field" data-zone="${z.key}" data-pt="${p.key}" data-k="std" value="${p.std || 0}"></td>
           <td><input class="input num" style="width:80px" ${dis} type="number" min="0" data-ch="qh-pt-field" data-zone="${z.key}" data-pt="${p.key}" data-k="qty" value="${p.qty || 0}"></td>
           <td class="num">${((Number(p.std) || 0) * (Number(p.qty) || 0)).toLocaleString('vi-VN')}</td>
-          <td>${can.del ? `<button class="btn sm danger" data-act="qh-pt-del" data-id="${z.key}|${p.key}">Xóa</button>` : ''}</td></tr>`), { empty: 'Chưa khai báo loại điểm nào' })}</div>
+          <td>${can.del ? `<button class="btn sm danger" data-act="qh-pt-del" data-id="${z.key}|${p.key}">Xóa</button>` : ''}</td></tr>`), { empty: 'Chưa khai báo loại diện tích nào' })}</div>
       <div class="row" style="padding:8px 2px;font-weight:600"><span>Tổng cộng</span><span class="spacer"></span><span>${totalQty.toLocaleString('vi-VN')} điểm dự kiến · ${totalArea.toLocaleString('vi-VN')} m²</span></div>
       ${over ? `<div class="note">Tổng diện tích điểm kinh doanh dự kiến (${totalArea.toLocaleString('vi-VN')} m²) vượt quá diện tích của khu (${Number(z.area || 0).toLocaleString('vi-VN')} m²).</div>` : ''}
+      ${qhZoneCollectorSectionHtml(mid, z, can, dis)}
       </div>
-      <div class="drawer-f">${can.del ? `<button class="btn danger" data-act="qh-del-zone" data-id="${z.key}">Xóa khu</button>` : ''}<span class="spacer"></span>
+      <div class="drawer-f">${can.del ? `<button class="btn danger" data-act="qh-del-zone" data-id="${z.key}">Xóa dãy</button>` : ''}<span class="spacer"></span>
         ${can.edit ? `<button class="btn" data-act="qh-save-draft" data-id="${z.key}">Lưu nháp</button><button class="btn primary" data-act="qh-save-final" data-id="${z.key}">Lưu và tiếp tục</button>` : '<button class="btn" data-act="close">Đóng</button>'}</div>`;
+  }
+  // PHAN_CONG_NHAN_VIEN_THU_PHI (mục 3 yêu cầu): section bổ sung trong popup "Sửa dãy" hiện có —
+  // KHÔNG redesign phần còn lại của popup. Chỉ hiện khi dãy đã khớp dữ liệu thật (có điểm kinh doanh
+  // để phân công) — dãy còn ở giai đoạn quy hoạch (chưa khớp) thì không có gì để gán.
+  function qhZoneCollectorSectionHtml(mid, z, can, dis) {
+    const pts = mbZonePoints(mid, z);
+    if (!pts.length) return '';
+    const collectors = mbCollectorAccounts(mid);
+    const curId = mbZoneCollectorId(mid, z); // '' | 'MIXED' | <acc id>
+    return `<div class="divider"></div>
+      <div class="row"><h4 style="margin:0;font-size:var(--font-size-sm)">Phân công thu phí</h4></div>
+      <div class="field" style="margin-top:8px"><label>Nhân viên thu phí phụ trách *</label>
+        <select class="input" ${dis} data-ch="qh-zone-collector" data-zone="${z.key}">
+          <option value="" ${!curId ? 'selected' : ''}>— Chưa phân công —</option>
+          ${curId === 'MIXED' ? '<option value="MIXED" selected disabled>— Nhiều NV phụ trách —</option>' : ''}
+          ${collectors.map(a => `<option value="${a.id}" ${curId === a.id ? 'selected' : ''}>${U.esc(a.fullName)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="small muted" style="margin-top:4px">Phạm vi: ${pts.length.toLocaleString('vi-VN')} điểm kinh doanh thuộc dãy này</div>`;
   }
   function qhOpenZoneDrawer(mid, zk) {
     const z = findZone(mid, zk);
@@ -212,15 +341,15 @@
   function mbZonesHtml(f, can) {
     return `<div class="mb-zones">${f.zones.length ? f.zones.map(z => `<div class="mb-node mb-zone ${mbIsSelZone(z.key) ? 'on' : ''}">
         <button class="mb-zone-label" data-act="mb-sel-zone" data-id="${z.key}">${U.esc(z.name || '(chưa đặt tên)')} <span class="muted small">${U.esc(z.code || '')}</span>${z.status === 'nhap' ? ' <span class="tag warn">Nháp</span>' : ''}</button>
-        ${mbActions([can.edit ? `<button class="mb-iconbtn" data-act="qh-zone-edit-open" data-id="${z.key}" title="Sửa khu">✎ Sửa</button>` : '', can.del ? `<button class="mb-iconbtn danger" data-act="qh-del-zone" data-id="${z.key}" title="Xóa khu">🗑 Xóa</button>` : ''])}
-      </div>`).join('') : '<div class="empty small">Chưa có khu</div>'}</div>`;
+        ${mbActions([can.edit ? `<button class="mb-iconbtn" data-act="qh-zone-edit-open" data-id="${z.key}" title="Sửa dãy">✎ Sửa</button>` : '', can.del ? `<button class="mb-iconbtn danger" data-act="qh-del-zone" data-id="${z.key}" title="Xóa dãy">🗑 Xóa</button>` : ''])}
+      </div>`).join('') : '<div class="empty small">Chưa có dãy</div>'}</div>`;
   }
   function mbTreeHtml(mid) {
     const can = mbCan(mid), blocks = blocksOf(mid);
     const isTtd = mid === 'TTD';
-    const addZoneLabel = isTtd ? '+ Khu chức năng' : '+ Khu';
+    const addZoneLabel = isTtd ? '+ Dãy chức năng' : '+ Dãy';
     const overviewBtn = `<button class="mb-node mb-overview ${!ui.mb.sel ? 'on' : ''}" data-act="mb-sel-overview">📊 Tổng quan</button>`;
-    if (!blocks.length) return overviewBtn + `<div class="empty small">${isTtd ? 'Chưa có phân khu chợ nào.' : `Chưa có khối/nhà chợ nào.${can.edit ? ' Bấm "+ Khối/Nhà chợ" ở trên để bắt đầu.' : ''}`}</div>`;
+    if (!blocks.length) return overviewBtn + `<div class="empty small">${isTtd ? 'Chưa có phân khu chợ nào.' : `Chưa có khu nào.${can.edit ? ' Bấm "+ Khu" ở trên để bắt đầu.' : ''}`}</div>`;
     // Chợ chỉ có đúng 1 khối + 1 tầng (vd. chợ quê TTĐ — xem defaultLayout()): gộp 2 cấp này lại
     // thành 1 hàng, tránh hiển thị 1 node "Tầng" trùng tên khối không mang giá trị (hotfix mục 14) —
     // suy ra từ CHÍNH cấu trúc dữ liệu, không hard-code theo market id. Hàng gộp chọn được, xem như
@@ -229,7 +358,7 @@
     if (mbFlatMode(mid)) {
       const b = blocks[0], f = b.floors[0];
       const rowBtns = mbActions([
-        can.edit ? `<button class="mb-iconbtn" data-act="qh-add-zone" data-block="${b.key}" data-floor="${f.key}" title="Thêm khu">${addZoneLabel}</button>` : '',
+        can.edit ? `<button class="mb-iconbtn" data-act="qh-add-zone" data-block="${b.key}" data-floor="${f.key}" title="Thêm dãy">${addZoneLabel}</button>` : '',
         !isTtd && can.edit ? `<button class="mb-iconbtn" data-act="qh-edit-block" data-id="${b.key}" title="Sửa">✎ Sửa</button>` : '',
         !isTtd && can.del ? `<button class="mb-iconbtn danger" data-act="qh-del-block" data-id="${b.key}" title="Xóa">🗑 Xóa</button>` : ''
       ]);
@@ -247,7 +376,7 @@
         ${bOpen ? (b.floors.length ? b.floors.map(f => {
           const fKey = 'f:' + f.key, fOpen = !ui.mb.collapsed[fKey];
           const fBtns = mbActions([
-            can.edit ? `<button class="mb-iconbtn" data-act="qh-add-zone" data-block="${b.key}" data-floor="${f.key}" title="Thêm khu">${addZoneLabel}</button>` : '',
+            can.edit ? `<button class="mb-iconbtn" data-act="qh-add-zone" data-block="${b.key}" data-floor="${f.key}" title="Thêm dãy">${addZoneLabel}</button>` : '',
             !isTtd && can.edit ? `<button class="mb-iconbtn" data-act="qh-edit-floor" data-block="${b.key}" data-id="${f.key}" title="Sửa">✎</button>` : '',
             !isTtd && can.del ? `<button class="mb-iconbtn danger" data-act="qh-del-floor" data-block="${b.key}" data-id="${f.key}" title="Xóa">🗑</button>` : ''
           ]);
@@ -259,26 +388,70 @@
       </div>`;
     }).join('');
   }
+  // Sơ đồ/Bảng (mục 4/5/6 yêu cầu redesign) — 2 nút nhỏ, KHÔNG đổi route/reload, chỉ đổi
+  // ui.mb.view rồi render lại đúng vùng nội dung bên phải, giữ nguyên filter/selection hiện tại.
+  function mbViewSwitcherHtml() {
+    return `<div class="seg" style="margin-bottom:10px"><button class="${ui.mb.view === 'grid' ? 'on' : ''}" data-act="mb-view" data-id="grid">▦ Sơ đồ</button><button class="${ui.mb.view === 'table' ? 'on' : ''}" data-act="mb-view" data-id="table">☰ Bảng</button></div>`;
+  }
   // Vùng nội dung bên phải: render đúng 1 trong 4 view theo cấp đang chọn (Tổng quan/Khối/Tầng/Khu),
   // luôn kèm breadcrumb derive từ LAYOUT hiện tại (mục 10). Node đã bị xóa (key không còn hợp lệ —
   // vd. vừa xóa khối/tầng/khu đang chọn, hoặc vừa đổi market/account) tự "heal" về Tổng quan, không
-  // vỡ trang.
+  // vỡ trang. Chế độ "Bảng" (ui.mb.view==='table') dùng CHUNG đúng phạm vi cây + bộ lọc (mục 6/7/11
+  // yêu cầu redesign) — bảng KHÔNG drill-down theo cấp như chế độ Sơ đồ, luôn liệt kê phẳng toàn bộ
+  // A.mbCurrentPoints(mid) trong phạm vi đang chọn.
   function mbRightHtml(mid) {
+    if (ui.mb.view === 'table') {
+      const sel = ui.mb.sel;
+      const zone = sel && sel.k === 'zone' ? findZone(mid, sel.id) : null;
+      const floor = sel && sel.k === 'floor' ? findFloorAny(mid, sel.id) : null;
+      const block = sel && sel.k === 'block' ? findBlock(mid, sel.id) : null;
+      const crumbs = zone ? mbCrumbsForZone(mid, zone)
+        : floor ? mbCrumbsForFloor(mid, floor.block, floor.floor)
+          : block ? mbCrumbsForBlock(mid, block) : [{ label: U.market(mid).name }];
+      const richTable = A.dkTableHtml && A.dkTableHtml(mid);
+      return mbViewSwitcherHtml() + mbCrumbHtml(crumbs || [{ label: U.market(mid).name }]) + (richTable || mbGenericTableHtml(mid));
+    }
     const can = mbCan(mid), sel = ui.mb.sel;
     if (sel && sel.k === 'zone') {
       const z = findZone(mid, sel.id);
-      if (z) return mbCrumbHtml(mbCrumbsForZone(mid, z)) + A.mbZoneDiagramHtml(mid, z, can.edit);
+      if (z) return mbViewSwitcherHtml() + mbCrumbHtml(mbCrumbsForZone(mid, z)) + A.mbZoneDiagramHtml(mid, z, can.edit);
       ui.mb.sel = null;
     } else if (sel && sel.k === 'floor') {
       const found = findFloorAny(mid, sel.id);
-      if (found) return mbCrumbHtml(mbCrumbsForFloor(mid, found.block, found.floor)) + A.mbFloorHtml(mid, found.floor);
+      if (found) return mbViewSwitcherHtml() + mbCrumbHtml(mbCrumbsForFloor(mid, found.block, found.floor)) + A.mbFloorHtml(mid, found.floor);
       ui.mb.sel = null;
     } else if (sel && sel.k === 'block') {
       const b = findBlock(mid, sel.id);
-      if (b) return mbCrumbHtml(mbCrumbsForBlock(mid, b)) + A.mbBlockHtml(mid, b);
+      if (b) return mbViewSwitcherHtml() + mbCrumbHtml(mbCrumbsForBlock(mid, b)) + A.mbBlockHtml(mid, b);
       ui.mb.sel = null;
     }
-    return mbCrumbHtml([{ label: U.market(mid).name }]) + A.mbOverviewHtml(mid, blocksOf(mid));
+    return mbViewSwitcherHtml() + mbCrumbHtml([{ label: U.market(mid).name }]) + A.mbOverviewHtml(mid, blocksOf(mid));
+  }
+  // Bảng chung cho market KHÔNG có bảng riêng (CL dùng A.dkTableHtml — richer, xem js/v-tieuthuong.js)
+  // — cột theo đúng tài liệu nghiệp vụ (Mã điểm/Khu/Tầng/Dãy/Diện tích/Loại diện tích/Ngành hàng/
+  // Trạng thái), cùng dataset A.mbCurrentPoints(mid) với Sơ đồ.
+  // MAT_BANG_TABLE_TOOLBAR_UNIFY (mục 2 yêu cầu): search/ngành hàng/loại diện tích ở ngay trên bảng —
+  // tái dùng NGUYÊN data-in="mb-filter-search"/data-ch="mb-filter-cat"/"mb-filter-area-type"/
+  // data-act="mb-filter-clear" đã có, không tạo control/state mới. Không có "Xuất Excel" ở đây vì
+  // market không phải CL chưa có chức năng đó (chỉ CL — dkViewCL, js/v-tieuthuong.js — mới có).
+  function mbGenericTableHtml(mid) {
+    const rows = A.mbCurrentPoints(mid), flt = ui.mb.filter, cats = A.mbCatOptions(mid), pos = A.mbPositionColumnVisibility();
+    const toolbar = `<div class="card-h" style="flex-wrap:wrap">
+        <input class="input" data-in="mb-filter-search" placeholder="Tìm mã điểm / tiểu thương" value="${U.esc(flt.search)}">
+        <select class="input" data-ch="mb-filter-area-type"><option value="">Loại diện tích: Tất cả</option>${U.AREA_TYPE_CODES.map(k => `<option value="${k}" ${flt.areaType === k ? 'selected' : ''}>${U.areaTypeLabel(k)}</option>`).join('')}</select>
+        <select class="input" data-ch="mb-filter-cat"><option value="">Ngành hàng: Tất cả</option>${cats.map(cName => `<option value="${U.esc(cName)}" ${flt.cat === cName ? 'selected' : ''}>${U.esc(cName)}</option>`).join('')}</select>
+        ${(flt.search || flt.status || flt.cat || flt.areaType) ? `<button class="btn sm" data-act="mb-filter-clear">↺ Xóa bộ lọc</button>` : ''}
+      </div>`;
+    return `<div class="card mb-table-card">${toolbar}<div class="card-b">${U.table(
+      [{ t: '<span class="mb-col-code">Mã điểm</span>' }, pos.zone && { t: '<span class="mb-col-zone">Khu</span>' }, pos.floor && { t: '<span class="mb-col-floor">Tầng</span>' }, pos.row && { t: '<span class="mb-col-row">Dãy</span>' }, { t: '<span class="mb-col-area">Diện tích (m²)</span>', num: true }, { t: '<span class="mb-col-area-type">Loại diện tích</span>' }, { t: '<span class="mb-col-category">Ngành hàng</span>' }, { t: '<span class="mb-col-trader">Tiểu thương</span>' }, { t: '<span class="mb-col-status">Trạng thái</span>' }, { t: '<span class="mb-col-actions">Thao tác</span>' }].filter(Boolean),
+      rows.map(st => {
+        const path = A.mbLayoutPathForPoint(mid, st), t = st.traderId ? A.idx.trader.get(st.traderId) : null;
+        return `<tr><td class="mb-col-code"><b>${U.esc(st.code)}</b></td>${pos.zone ? `<td class="mb-col-zone">${U.esc(path.khu)}</td>` : ''}${pos.floor ? `<td class="mb-col-floor">${U.esc(path.tang)}</td>` : ''}${pos.row ? `<td class="mb-col-row">${U.esc(path.day)}</td>` : ''}
+          <td class="num mb-col-area">${st.area.toLocaleString('vi-VN')}</td><td class="mb-col-area-type">${U.esc(U.areaTypeLabel(st.areaType) || 'Chưa có thông tin')}</td><td class="mb-col-category">${U.esc(st.cat || '')}</td>
+          <td class="mb-col-trader">${t ? U.esc(t.name) : '<span class="muted">–</span>'}</td><td class="mb-col-status">${U.statusTag(st.status)}</td>
+          <td class="nowrap mb-col-actions"><button class="btn sm" data-act="stall" data-id="${st.id}">Xem</button></td></tr>`;
+      }), { empty: 'Không có điểm kinh doanh phù hợp bộ lọc.' }
+    )}</div></div>`;
   }
 
   // Workspace "Mặt bằng chợ" DUY NHẤT — #/mat-bang (screen permission 'mat-bang' DUY NHẤT) trỏ vào
@@ -289,22 +462,33 @@
     const mid = qhMarket(), can = mbCan(mid), m = U.market(mid), open = !!ui.mb.treeOpen;
     const isTtd = mid === 'TTD';
     const stats = A.mbMarketStats(mid);
+    const flt = ui.mb.filter;
     const c = k => stats.byStatus[k] || 0;
-    const chip = (k, label, extra) => `<span class="mb-chip ${k ? 'mb-chip-' + k : 'mb-chip-total'}">${k ? `<i style="background:${D.STATUS[k].color}"></i>` : ''}<b>${extra != null ? extra : c(k)}</b>${label}</span>`;
+    // Chip trạng thái BẤM ĐƯỢC (mục 7 yêu cầu redesign) — vẫn đúng 1 nguồn đếm A.mbMarketStats(mid)
+    // như trước, chỉ thêm data-act + trạng thái "đang chọn" (ui.mb.filter.status). "Tất cả" = xoá lọc
+    // trạng thái (giữ nguyên search/ngành hàng).
+    const chip = (k, label, extra) => `<button class="mb-chip ${k ? 'mb-chip-' + k : 'mb-chip-total'} ${flt.status === (k || '') ? 'on' : ''}" data-act="mb-filter-status" data-id="${k || ''}">${k ? `<i style="background:${D.STATUS[k].color}"></i>` : ''}<b>${extra != null ? extra : c(k)}</b>${label}</button>`;
     const rentChip = (label, count) => `<span class="mb-chip mb-chip-total"><b>${count}</b>${label}</span>`;
     const rentalSummary = isTtd
       ? rentChip('quầy cố định tháng/quý', stats.points.filter(st => U.rentalKind(st) === 'fixed').length)
         + rentChip('quầy theo phiên/vãng lai', stats.points.filter(st => U.rentalKind(st) === 'session').length)
       : '';
-    const summary = rentalSummary + chip(null, 'điểm kinh doanh', stats.total) + chip('thue', 'đang thuê') + chip('trong', 'còn trống') + chip('no', 'nợ phí') + chip('ngung', 'tạm ngưng') + chip('tranhchap', 'tranh chấp');
+    const statusChips = ['thue', 'trong', 'no', 'ngung', 'tranhchap'].map(k => chip(k, D.STATUS[k].label)).join('');
+    const summary = rentalSummary + chip(null, 'điểm kinh doanh', stats.total) + statusChips;
+    // MAT_BANG_TABLE_TOOLBAR_UNIFY (mục 1 yêu cầu): card header giờ CHỈ còn tên màn/tên chợ/mô tả/
+    // badge thống kê — search + ngành hàng đã chuyển xuống toolbar ngay trên bảng (chỉ render ở chế
+    // độ Bảng), xem dkViewCL()/js/v-tieuthuong.js (CL) và mbGenericTableHtml() bên trên (market khác)
+    // — cùng tái dùng NGUYÊN data-in="mb-filter-search"/data-ch="mb-filter-cat", không tạo control
+    // mới, không đổi ý nghĩa ui.mb.filter. Badge trạng thái (chip) KHÔNG đổi — vẫn ở đây, vẫn áp dụng
+    // cho cả Sơ đồ lẫn Bảng như trước.
     return `<div class="card mb-head"><div class="card-b mb-head-b">
       <div class="mb-head-info"><h3>${isTtd ? 'Mặt bằng chợ' : 'Mặt bằng & điểm kinh doanh'}</h3><div class="mb-head-sub"><b>${U.esc(m.name)}</b> · ${U.esc(m.hang)}${m.address ? ' · ' + U.esc(m.address) : ''}</div>${m.note ? `<div class="small muted">${U.esc(m.note)}</div>` : ''}</div>
         <div class="mb-summary">${summary}</div></div></div>
     <button class="btn sm mb-tree-toggle" data-act="mb-toggle-tree">${open ? '✕ Đóng cấu trúc' : '☰ Cấu trúc mặt bằng'}</button>
     <div class="mb-workspace">
       <div class="card mb-tree-card ${open ? 'open' : ''}"><div class="card-h" style="padding-bottom:6px">
-          <h3>${isTtd ? 'Phân khu chợ' : 'Cấu trúc'}</h3><span class="spacer"></span>
-          ${!isTtd && can.edit ? `<button class="btn sm primary" data-act="qh-add-block">+ Khối/Nhà chợ</button>` : ''}
+          <h3>Cấu trúc chợ</h3><span class="spacer"></span>
+          ${!isTtd && can.edit ? `<button class="btn sm primary" data-act="qh-add-block">+ Khu</button>` : ''}
           ${can.reset ? `<button class="btn sm mb-more" data-act="qh-reset" title="Khôi phục cấu trúc mặc định">⋯</button>` : ''}</div>
         <div class="card-b mb-tree">${mbTreeHtml(mid)}</div></div>
       <div>${mbRightHtml(mid)}</div>
@@ -318,6 +502,11 @@
     'mb-sel-overview': () => { ui.mb.sel = null; A.render(); },
     'mb-toggle-node': el => { const k = el.dataset.key; ui.mb.collapsed[k] = !ui.mb.collapsed[k]; A.render(); },
     'mb-toggle-tree': () => { ui.mb.treeOpen = !ui.mb.treeOpen; A.render(); },
+    // Chuyển Sơ đồ/Bảng (mục 4 yêu cầu redesign) — CHỈ đổi ui.mb.view rồi A.render(); KHÔNG đổi
+    // route, KHÔNG reset ui.mb.sel (phạm vi cây)/ui.mb.filter (bộ lọc) đang giữ.
+    'mb-view': el => { ui.mb.view = el.dataset.id === 'table' ? 'table' : 'grid'; A.render(); },
+    'mb-filter-status': el => { ui.mb.filter.status = el.dataset.id; A.render(); },
+    'mb-filter-clear': () => { ui.mb.filter = { search: '', status: '', cat: '', areaType: '' }; A.render(); },
     'qh-zone-edit-open': el => { if (findZone(qhMarket(), el.dataset.id)) qhOpenZoneDrawer(qhMarket(), el.dataset.id); },
     'qh-reset': () => {
       if (!A.canDo('cau-truc.reset', qhMarket())) return;
@@ -498,7 +687,7 @@
       const z = findZone(qhMarket(), zk);
       if (!z) return;
       z.planned = z.planned.filter(p => p.key !== pk);
-      saveLayout(); A.render(); qhSyncDrawer(); U.toast('Đã xóa loại điểm');
+      saveLayout(); A.render(); qhSyncDrawer(); U.toast('Đã xóa loại diện tích');
     },
     'qh-save-draft': el => {
       if (!A.canDo('cau-truc.edit', qhMarket())) return;
@@ -544,6 +733,30 @@
     else p.name = el.value;
     saveLayout(); A.render(); qhSyncDrawer();
   };
+  // PHAN_CONG_NHAN_VIEN_THU_PHI (mục 5 yêu cầu): chọn 1 NV cho cả dãy → ghi collectorId lên MỌI điểm
+  // kinh doanh THẬT thuộc dãy (mục 2: "dãy chỉ là cách chọn nhanh") — GHI ĐÈ phân công cũ nếu có
+  // (mục 7: đổi NV phải thay thế, không cộng dồn). Lưu qua A.save() (state thật — A.db.stalls),
+  // KHÔNG qua saveLayout() (đó là model quy hoạch riêng, không liên quan tới field này).
+  A.CH['qh-zone-collector'] = el => {
+    const mid = qhMarket();
+    if (!A.canDo('cau-truc.edit', mid)) { A.render(); return; }
+    const z = findZone(mid, el.dataset.zone);
+    if (!z) return;
+    const pts = mbZonePoints(mid, z);
+    if (!pts.length) return;
+    const collectorId = el.value || null;
+    pts.forEach(st => { st.collectorId = collectorId; });
+    A.save();
+    const acc = collectorId ? A.ACCOUNTS.get(collectorId) : null;
+    U.toast(acc ? `Đã phân công ${acc.fullName} phụ trách thu phí dãy ${z.name || z.code}` : `Đã bỏ phân công thu phí dãy ${z.name || z.code}`);
+    A.render(); qhSyncDrawer();
+  };
+  A.IN['mb-filter-search'] = el => { ui.mb.filter.search = el.value; A.render(); };
+  A.CH['mb-filter-cat'] = el => { ui.mb.filter.cat = el.value; A.render(); };
+  // MAT_BANG_LOAI_DIEN_TICH: filter "Loại diện tích" dùng CHUNG cho mọi bảng điểm kinh doanh (CL lẫn
+  // market khác) — CÙNG 1 handler, tái dùng ui.mb.filter/A.mbMatchesFilter đã có, không tạo state
+  // riêng cho từng market như f.dkclType cũ (đã bỏ, xem js/v-tieuthuong.js).
+  A.CH['mb-filter-area-type'] = el => { ui.mb.filter.areaType = el.value; A.render(); };
 
   // Phase 7: #/mat-bang (screen permission 'mat-bang' DUY NHẤT) render workspace này — không còn
   // 2 registration 'so-do'/'cau-truc' riêng, không còn khái niệm "màn edit riêng" (xem ghi chú đầu

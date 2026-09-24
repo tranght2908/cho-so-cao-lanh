@@ -1058,7 +1058,16 @@
       non.push((incCL ? m.noncash : 0) + (incT ? ttdBase * share : 0));
     });
     db.issuedPeriods.filter(p => p <= '2026-09').forEach(p => {
-      const ps = db.payments.filter(x => U.inScope(x, xmMkt) && A.idx.invoice.get(x.invoiceId).period === p);
+      // TONG_QUAN_LIEN_CHO_REGRESSION_FIX: payment không phải lúc nào cũng có invoiceId hợp lệ —
+      // thu tại phiên chợ quê qua Mini App (js/mini.js, luồng QR/tiền mặt phiên) cố ý ghi
+      // `invoiceId: null` (không gắn với 1 khoản phải thu/kỳ thu chính thức nào). A.idx.invoice.get()
+      // trả về undefined cho các payment này — trước đây gọi thẳng `.period` trên kết quả đó làm
+      // TypeError, khiến A.VIEWS['tong-quan'] throw giữa chừng và A.render() không kịp gán lại
+      // #view.innerHTML (màn "Tổng quan liên chợ" coi như "biến mất", dù menu/permission/route vẫn
+      // đúng). Payment không có invoice hợp lệ chỉ đơn giản KHÔNG khớp kỳ p nào ở đây (đã có trong
+      // db.months ước tính riêng cho phiên chợ quê phía trên) — không phải lỗi dữ liệu cần sửa ở
+      // nguồn, chỉ cần chặn an toàn tại điểm đọc.
+      const ps = db.payments.filter(x => U.inScope(x, xmMkt) && x.invoiceId && A.idx.invoice.get(x.invoiceId) && A.idx.invoice.get(x.invoiceId).period === p);
       labels.push(p.slice(5) + '/' + p.slice(2, 4) + (p === '2026-09' ? '*' : ''));
       cash.push(U.sum(ps.filter(x => x.method === 'tm'), x => x.amount));
       non.push(U.sum(ps.filter(x => x.method !== 'tm'), x => x.amount));
@@ -1068,7 +1077,10 @@
 
   A.VIEWS['tong-quan'] = function () {
     // Tổng quan liên chợ = màn cross-market (A.SCREEN_MARKET['tong-quan'] === 'CROSS') — không bị
-    // chặn bởi selectedMarket, dùng bộ lọc nội bộ riêng A.xmMarket()/A.xmScopeBar() (mục 9 Phase 2).
+    // chặn bởi selectedMarket. TONG_QUAN_MARKET_DROPDOWN_DEDUP: dropdown "Chợ" trên topbar bị ẨN
+    // riêng cho màn này (chrome(), xem js/core.js) để khỏi trùng với "Phạm vi xem" vẽ ngay dưới đây —
+    // cả 2 cùng đọc/ghi CHUNG 1 state (ui.market) qua CHUNG 1 handler (data-ch="market-select" →
+    // A.ACT.market), không phải 2 cơ chế khác nhau. A.xmMarket() đọc thẳng ui.market.
     const xmMkt = A.xmMarket();
     const s = marketStats(xmMkt), db = A.db;
     const kpi = (label, value, sub, cls, bar) => `<div class="card kpi"><div class="k-label">${label}</div><div class="k-value">${value}</div>
@@ -1087,12 +1099,16 @@
     if (unmatched) alerts.push(['warn', `${unmatched} giao dịch chuyển khoản chưa khớp khoản thu`, 'doi-soat']);
     const escal = db.incidents.filter(i => U.inScope(i, xmMkt) && i.escalated && i.state !== 'dong');
 
-    const cmp = ['CL', 'TTD'].map(id => [id, marketStats(id)]);
+    // RBAC_MARKET_SCOPE_MIGRATION mục 3.B/24: Lãnh đạo/Quản trị (GLOBAL) "xem dữ liệu tổng hợp
+    // 12 chợ" — cột so sánh lấy ĐỘNG theo A.allowedMarkets(account đang dùng), không còn hard-code
+    // đúng 2 cột CL/TTD. account MARKET (hiếm khi vào được màn CROSS này) vẫn chỉ thấy (các) chợ
+    // trong scope của mình. 10 chợ mới (floors:[], chưa khảo sát) hiện cột 0 ở mọi chỉ tiêu — không
+    // crash (marketStats() vẫn trả object hợp lệ với mảng rỗng).
+    const cmp = A.allowedMarkets(A.currentAccount()).map(id => [id, marketStats(id)]);
     const cmpRow = (label, f) => `<tr><td>${label}</td>${cmp.map(c => `<td class="num">${f(c[1])}</td>`).join('')}</tr>`;
-    const xmBar = A.xmScopeBar();
 
     return `
-    ${xmBar ? `<div class="card"><div class="card-b row" style="padding-top:14px"><span class="label-sm">Phạm vi xem</span>${xmBar}</div></div>` : ''}
+    <div class="card"><div class="card-b row" style="padding-top:14px"><span class="label-sm">Phạm vi xem</span><select class="input" style="min-width:200px" data-ch="market-select">${A.marketSelectOptionsHtml()}</select></div></div>
     <div class="kpis">
       ${kpi('Điểm kinh doanh', s.stalls, `Lấp đầy ${U.pctTxt(s.occPct)}`, '', s.occPct)}
       ${kpi('Tiểu thương đang kinh doanh', s.traders, `${U.pctTxt(s.app)} đã dùng mini app`, '', s.app)}
@@ -1111,7 +1127,7 @@
     </div>
     <div class="grid g2">
       <div class="card"><div class="card-h"><h3>So sánh giữa các chợ</h3></div><div class="card-b">
-        <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Chỉ tiêu</th><th class="num">Chợ Cao Lãnh</th><th class="num">Chợ quê TTĐ</th></tr></thead><tbody>
+        <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Chỉ tiêu</th>${cmp.map(c => `<th class="num">${U.esc(U.mShort(c[0]))}</th>`).join('')}</tr></thead><tbody>
         ${cmpRow('Điểm kinh doanh / quầy', x => x.stalls)}
         ${cmpRow('Tỷ lệ lấp đầy', x => U.pctTxt(x.occPct))}
         ${cmpRow('Tiểu thương', x => x.traders)}
@@ -1288,10 +1304,16 @@
         const t = st.traderId ? A.idx.trader.get(st.traderId) : null;
         // `data-id` stays the technical id; `code` is the human-facing point code.
         const structural = st.structuralStatus === 'SPLIT';
-        return `<button class="cell s-${st.status} ${sec.type === 'kiot' ? 'kiot' : ''} ${structural ? 'dim' : ''}" data-act="stall" data-id="${st.id}" title="${mbPointTitle(st, t, structural)}">${st.code}</button>`;
+        // Bộ lọc dùng chung Sơ đồ/Bảng (js/v-cautruc.js A.mbMatchesFilter) — điểm không khớp mờ đi,
+        // cùng cách xử lý đã có cho điểm cấu trúc "Đã tách" (mục 7 yêu cầu redesign).
+        const dim = structural || !A.mbMatchesFilter(st);
+        return `<button class="cell s-${st.status} ${sec.type === 'kiot' ? 'kiot' : ''} ${dim ? 'dim' : ''}" data-act="stall" data-id="${st.id}" title="${mbPointTitle(st, t, structural)}">${st.code}</button>`;
       }).join('')}</div></div>`;
     }).join('<div class="aisle"></div>');
-    return `<div class="plan-section">${head}<div class="small muted" style="margin:-4px 0 8px">${stalls.length} điểm · ${mbMetaLine(mid, stalls)}</div>${rows}</div>`;
+    // PHAN_CONG_NHAN_VIEN_THU_PHI (mục 6 yêu cầu): thêm ĐÚNG 1 dòng nhỏ, không làm nặng giao diện —
+    // A.mbZoneCollectorLabel (js/v-cautruc.js) tự suy "Chưa phân công"/"Nhiều NV phụ trách"/tên NV.
+    const collectorLbl = A.mbZoneCollectorLabel(mid, z);
+    return `<div class="plan-section">${head}<div class="small muted" style="margin:-4px 0 8px">${stalls.length} điểm · ${mbMetaLine(mid, stalls)}</div>${collectorLbl ? `<div class="small muted" style="margin:-4px 0 8px">NV thu phí: ${U.esc(collectorLbl)}</div>` : ''}${rows}</div>`;
   }
   // ---- Khu (mục 8): giữ đúng hành vi cũ (legend lọc trạng thái + tìm kiếm + sơ đồ đầy đủ). ----
   A.mbZoneDiagramHtml = function (mid, z, canEditZone) {
@@ -1314,13 +1336,18 @@
       const cells = stalls.filter(st => st.row === r);
       return `<div class="plan-row"><span class="rl">${r}</span><div class="cells" style="--n:${sec.per}">${cells.map(st => {
         const t = st.traderId ? A.idx.trader.get(st.traderId) : null;
-        // Search filtering and structural history share the existing dim treatment.
-        const dim = st.structuralStatus === 'SPLIT' || !stallMatch(st);
+        // Search filtering and structural history share the existing dim treatment. Bộ lọc dùng
+        // chung Sơ đồ/Bảng (A.mbMatchesFilter) cộng thêm — mờ nếu KHÔNG khớp legend/search tại khu
+        // NÀY hoặc KHÔNG khớp bộ lọc chung ở thanh trên (mục 7 yêu cầu redesign).
+        const dim = st.structuralStatus === 'SPLIT' || !stallMatch(st) || !A.mbMatchesFilter(st);
         return `<button class="cell s-${st.status} ${sec.type === 'kiot' ? 'kiot' : ''} ${dim ? 'dim' : ''} ${ui.sel === st.id ? 'sel' : ''}" data-act="stall" data-id="${st.id}" title="${mbPointTitle(st, t, st.structuralStatus === 'SPLIT')}">${st.code}</button>`;
       }).join('')}</div></div>`;
     }).join('<div class="aisle"></div>');
+    // PHAN_CONG_NHAN_VIEN_THU_PHI (mục 6 yêu cầu): nối thêm vào ĐÚNG dòng meta nhỏ sẵn có, không tạo
+    // khối riêng — giữ giao diện nhẹ.
+    const collectorLbl = A.mbZoneCollectorLabel(mid, z);
     return `<div class="card"><div class="card-h">
-        <h3>${U.esc(sec.name)}</h3><span class="small muted">${stalls.length} điểm · ${U.esc(sec.cat)} · ${f.name}</span>
+        <h3>${U.esc(sec.name)}</h3><span class="small muted">${stalls.length} điểm · ${U.esc(sec.cat)} · ${f.name}${collectorLbl ? ` · NV thu phí: ${U.esc(collectorLbl)}` : ''}</span>
         <span class="spacer"></span>${editBtn}<input class="input" style="width:220px" placeholder="Tìm mã điểm hoặc tên tiểu thương" data-in="plan-search" value="${U.esc(ui.planSearch)}"></div>
       <div class="card-b"><div class="legend" style="margin-bottom:10px">${legend}</div>${rentalLegend ? `<div class="small muted" style="margin:-2px 0 10px">${rentalLegend}</div>` : ''}<div class="plan">${rows}</div></div></div>`;
   };

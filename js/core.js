@@ -10,7 +10,18 @@ window.APP = (function () {
   // luôn phải là 'CL'/'TTD' cụ thể. Bump version để mọi state cũ (kể cả market:'ALL' đã lưu từ
   // Phase 1) bị bỏ qua hoàn toàn thay vì cố vá — A.syncAccountContext() ở A.load() sẽ tự chọn lại
   // market hợp lệ theo đúng account đang dùng.
-  const RBAC_SCHEMA = 3; // 3: Trưởng BQL chợ có phạm vi cả 02 chợ
+  // v3 → v4 (RBAC_MARKET_SCOPE_MIGRATION): role master 8 → 6 (market_staff/accountant loại bỏ) +
+  // market master 2 → 12 chợ (D.MARKETS, data.js). Bump để: (1) js/permissions.js reseed roles/
+  // rolePerms SẠCH theo 6 role mới (bỏ qua nhánh merge — không còn account/permission nào giữ
+  // market_staff/accountant "dưới tên khác"); (2) js/accounts.js reseed account demo SẠCH theo 12
+  // chợ + 6 role (accounts cũ scoped role đã nghỉ hưu không "tự nâng quyền" thành role khác — bị bỏ
+  // hẳn, seed lại an toàn từ defaultAccounts()); (3) UI state cũ (currentDemoAccountId trỏ tới 1
+  // account không còn tồn tại) tự rơi về fallback an toàn của A.currentAccount()/A.syncAccountContext()
+  // — không tự chọn account quyền cao hơn. Không có mapping account cũ nào chắc chắn 1:1 (tên/SĐT độc
+  // lập với role thật) nên KHÔNG cố "vá" state cũ — reseed sạch là fallback an toàn nhất (mục 25 yêu
+  // cầu: "fallback an toàn; không tự nâng quyền; không tự chuyển account thành Admin"). Xem
+  // RBAC_MARKET_SCOPE_MIGRATION_REPORT.md.
+  const RBAC_SCHEMA = 4; // 4: role master 6 role + market master 12 chợ
   const A = {
     D, db: null, idx: null, current: null, RBAC_SCHEMA,
     VIEWS: {}, ACT: {}, IN: {}, CH: {},
@@ -18,10 +29,15 @@ window.APP = (function () {
       // currentDemoAccountId là nguồn xác thực duy nhất cho phiên demo — role hiệu lực (ui.role)
       // luôn được suy ra từ account này (A.syncAccountContext()), không còn set trực tiếp qua UI.
       currentDemoAccountId: null, role: null,
-      // market (selectedMarket) luôn là 'CL'/'TTD' cụ thể sau khi A.syncAccountContext() chạy lần
-      // đầu (xem A.load()) — giá trị khởi tạo 'ALL' dưới đây chỉ là placeholder trước khi có
-      // account, không bao giờ được dùng để hiển thị/filter thật.
-      market: 'ALL', xmScope: 'ALL', planMarket: 'CL', floor: { CL: 'T1', TTD: 'KHU' }, hidden: {}, sel: null, planSearch: '',
+      // MARKET_SELECTOR_ALL_UNIFICATION: market (selectedMarket) là 1 chợ cụ thể HOẶC 'ALL' — 'ALL'
+      // chỉ hợp lệ khi account đang dùng có scopeType GLOBAL (system_admin/ward_leader — xem
+      // A.ACCOUNTS.scopeType()). A.syncAccountContext() đảm bảo bất biến này ngay sau khi có account
+      // (xem A.load()); giá trị khởi tạo dưới đây chỉ là placeholder trước khi có account, không bao
+      // giờ được dùng để hiển thị/filter thật. Trước đây có 1 biến ui.xmScope RIÊNG cho bộ lọc nội bộ
+      // của các màn CROSS (Tổng quan/Báo cáo) — đã BỎ, hợp nhất về đúng 1 state (ui.market) và đúng 1
+      // selector (dropdown "Chợ" trên thanh top, xem chrome()) để tránh 2 điều khiển cho cùng 1 khái
+      // niệm "đang xem chợ nào" (yêu cầu "không tạo selector thứ hai").
+      market: 'ALL', planMarket: 'CL', floor: { CL: 'T1', TTD: 'KHU' }, hidden: {}, sel: null, planSearch: '',
       page: {}, f: {}, contractTab: 'all', period: '2026-09', report: 'lapday', readingsFilter: 'all', incCat: '',
       dsTab: null, dsBankFilter: 'all', dsBankSearch: '', dsFrom: null, dsTo: null,
       mini: { traderId: null, step: 'login', tab: 'home', pay: null, lastPays: null, attach: false, bill: null }
@@ -62,8 +78,10 @@ window.APP = (function () {
   U.icon = (name, title) => `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${title ? ` role="img" aria-label="${U.esc(title)}"` : ' aria-hidden="true"'}>${ICON_PATHS[name] || ICON_PATHS.file}</svg>`;
   U.market = id => D.MARKETS.find(m => m.id === id);
   U.mShort = id => U.market(id).short;
-  // Phase 2: selectedMarket (ui.market) không còn có thể là 'ALL' — luôn là 'CL'/'TTD' cụ thể
-  // (A.syncAccountContext() đảm bảo điều này). Vì vậy U.inM chỉ còn so sánh trực tiếp.
+  // MARKET_SELECTOR_ALL_UNIFICATION: ui.market có thể là 'ALL' (account GLOBAL). U.inM chỉ dùng ở
+  // các màn 'BOTH'/'CL'/'TTD' (theo A.SCREEN_MARKET) — renderer của các màn đó KHÔNG BAO GIỜ chạy
+  // khi ui.market === 'ALL' (A.render() chặn trước, xem A.marketRequiredHtml()), nên so sánh trực
+  // tiếp ở đây luôn an toàn (không cần nhánh 'ALL' riêng).
   U.inM = x => x.market === ui.market;
   // Dùng riêng cho các màn cross-market (Tổng quan liên chợ, Báo cáo) — nhận thẳng 1 market cụ
   // thể HOẶC 'ALL' làm tham số, KHÔNG đọc ui.market toàn cục. 'ALL' ở đây là "Tất cả" của bộ lọc
@@ -71,6 +89,10 @@ window.APP = (function () {
   U.inScope = (x, m) => m === 'ALL' || x.market === m;
   U.staffName = id => { const s = D.STAFF.find(x => x.id === id); return s ? s.name : (id || ''); };
   U.typeLabel = t => ({ kiot: 'Ki-ốt', nhalong: 'Trong nhà lồng', ngoai: 'Ngoài nhà lồng', phien: 'Quầy phiên' }[t]);
+  // Physical-area taxonomy for Mặt bằng only; it is separate from `type` and `pointType`.
+  U.areaTypeLabel = t => ({ covered: 'Có mái che', uncovered: 'Không mái che', self_produced: 'Tự sản tự tiêu', session: 'Theo phiên' }[t]);
+  // Các mã loại diện tích dùng chung cho dropdown/filter của màn Mặt bằng.
+  U.AREA_TYPE_CODES = ['covered', 'uncovered', 'self_produced', 'session'];
   // Đơn giá hiện hành của điểm KD lấy từ "Chính sách thu và biểu phí", không phải
   // đơn giá snapshot của hợp đồng. NEED_CONFIRMATION: quy tắc mapping biểu phí
   // theo khu vực/loại điểm cần được nghiệp vụ xác nhận khi có API/backend.
@@ -258,24 +280,36 @@ window.APP = (function () {
     }
     return acc;
   };
-  // Phase 2 — Market Scope: Account.marketScopes là nguồn enforce chính (KHÔNG dùng Role.scope).
-  // 'ALL' trong marketScopes (dữ liệu mock hợp lệ, xem accounts.js) = "toàn hệ thống", giải nén
-  // thành 2 market cụ thể ở đây — nơi DUY NHẤT hiểu 'ALL' theo nghĩa này. Nơi khác trong app
-  // không được tự ý coi 'ALL' là 1 market cụ thể.
+  // Market Scope: Account.marketScopes là nguồn enforce chính (KHÔNG dùng Role.scope). 'ALL' trong
+  // marketScopes (dữ liệu mock hợp lệ, xem accounts.js — dùng cho account GLOBAL: system_admin/
+  // ward_leader) = "toàn hệ thống", giải nén thành ĐÚNG danh sách id hiện có trong D.MARKETS (market
+  // master 12 chợ, data.js) ở đây — nơi DUY NHẤT hiểu 'ALL' theo nghĩa này. Nơi khác trong app
+  // không được tự ý coi 'ALL' là 1 market cụ thể. RBAC_MARKET_SCOPE_MIGRATION: KHÔNG còn hard-code
+  // ['CL','TTD'] — market hợp lệ tra theo D.MARKETS động, để account MARKET scoped tới bất kỳ chợ
+  // nào trong 12 chợ đều được nhận diện đúng, không chỉ 2 chợ demo gốc.
   A.allowedMarkets = function (account) {
     const scopes = (account && account.marketScopes) || [];
-    if (scopes.indexOf('ALL') !== -1) return ['CL', 'TTD'];
-    return scopes.filter(m => m === 'CL' || m === 'TTD');
+    if (scopes.indexOf('ALL') !== -1) return D.MARKETS.map(m => m.id);
+    const validIds = new Set(D.MARKETS.map(m => m.id));
+    return scopes.filter(m => validIds.has(m));
   };
   // Market applicability theo RBAC_V1_SPEC.md mục 6 — nguồn cấu hình TẬP TRUNG duy nhất, tránh
   // rải if(screen===...)/if(market===...) ở từng view:
-  //   'CROSS'  = màn liên chợ (Tổng quan, Báo cáo) — không bị chặn bởi selectedMarket, có bộ lọc
-  //              nội bộ riêng (xem A.xmMarket()/A.xmScopeBar()).
-  //   'BOTH'   = áp dụng cho cả CL và TTD, theo đúng selectedMarket hiện tại.
-  //   'CL'/'TTD' = chỉ áp dụng đúng 1 chợ trong prototype V1 hiện tại.
+  //   'CROSS'  = màn liên chợ (Tổng quan, Danh mục chợ, Báo cáo) — không bị chặn bởi selectedMarket,
+  //              đọc thẳng A.xmMarket() (= ui.market) làm phạm vi lọc nội bộ; selectedMarket='ALL'
+  //              (account GLOBAL) là điều kiện bình thường ở đúng các màn này.
+  //   'BOTH'   = MARKET VIEW áp dụng cho TẤT CẢ chợ trong phạm vi account (không giới hạn CL/TTD —
+  //              đã mở rộng cho 12 chợ), theo đúng selectedMarket cụ thể hiện tại. Khi selectedMarket
+  //              ='ALL' (account GLOBAL), màn vẫn "truy cập được" (menu/route không chặn — xem
+  //              A.screenMarketOk()) nhưng A.render() hiện thông báo yêu cầu chọn 1 chợ cụ thể thay
+  //              vì gọi renderer thật (A.marketRequiredHtml() — MARKET_SELECTOR_ALL_UNIFICATION).
+  //   'CL'/'TTD' = chỉ áp dụng đúng 1 chợ cụ thể (nghiệp vụ đặc thù của riêng chợ đó trong prototype
+  //              — Tài sản chợ mới demo cho Chợ Cao Lãnh, Phiên chợ quê là đặc thù Chợ quê Tân Thuận
+  //              Đông — KHÔNG phải "giả định 2 chợ" cần tổng quát hoá, giữ nguyên). Cùng quy tắc
+  //              'ALL' như 'BOTH' ở trên.
   //   'SYSTEM' = không gate theo market (Tài khoản, Cài đặt = hệ thống).
   A.SCREEN_MARKET = {
-    'tong-quan': 'CROSS', 'bao-cao': 'CROSS',
+    'tong-quan': 'CROSS', 'bao-cao': 'CROSS', 'danh-muc-cho': 'CROSS',
     'mat-bang': 'BOTH', 'tai-san': 'CL', 'diem-kd': 'BOTH', 'tieu-thuong': 'BOTH', 'hop-dong': 'BOTH',
     'cau-hinh-gia': 'BOTH',
     'phai-thu': 'BOTH', 'thu-tien': 'BOTH', 'doi-soat': 'BOTH', 'cong-no': 'BOTH',
@@ -287,41 +321,56 @@ window.APP = (function () {
   // screenId có hợp lệ với market scope của account + selectedMarket hiện tại không. Đây là điểm
   // kiểm tra DUY NHẤT cho cả 2 vế "accountHasRequiredMarketScope" và "screenApplicableToMarket"
   // của công thức CAN_VIEW_SCREEN (RBAC_V1_SPEC.md mục 7).
+  // MARKET_SELECTOR_ALL_UNIFICATION: khi ui.market === 'ALL' (chỉ đạt được nếu account đang dùng có
+  // scopeType GLOBAL — A.syncAccountContext() đảm bảo bất biến này), màn 'BOTH'/'CL'/'TTD' vẫn coi là
+  // "truy cập được" (không biến mất khỏi menu, route không bị bật lại về màn khác) — nhưng renderer
+  // thật của màn đó KHÔNG được gọi với ui.market='ALL' (xem A.render()/A.marketRequiredHtml()), tự
+  // hiện thông báo "chọn 1 chợ cụ thể" thay vì render sai dữ liệu hoặc crash.
   A.screenMarketOk = function (screenId, account) {
     const kind = A.SCREEN_MARKET[screenId];
     if (!kind || kind === 'CROSS' || kind === 'SYSTEM') return true;
+    if (ui.market === 'ALL') return true;
     if (A.allowedMarkets(account).indexOf(ui.market) === -1) return false; // ngoài phạm vi account
     if (kind === 'BOTH') return true;
     return kind === ui.market; // 'CL' hoặc 'TTD' cụ thể
   };
-  // "Tất cả" của bộ lọc NỘI BỘ cho các màn cross-market — gộp các chợ trong PHẠM VI ACCOUNT hiện
-  // tại (A.allowedMarkets), KHÔNG phải gộp toàn hệ thống vô điều kiện, và hoàn toàn tách biệt với
-  // selectedMarket toàn cục (ui.market luôn CL/TTD cụ thể, không bao giờ là 'ALL').
-  A.xmMarket = function () {
-    const allowed = A.allowedMarkets(A.currentAccount());
-    if (allowed.length <= 1) return allowed[0] || ui.market;
-    return (ui.xmScope && allowed.indexOf(ui.xmScope) !== -1) ? ui.xmScope : 'ALL';
+  // "Tất cả" của các màn cross-market (Tổng quan liên chợ, Báo cáo, Danh mục chợ) giờ ĐỌC THẲNG
+  // selectedMarket (ui.market) — không còn ui.xmScope/A.xmScopeBar() riêng (đã bỏ, gộp về đúng 1
+  // state/1 cơ chế, xem A.marketSelectOptionsHtml() bên dưới). A.syncAccountContext() đảm bảo
+  // ui.market luôn hợp lệ (1 chợ cụ thể trong A.allowedMarkets(account), hoặc 'ALL' chỉ khi account
+  // GLOBAL) trước khi bất kỳ renderer nào chạy, nên ở đây chỉ cần trả nguyên giá trị.
+  A.xmMarket = function () { return ui.market; };
+  // Sinh HTML <option> cho dropdown chọn chợ (value=ui.market hiện tại được đánh dấu selected) —
+  // "Tất cả" (value='ALL') chỉ có khi account đang dùng scopeType GLOBAL. Dùng chung cho dropdown
+  // "Chợ" trên topbar (mọi màn 'BOTH'/'CL'/'TTD') VÀ dropdown "Phạm vi xem" vẽ riêng trong nội dung
+  // "Tổng quan liên chợ" (xem js/v-dieuhanh.js) — ĐÚNG 1 nguồn logic option, tránh viết lại 2 lần
+  // rồi lệch nhau; cả 2 nơi cùng dùng data-ch="market-select" → A.CH['market-select'] → A.ACT.market
+  // (cùng 1 state/1 handler, không phải 2 selector độc lập).
+  A.marketSelectOptionsHtml = function () {
+    const accNow = A.currentAccount();
+    const isGlobal = A.ACCOUNTS.scopeType(accNow) === 'GLOBAL';
+    const opts = (isGlobal ? [['ALL', 'Tất cả']] : []).concat(A.allowedMarkets(accNow).map(id => [id, U.mShort(id)]));
+    return opts.map(o => `<option value="${o[0]}" ${ui.market === o[0] ? 'selected' : ''}>${U.esc(o[1])}</option>`).join('');
   };
-  const MARKET_LABELS = { CL: 'Chợ Cao Lãnh', TTD: 'Chợ quê TTĐ' };
-  // Thanh chọn "Tất cả / CL / TTD" nội bộ dùng chung cho Tổng quan liên chợ + Báo cáo thống kê.
-  // Không hiện gì nếu account chỉ có 1 market trong scope (không có gì để chọn).
-  A.xmScopeBar = function () {
-    const allowed = A.allowedMarkets(A.currentAccount());
-    if (allowed.length <= 1) return '';
-    const cur = A.xmMarket();
-    const opts = [['ALL', 'Tất cả']].concat(allowed.map(id => [id, MARKET_LABELS[id]]));
-    return `<div class="seg">${opts.map(o => `<button class="${cur === o[0] ? 'on' : ''}" data-act="xm-scope" data-id="${o[0]}">${o[1]}</button>`).join('')}</div>`;
-  };
-  // ui.role KHÔNG còn được set trực tiếp qua hành động chọn role, và ui.market luôn phải nằm
-  // trong A.allowedMarkets(account) — cả 2 luôn được suy ra/kẹp lại từ account đang dùng ở đây.
-  // Gọi mỗi khi currentDemoAccountId đổi, và phòng thủ thêm ở đầu chrome()/A.route() để bắt cả
-  // trường hợp account (hoặc marketScopes của nó) bị khoá/đổi giữa phiên.
+  // ui.role KHÔNG còn được set trực tiếp qua hành động chọn role, và ui.market luôn phải là 1 chợ
+  // hợp lệ trong A.allowedMarkets(account) HOẶC 'ALL' (chỉ khi account đang dùng có scopeType GLOBAL
+  // — A.ACCOUNTS.scopeType()) — cả 2 luôn được suy ra/kẹp lại từ account đang dùng ở đây. Gọi mỗi khi
+  // currentDemoAccountId đổi, và phòng thủ thêm ở đầu chrome()/A.route() để bắt cả trường hợp account
+  // (hoặc marketScopes của nó) bị khoá/đổi giữa phiên.
+  // MARKET_SELECTOR_ALL_UNIFICATION mục 8 test H: đổi từ account GLOBAL đang ở 'ALL' sang account
+  // MARKET-scoped (Trưởng BQL/NV thu phí/NV kỹ thuật) phải tự kẹp ui.market về 1 chợ cụ thể — KHÔNG
+  // được giữ 'ALL' trái phép. Ngược lại, nếu ui.market đã là 1 chợ cụ thể hợp lệ và account mới là
+  // GLOBAL, GIỮ NGUYÊN chợ đang chọn (không tự nhảy sang 'ALL') — chỉ người dùng bấm dropdown mới đổi.
   A.syncAccountContext = function () {
     const acc = A.currentAccount();
     ui.role = acc ? A.ACCOUNTS.primaryRole(acc) : null;
     const allowed = A.allowedMarkets(acc);
-    if (allowed.length) { if (allowed.indexOf(ui.market) === -1) ui.market = allowed[0]; }
-    else if (!ui.market) ui.market = 'CL'; // phòng thủ tối đa, không kỳ vọng xảy ra với seed hiện tại
+    const isGlobal = acc && A.ACCOUNTS.scopeType(acc) === 'GLOBAL';
+    if (ui.market === 'ALL') {
+      if (!isGlobal) ui.market = allowed[0] || 'CL'; // clamp: ALL không hợp lệ với account MARKET-scoped
+    } else if (allowed.length) {
+      if (allowed.indexOf(ui.market) === -1) ui.market = isGlobal ? 'ALL' : allowed[0];
+    } else if (!ui.market) ui.market = 'CL'; // phòng thủ tối đa, không kỳ vọng xảy ra với seed hiện tại
     return { role: ui.role, market: ui.market };
   };
 
@@ -356,6 +405,13 @@ window.APP = (function () {
       if (s) { const x = JSON.parse(s); if (x && x.version === D.VERSION) A.db = x; }
     } catch (e) { A.db = null; }
     if (A.db) A.reindex(); else A.fresh();
+    // FE/localStorage migration: preserve existing records and legacy fields, adding only areaType.
+    const areaTypeByLegacyType = { kiot: 'covered', nhalong: 'covered', ngoai: 'self_produced', phien: 'session' };
+    const migratedAreaType = A.db.stalls.some(st => !st.areaType);
+    if (migratedAreaType) {
+      A.db.stalls.forEach(st => { if (!st.areaType) st.areaType = areaTypeByLegacyType[st.type] || 'covered'; });
+      A.save();
+    }
     A.ensureMiniAppDemoLink();
     // RBAC V1 migration: ui state cũ (schema khác, hoặc còn giữ shape {role, market} kiểu cũ
     // không có currentDemoAccountId) không tương thích — bỏ qua, để currentDemoAccountId=null rồi
@@ -516,6 +572,10 @@ window.APP = (function () {
   A.MENU = [
     { group: 'Điều hành', items: [
       { id: 'tong-quan', ico: U.icon('dashboard'), label: 'Tổng quan liên chợ' },
+      // "Danh mục chợ" = quản lý thông tin CẤP CHỢ (tên, mã, địa điểm, hạng, BQL, bảng giá, trạng
+      // thái) — KHÁC "Mặt bằng chợ" bên dưới (cấu trúc Khu/Tầng/Dãy/Điểm kinh doanh BÊN TRONG 1 chợ,
+      // GIỮ NGUYÊN không đổi). Xem js/marketcatalog.js + js/v-danhmuccho.js.
+      { id: 'danh-muc-cho', ico: U.icon('store'), label: 'Danh mục chợ' },
       { sub: 'Hạ tầng chợ' },
       // Phase 7: UI "Thiết lập mặt bằng chợ" + "Sơ đồ mặt bằng" đã gộp thành 1 workspace "Mặt bằng
       // chợ" (MARKET_LAYOUT_UX_HOTFIX_REPORT.md) và nay RBAC cũng chuẩn hóa theo — 2 screen
@@ -555,6 +615,51 @@ window.APP = (function () {
   ];
   A.menuItem = id => { for (const g of A.MENU) for (const it of g.items) if (it.id === id) return it; return null; };
 
+  // Nhãn rút gọn cho thanh "Tài khoản demo" (mục 14 yêu cầu — biết ngay account thuộc role nào mà
+  // không làm thanh quá dài với tới 12 chợ × nhiều role). Role tuỳ biến/không có trong map vẫn hiển
+  // thị đúng tên đầy đủ (fallback ở chrome() bên dưới), không crash nếu admin đổi tên 1 trong 6 role
+  // gốc hoặc tạo role mới.
+  const DEMO_ROLE_SHORT = {
+    system_admin: 'QTHT', ward_leader: 'Lãnh đạo', market_manager: 'Trưởng BQL',
+    collector: 'Thu phí', technician: 'Kỹ thuật', trader: 'Tiểu thương'
+  };
+  // DEMO_ACCOUNT_BAR_COMPACT_GROUPING (mục 4/5/6/10 yêu cầu): với 12 chợ, liệt kê phẳng mọi account
+  // hợp lệ (bản cũ) làm thanh dài hàng chục nút khi selectedMarket='ALL'. Nhóm lại theo 2 tầng, vẫn
+  // ĐÚNG 1 nguồn dữ liệu (A.ACCOUNTS.list()) và ĐÚNG 1 tiêu chí lọc (marketScopes qua
+  // A.allowedMarkets(), KHÔNG hardcode theo tên/id):
+  //   - "Tài khoản toàn hệ thống" (scopeType GLOBAL — system_admin/ward_leader): LUÔN hiện, mọi
+  //     selectedMarket, để luôn có đường quay lại account GLOBAL (mục 6).
+  //   - selectedMarket='ALL': CHỈ hiện nhóm GLOBAL ở trên + 1 dòng gợi ý — KHÔNG bung account của cả
+  //     12 chợ (mục 4).
+  //   - selectedMarket=1 chợ cụ thể: thêm các nhóm MARKET-scoped account CÓ chợ đó trong marketScopes,
+  //     xếp theo role (mục 5) — account KHÔNG thuộc chợ đang chọn không xuất hiện.
+  const DEMO_MARKET_ROLE_ORDER = ['market_manager', 'collector', 'technician', 'trader'];
+  function demoAccountBtnHtml(a, withRolePrefix) {
+    const roleTxt = withRolePrefix ? (DEMO_ROLE_SHORT[A.ACCOUNTS.primaryRole(a)] || (A.PERM.role(A.ACCOUNTS.primaryRole(a)) || {}).name || '') : '';
+    return `<button class="${ui.currentDemoAccountId === a.id ? 'on' : ''}" data-act="demo-account" data-id="${a.id}">${roleTxt ? U.esc(roleTxt) + ' — ' : ''}${U.esc(a.fullName)}</button>`;
+  }
+  function demoAccountBarHtml() {
+    const active = A.ACCOUNTS.list().filter(a => a.status === 'active');
+    const globals = active.filter(a => A.ACCOUNTS.scopeType(a) === 'GLOBAL');
+    const globalGroup = globals.length ? `<span class="label-sm">Tài khoản toàn hệ thống</span><span class="seg">${globals.map(a => demoAccountBtnHtml(a, true)).join('')}</span>` : '';
+    if (ui.market === 'ALL') {
+      return globalGroup + '<span class="small muted">Chọn một chợ cụ thể để xem tài khoản demo thuộc chợ đó.</span>';
+    }
+    const marketAccounts = active.filter(a => A.ACCOUNTS.scopeType(a) !== 'GLOBAL' && A.allowedMarkets(a).indexOf(ui.market) !== -1);
+    const roleGroups = DEMO_MARKET_ROLE_ORDER.map(rid => {
+      const list = marketAccounts.filter(a => A.ACCOUNTS.primaryRole(a) === rid);
+      if (!list.length) return '';
+      const r = A.PERM.role(rid);
+      return `<span class="label-sm">${U.esc(DEMO_ROLE_SHORT[rid] || (r ? r.name : rid))}</span><span class="seg">${list.map(a => demoAccountBtnHtml(a, false)).join('')}</span>`;
+    }).join('');
+    // Phòng thủ: account MARKET với role tuỳ biến (admin thêm role thứ 7+ ngoài 4 role gốc ở trên,
+    // xem js/permissions.js) vẫn phải hiện, không âm thầm biến mất khỏi thanh demo.
+    const known = new Set(DEMO_MARKET_ROLE_ORDER);
+    const others = marketAccounts.filter(a => !known.has(A.ACCOUNTS.primaryRole(a)));
+    const otherGroup = others.length ? `<span class="label-sm">Khác</span><span class="seg">${others.map(a => demoAccountBtnHtml(a, true)).join('')}</span>` : '';
+    return globalGroup + roleGroups + otherGroup;
+  }
+
   function chrome() {
     // Phòng thủ: nếu account đang dùng vừa bị khoá/xoá giữa phiên, hoặc marketScopes của nó
     // không còn chứa selectedMarket đang lưu, tự "heal" role + market về đúng account trước khi
@@ -576,24 +681,43 @@ window.APP = (function () {
         return `<a href="#/${it.id}" class="${A.current === it.id ? 'active' : ''}"><span class="ico">${it.ico}</span>${label}${b ? `<span class="badge">${b}</span>` : ''}</a>`;
       }).join('');
     }).join('');
-    // RBAC V1: topbar không còn cho chọn role trực tiếp — chọn Account Demo, role chỉ hiển thị.
-    $('#role-seg').innerHTML = A.ACCOUNTS.list().filter(a => a.status === 'active')
-      .map(a => `<button class="${ui.currentDemoAccountId === a.id ? 'on' : ''}" data-act="demo-account" data-id="${a.id}">${U.esc(a.fullName)}</button>`).join('');
+    // RBAC_MARKET_SCOPE_MIGRATION mục 11-14 + DEMO_ACCOUNT_BAR_COMPACT_GROUPING: thanh "Tài khoản
+    // demo" lọc theo ui.market (selectedMarket) và nhóm theo scope/role — xem demoAccountBarHtml().
+    $('#role-seg').innerHTML = demoAccountBarHtml();
     const activeRole = A.PERM.role(ui.role);
     const roleLabelEl = $('#active-role-label');
     if (roleLabelEl) roleLabelEl.textContent = activeRole ? ('Vai trò: ' + activeRole.name) : '';
-    // RBAC V1 Phase 2: global market selector chỉ hiện market thuộc A.allowedMarkets(account
-    // đang dùng), không còn 'ALL'. Nếu account chỉ có 1 market, selector chỉ còn 1 nút (đã luôn
-    // "on" vì syncAccountContext() đảm bảo ui.market chính là market đó).
-    $('#market-seg').innerHTML = A.allowedMarkets(A.currentAccount())
-      .map(id => `<button class="${ui.market === id ? 'on' : ''}" data-act="market" data-id="${id}">${MARKET_LABELS[id]}</button>`).join('');
-    $('#market-wrap').style.display = A.current === 'mini-app' ? 'none' : '';
+    // MARKET_SELECTOR_ALL_UNIFICATION: market selector dropdown — CÓ lựa chọn "Tất cả" (value='ALL')
+    // khi account đang dùng có scopeType GLOBAL (A.ACCOUNTS.scopeType() — system_admin/ward_leader).
+    // Với account MARKET, dropdown chỉ liệt kê ĐÚNG (các) chợ trong marketScopes của account đó,
+    // KHÔNG có "Tất cả" — account không thể tự đổi sang chợ/phạm vi ngoài scope vì lựa chọn đó không
+    // tồn tại trong dropdown. A.marketSelectHtml() sinh ra ĐÚNG 1 lần logic option này, dùng chung
+    // cho cả dropdown "Chợ" trên topbar LẪN dropdown "Phạm vi xem" trong Tổng quan liên chợ (xem
+    // js/v-dieuhanh.js) — cả 2 chỗ cùng đọc/ghi ui.market qua data-ch="market-select"/A.ACT.market,
+    // không phải 2 state/2 cơ chế khác nhau, chỉ là 2 vị trí hiển thị của ĐÚNG 1 selector.
+    $('#market-seg').innerHTML = `<select class="input" style="min-width:200px" data-ch="market-select">${A.marketSelectOptionsHtml()}</select>`;
+    // TONG_QUAN_MARKET_DROPDOWN_DEDUP: "Tổng quan liên chợ" tự vẽ dropdown "Phạm vi xem" riêng ngay
+    // trong nội dung dashboard (cùng control, xem trên) — ẩn bản trên topbar CHỈ cho đúng màn này để
+    // khỏi có 2 dropdown chọn chợ cùng lúc trên 1 màn. Các màn khác (kể cả 'mini-app', đã ẩn từ
+    // trước) không đổi.
+    $('#market-wrap').style.display = (A.current === 'mini-app' || A.current === 'tong-quan') ? 'none' : '';
     const it = A.menuItem(A.current);
     const pageLabel = it && it.id === 'mat-bang' && ui.market === 'CL' ? 'Mặt bằng & điểm kinh doanh' : (it ? it.label : '');
     $('#page-title').textContent = pageLabel;
     document.title = (pageLabel ? pageLabel + ' · ' : '') + 'Chợ số Cao Lãnh – Prototype';
   }
 
+  // MARKET_SELECTOR_ALL_UNIFICATION mục 5: màn 'BOTH'/'CL'/'TTD' bắt buộc cần 1 chợ cụ thể để render
+  // đúng (Mặt bằng, Tài sản chợ, Tiểu thương, Hợp đồng, Thu tiền, Đối soát, Công nợ, Phản ánh...) —
+  // khi ui.market === 'ALL', KHÔNG được silently fallback về Chợ Cao Lãnh và KHÔNG được gọi renderer
+  // thật của màn đó (nhiều renderer tra cứu U.market(ui.market)/U.inM trực tiếp, sẽ sai dữ liệu hoặc
+  // crash nếu chạy với 'ALL') — hiện thông báo yêu cầu chọn 1 chợ cụ thể thay thế.
+  A.marketRequiredHtml = function (screenId) {
+    const msg = screenId === 'mat-bang'
+      ? 'Vui lòng chọn một chợ cụ thể để xem và quản lý mặt bằng.'
+      : (() => { const it = A.menuItem(screenId); const lbl = it ? it.label : 'nội dung màn này'; return `Vui lòng chọn một chợ cụ thể để xem ${lbl.charAt(0).toLowerCase() + lbl.slice(1)}.`; })();
+    return `<div class="empty">${U.esc(msg)}</div>`;
+  };
   A.render = function (scroll) {
     const ae = document.activeElement;
     const focusKey = ae && ae.dataset && ae.dataset.in ? ae.dataset.in : null;
@@ -603,8 +727,10 @@ window.APP = (function () {
     // account hiện tại có quyền — không được render A.VIEWS[...] trong trường hợp đó dù hàm view
     // có tồn tại hay không (NO SCREEN PERMISSION = NO SCREEN RENDER).
     const view = A.current ? A.VIEWS[A.current] : null;
+    const kind = A.current ? A.SCREEN_MARKET[A.current] : null;
+    const needsMarket = ui.market === 'ALL' && (kind === 'BOTH' || kind === 'CL' || kind === 'TTD');
     $('#view').innerHTML = A.current
-      ? (view ? view() : '<div class="empty">Đang xây dựng</div>')
+      ? (needsMarket ? A.marketRequiredHtml(A.current) : (view ? view() : '<div class="empty">Đang xây dựng</div>'))
       : '<div class="empty">Tài khoản hiện chưa được cấp quyền truy cập chức năng.</div>';
     if (focusKey) {
       const el = document.querySelector(`[data-in="${focusKey}"]`);
@@ -630,10 +756,14 @@ window.APP = (function () {
     // 'mat-bang' NGAY TẠI ĐÂY, trước khi đánh giá U.can(r) — không cần nhánh xử lý riêng, logic
     // fallback U.can(r)/A.firstAccessibleScreen() ngay dưới đây tự áp dụng y hệt mọi route khác
     // (account không có quyền 'mat-bang' thì tự rơi về fallback, không trắng trang/không loop).
+    // MAT_BANG_KHU_TANG_DAY_REDESIGN: "Sơ đồ mặt bằng"/"Danh sách điểm" không còn 2 tab riêng — cả
+    // 2 route vẫn dẫn vào ĐÚNG 1 workspace (ui.mb.view chọn Sơ đồ/Bảng, xem js/v-cautruc.js), chỉ
+    // khác giá trị mặc định khi mới vào theo đúng ý nghĩa route cũ (#/mat-bang → Sơ đồ, #/diem-kd →
+    // Bảng) — GIỮ NGUYÊN route, không tự ý đổi.
     if (ui.market === 'CL' && r === 'mat-bang') {
-      ui.dkTab = 'map';
+      if (ui.mb) ui.mb.view = 'grid';
     } else if (ui.market === 'CL' && (r === 'diem-kd' || r === 'so-do' || r === 'cau-truc')) {
-      ui.dkTab = r === 'diem-kd' ? 'list' : 'map';
+      if (ui.mb) ui.mb.view = r === 'diem-kd' ? 'table' : 'grid';
       r = 'mat-bang';
     } else if (r === 'so-do' || r === 'cau-truc') r = 'mat-bang';
     // NO SCREEN PERMISSION = NO SCREEN RENDER: route yêu cầu (từ hash, kể cả gõ thẳng URL) chỉ
@@ -690,28 +820,36 @@ window.APP = (function () {
       if (U.can('mini-app') && ((role && role.selfService) || A.canDirectCollect(ui.market))) A.go('mini-app');
       else if (!U.can(A.current) || A.current === 'mini-app') A.go('tong-quan'); else A.route();
     },
-    // Đổi selectedMarket toàn cục: chỉ chấp nhận market nằm trong allowedMarkets của account đang
-    // dùng (phòng thủ — UI vốn chỉ render đúng các nút này). Luôn đi qua A.route() thay vì
-    // A.render() để route hiện tại được re-validate ngay (vd. đang ở "Phiên chợ quê" mà đổi sang
-    // Chợ Cao Lãnh phải tự chuyển màn khác, không được tiếp tục hiện phien-cho cũ — mục 6).
+    // Đổi selectedMarket toàn cục: chấp nhận market nằm trong allowedMarkets của account đang dùng,
+    // HOẶC 'ALL' nếu account có scopeType GLOBAL (MARKET_SELECTOR_ALL_UNIFICATION — phòng thủ, UI vốn
+    // chỉ render đúng các lựa chọn này). Luôn đi qua A.route() thay vì A.render() để route hiện tại
+    // được re-validate ngay (vd. đang ở "Phiên chợ quê" mà đổi sang Chợ Cao Lãnh phải tự chuyển màn
+    // khác, không được tiếp tục hiện phien-cho cũ — mục 6).
     market: el => {
       const id = el.dataset.id;
-      if (A.allowedMarkets(A.currentAccount()).indexOf(id) === -1) return;
+      const acc = A.currentAccount();
+      if (id === 'ALL') { if (A.ACCOUNTS.scopeType(acc) !== 'GLOBAL') return; }
+      else if (A.allowedMarkets(acc).indexOf(id) === -1) return;
       ui.market = id; ui.page = {}; ui.sel = null; A.saveUi(); A.route();
     },
-    'xm-scope': el => { ui.xmScope = el.dataset.id; A.render(); },
     page: el => { ui.page[el.dataset.k] = (ui.page[el.dataset.k] || 0) + Number(el.dataset.d); A.render(); },
     go: el => A.go(el.dataset.to),
     receipt: el => A.showReceipt(A.db.payments.filter(p => p.receipt === el.dataset.id && U.inM(p) && A.receiptBusinessStateOk(p))),
     guide: () => A.guide(),
     'drawer-back': () => A.drawerBack()
   });
+  // Cầu nối cho dropdown thay hàng nút .seg cũ (RBAC_MARKET_SCOPE_MIGRATION mục 8) — tái dùng
+  // NGUYÊN VẸN logic A.ACT.market đã có (không tạo helper thứ 2), chỉ đổi nguồn đọc giá trị từ
+  // el.dataset.id (nút bấm) sang el.value (select).
+  Object.assign(A.CH, {
+    'market-select': el => A.ACT.market({ dataset: { id: el.value } })
+  });
 
   A.guide = function () {
     A.modal(A.mHead('Hướng dẫn xem prototype') + `<div class="modal-b">
-      <p class="muted" style="margin-top:0">Prototype mô phỏng <b>Hệ thống quản lý chợ số</b> cho 02 chợ: Chợ Cao Lãnh và Chợ quê Cù lao Tân Thuận Đông. Đổi <b>Vai trò</b> và <b>Chợ</b> ở thanh trên cùng.</p>
+      <p class="muted" style="margin-top:0">Prototype mô phỏng <b>Hệ thống quản lý chợ số</b> cho phạm vi 12 chợ (Chợ Cao Lãnh và Chợ quê Cù lao Tân Thuận Đông có đầy đủ dữ liệu nghiệp vụ demo; 10 chợ còn lại mới có trong danh mục, chưa khảo sát hạ tầng). Đổi <b>Tài khoản demo</b> và <b>Chợ</b> ở thanh trên cùng.</p>
       <ol class="script">
-        <li><div><b>Lãnh đạo phường → Tổng quan liên chợ:</b> số liệu tổng hợp, so sánh 02 chợ, cảnh báo cần xử lý.</div></li>
+        <li><div><b>Lãnh đạo phường → Tổng quan liên chợ:</b> số liệu tổng hợp, so sánh giữa các chợ, cảnh báo cần xử lý.</div></li>
         <li><div><b>Ban Quản lý chợ quê TTĐ → Thu tiền & biên lai:</b> ghi nhận thu tiền mặt trực tiếp, hệ thống phát hành biên lai, tự mở lệnh in và gửi biên lai qua Mini app.</div></li>
         <li><div><b>Tiểu thương → Mini app:</b> đăng nhập bằng OTP, thanh toán khoản phải nộp, gửi phản ánh kèm ảnh.</div></li>
         <li><div>Quay lại <b>Ban Quản lý chợ → Phản ánh & sự cố:</b> phản ánh vừa gửi đã nằm ở cột "Tiếp nhận" để phân công xử lý.</div></li>

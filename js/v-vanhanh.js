@@ -103,8 +103,8 @@
   };
   A.addIncident = function (stallId, cat, title, desc, source, photo) {
     const st = A.idx.stall.get(stallId);
-    const created = U.today(), dl = new Date(created); dl.setDate(dl.getDate() + (cat === 'Điện' || cat === 'PCCC' ? 1 : 3));
-    const i = { id: 'SC-' + U.pad(101 + A.db.incidents.length, 4), market: st.market, stallId, traderId: st.traderId, cat, title, desc: desc || '', photo: !!photo, state: 'tiepnhan', source, escalated: false, created, deadline: dl.toISOString().slice(0, 10), assignee: null, rating: null, log: [{ at: created, text: 'Tiếp nhận phản ánh từ ' + source }] };
+    const created = U.today();
+    const i = { id: 'SC-' + U.pad(101 + A.db.incidents.length, 4), market: st.market, stallId, traderId: st.traderId, cat, title, desc: desc || '', photo: !!photo, state: 'tiepnhan', source, escalated: false, created, deadline: incDefaultDeadline(cat, created, false), assignee: null, rating: null, log: [{ at: created, text: 'Tiếp nhận phản ánh từ ' + source }] };
     A.db.incidents.push(i); A.save();
     return i;
   };
@@ -127,6 +127,16 @@
   const incOverdueDays = i => Math.max(0, U.days(i.deadline, U.today()));
   const incAssets = () => (A.db.marketAssets || []).filter(a => a.market === ui.market);
   const incCats = () => ['Điện', 'Cấp thoát nước', 'Vệ sinh', 'An ninh trật tự', 'PCCC', 'Hạ tầng', 'Khác'];
+  const incUrgentCats = new Set(['Điện', 'PCCC']);
+  const incDeadlineDays = cat => incUrgentCats.has(cat) ? 1 : 3;
+  const incDefaultDeadline = (cat, base, withTime) => {
+    const s = String(base || U.today()).slice(0, 10);
+    const d = new Date(Number(s.slice(0, 4)), Number(s.slice(5, 7)) - 1, Number(s.slice(8, 10)));
+    d.setDate(d.getDate() + incDeadlineDays(cat));
+    const day = d.getFullYear() + '-' + U.pad(d.getMonth() + 1) + '-' + U.pad(d.getDate());
+    return withTime ? day + 'T17:00' : day;
+  };
+  const incDeadlineRuleText = cat => incUrgentCats.has(cat) ? 'Điện/PCCC: 1 ngày' : 'Nhóm khác: 3 ngày';
   const incIsTechnician = () => ui.role === 'technician';
   const incCurrentStaffId = () => {
     const acc = A.currentAccount && A.currentAccount();
@@ -153,6 +163,17 @@
     (i.history || (i.history = [])).push({ at: incNow(), action, detail: detail || '' });
     (i.log || (i.log = [])).push({ at: U.today(), text: action + (detail ? ': ' + detail : '') });
   }
+  function incEnsureLeaderReminder(i) {
+    if (!late(i) || i.leaderReminder) return false;
+    i.leaderReminder = {
+      at: incNow(),
+      targetRole: 'market_manager',
+      targetLabel: 'Trưởng Ban Quản lý',
+      reason: 'OVERDUE_INCIDENT'
+    };
+    incHistory(i, 'Hệ thống nhắc Trưởng Ban Quản lý', 'Phản ánh quá hạn xử lý');
+    return true;
+  }
   function ensureIncidentV2() {
     let changed = false;
     (A.db.incidents || []).forEach(i => {
@@ -161,6 +182,8 @@
       if (!i.work) { i.work = null; changed = true; }
       if (!i.acceptance) { i.acceptance = null; changed = true; }
       if (!i.images) { i.images = { report: i.photo ? ['Ảnh phản ánh (mock)'] : [], inspection: [], work: [] }; changed = true; }
+      if (!i.deadline) { i.deadline = incDefaultDeadline(i.cat, i.created || U.today(), String(i.created || '').indexOf('T') !== -1); changed = true; }
+      if (incEnsureLeaderReminder(i)) changed = true;
     });
     const defs = [
       ['SC-DEMO-01','tiepnhan','Đồng hồ nước chạy bất thường','Cấp thoát nước','AST-CL-003'],
@@ -179,6 +202,7 @@
       if (['dangxuly','chonghiemthu','hoanthanh','dong'].includes(d[1])) i.inspection = { at:'2026-09-12T09:15', by:'NV05', condition:'Kiểm tra tại hiện trường, đã xác định nguyên nhân cần xử lý.', note:'Ghi nhận kỹ thuật mẫu.' };
       if (['chonghiemthu','hoanthanh','dong'].includes(d[1])) i.work = { content:'Đã thực hiện xử lý theo hiện trạng ghi nhận.', result:'Thiết bị/vị trí hoạt động bình thường sau kiểm tra.', completedAt:'2026-09-12T11:20', note:'' };
       if (['hoanthanh','dong'].includes(d[1])) i.acceptance = { result:'pass', by:'NV01', at:'2026-09-12T14:00', note:'Đạt yêu cầu.' };
+      incEnsureLeaderReminder(i);
       A.db.incidents.push(i); changed = true;
     });
     if (changed) A.save();
@@ -192,14 +216,14 @@
   function incDetail(i) {
     const tab=ui.incDetailTab||'overview', a=incAsset(i), st=A.idx.stall.get(i.stallId)||{}, t=A.idx.trader.get(i.traderId), action=incAction(i);
     let body='';
-    if(tab==='overview') body=`<dl class="kv"><dt>Mã sự cố</dt><dd>${i.id}</dd><dt>Tên sự cố</dt><dd>${U.esc(i.title)}</dd><dt>Trạng thái</dt><dd><span class="tag info">${stLabel(i.state)}</span>${late(i)?` <span class="tag danger">Quá hạn ${incOverdueDays(i)} ngày</span>`:''}</dd><dt>Nhóm</dt><dd>${U.esc(i.cat)}</dd><dt>Nguồn</dt><dd>${U.esc(i.source)}</dd><dt>Người phản ánh</dt><dd>${U.esc(t?t.name:'—')}</dd><dt>Điểm KD</dt><dd>${U.esc(st.code||'—')}</dd><dt>Ngày tiếp nhận</dt><dd>${incFmt(i.created)}</dd><dt>Hạn xử lý</dt><dd>${incFmt(i.deadline)}</dd><dt>Người xử lý</dt><dd>${U.esc(incStaff(i))}</dd></dl>${a?`<section class="inc-section"><h4>Tài sản liên quan</h4>${incAssetPreview(a)}<button class="btn sm" data-act="asset-open" data-id="${a.id}">Xem tài sản</button></section>`:''}`;
+    if(tab==='overview') body=`<dl class="kv"><dt>Mã sự cố</dt><dd>${i.id}</dd><dt>Tên sự cố</dt><dd>${U.esc(i.title)}</dd><dt>Trạng thái</dt><dd><span class="tag info">${stLabel(i.state)}</span>${late(i)?` <span class="tag danger">Quá hạn ${incOverdueDays(i)} ngày</span>`:''}${i.leaderReminder?' <span class="tag warn">Đã nhắc Trưởng BQL</span>':''}</dd><dt>Nhóm</dt><dd>${U.esc(i.cat)} <span class="small muted">(${incDeadlineRuleText(i.cat)})</span></dd><dt>Nguồn</dt><dd>${U.esc(i.source)}</dd><dt>Người phản ánh</dt><dd>${U.esc(t?t.name:'—')}</dd><dt>Điểm KD</dt><dd>${U.esc(st.code||'—')}</dd><dt>Ngày tiếp nhận</dt><dd>${incFmt(i.created)}</dd><dt>Hạn xử lý</dt><dd>${incFmt(i.deadline)}</dd>${i.leaderReminder?`<dt>Nhắc quá hạn</dt><dd>Hệ thống đã nhắc ${U.esc(i.leaderReminder.targetLabel)} lúc ${incFmt(i.leaderReminder.at)}</dd>`:''}<dt>Người xử lý</dt><dd>${U.esc(incStaff(i))}</dd></dl>${a?`<section class="inc-section"><h4>Tài sản liên quan</h4>${incAssetPreview(a)}<button class="btn sm" data-act="asset-open" data-id="${a.id}">Xem tài sản</button></section>`:''}`;
     if(tab==='inspection') body=i.inspection?`<dl class="kv"><dt>Thời gian kiểm tra</dt><dd>${incFmt(i.inspection.at)}</dd><dt>Người kiểm tra</dt><dd>${U.esc(U.staffName(i.inspection.by))}</dd><dt>Tình trạng thực tế</dt><dd>${U.esc(i.inspection.condition)}</dd><dt>Ghi chú kỹ thuật</dt><dd>${U.esc(i.inspection.note||'—')}</dd></dl>${incImages(i.images.inspection)}`:'<div class="empty">Chưa có thông tin kiểm tra hiện trường.</div>';
     if(tab==='work') body=i.work?`<dl class="kv"><dt>Người xử lý</dt><dd>${U.esc(incStaff(i))}</dd><dt>Nội dung xử lý</dt><dd>${U.esc(i.work.content)}</dd><dt>Kết quả sau xử lý</dt><dd>${U.esc(i.work.result)}</dd><dt>Thời gian hoàn thành</dt><dd>${incFmt(i.work.completedAt)}</dd><dt>Ghi chú</dt><dd>${U.esc(i.work.note||'—')}</dd></dl>${incImages(i.images.work)}`:'<div class="empty">Chưa có kết quả xử lý.</div>';
     if(tab==='acceptance') body=i.acceptance?`<dl class="kv"><dt>Kết quả</dt><dd><span class="tag ${i.acceptance.result==='pass'?'ok':'danger'}">${i.acceptance.result==='pass'?'Đạt':'Chưa đạt'}</span></dd><dt>Người nghiệm thu</dt><dd>${U.esc(U.staffName(i.acceptance.by))}</dd><dt>Thời gian</dt><dd>${incFmt(i.acceptance.at)}</dd><dt>Ý kiến</dt><dd>${U.esc(i.acceptance.note||'—')}</dd>${i.acceptance.rework?`<dt>Yêu cầu xử lý lại</dt><dd>${U.esc(i.acceptance.rework)}</dd>`:''}</dl>`:'<div class="empty">Chưa thực hiện nghiệm thu.</div>';
     if(tab==='images') body=`<section class="inc-section"><h4>Ảnh phản ánh</h4>${incImages(i.images.report)}</section><section class="inc-section"><h4>Ảnh kiểm tra hiện trường</h4>${incImages(i.images.inspection)}</section><section class="inc-section"><h4>Ảnh sau xử lý</h4>${incImages(i.images.work)}</section>`;
     if(tab==='history') body=`<div class="inc-timeline">${(i.history||[]).map(h=>`<div class="inc-timeline-i"><b>${incFmt(h.at)}</b><strong>${U.esc(h.action)}</strong>${h.detail?`<span>${U.esc(h.detail)}</span>`:''}</div>`).join('')}</div>`;
     const permissionAction = i.state === 'tiepnhan' ? 'assign' : (i.state === 'chonghiemthu' ? 'accept' : (i.state === 'hoanthanh' ? 'close' : 'field'));
-    return `<div class="drawer-h"><div><h3>${i.id} · ${U.esc(i.title)}</h3><div class="small muted"><span class="tag info">${stLabel(i.state)}</span>${late(i)?' <span class="tag danger">Quá hạn '+incOverdueDays(i)+' ngày</span>':''}</div></div><span class="spacer"></span>${action&&i.state!=='dong'&&incCan(i,permissionAction)?`<button class="btn primary" data-act="${action[0]}" data-id="${i.id}">${action[1]}</button>`:''}<button class="x" data-act="close">×</button></div><div class="drawer-b"><div class="seg asset-tabs">${[['overview','Tổng quan'],['inspection','Kiểm tra'],['work','Xử lý'],['acceptance','Nghiệm thu'],['images','Hình ảnh'],['history','Nhật ký']].map(x=>`<button class="${tab===x[0]?'on':''}" data-act="inc-detail-tab" data-id="${i.id}" data-tab="${x[0]}">${x[1]}</button>`).join('')}</div><div class="inc-detail-content">${body}</div></div><div class="drawer-f"><button class="btn" data-act="close">Đóng</button></div>`;
+    return `<div class="drawer-h"><div><h3>${i.id} · ${U.esc(i.title)}</h3><div class="small muted"><span class="tag info">${stLabel(i.state)}</span>${late(i)?' <span class="tag danger">Quá hạn '+incOverdueDays(i)+' ngày</span>':''}${i.leaderReminder?' <span class="tag warn">Đã nhắc Trưởng BQL</span>':''}</div></div><span class="spacer"></span>${action&&i.state!=='dong'&&incCan(i,permissionAction)?`<button class="btn primary" data-act="${action[0]}" data-id="${i.id}">${action[1]}</button>`:''}<button class="x" data-act="close">×</button></div><div class="drawer-b"><div class="seg asset-tabs">${[['overview','Tổng quan'],['inspection','Kiểm tra'],['work','Xử lý'],['acceptance','Nghiệm thu'],['images','Hình ảnh'],['history','Nhật ký']].map(x=>`<button class="${tab===x[0]?'on':''}" data-act="inc-detail-tab" data-id="${i.id}" data-tab="${x[0]}">${x[1]}</button>`).join('')}</div><div class="inc-detail-content">${body}</div></div><div class="drawer-f"><button class="btn" data-act="close">Đóng</button></div>`;
   }
   function openIncident(i) { if(!i)return; ui.incDetailTab=ui.incDetailTab||'overview'; A.$('#modal-root').innerHTML=`<div class="drawer-overlay" data-act="close"></div><div class="drawer inc-detail-drawer">${incDetail(i)}</div>`; }
   function incPermissionAction(i) {
@@ -256,7 +280,7 @@
         <td><b>${i.id}</b><div class="small muted">${incFmt(i.created)}</div></td>
         <td><b>${U.esc(i.title)}</b><div class="small muted">${U.esc(i.cat)} · ${U.esc(i.source || '')}</div></td>
         <td>${U.esc(st.code || '—')}${a ? `<div class="small muted">${U.esc(a.code)} · ${U.esc(a.name)}</div>` : ''}</td>
-        <td><span class="tag info">${stLabel(i.state)}</span>${late(i)?' <span class="tag danger">Quá hạn</span>':''}${i.escalated?' <span class="tag purple">Vượt cấp</span>':''}</td>
+        <td><span class="tag info">${stLabel(i.state)}</span>${late(i)?' <span class="tag danger">Quá hạn</span>':''}${i.leaderReminder?' <span class="tag warn">Đã nhắc BQL</span>':''}${i.escalated?' <span class="tag purple">Vượt cấp</span>':''}</td>
         <td>${U.esc(incStaff(i))}<div class="small muted">Hạn: ${incFmt(i.deadline)}</div></td>
         <td class="nowrap"><button class="btn sm" data-act="inc-open" data-id="${i.id}">Xem</button>${canAct?` <button class="btn sm primary" data-act="${act[0]}" data-id="${i.id}">${act[1]}</button>`:''}</td>
       </tr>`;
@@ -267,6 +291,8 @@
     const marketName = U.mShort(ui.market);
     const all = A.db.incidents.filter(i => incCanView(i) && (!ui.incCat || i.cat === ui.incCat));
     const tech = incIsTechnician();
+    const overdue = all.filter(late);
+    const reminded = overdue.filter(i => i.leaderReminder);
     const title = tech ? 'Công việc kỹ thuật được giao' : 'Phản ánh & sự cố';
     const desc = tech
       ? 'Nhận xử lý, cập nhật tiến độ và gửi kết quả cho phản ánh đã được phân công tại ' + marketName + '.'
@@ -275,10 +301,11 @@
     if (!tabs.some(t => t.id === ui.incFlowTab)) ui.incFlowTab = tabs[0] && tabs[0].id;
     const tab = tabs.find(t => t.id === ui.incFlowTab) || tabs[0];
     const rows = all.filter(i => incTabMatch(i, tab));
+    const reminderHtml = !tech && overdue.length ? `<div class="note warn" style="margin-bottom:12px"><b>Nhắc Trưởng Ban Quản lý:</b> ${reminded.length}/${overdue.length} phản ánh quá hạn tại ${U.esc(marketName)} đã được hệ thống đánh dấu nhắc xử lý.</div>` : '';
     return `<div class="page-head"><div><h2>${title}</h2><p class="muted">${desc}</p></div>${!tech && A.canDo('su-co.tao-phan-anh', ui.market) ? '<button class="btn primary" data-act="inc-new-v2">+ Tạo phản ánh</button>' : ''}</div>
-      <div class="kpis"><div class="card kpi"><div class="k-label">${tech ? 'Được giao' : 'Đang mở'}</div><div class="k-value">${all.filter(isOpen).length}</div></div><div class="card kpi"><div class="k-label">Quá hạn</div><div class="k-value" style="color:#df2225">${all.filter(late).length}</div></div><div class="card kpi"><div class="k-label">Hoàn thành</div><div class="k-value">${all.filter(i=>i.state==='hoanthanh'||i.state==='dong').length}</div></div><div class="card kpi"><div class="k-label">${tech ? 'Cần thao tác' : 'Chờ tiếp nhận'}</div><div class="k-value">${all.filter(i=>tech?(i.state==='phancong'||i.state==='dangxuly'):i.state==='tiepnhan').length}</div></div></div>
+      <div class="kpis"><div class="card kpi"><div class="k-label">${tech ? 'Được giao' : 'Đang mở'}</div><div class="k-value">${all.filter(isOpen).length}</div></div><div class="card kpi"><div class="k-label">Quá hạn</div><div class="k-value" style="color:#df2225">${overdue.length}</div><div class="k-sub">Điện/PCCC 1 ngày · nhóm khác 3 ngày</div></div><div class="card kpi"><div class="k-label">${tech ? 'Đã nhắc BQL' : 'Nhắc Trưởng BQL'}</div><div class="k-value">${reminded.length}</div></div><div class="card kpi"><div class="k-label">${tech ? 'Cần thao tác' : 'Chờ tiếp nhận'}</div><div class="k-value">${all.filter(i=>tech?(i.state==='phancong'||i.state==='dangxuly'):i.state==='tiepnhan').length}</div></div></div>
       <div class="card"><div class="card-h"><h3>${tech ? 'Danh sách xử lý kỹ thuật' : 'Hàng đợi phản ánh'}</h3><select class="input" data-ch="inc-cat"><option value="">Mọi nhóm</option>${incCats().map(c=>`<option ${ui.incCat===c?'selected':''}>${c}</option>`).join('')}</select></div>
-      <div class="card-b">${incWorkflowHint()}${incTabBar(tabs, tab.id)}
+      <div class="card-b">${reminderHtml}${incWorkflowHint()}${incTabBar(tabs, tab.id)}
         ${U.table([{t:'Mã / thời gian'}, {t:'Nội dung'}, {t:'Vị trí / tài sản'}, {t:'Trạng thái'}, {t:'Người xử lý / hạn'}, {t:''}], incRows(rows), { empty: tech ? 'Không có công việc kỹ thuật phù hợp.' : 'Không có phản ánh trong hàng đợi này.' })}
       </div></div>`;
   };
@@ -288,7 +315,7 @@
   A.CH['inc-images'] = el => { const list=A.$(`[data-image-list="${el.dataset.kind}"]`); const files=Array.from(el.files||[]); ui.incImageDraft=ui.incImageDraft||{}; ui.incImageDraft[el.dataset.kind]=files.map(f=>({name:f.name,url:URL.createObjectURL(f)})); if(list) list.innerHTML=ui.incImageDraft[el.dataset.kind].map((x,n)=>`<div class="inc-image-thumb"><img src="${x.url}" alt=""><span>${U.esc(x.name)}</span><button class="x" data-act="inc-image-remove" data-kind="${el.dataset.kind}" data-n="${n}">×</button></div>`).join(''); };
   A.ACT['inc-image-remove'] = el => { const xs=(ui.incImageDraft||{})[el.dataset.kind]||[]; const x=xs.splice(Number(el.dataset.n),1)[0]; if(x)URL.revokeObjectURL(x.url); const box=A.$(`[data-image-list="${el.dataset.kind}"]`); if(box)box.innerHTML=xs.map((v,n)=>`<div class="inc-image-thumb"><img src="${v.url}" alt=""><span>${U.esc(v.name)}</span><button class="x" data-act="inc-image-remove" data-kind="${el.dataset.kind}" data-n="${n}">×</button></div>`).join(''); };
   function incDraftNames(kind) { return ((ui.incImageDraft||{})[kind]||[]).map(x=>x.name); }
-  A.ACT['inc-assign-open'] = el => { const i=A.db.incidents.find(x=>x.id===el.dataset.id); if(!i||i.state!=='tiepnhan'||!incCan(i,'assign'))return; const assets=incAssets(), staff=D.STAFF.filter(s=>s.market===i.market && s.role.indexOf('kỹ thuật') !== -1); incModal('Tiếp nhận & phân công sự cố',incHeader(i)+incReadonly(i)+`<section class="inc-section"><h4>Phân loại & tài sản liên quan</h4><div class="form-grid"><div class="field"><label>Nhóm sự cố *</label><select class="input" id="ia-cat">${incCats().map(x=>`<option ${x===i.cat?'selected':''}>${x}</option>`).join('')}</select></div><div class="field"><label>Tài sản liên quan</label><select class="input" id="ia-asset"><option value="">Không xác định / Không liên quan tài sản</option>${assets.map(a=>`<option value="${a.id}" ${i.assetId===a.id?'selected':''}>${U.esc(a.code)} · ${U.esc(a.name)}</option>`).join('')}</select></div></div></section><section class="inc-section"><h4>Phân công</h4><div class="form-grid"><div class="field"><label>Người xử lý *</label><select class="input" id="ia-assignee"><option value="">Chọn nhân viên kỹ thuật</option>${staff.map(s=>`<option value="${s.id}" ${i.assignee===s.id?'selected':''}>${U.esc(s.name)} · ${U.esc(s.role)}</option>`).join('')}</select></div><div class="field"><label>Hạn xử lý *</label><input class="input" type="datetime-local" id="ia-due" value="${i.deadline||''}"></div></div><div class="field"><label>Ghi chú phân công</label><textarea class="input" id="ia-note" rows="2"></textarea></div></section>`,`<button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="inc-assign-save" data-id="${i.id}">Xác nhận phân công</button>`); };
+  A.ACT['inc-assign-open'] = el => { const i=A.db.incidents.find(x=>x.id===el.dataset.id); if(!i||i.state!=='tiepnhan'||!incCan(i,'assign'))return; const assets=incAssets(), staff=D.STAFF.filter(s=>s.market===i.market && s.role.indexOf('kỹ thuật') !== -1), due=(i.deadline&&String(i.deadline).indexOf('T')!==-1)?i.deadline:incDefaultDeadline(i.cat,i.created,true); incModal('Tiếp nhận & phân công sự cố',incHeader(i)+incReadonly(i)+`<section class="inc-section"><h4>Phân loại & tài sản liên quan</h4><div class="form-grid"><div class="field"><label>Nhóm sự cố *</label><select class="input" id="ia-cat">${incCats().map(x=>`<option ${x===i.cat?'selected':''}>${x}</option>`).join('')}</select><div class="small muted">Hạn mặc định: Điện/PCCC 1 ngày; nhóm khác 3 ngày.</div></div><div class="field"><label>Tài sản liên quan</label><select class="input" id="ia-asset"><option value="">Không xác định / Không liên quan tài sản</option>${assets.map(a=>`<option value="${a.id}" ${i.assetId===a.id?'selected':''}>${U.esc(a.code)} · ${U.esc(a.name)}</option>`).join('')}</select></div></div></section><section class="inc-section"><h4>Phân công</h4><div class="form-grid"><div class="field"><label>Người xử lý *</label><select class="input" id="ia-assignee"><option value="">Chọn nhân viên kỹ thuật</option>${staff.map(s=>`<option value="${s.id}" ${i.assignee===s.id?'selected':''}>${U.esc(s.name)} · ${U.esc(s.role)}</option>`).join('')}</select></div><div class="field"><label>Hạn xử lý *</label><input class="input" type="datetime-local" id="ia-due" value="${due}"></div></div><div class="field"><label>Ghi chú phân công</label><textarea class="input" id="ia-note" rows="2"></textarea></div></section>`,`<button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="inc-assign-save" data-id="${i.id}">Xác nhận phân công</button>`); };
   A.ACT['inc-assign-save'] = el => { const i=A.db.incidents.find(x=>x.id===el.dataset.id), as=A.$('#ia-assignee').value, due=A.$('#ia-due').value; if(!i||i.state!=='tiepnhan'||!incCan(i,'assign'))return; if(!as||!due){U.toast('Vui lòng chọn người xử lý và hạn xử lý.');return;} const staff=D.STAFF.find(s=>s.id===as&&s.market===i.market&&s.role.indexOf('kỹ thuật')!==-1); if(!staff){U.toast('Người xử lý phải là nhân viên kỹ thuật thuộc chợ đang chọn.');return;} const assetId=A.$('#ia-asset').value||null; if(assetId && !(A.db.marketAssets||[]).some(a=>a.id===assetId&&a.market===i.market)){U.toast('Tài sản liên quan không thuộc chợ đang chọn.');return;} i.cat=A.$('#ia-cat').value;i.assetId=assetId;i.assignee=as;i.deadline=due;i.assignmentNote=A.$('#ia-note').value.trim();i.state='phancong';incHistory(i,'Phân công xử lý',incStaff(i)+' · Hạn: '+incFmt(due));A.save();A.closeModal();A.render();U.toast('Đã phân công xử lý.'); };
   A.ACT['inc-inspect-open'] = el => { const i=A.db.incidents.find(x=>x.id===el.dataset.id),a=incAsset(i); if(!i||i.state!=='phancong'||!incCan(i,'transition'))return;ui.incImageDraft={};incModal('Kiểm tra hiện trường',incHeader(i)+`<section class="inc-section"><dl class="kv"><dt>Người xử lý</dt><dd>${U.esc(incStaff(i))}</dd><dt>Hạn xử lý</dt><dd>${incFmt(i.deadline)}</dd><dt>Tài sản liên quan</dt><dd>${a?U.esc(a.code+' · '+a.name):'—'}</dd><dt>Vị trí</dt><dd>${a?U.esc(a.locationLabel):'—'}</dd></dl></section><section class="inc-section"><h4>Kết quả kiểm tra</h4><div class="form-grid"><div class="field"><label>Thời gian kiểm tra *</label><input class="input" type="datetime-local" id="ii-at" value="${incNow()}"></div></div><div class="field"><label>Tình trạng thực tế *</label><textarea class="input" id="ii-condition" rows="3"></textarea></div><div class="field"><label>Ghi chú kỹ thuật</label><textarea class="input" id="ii-note" rows="2"></textarea></div></section><section class="inc-section"><h4>Hình ảnh hiện trường <span class="muted small">(không bắt buộc)</span></h4>${incImageInput('inspection')}</section>`,`<button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="inc-inspect-save" data-id="${i.id}">Bắt đầu xử lý</button>`); };
   A.ACT['inc-inspect-save'] = el => { const i=A.db.incidents.find(x=>x.id===el.dataset.id),at=A.$('#ii-at').value,c=A.$('#ii-condition').value.trim();if(!i||i.state!=='phancong'||!incCan(i,'transition'))return;if(!at||!c){U.toast('Vui lòng nhập thời gian và tình trạng thực tế.');return;}i.inspection={at,by:i.assignee,condition:c,note:A.$('#ii-note').value.trim()};i.images.inspection=incDraftNames('inspection');i.state='dangxuly';incHistory(i,'Kiểm tra hiện trường',c);incHistory(i,'Bắt đầu xử lý','');A.save();A.closeModal();A.render();U.toast('Đã bắt đầu xử lý.'); };
@@ -303,7 +330,7 @@
   A.ACT['inc-close-open'] = el => {const i=A.db.incidents.find(x=>x.id===el.dataset.id);if(!i||i.state!=='hoanthanh'||!incCan(i,'close'))return;const accepted=i.acceptance&&i.acceptance.result==='pass';incModal('Đóng sự cố',incHeader(i)+`<section class="inc-section"><div class="inc-check">✓ Đã xử lý</div>${accepted?'<div class="inc-check">✓ Đã nghiệm thu đạt</div>':'<div class="inc-check">✓ Đã thông báo kết quả cho người phản ánh</div>'}<dl class="kv"><dt>Người xử lý</dt><dd>${U.esc(incStaff(i))}</dd>${accepted?`<dt>Người nghiệm thu</dt><dd>${U.esc(U.staffName((i.acceptance||{}).by))}</dd>`:''}<dt>Hoàn thành</dt><dd>${incFmt((i.work||{}).completedAt)}</dd></dl><div class="field"><label>Ghi chú khi đóng</label><textarea class="input" id="ic-note" rows="2"></textarea></div></section>`,`<button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="inc-close-save" data-id="${i.id}">Đóng sự cố</button>`);};
   A.ACT['inc-close-save'] = el => {const i=A.db.incidents.find(x=>x.id===el.dataset.id);if(!i||i.state!=='hoanthanh'||!incCan(i,'close'))return;i.closeInfo={at:incNow(),note:A.$('#ic-note').value.trim()};i.state='dong';incHistory(i,'Đóng sự cố',i.closeInfo.note);A.save();A.closeModal();A.render();U.toast('Đã đóng sự cố.');};
   A.ACT['inc-new-v2'] = () => { if(!A.canDo('su-co.tao-phan-anh',ui.market))return;ui.incImageDraft={};const stalls=A.db.stalls.filter(s=>s.market===ui.market);incModal('Tạo phản ánh / sự cố',`<section class="inc-section"><div class="form-grid"><div class="field"><label>Nguồn</label><input class="input" value="Nhập tại Ban Quản lý" disabled></div><div class="field"><label>Nhóm *</label><select class="input" id="in2-cat">${incCats().map(c=>`<option>${c}</option>`).join('')}</select></div><div class="field"><label>Điểm KD</label><select class="input" id="in2-stall"><option value="">Không xác định</option>${stalls.map(s=>`<option value="${s.id}">${s.code}</option>`).join('')}</select></div><div class="field"><label>Tài sản liên quan</label><select class="input" id="in2-asset"><option value="">Không xác định / Không liên quan</option>${incAssets().map(a=>`<option value="${a.id}">${U.esc(a.code)} · ${U.esc(a.name)}</option>`).join('')}</select></div></div><div class="field"><label>Tiêu đề *</label><input class="input" id="in2-title"></div><div class="field"><label>Nội dung *</label><textarea class="input" id="in2-desc" rows="3"></textarea></div></section><section class="inc-section"><h4>Ảnh <span class="muted small">(không bắt buộc)</span></h4>${incImageInput('report')}</section>`,`<button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="inc-new-v2-save">Tạo phản ánh</button>`);};
-  A.ACT['inc-new-v2-save'] = () => {if(!A.canDo('su-co.tao-phan-anh',ui.market))return;const title=A.$('#in2-title').value.trim(),desc=A.$('#in2-desc').value.trim(),stall=A.idx.stall.get(A.$('#in2-stall').value),cat=A.$('#in2-cat').value,assetId=A.$('#in2-asset').value||null;if(!title||!desc){U.toast('Vui lòng nhập tiêu đề và nội dung.');return;}if(stall&&stall.market!==ui.market){U.toast('Điểm kinh doanh không thuộc chợ đang chọn.');return;}if(assetId&&!(A.db.marketAssets||[]).some(a=>a.id===assetId&&a.market===ui.market)){U.toast('Tài sản liên quan không thuộc chợ đang chọn.');return;}const id='SC-'+U.pad(101+A.db.incidents.length,4),created=incNow(),due=new Date(U.today());due.setDate(due.getDate()+(cat==='Điện'||cat==='PCCC'?1:3));const i={id,market:ui.market,stallId:stall&&stall.id,traderId:stall&&stall.traderId,assetId,cat,title,desc,source:'Nhập tại Ban Quản lý',state:'tiepnhan',created,deadline:due.toISOString().slice(0,16),assignee:null,rating:null,escalated:false,images:{report:incDraftNames('report'),inspection:[],work:[]},history:[{at:created,action:'Tiếp nhận phản ánh',detail:'Nguồn: Nhập tại Ban Quản lý'}],log:[]};A.db.incidents.push(i);A.save();A.closeModal();A.render();U.toast('Đã tạo '+id);};
+  A.ACT['inc-new-v2-save'] = () => {if(!A.canDo('su-co.tao-phan-anh',ui.market))return;const title=A.$('#in2-title').value.trim(),desc=A.$('#in2-desc').value.trim(),stall=A.idx.stall.get(A.$('#in2-stall').value),cat=A.$('#in2-cat').value,assetId=A.$('#in2-asset').value||null;if(!title||!desc){U.toast('Vui lòng nhập tiêu đề và nội dung.');return;}if(stall&&stall.market!==ui.market){U.toast('Điểm kinh doanh không thuộc chợ đang chọn.');return;}if(assetId&&!(A.db.marketAssets||[]).some(a=>a.id===assetId&&a.market===ui.market)){U.toast('Tài sản liên quan không thuộc chợ đang chọn.');return;}const id='SC-'+U.pad(101+A.db.incidents.length,4),created=incNow(),due=incDefaultDeadline(cat,created,true);const i={id,market:ui.market,stallId:stall&&stall.id,traderId:stall&&stall.traderId,assetId,cat,title,desc,source:'Nhập tại Ban Quản lý',state:'tiepnhan',created,deadline:due,assignee:null,rating:null,escalated:false,images:{report:incDraftNames('report'),inspection:[],work:[]},history:[{at:created,action:'Tiếp nhận phản ánh',detail:'Nguồn: Nhập tại Ban Quản lý · hạn mặc định '+incDeadlineRuleText(cat)}],log:[]};A.db.incidents.push(i);A.save();A.closeModal();A.render();U.toast('Đã tạo '+id);};
 
   // ---------- Thông báo đa kênh ----------
   const cats = () => Array.from(new Set(A.db.stalls.map(s => s.cat)));
@@ -365,7 +392,10 @@
       congno: { t: 'Công nợ theo khu vực', cols: ['Chợ', 'Khu vực', 'Số tiểu thương nợ', 'Nợ quá hạn (đ)', 'Nợ chưa đến hạn (đ)'],
         rows: secs.map(sc => { const xs = inv.filter(i => i.status !== 'paid' && (i.market + A.idx.stall.get(i.stallId).section) === sc.key); return [U.mShort(sc.m), sc.name, new Set(xs.filter(U.isOver).map(i => i.traderId)).size, U.sum(xs.filter(U.isOver), U.due), U.sum(xs.filter(i => !U.isOver(i)), U.due)]; }) },
       khongtienmat: { t: 'Tỷ lệ thanh toán không dùng tiền mặt', cols: ['Kỳ', 'Tiền mặt (đ)', 'Quét QR (đ)', 'Chuyển khoản (đ)', 'Không tiền mặt %'],
-        rows: periods.map(p => { const xs = pays.filter(x => A.idx.invoice.get(x.invoiceId).period === p), s = m => U.sum(xs.filter(x => x.method === m), x => x.amount), tot = U.sum(xs, x => x.amount); return [U.per(p), s('tm'), s('qr'), s('ck'), U.pct(s('qr') + s('ck'), tot)]; }), chart: 'khongtienmat' },
+        // BAO_CAO_THONG_KE_RECOVERY: thanh toán từ Mini App (phiên chợ quê) có invoiceId: null (không
+        // gắn kỳ phải thu chính thức) — cùng nguyên nhân đã sửa ở revenueSeries() trong v-dieuhanh.js,
+        // ở đây cần guard riêng vì reports() là hàm khác. Payment không có kỳ hợp lệ bị loại khỏi bảng theo kỳ.
+        rows: periods.map(p => { const xs = pays.filter(x => x.invoiceId && A.idx.invoice.get(x.invoiceId) && A.idx.invoice.get(x.invoiceId).period === p), s = m => U.sum(xs.filter(x => x.method === m), x => x.amount), tot = U.sum(xs, x => x.amount); return [U.per(p), s('tm'), s('qr'), s('ck'), U.pct(s('qr') + s('ck'), tot)]; }), chart: 'khongtienmat' },
       doisoat: { t: 'Đối soát ngày ' + U.dmy(U.today()), cols: ['Giờ', 'Mã sao kê', 'Nội dung', 'Số tiền (đ)', 'Trạng thái'],
         rows: db.bank.map(b => [b.time, b.id, b.ref, b.amount, b.matched ? 'Đã khớp' : 'Chưa khớp']) },
       suco: { t: 'Tình hình xử lý phản ánh, sự cố', cols: ['Nhóm', 'Tổng', 'Đã xong', 'Đang xử lý', 'Quá hạn', 'Đánh giá TB'],
@@ -436,8 +466,10 @@
     return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" style="max-height:${H}px">${g}</svg><div class="chart-legend"><span><i style="background:#0961bb"></i>${U.esc(o.name)}</span></div></div>`;
   }
   A.VIEWS['bao-cao'] = function () {
-    // Báo cáo thống kê = màn cross-market (A.SCREEN_MARKET['bao-cao'] === 'CROSS') — dùng bộ lọc
-    // nội bộ A.xmMarket()/A.xmScopeBar() thay vì bị chặn/giới hạn theo selectedMarket (mục 9 Phase 2).
+    // Báo cáo thống kê = màn cross-market (A.SCREEN_MARKET['bao-cao'] === 'CROSS') — không bị chặn
+    // bởi selectedMarket. MARKET_SELECTOR_ALL_UNIFICATION: A.xmMarket() giờ đọc thẳng ui.market —
+    // dropdown "Chợ" trên thanh top (có "Tất cả" cho account GLOBAL) là nơi DUY NHẤT chọn phạm vi
+    // báo cáo, không còn field "Chợ" riêng trong Cấu hình báo cáo (tránh 2 điều khiển cùng 1 state).
     const xmMkt = A.xmMarket();
     const R = reports(xmMkt), SF = A.STATE_FORMS || {}, stateKey = SF[ui.report] ? ui.report : null, key = stateKey ? 'lapday' : (R[ui.report] ? ui.report : 'lapday'), r = R[key];
     const rp = ui.rp || (ui.rp = { from: '2026-09-01', to: U.today() });
@@ -450,8 +482,7 @@
     const numCol = k => k > 0 && typeof (r.rows[0] || [])[k] === 'number';
     const tot = rpTotals(key, r);
     const kpis = rpKpis(key, r.rows);
-    const scopeName = xmMkt === 'ALL' ? 'Chợ Cao Lãnh và Chợ quê Cù lao Tân Thuận Đông' : U.market(xmMkt).name;
-    const allowed = A.allowedMarkets(A.currentAccount());
+    const scopeName = xmMkt === 'ALL' ? A.allowedMarkets(A.currentAccount()).map(U.mShort).join(', ') : U.market(xmMkt).name;
     const who = A.currentAccount ? A.currentAccount() : null;
     return `<div class="rp-page-h"><h2>Báo cáo thống kê</h2><div class="muted">Tạo, xem trước và xuất các báo cáo quản lý chợ</div></div>
     <div class="grid g-report rp-grid">
@@ -460,7 +491,7 @@
         <div class="card no-print"><div class="card-h"><h3>Cấu hình báo cáo</h3></div><div class="card-b rp-cfg">
           <div class="field"><label>Từ ngày</label><input type="date" class="input" data-ch="rp-cfg" data-k="from" value="${rp.from}"></div>
           <div class="field"><label>Đến ngày</label><input type="date" class="input" data-ch="rp-cfg" data-k="to" value="${rp.to}"></div>
-          <div class="field"><label>Chợ</label><select class="input" data-ch="rp-scope" ${allowed.length <= 1 ? 'disabled' : ''}>${allowed.length > 1 ? `<option value="ALL" ${xmMkt === 'ALL' ? 'selected' : ''}>Tất cả chợ</option>` : ''}${allowed.map(id => `<option value="${id}" ${xmMkt === id ? 'selected' : ''}>${U.esc(U.market(id).name)}</option>`).join('')}</select></div>
+          <div class="field"><label>Chợ</label><input class="input" value="${U.esc(scopeName)}" disabled title="Đổi phạm vi ở dropdown &quot;Chợ&quot; trên thanh top"></div>
           <div class="field"><label>Đơn vị lập</label><select class="input"><option>Ban Quản lý chợ</option><option>UBND phường Cao Lãnh</option></select></div>
         </div></div>
         <div class="card rp-card"><div class="card-h no-print"><h3>👁 Xem trước: ${U.esc(stateKey ? SF[stateKey].mau + ' – ' + SF[stateKey].t : r.t)}</h3><span class="spacer"></span><button class="btn" data-act="print">⬇ Xuất PDF</button><button class="btn" data-act="rp-csv">📊 Excel</button><button class="btn" data-act="print">🖨 In</button><button class="btn" data-act="rp-save">💾 Lưu mẫu</button></div>
@@ -474,13 +505,12 @@
               <div class="tbl-wrap"><table class="tbl rp-tbl"><thead><tr><th class="num rp-stt">STT</th>${cols.map((c, k) => `<th class="${numCol(k) ? 'num' : ''}">${U.esc(c)}</th>`).join('')}</tr></thead>
               <tbody>${r.rows.length ? r.rows.map((row, i) => `<tr><td class="num rp-stt">${i + 1}</td>${row.map((v, k) => `<td class="${typeof v === 'number' ? 'num' : ''} ${k === 0 ? 'rp-first' : ''}">${fmtCell(v, r.cols[k])}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length + 1}" class="empty">Không có dữ liệu trong phạm vi đã chọn</td></tr>`}</tbody>
               ${tot ? `<tfoot><tr class="rp-total"><td></td>${tot.map((v, k) => `<td class="${typeof v === 'number' ? 'num' : ''}">${v === '' ? '' : fmtCell(v, r.cols[k])}</td>`).join('')}</tr></tfoot>` : ''}</table></div></div>
-            <div class="rp-sign print-only"><div><div class="rp-sign-t">NGƯỜI LẬP BIỂU</div><div class="rp-sign-s">(Ký, ghi rõ họ tên)</div><div class="rp-sign-n">${U.esc(who && (who.accountType === 'Ban Quản lý chợ' || who.accountType === 'Nhân viên Ban Quản lý chợ') ? who.fullName : 'Lê Thị Ngọc Hân')}</div></div><div><div class="rp-sign-t">TRƯỞNG BAN QUẢN LÝ CHỢ</div><div class="rp-sign-s">(Ký, đóng dấu)</div><div class="rp-sign-n">Trần Minh Khoa</div></div></div>
+            <div class="rp-sign print-only"><div><div class="rp-sign-t">NGƯỜI LẬP BIỂU</div><div class="rp-sign-s">(Ký, ghi rõ họ tên)</div><div class="rp-sign-n">${U.esc(who && ['market_manager', 'collector'].indexOf(A.ACCOUNTS.primaryRole(who)) !== -1 ? who.fullName : 'Lê Thị Ngọc Hân')}</div></div><div><div class="rp-sign-t">TRƯỞNG BAN QUẢN LÝ CHỢ</div><div class="rp-sign-s">(Ký, đóng dấu)</div><div class="rp-sign-n">Trần Minh Khoa</div></div></div>
             <div class="small muted rp-note">Số liệu sinh tự động từ dữ liệu nghiệp vụ của hệ thống lúc ${U.nowTime()} ngày ${U.dmy(U.today())}.</div>
           </div>`}</div></div>
       </div></div>`;
   };
   A.CH['rp-cfg'] = el => { ui.rp[el.dataset.k] = el.value; A.render(); };
-  A.CH['rp-scope'] = el => { A.ACT['xm-scope']({ dataset: { id: el.value } }); };
   A.ACT['rp-save'] = () => U.toast('Đã lưu mẫu báo cáo (mô phỏng)');
   A.ACT.rp = el => { ui.report = el.dataset.id; A.render(); };
   A.ACT['rp-csv'] = () => { if (A.STATE_FORMS && A.STATE_FORMS[ui.report]) { A.stateFormCsv(ui.report, A.xmMarket()); return; } const R = reports(A.xmMarket()), r = R[ui.report] || R.lapday; U.csv('bao-cao-' + (R[ui.report] ? ui.report : 'lapday'), r.cols, r.rows); };
@@ -490,10 +520,15 @@
     const parts = (name || '').trim().split(/\s+/).filter(Boolean);
     return ((parts[0] || '')[0] || '') + ((parts[parts.length - 1] || '')[0] || '');
   }
+  // RBAC_MARKET_SCOPE_MIGRATION mục 21: không liệt kê hết tên chợ nếu account có nhiều chợ (table
+  // sẽ quá cao với market master 12 chợ) — chỉ hiện chợ đầu + "+N chợ", đầy đủ danh sách xem ở
+  // drawer chi tiết account (accDrawerHtml bên dưới vẫn gọi hàm này, nên khi cần liệt kê đủ, sửa ở
+  // đây 1 chỗ là đủ — hiện tại drawer cũng chỉ cần tóm tắt, không có yêu cầu liệt kê đầy đủ riêng).
   function accScopeLabel(scopes) {
     if (!scopes || !scopes.length) return '—';
-    if (scopes.includes('ALL')) return 'Toàn hệ thống';
-    return scopes.map(m => U.mShort(m)).join(', ');
+    if (scopes.includes('ALL')) return 'Toàn bộ ' + D.MARKETS.length + ' chợ';
+    if (scopes.length === 1) return U.mShort(scopes[0]);
+    return U.mShort(scopes[0]) + ' +' + (scopes.length - 1) + ' chợ';
   }
   function accRoleBadges(roleIds) {
     return (roleIds || []).map(rid => { const r = A.PERM.role(rid); return `<span class="tag info">${U.esc(r ? r.name : rid)}</span>`; }).join(' ') || '<span class="muted small">Chưa gán</span>';
@@ -501,14 +536,14 @@
   function accRows() {
     const f = ui.acc, q = (f.search || '').toLowerCase();
     // TRADER_PROFILE_AND_MINIAPP_WORKFLOW (mục 31 yêu cầu — "S"): bảng MẶC ĐỊNH chỉ hiển thị account
-    // nội bộ (system_admin/ward_leader/market_manager/market_staff/accountant/collector/technician),
-    // KHÔNG hiển thị account role 'trader' — account đó được quản lý về nghiệp vụ từ màn Hồ sơ tiểu
-    // thương → Tài khoản Mini App (xem js/v-tieuthuong.js, Section E). Chỉ ẨN mặc định (presentation
-    // filter, KHÔNG xoá account/role) — nếu admin CHỦ ĐỘNG lọc đúng "Tiểu thương" ở ô "Loại tài
-    // khoản" thì vẫn xem được (tra cứu khi cần), không khoá cứng.
+    // nội bộ (system_admin/ward_leader/market_manager/collector/technician), KHÔNG hiển thị account
+    // role 'trader' — account đó được quản lý về nghiệp vụ từ màn Hồ sơ tiểu thương → Tài khoản Mini
+    // App (xem js/v-tieuthuong.js, Section E). Chỉ ẨN mặc định (presentation filter, KHÔNG xoá
+    // account/role) — nếu admin CHỦ ĐỘNG lọc đúng "Tiểu thương" ở ô "Loại tài khoản" thì vẫn xem được
+    // (tra cứu khi cần), không khoá cứng.
     const hideTraders = f.type !== 'Tiểu thương';
     // Lọc theo A.allowedMarkets() (không phải marketScopes thô) — chỉ có vậy mới lọc đúng cho cả
-    // account cũ còn ['ALL'] LẪN account mới ['CL','TTD']/['CL']/['TTD'] (mục 8 yêu cầu Phase 5B).
+    // account GLOBAL ['ALL'] LẪN account MARKET scoped tới bất kỳ (các) chợ nào trong 12 chợ.
     return A.ACCOUNTS.list().filter(a =>
       (!hideTraders || a.accountType !== 'Tiểu thương') &&
       (!f.type || a.accountType === f.type) &&
@@ -548,14 +583,34 @@
       </div>
       <div class="drawer-f">${canEdit ? `<button class="btn primary" data-act="acc-edit" data-id="${a.id}">Chỉnh sửa</button>` : ''}<button class="btn" data-act="close">Đóng</button></div>`;
   }
+  // RBAC_MARKET_SCOPE_MIGRATION mục 20: phần "Phạm vi" đổi theo vai trò đang chọn —
+  //   system_admin → "Toàn hệ thống" (tĩnh, không chọn từng chợ)
+  //   ward_leader  → "Toàn bộ N chợ" (tĩnh, không chọn từng chợ)
+  //   market_manager/collector/technician → multi-select 12 chợ (checkbox)
+  //   trader       → không cho gán qua form này (quản lý qua Hồ sơ tiểu thương → Tài khoản Mini App,
+  //                  "không cho phép dùng marketScopes để vượt qua ownership" — mục 20 yêu cầu)
+  //   chưa chọn vai trò → vẫn hiện multi-select (an toàn mặc định, admin luôn chọn vai trò trước khi
+  //                  Lưu vì acc-form-save đã validate).
+  function afScopeSectionHtml(d, dis) {
+    const roleId = (d.roleIds && d.roleIds[0]) || '';
+    if (roleId === 'system_admin' || roleId === 'ward_leader') {
+      const label = roleId === 'system_admin' ? 'Toàn hệ thống' : 'Toàn bộ ' + D.MARKETS.length + ' chợ';
+      return `<div class="field" style="margin-top:12px"><label>Phạm vi</label><div class="note info">${U.esc(label)} — vai trò này không cần chọn từng chợ.</div></div>`;
+    }
+    if (roleId === 'trader') {
+      return `<div class="field" style="margin-top:12px"><label>Phạm vi</label><div class="note">Tài khoản Tiểu thương được quản lý qua <b>Tiểu thương → Hồ sơ tiểu thương → Tài khoản Mini App</b>, không gán phạm vi chợ trực tiếp ở đây.</div></div>`;
+    }
+    // Legacy ['ALL'] (account cũ) diễn giải qua đúng A.allowedMarkets() hiện có — không tự viết lại
+    // logic 'ALL' ở đây — để checkbox hiển thị đã tick sẵn đúng các chợ; account KHÔNG bị ghi lại
+    // cho tới khi admin thật sự bấm Lưu.
+    const dm = A.allowedMarkets({ marketScopes: d.marketScopes || [] });
+    return `<div class="field" style="margin-top:12px"><label>Phạm vi chợ được phân công</label>
+      <div class="row" style="gap:14px;flex-wrap:wrap;margin-top:4px">${D.MARKETS.map(m => `<label class="small" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" data-ch="af-scope" data-market="${m.id}" ${dm.includes(m.id) ? 'checked' : ''} ${dis}> ${U.esc(m.short)}</label>`).join('')}</div></div>`;
+  }
   function renderAccForm() {
     const d = ui.accForm, isNew = !d.id;
     const canAssign = isNew || A.canDo('tai-khoan.gan-quyen');
     const dis = canAssign ? '' : 'disabled';
-    // Legacy ['ALL'] (account cũ trước Phase 5B) diễn giải qua đúng A.allowedMarkets() hiện có —
-    // không tự viết lại logic 'ALL' ở đây — để checkbox hiển thị đã tick sẵn cả 2 chợ; account
-    // KHÔNG bị ghi lại cho tới khi admin thật sự bấm Lưu (xem mục 3 yêu cầu Phase 5B).
-    const dm = A.allowedMarkets({ marketScopes: d.marketScopes || [] });
     A.modal(A.mHead(isNew ? 'Thêm tài khoản mới' : 'Sửa tài khoản') + `<div class="modal-b"><div class="form-grid">
       <div class="field"><label>Mã tài khoản *</label><input class="input" data-ch="af-code" value="${U.esc(d.code || '')}" ${isNew ? '' : 'disabled'}></div>
       <div class="field"><label>Họ tên *</label><input class="input" data-ch="af-name" value="${U.esc(d.fullName || '')}"></div>
@@ -565,12 +620,7 @@
       <div class="field"><label>Đơn vị</label><input class="input" data-ch="af-org" value="${U.esc(d.organization || '')}"></div>
       <div class="field"><label>Trạng thái</label><select class="input" data-ch="af-status"><option value="active" ${d.status === 'active' ? 'selected' : ''}>Hoạt động</option><option value="disabled" ${d.status === 'disabled' ? 'selected' : ''}>Tạm khoá</option></select></div>
     </div>
-    <div class="field" style="margin-top:12px"><label>Phạm vi chợ được phân công</label>
-      <div class="row" style="gap:16px;flex-wrap:wrap;margin-top:4px">
-        <label class="small" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" data-ch="af-scope-cl" ${dm.includes('CL') ? 'checked' : ''} ${dis}> Chợ Cao Lãnh</label>
-        <label class="small" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" data-ch="af-scope-ttd" ${dm.includes('TTD') ? 'checked' : ''} ${dis}> Chợ quê Tân Thuận Đông</label>
-      </div>
-    </div>
+    ${afScopeSectionHtml(d, dis)}
     ${!canAssign ? '<div class="note" style="margin-top:12px">Bạn không có quyền gán vai trò / phạm vi chợ nên các trường này đang bị khoá.</div>' : ''}
     </div>
     <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="acc-form-save">Lưu</button></div>`);
@@ -628,7 +678,11 @@
   };
   A.ACT['acc-new'] = () => {
     if (!A.canDo('tai-khoan.tao-moi')) return;
-    ui.accForm = { id: null, code: '', fullName: '', phone: '', accountType: A.ACCOUNTS.ACCOUNT_TYPES[3], roleIds: [], organization: '', marketScopes: ['CL', 'TTD'], status: 'active' };
+    // Chưa chọn vai trò → chưa biết chợ nào phù hợp, để trống thay vì mặc định cứng — admin chọn
+    // vai trò trước (A.CH['af-role'] tự hiện đúng dạng Phạm vi), rồi mới tick chợ. "Loại tài khoản"
+    // mặc định ACCOUNT_TYPES[3] = tên role 'collector' (thứ tự cố định theo defaultRoles(),
+    // js/permissions.js) — vai trò vận hành phổ biến nhất, tránh mặc định thiên về quyền cao.
+    ui.accForm = { id: null, code: '', fullName: '', phone: '', accountType: A.ACCOUNTS.ACCOUNT_TYPES[3], roleIds: [], organization: '', marketScopes: [], status: 'active' };
     renderAccForm();
   };
   A.ACT['acc-edit'] = el => {
@@ -646,18 +700,27 @@
   A.CH['af-name'] = el => { ui.accForm.fullName = el.value; };
   A.CH['af-phone'] = el => { ui.accForm.phone = el.value; };
   A.CH['af-type'] = el => { ui.accForm.accountType = el.value; };
-  A.CH['af-role'] = el => { ui.accForm.roleIds = el.value ? [el.value] : []; };
+  // Đổi vai trò làm phần "Phạm vi" hiện đúng dạng tương ứng (mục 20 yêu cầu: GLOBAL/trader/multi-
+  // select 12 chợ) — phải vẽ lại cả form, có tiền lệ an toàn ở v-taichinh.js A.CH['adj-proposed'].
+  // Đồng bộ luôn "Loại tài khoản" theo tên vai trò mới chọn (2 field cùng phản ánh 1 vai trò, tránh
+  // lệch nhãn) — admin vẫn có thể tự đổi lại "Loại tài khoản" sau nếu muốn.
+  A.CH['af-role'] = el => {
+    ui.accForm.roleIds = el.value ? [el.value] : [];
+    const r = el.value ? A.PERM.role(el.value) : null;
+    if (r) ui.accForm.accountType = r.name;
+    renderAccForm();
+  };
   A.CH['af-org'] = el => { ui.accForm.organization = el.value; };
-  // Rebuild ui.accForm.marketScopes CHỈ từ CL/TTD mỗi lần tick/bỏ tick — không bao giờ ghi 'ALL'.
-  // Chuẩn hoá state hiện có qua A.allowedMarkets() trước khi add/remove để 1 account cũ ['ALL']
-  // (hoặc vừa mở form) được diễn giải đúng thành 2 chợ trước khi người dùng bỏ tick 1 trong 2.
+  // Rebuild ui.accForm.marketScopes theo ĐÚNG danh sách D.MARKETS hiện có (12 chợ, không còn hard-
+  // code CL/TTD) mỗi lần tick/bỏ tick 1 checkbox — không bao giờ ghi 'ALL'. Chuẩn hoá state hiện có
+  // qua A.allowedMarkets() trước khi add/remove để 1 account cũ ['ALL'] (hoặc vừa mở form) được diễn
+  // giải đúng thành danh sách chợ cụ thể trước khi người dùng bỏ tick 1 trong số đó.
   function afSetScope(mid, checked) {
     const cur = new Set(A.allowedMarkets({ marketScopes: ui.accForm.marketScopes || [] }));
     if (checked) cur.add(mid); else cur.delete(mid);
-    ui.accForm.marketScopes = ['CL', 'TTD'].filter(m => cur.has(m));
+    ui.accForm.marketScopes = D.MARKETS.map(m => m.id).filter(m => cur.has(m));
   }
-  A.CH['af-scope-cl'] = el => { afSetScope('CL', el.checked); };
-  A.CH['af-scope-ttd'] = el => { afSetScope('TTD', el.checked); };
+  A.CH['af-scope'] = el => { afSetScope(el.dataset.market, el.checked); };
   A.CH['af-status'] = el => { ui.accForm.status = el.value; };
   A.ACT['acc-form-save'] = () => {
     const d = ui.accForm, isNew = !d.id;
@@ -667,8 +730,16 @@
     if (!d.fullName || !d.fullName.trim()) { U.toast('Vui lòng nhập họ tên'); return; }
     if (A.ACCOUNTS.codeTaken(d.code, d.id)) { U.toast('Mã tài khoản "' + d.code + '" đã tồn tại'); return; }
     const existing = d.id ? A.ACCOUNTS.get(d.id) : null;
-    const marketScopes = canAssign ? (d.marketScopes || []) : (existing ? existing.marketScopes : []);
-    if (canAssign && !marketScopes.length) { U.toast('Vui lòng chọn ít nhất một chợ được phân công.'); return; }
+    const roleId = canAssign ? ((d.roleIds && d.roleIds[0]) || '') : (existing && A.ACCOUNTS.primaryRole(existing)) || '';
+    // RBAC_MARKET_SCOPE_MIGRATION mục 20: system_admin/ward_leader luôn GLOBAL ('ALL', không multi-
+    // select); market_manager/collector/technician bắt buộc chọn ít nhất 1 trong 12 chợ; trader
+    // không gán phạm vi ở form này (giữ nguyên phạm vi hiện có — quản lý qua Hồ sơ tiểu thương).
+    let marketScopes = canAssign ? (d.marketScopes || []) : (existing ? existing.marketScopes : []);
+    if (canAssign) {
+      if (roleId === 'system_admin' || roleId === 'ward_leader') marketScopes = ['ALL'];
+      else if (roleId === 'trader') marketScopes = existing ? existing.marketScopes : (d.marketScopes || []);
+      else if (!marketScopes.length) { U.toast('Vui lòng chọn ít nhất một chợ được phân công.'); return; }
+    }
     const patch = { code: d.code.trim(), fullName: d.fullName.trim(), phone: (d.phone || '').trim(), accountType: d.accountType, roleIds: canAssign ? d.roleIds : (existing ? existing.roleIds : []), organization: (d.organization || '').trim(), marketScopes, status: d.status };
     if (d.id) {
       A.ACCOUNTS.update(d.id, patch);
@@ -1538,7 +1609,11 @@
   A.CH['perm-role-select'] = el => { ui.permRole = el.value; A.render(); };
   A.CH['perm-toggle'] = el => {
     if (!A.canDo('cai-dat.phan-quyen')) { A.render(); return; }
-    const actor = ui.role === 'lanhdao' ? 'Lãnh đạo UBND phường' : 'Trần Minh Khoa';
+    // RBAC_MARKET_SCOPE_MIGRATION: 'lanhdao' là role id pre-V1 đã bỏ từ lâu, điều kiện này chưa bao
+    // giờ đúng với bất kỳ role id V1/V2 nào (luôn rơi vào nhánh else) — sửa dùng thẳng tên account
+    // demo đang thao tác thay vì tên cứng, đúng bản chất nhật ký kiểm toán.
+    const currentAcc = A.currentAccount();
+    const actor = currentAcc ? currentAcc.fullName : 'Không rõ';
     const role = A.PERM.role(el.dataset.role), perm = A.PERM.permission(el.dataset.key);
     const roleName = role ? role.name : el.dataset.role, permLabel = perm ? perm.label : el.dataset.key;
     if (el.checked) {

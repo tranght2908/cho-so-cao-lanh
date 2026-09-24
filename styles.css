@@ -144,16 +144,6 @@ table { border-collapse: collapse; width: 100%; }
 .btn.danger { color: var(--danger); border-color: #f3c2c2; }
 .btn.sm { padding: 4px 9px; font-size: var(--font-size-sm); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
-.request-create-menu { position: relative; z-index: 8; }
-.request-create-menu > summary { list-style: none; }
-.request-create-menu > summary::-webkit-details-marker { display: none; }
-.request-create-menu > summary span { font-size: var(--font-size-sm); transition: transform .16s ease; }
-.request-create-menu[open] > summary span { transform: rotate(180deg); }
-.request-create-menu-list { position: absolute; right: 0; top: calc(100% + 6px); width: 258px; padding: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 24px rgba(15,30,50,.16); }
-.request-create-item { width: 100%; border: 0; background: transparent; border-radius: 7px; padding: 9px 10px; text-align: left; cursor: pointer; color: var(--ink); display: flex; flex-direction: column; gap: 2px; }
-.request-create-item:hover { background: var(--brand-soft); }
-.request-create-item b { font-size: var(--font-size-base); }
-.request-create-item span { color: var(--muted); font-size: var(--font-size-sm); line-height: 1.35; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .spacer { flex: 1; }
 .input, select.input, textarea.input { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 7px 10px; font-size: var(--font-size-base); min-width: 0; }
@@ -472,15 +462,71 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 .mb-summary b { font-variant-numeric: tabular-nums; font-weight: 700; }
 .mb-workspace { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px; align-items: start; }
 
-.cl-layout-point-page { min-width: 0; }
-.cl-layout-point-tabs { display: flex; gap: 4px; overflow-x: auto; margin: 0 0 14px; padding: 4px; border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; }
-.cl-layout-point-tabs button { flex: 0 0 auto; border: 0; border-bottom: 2px solid transparent; border-radius: 6px; background: transparent; color: var(--muted); padding: 9px 14px; cursor: pointer; font: inherit; white-space: nowrap; }
-.cl-layout-point-tabs button.active { border-color: var(--brand); background: #fff; color: var(--brand); font-weight: 700; }
-.cl-layout-point-tabs .badge { display: inline-grid; place-items: center; min-width: 20px; height: 20px; margin-left: 4px; padding: 0 5px; border-radius: 999px; background: var(--brand-soft); color: var(--brand); font-size: var(--font-size-xs); }
-.cl-layout-point-body { min-width: 0; }
-.cl-layout-point-body > .card { min-width: 0; }
-.cl-layout-point-body .tbl-wrap { overflow-x: auto; }
-@media (max-width: 640px) { .cl-layout-point-tabs { margin-bottom: 10px; } .cl-layout-point-tabs button { padding-inline: 11px; } }
+/* Bảng Mặt bằng & điểm kinh doanh: chỉ scope trong workspace này để bảng ở các màn khác giữ nguyên. */
+.mb-table-card .tbl-wrap { width: 100%; overflow-x: auto; }
+.mb-table-card .tbl { --mb-table-min: 1070px; width: max(100%, var(--mb-table-min)); min-width: var(--mb-table-min); table-layout: fixed; border-collapse: collapse; }
+.mb-table-card .tbl:has(th:nth-child(10)) { --mb-table-min: 1150px; }
+.mb-table-card .tbl:has(th:nth-child(11)) { --mb-table-min: 1285px; }
+.mb-table-card .tbl:has(th:nth-child(12)) { --mb-table-min: 1425px; }
+.mb-table-card .tbl th { padding: 10px 12px; vertical-align: middle; background: #f8fafc; color: var(--muted); font-weight: 600; line-height: 1.3; border-bottom-color: #e7ecf2; }
+.mb-table-card .tbl td { padding: 10px 12px; vertical-align: middle; line-height: 1.35; border-bottom-color: #edf1f5; overflow-wrap: anywhere; }
+.mb-table-card .tbl th + th, .mb-table-card .tbl td + td { border-left: 1px solid #f0f3f7; }
+.mb-table-card .tbl tbody tr:nth-child(even) td { background: #fbfcfe; }
+.mb-table-card .tbl tbody tr:hover td, .mb-table-card .tbl tr.click:hover td { background: #f4f8fc; }
+.mb-table-card .tbl th:has(.mb-col-code), .mb-table-card .tbl td.mb-col-code { width: 90px; text-align: left; }
+.mb-table-card .tbl td.mb-col-code { font-weight: 700; white-space: nowrap; }
+.mb-table-card .tbl th:has(.mb-col-zone), .mb-table-card .tbl td.mb-col-zone { width: 135px; }
+.mb-table-card .tbl th:has(.mb-col-floor), .mb-table-card .tbl td.mb-col-floor { width: 80px; }
+.mb-table-card .tbl th:has(.mb-col-row), .mb-table-card .tbl td.mb-col-row { width: 125px; }
+.mb-table-card .tbl th:has(.mb-col-area), .mb-table-card .tbl td.mb-col-area { width: 95px; }
+.mb-table-card .tbl th:has(.mb-col-area-type), .mb-table-card .tbl td.mb-col-area-type { width: 120px; }
+.mb-table-card .tbl th:has(.mb-col-category), .mb-table-card .tbl td.mb-col-category { width: 150px; }
+.mb-table-card .tbl th:has(.mb-col-trader), .mb-table-card .tbl td.mb-col-trader { width: 150px; }
+.mb-table-card .tbl th:has(.mb-col-seller), .mb-table-card .tbl td.mb-col-seller { width: 150px; }
+.mb-table-card .tbl th:has(.mb-col-collector), .mb-table-card .tbl td.mb-col-collector { width: 140px; }
+.mb-table-card .tbl th:has(.mb-col-status), .mb-table-card .tbl td.mb-col-status { width: 120px; text-align: center; white-space: nowrap; }
+.mb-table-card .tbl th:has(.mb-col-actions), .mb-table-card .tbl td.mb-col-actions { width: 80px; text-align: center; white-space: nowrap; }
+.mb-table-card .tbl th:has(.mb-col-area), .mb-table-card .tbl th:has(.mb-col-status), .mb-table-card .tbl th:has(.mb-col-actions) { text-align: right; }
+.mb-table-card .tbl th:has(.mb-col-status), .mb-table-card .tbl th:has(.mb-col-actions) { text-align: center; }
+.mb-table-card .tbl td.mb-col-category, .mb-table-card .tbl td.mb-col-trader, .mb-table-card .tbl td.mb-col-seller, .mb-table-card .tbl td.mb-col-collector { word-break: normal; }
+
+/* Danh mục chợ, Tiểu thương và Hợp đồng dùng cùng nhịp đọc bảng, nhưng chỉ trong ba màn này. */
+.catalog-table-card .tbl-wrap, .trader-table-card .tbl-wrap, .contract-table-card .tbl-wrap { width: 100%; overflow-x: auto; }
+.catalog-table-card .tbl, .trader-table-card .tbl, .contract-table-card .tbl { width: 100%; min-width: 1040px; table-layout: fixed; border-collapse: collapse; }
+.catalog-table-card .tbl { min-width: 1200px; }
+.catalog-table-card .tbl th, .trader-table-card .tbl th, .contract-table-card .tbl th { padding: 10px 12px; vertical-align: middle; background: #f8fafc; color: var(--muted); font-weight: 600; line-height: 1.3; border-bottom-color: #e7ecf2; }
+.catalog-table-card .tbl td, .trader-table-card .tbl td, .contract-table-card .tbl td { padding: 10px 12px; vertical-align: middle; line-height: 1.35; border-bottom-color: #edf1f5; overflow-wrap: anywhere; }
+.catalog-table-card .tbl th + th, .catalog-table-card .tbl td + td, .trader-table-card .tbl th + th, .trader-table-card .tbl td + td, .contract-table-card .tbl th + th, .contract-table-card .tbl td + td { border-left: 1px solid #f0f3f7; }
+.catalog-table-card .tbl tbody tr:nth-child(even) td, .trader-table-card .tbl tbody tr:nth-child(even) td, .contract-table-card .tbl tbody tr:nth-child(even) td { background: #fbfcfe; }
+.catalog-table-card .tbl tbody tr:hover td, .trader-table-card .tbl tbody tr:hover td, .contract-table-card .tbl tbody tr:hover td { background: #f4f8fc; }
+.catalog-table-card .tbl th:nth-child(1), .catalog-table-card .tbl td:nth-child(1) { width: 55px; text-align: center; }
+.catalog-table-card .tbl th:nth-child(2), .catalog-table-card .tbl td:nth-child(2) { width: 180px; }
+.catalog-table-card .tbl th:nth-child(3), .catalog-table-card .tbl td:nth-child(3) { width: 240px; }
+.catalog-table-card .tbl th:nth-child(4), .catalog-table-card .tbl td:nth-child(4) { width: 105px; }
+.catalog-table-card .tbl th:nth-child(5), .catalog-table-card .tbl td:nth-child(5) { width: 200px; }
+.catalog-table-card .tbl th:nth-child(6), .catalog-table-card .tbl td:nth-child(6) { width: 145px; }
+.catalog-table-card .tbl th:nth-child(7), .catalog-table-card .tbl td:nth-child(7) { width: 120px; text-align: center; }
+.catalog-table-card .tbl th:nth-child(8), .catalog-table-card .tbl td:nth-child(8) { width: 160px; text-align: center; }
+.catalog-table-card .tbl td:nth-child(2), .trader-table-card .tbl td:nth-child(2), .contract-table-card .tbl td:nth-child(1) { font-weight: 700; }
+.trader-table-card .tbl th:nth-child(1), .trader-table-card .tbl td:nth-child(1) { width: 95px; }
+.trader-table-card .tbl th:nth-child(2), .trader-table-card .tbl td:nth-child(2) { width: 155px; }
+.trader-table-card .tbl th:nth-child(3), .trader-table-card .tbl td:nth-child(3) { width: 150px; }
+.trader-table-card .tbl th:nth-child(4), .trader-table-card .tbl td:nth-child(4) { width: 150px; }
+.trader-table-card .tbl th:nth-child(5), .trader-table-card .tbl td:nth-child(5) { width: 110px; }
+.trader-table-card .tbl th:nth-child(6), .trader-table-card .tbl td:nth-child(6) { width: 135px; }
+.trader-table-card .tbl th:nth-child(7), .trader-table-card .tbl td:nth-child(7) { width: 90px; text-align: center; }
+.trader-table-card .tbl th:nth-child(8), .trader-table-card .tbl td:nth-child(8) { width: 110px; }
+.trader-table-card .tbl th:nth-child(9), .trader-table-card .tbl td:nth-child(9) { width: 80px; text-align: center; white-space: nowrap; }
+.contract-table-card .tbl th:nth-child(1), .contract-table-card .tbl td:nth-child(1) { width: 105px; }
+.contract-table-card .tbl th:nth-child(2), .contract-table-card .tbl td:nth-child(2) { width: 160px; }
+.contract-table-card .tbl th:nth-child(3), .contract-table-card .tbl td:nth-child(3) { width: 95px; }
+.contract-table-card .tbl th:nth-child(4), .contract-table-card .tbl td:nth-child(4), .contract-table-card .tbl th:nth-child(5), .contract-table-card .tbl td:nth-child(5) { width: 105px; white-space: nowrap; }
+.contract-table-card .tbl th:nth-child(6), .contract-table-card .tbl td:nth-child(6) { width: 120px; }
+.contract-table-card .tbl th:nth-child(7), .contract-table-card .tbl td:nth-child(7) { width: 140px; }
+.contract-table-card .tbl th:nth-child(8), .contract-table-card .tbl td:nth-child(8) { width: 120px; text-align: center; }
+.contract-table-card .tbl th:nth-child(9), .contract-table-card .tbl td:nth-child(9) { width: 80px; text-align: center; white-space: nowrap; }
+.contract-table-card .tbl th:nth-child(6), .contract-table-card .tbl td:nth-child(6) { text-align: right; font-variant-numeric: tabular-nums; }
+
 .mb-tree { display: flex; flex-direction: column; gap: 1px; }
 /* Hàng trong cây: có thể là 1 nút full-row (Tổng quan) hoặc 1 hàng chứa nhiều phần tử tương tác
    (caret + tên + action) — action phụ (Sửa/Xóa/+...) mờ mặc định, rõ khi hover/chọn/focus, đúng
@@ -713,6 +759,11 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 .mb-head-sub { font-size: 13px; color: var(--ink-2); }
 .mb-summary { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12.5px; }
 .mb-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink-2); white-space: nowrap; }
+/* Mặt bằng & điểm kinh doanh — redesign Khu/Tầng/Dãy: chip trạng thái dùng làm filter bấm được
+   (button.mb-chip, giữ nguyên toàn bộ style màu .mb-chip-* hiện có) — chỉ thêm con trỏ + viền nhấn
+   khi đang chọn, không tạo màu/token mới. */
+button.mb-chip { cursor: pointer; font: inherit; }
+button.mb-chip.on { outline: 2px solid currentColor; outline-offset: -2px; }
 .mb-chip i { width: 8px; height: 8px; border-radius: 50%; }
 .mb-chip b { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ink); }
 .mb-chip-total { background: #e3efff; border-color: #bcd6f5; color: #0b4a9e; }

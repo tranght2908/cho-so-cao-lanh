@@ -2,14 +2,20 @@
  * "Account Demo" mà topbar dùng để xác định phiên đang chạy (xem A.currentAccount() ở core.js).
  * Module này ĐỘC LẬP với D.STAFF trong data.js — D.STAFF vẫn giữ nguyên,
  * tiếp tục dùng cho dropdown "Người xử lý" ở Phản ánh & sự cố như cũ.
- * Seed mặc định TÁI SỬ DỤNG các bản ghi D.STAFF (không đổi mã/tên/chức danh),
- * chỉ bổ sung thêm vài tài khoản mẫu để có đủ các loại tài khoản theo yêu cầu.
+ * Seed mặc định TÁI SỬ DỤNG các bản ghi D.STAFF (không đổi mã/tên/chợ) cho 2 chợ có sẵn dữ liệu
+ * nghiệp vụ (Chợ Cao Lãnh 'CL', Chợ quê Tân Thuận Đông 'TTD'), cộng thêm account demo tự viết cho
+ * 10 chợ còn lại trong market master (RBAC_MARKET_SCOPE_MIGRATION mục 19 — market master 12 chợ,
+ * xem D.MARKETS ở data.js) để chứng minh market scope hoạt động đúng ở mọi chợ, không chỉ 2 chợ gốc.
  *
- * RBAC V1 — PHASE 1: roleIds của mọi account đã chuyển sang role V1 (8 role trong
- * js/permissions.js). `bql` cũ KHÔNG map 1:1 — account từng dùng `bql` được tách theo đúng chức
- * danh thật (`D.STAFF[].role`) qua STAFF_ROLE_MAP bên dưới. V1 seed đúng 1 phần tử/roleIds; đọc
- * role hiệu lực của account LUÔN qua A.ACCOUNTS.primaryRole() (không đọc roleIds[0] trực tiếp ở
- * nơi khác), để sau này hỗ trợ nhiều role/account chỉ cần sửa đúng 1 hàm này.
+ * RBAC_MARKET_SCOPE_MIGRATION: role master 8 → 6 (loại 'market_staff'/'accountant' — xem
+ * js/permissions.js). roleIds của mọi account LUÔN thuộc 1 trong 6 role còn hiệu lực; đọc role hiệu
+ * lực của account LUÔN qua A.ACCOUNTS.primaryRole() (không đọc roleIds[0] trực tiếp ở nơi khác), để
+ * sau này hỗ trợ nhiều role/account chỉ cần sửa đúng 1 hàm này.
+ *
+ * scopeType (GLOBAL/MARKET, mục 5 yêu cầu) KHÔNG lưu thành field riêng để tránh 2 nguồn dữ liệu có
+ * thể lệch nhau — suy ra TRỰC TIẾP từ marketScopes: chứa 'ALL' = GLOBAL (system_admin/ward_leader),
+ * ngược lại = MARKET (market_manager/collector/technician/trader). Xem A.ACCOUNTS.scopeType() và
+ * A.allowedMarkets() (js/core.js) — nơi DUY NHẤT giải mã 'ALL'.
  */
 (function (A) {
   'use strict';
@@ -17,53 +23,105 @@
   const AKEY = 'choso-caolanh-accounts';
   const ASCHEMA_KEY = 'choso-caolanh-accounts-schema';
 
-  const ACCOUNT_TYPES = ['Quản trị hệ thống', 'Lãnh đạo UBND phường', 'Ban Quản lý chợ', 'Nhân viên Ban Quản lý chợ', 'Tiểu thương'];
+  // ACCOUNT_TYPES ("Loại tài khoản" — filter/field hiển thị riêng, độc lập với Vai trò RBAC nhưng
+  // PHẢI khớp đúng 1-1 với tên 6 role hiện hành để không còn nhãn "mồ côi" (RBAC_MARKET_SCOPE_
+  // MIGRATION mục 2: "role labels" cũng phải migrate) — lấy ĐỘNG từ A.PERM.roles() (permissions.js
+  // đã chạy xong trước accounts.js trong index.html, xem thứ tự script), không hard-code chuỗi lặp.
+  const ACCOUNT_TYPES = A.PERM.roles().map(r => r.name);
+  const roleName = id => { const r = A.PERM.role(id); return r ? r.name : id; };
 
-  // D.STAFF[].role (text mô tả chức danh, data.js) → role id V1 tương ứng.
+  // D.STAFF[].role (text mô tả chức danh, data.js) → role id RBAC tương ứng. Chỉ còn 4 chức danh
+  // thật sự tồn tại trong D.STAFF sau khi data.js đã migrate 3 dòng Kế toán/Nhân viên Ban Quản lý
+  // chợ sang đúng 1 trong 6 role còn hiệu lực (xem data.js) — KHÔNG còn map nào trỏ tới
+  // 'market_staff'/'accountant' (role đã nghỉ hưu).
   const STAFF_ROLE_MAP = {
     'Trưởng Ban Quản lý chợ': 'market_manager',
-    'Kế toán': 'accountant',
-    'Nhân viên Ban Quản lý chợ': 'market_staff',
     'Nhân viên thu phí': 'collector',
-    'Nhân viên kỹ thuật (điện, nước)': 'technician',
-    'Tổ quản lý chợ quê': 'market_staff',
-    'Nhân viên thu phí phiên': 'collector'
+    'Nhân viên thu phí phiên': 'collector',
+    'Nhân viên kỹ thuật (điện, nước)': 'technician'
   };
-  const RETIRED_SEED_ACCOUNT_IDS = ['AC-BQL-TTD', 'AC-PHIEN-DEMO'];
+  const RETIRED_SEED_ACCOUNT_IDS = [
+    'AC-BQL-TTD', 'AC-PHIEN-DEMO',
+    // RBAC_MARKET_SCOPE_MIGRATION: account demo "Nguyễn Văn A"/"Nguyễn Thanh Bình" tạo riêng cho
+    // luồng "market_staff tiếp nhận yêu cầu tách điểm" (BUSINESS_POINT_SPLIT_WORKFLOW supplement) —
+    // role 'market_staff' đã loại bỏ, bước "tiếp nhận" của tách/gộp/chuyển đổi điểm kinh doanh nay
+    // gộp hẳn vào market_manager (NV01 đã có đủ quyền) nên không còn lý do nghiệp vụ riêng để giữ 2
+    // account này (mục 26: "không giữ alias role cũ chỉ để tránh sửa code"). CL vẫn đủ 4 account
+    // D.STAFF (1 market_manager + 2 collector + 1 technician) để demo mọi thao tác còn lại.
+    'AC-NV08'
+  ];
+
+  function defaultStaffAccounts() {
+    return D.STAFF.map(s => {
+      const roleId = STAFF_ROLE_MAP[s.role] || 'collector';
+      return {
+        id: 'AC-' + s.id, code: s.id, fullName: s.name, phone: '',
+        accountType: roleName(roleId),
+        title: s.role, roleIds: [roleId],
+        // Trưởng Ban Quản lý chợ quản lý cả 02 chợ có dữ liệu nghiệp vụ (demo "1 account, nhiều
+        // chợ" — mục 19 yêu cầu); nhân viên gắn với đúng chợ được giao.
+        organization: s.role === 'Trưởng Ban Quản lý chợ' ? 'Ban Quản lý chợ phường Cao Lãnh' : 'Ban Quản lý ' + ((D.MARKETS.find(m => m.id === s.market) || {}).short || s.market),
+        marketScopes: s.role === 'Trưởng Ban Quản lý chợ' ? ['CL', 'TTD'] : [s.market], status: 'active'
+      };
+    });
+  }
+
+  // Account demo cho 10 chợ CHƯA có dữ liệu nghiệp vụ (floors:[] — xem data.js) — mỗi chợ có đúng 1
+  // Trưởng Ban Quản lý chợ + 1 Nhân viên thu phí + 1 Nhân viên kỹ thuật (mục 19: mức tối thiểu),
+  // KHÔNG có Tiểu thương demo (mục 19: "nếu phù hợp với dữ liệu hiện có" — 10 chợ này chưa có
+  // A.db.traders/stalls thật để gắn traderId có ý nghĩa, tạo account tiểu thương "rỗng" không chứng
+  // minh được gì thêm về ownership so với 4 account tiểu thương demo đã có ở CL/TTD). Tên người chỉ
+  // là dữ liệu minh họa (mục 19: "Không tạo dữ liệu cá nhân thực").
+  const NEW_MARKET_ROSTER = [
+    ['HA', 'Nguyễn Văn Hòa', 'Trần Thị Ngọc An', 'Lê Văn Bình'],
+    ['TVH', 'Phạm Văn Việt', 'Đặng Thị Hồng Hòa', 'Bùi Văn Toàn'],
+    ['TTT', 'Ngô Văn Tây', 'Dương Thị Mỹ Dân', 'Lý Văn Thuận'],
+    ['TL', 'Hồ Văn Lưu', 'Mai Thị Bình', 'Trương Văn Thông'],
+    ['TT', 'Châu Văn Tịch', 'Lâm Thị Tân', 'Nguyễn Văn Đức'],
+    ['TTH', 'Trần Văn Thới', 'Lê Thị Tịnh', 'Phạm Văn Long'],
+    ['MN', 'Huỳnh Văn Ngãi', 'Võ Thị Mỹ', 'Đỗ Văn Sang'],
+    ['LH', 'Ngô Văn Hồi', 'Dương Thị Long', 'Hồ Văn Thịnh'],
+    ['XB', 'Mai Văn Bèo', 'Trương Thị Xẻo', 'Châu Văn Phát'],
+    ['SQ', 'Lâm Văn Quốc', 'Nguyễn Thị Sáu', 'Trần Văn Cường']
+  ];
+  function newMarketAccounts() {
+    const out = [];
+    NEW_MARKET_ROSTER.forEach(row => {
+      const mid = row[0], managerName = row[1], collectorName = row[2], technicianName = row[3];
+      const m = D.MARKETS.find(x => x.id === mid);
+      const org = 'Ban Quản lý ' + (m ? m.name : mid);
+      const mk = (suffix, roleId, fullName, title) => ({
+        id: 'AC-' + mid + '-' + suffix, code: mid + '-' + suffix, fullName, phone: '',
+        accountType: roleName(roleId), title, roleIds: [roleId], organization: org,
+        marketScopes: [mid], status: 'active'
+      });
+      out.push(mk('QL', 'market_manager', managerName, 'Trưởng Ban Quản lý chợ'));
+      out.push(mk('TP', 'collector', collectorName, 'Nhân viên thu phí'));
+      out.push(mk('KT', 'technician', technicianName, 'Nhân viên kỹ thuật'));
+    });
+    return out;
+  }
 
   function defaultAccounts() {
-    const list = D.STAFF.map(s => ({
-      id: 'AC-' + s.id, code: s.id, fullName: s.name, phone: '',
-      accountType: s.role === 'Trưởng Ban Quản lý chợ' ? 'Ban Quản lý chợ' : 'Nhân viên Ban Quản lý chợ',
-      title: s.role, roleIds: [STAFF_ROLE_MAP[s.role] || 'market_staff'],
-      // Trưởng Ban Quản lý chợ quản lý cả 02 chợ; nhân viên gắn với chợ được giao.
-      organization: s.role === 'Trưởng Ban Quản lý chợ' ? 'Ban Quản lý chợ phường Cao Lãnh' : 'Ban Quản lý ' + ((D.MARKETS.find(m => m.id === s.market) || {}).short || s.market),
-      marketScopes: s.role === 'Trưởng Ban Quản lý chợ' ? ['CL', 'TTD'] : [s.market], status: 'active'
-    }));
+    const list = defaultStaffAccounts();
     list.push(
-      { id: 'AC-NV08', code: 'NV08', fullName: 'Nguyễn Văn A', phone: '0909567890', accountType: 'Nhân viên Ban Quản lý chợ', title: 'Nhân viên Ban Quản lý chợ (nghiệp vụ mặt bằng)', roleIds: ['market_staff'], organization: 'Ban Quản lý Chợ Cao Lãnh', marketScopes: ['CL'], status: 'active' },
-      { id: 'AC-LD01', code: 'LD01', fullName: 'Nguyễn Văn Phúc', phone: '0909123456', accountType: 'Lãnh đạo UBND phường', title: 'Phó Chủ tịch UBND phường', roleIds: ['ward_leader'], organization: 'UBND phường Cao Lãnh', marketScopes: ['ALL'], status: 'active' },
-      { id: 'AC-QT01', code: 'QT01', fullName: 'Đặng Thị Thu', phone: '0909234567', accountType: 'Quản trị hệ thống', title: 'Quản trị hệ thống', roleIds: ['system_admin'], organization: 'UBND phường Cao Lãnh', marketScopes: ['ALL'], status: 'active' },
-      { id: 'AC-CHI-QUYET', code: 'CHI-QUYET', fullName: 'Chí Quyết', phone: '0909000001', accountType: 'Tiểu thương', title: 'Tiểu thương chợ quê', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'active', linkedTraderId: 'TTD-CQ', traderId: 'TTD-CQ' },
-      { id: 'AC-TT-TTD', code: 'TT-TTD', fullName: 'Tiểu thương Chợ quê Tân Thuận Đông', phone: '0909666777', accountType: 'Tiểu thương', title: 'Tiểu thương chợ quê mẫu', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'active' },
-      // BUSINESS_POINT_SPLIT_WORKFLOW supplement (yêu cầu bổ sung — luồng "Trưởng BQL chủ động đề
-      // xuất"): D.STAFF (data.js) KHÔNG có sẵn nhân viên nào mang role V1 `market_staff` VÀ scoped
-      // đúng Chợ Cao Lãnh (chỉ có 'Tổ quản lý chợ quê' → market_staff, nhưng market: 'TTD') — nếu
-      // không có account demo này, bước "Nhân viên BQL tiếp nhận/hoàn thiện phương án" (permKey
-      // `diem-kd.tach-diem.tiep-nhan`) và dropdown "Người xử lý" ở form "Đề xuất tách điểm" (Trưởng
-      // BQL giao việc) không thể demo được cho CL. Thêm ĐÚNG 1 account thủ công (cùng pattern với 4
-      // account tay bên trên/dưới — KHÔNG sửa D.STAFF/data.js), dùng tên "Nguyễn Văn A" khớp với ví
-      // dụ trong yêu cầu bổ sung.
-      // TRADER_PROFILE_AND_MINIAPP_WORKFLOW: `traderId` MỚI — liên kết account Mini App với ĐÚNG 1
+      // 2 account GLOBAL (scopeType suy ra từ marketScopes=['ALL'] — mục 5/7 yêu cầu): Lãnh đạo UBND
+      // và Quản trị hệ thống KHÔNG gán vào 1 chợ cụ thể nào (mục 12: "Không gán Admin/Lãnh đạo giả
+      // vào từng market chỉ để thanh demo hoạt động").
+      { id: 'AC-LD01', code: 'LD01', fullName: 'Nguyễn Văn Phúc', phone: '0909123456', accountType: roleName('ward_leader'), title: 'Phó Chủ tịch UBND phường', roleIds: ['ward_leader'], organization: 'UBND phường Cao Lãnh', marketScopes: ['ALL'], status: 'active' },
+      { id: 'AC-QT01', code: 'QT01', fullName: 'Đặng Thị Thu', phone: '0909234567', accountType: roleName('system_admin'), title: 'Quản trị hệ thống', roleIds: ['system_admin'], organization: 'UBND phường Cao Lãnh', marketScopes: ['ALL'], status: 'active' },
+      { id: 'AC-CHI-QUYET', code: 'CHI-QUYET', fullName: 'Chí Quyết', phone: '0909000001', accountType: roleName('trader'), title: 'Tiểu thương chợ quê', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'active', linkedTraderId: 'TTD-CQ', traderId: 'TTD-CQ' },
+      { id: 'AC-TT-TTD', code: 'TT-TTD', fullName: 'Tiểu thương Chợ quê Tân Thuận Đông', phone: '0909666777', accountType: roleName('trader'), title: 'Tiểu thương chợ quê mẫu', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'active' },
+      // TRADER_PROFILE_AND_MINIAPP_WORKFLOW: `traderId` — liên kết account Mini App với ĐÚNG 1
       // Trader Profile (A.db.traders, xem data.js). null = account tồn tại nhưng CHƯA/không còn gắn
       // với hồ sơ nào (giữ nguyên 2 account demo cũ này ở trạng thái CHƯA LIÊN KẾT — không có cách
       // nào xác định AN TOÀN chúng "là" trader nào trong A.db.traders vì tên/SĐT hoàn toàn độc lập
       // với dữ liệu mẫu sinh ngẫu nhiên có seed riêng; auto-link case demo LINKED thật lấy trực tiếp
       // từ A.db lúc runtime — xem A.ensureMiniAppDemoLink() ở js/core.js).
-      { id: 'AC-TT01', code: 'TT-DEMO1', fullName: 'Nguyễn Thị Hoa', phone: '0909345678', accountType: 'Tiểu thương', title: 'Tiểu thương mẫu', roleIds: ['trader'], organization: 'Chợ Cao Lãnh', marketScopes: ['CL'], status: 'active', traderId: null },
-      { id: 'AC-TT02', code: 'TT-DEMO2', fullName: 'Trần Văn Sáu', phone: '0909456789', accountType: 'Tiểu thương', title: 'Tiểu thương mẫu (đã tạm khoá minh hoạ)', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'disabled', traderId: null }
+      { id: 'AC-TT01', code: 'TT-DEMO1', fullName: 'Nguyễn Thị Hoa', phone: '0909345678', accountType: roleName('trader'), title: 'Tiểu thương mẫu', roleIds: ['trader'], organization: 'Chợ Cao Lãnh', marketScopes: ['CL'], status: 'active', traderId: null },
+      { id: 'AC-TT02', code: 'TT-DEMO2', fullName: 'Trần Văn Sáu', phone: '0909456789', accountType: roleName('trader'), title: 'Tiểu thương mẫu (đã tạm khoá minh hoạ)', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'disabled', traderId: null }
     );
-    return list;
+    return list.concat(newMarketAccounts());
   }
   // Safe-merge cho account ĐÃ LƯU trong localStorage từ trước khi có field `traderId` (mục tương
   // tự mergeNewDefaultAccounts — KHÔNG đổi bất kỳ giá trị nào đã có, chỉ bổ sung field còn thiếu).
@@ -73,13 +131,12 @@
     return changed;
   }
 
-  // Bổ sung AN TOÀN account demo MỚI (vd. AC-NV08 ở trên) vào danh sách account ĐÃ LƯU trong
-  // localStorage của trình duyệt — KHÔNG đụng account nào đã có (kể cả đã bị người dùng tuỳ biến qua
-  // màn "Tài khoản người dùng": đổi tên, khoá/mở khoá, đổi vai trò/phạm vi chợ...). Chỉ thêm những id
-  // hoàn toàn chưa tồn tại trong mảng đã lưu, giống nguyên tắc "merge, không reset" mà
-  // js/permissions.js đã áp dụng cho RolePermission — KHÔNG bump `A.RBAC_SCHEMA` chỉ để thêm 1
-  // account demo (bump RBAC_SCHEMA sẽ kéo theo reseed toàn bộ role/account/ui state, quá rộng so với
-  // thay đổi thật sự cần).
+  // Bổ sung AN TOÀN account demo MỚI vào danh sách account ĐÃ LƯU trong localStorage của trình
+  // duyệt — KHÔNG đụng account nào đã có (kể cả đã bị người dùng tuỳ biến qua màn "Tài khoản người
+  // dùng": đổi tên, khoá/mở khoá, đổi vai trò/phạm vi chợ...). Chỉ thêm những id hoàn toàn chưa tồn
+  // tại trong mảng đã lưu, giống nguyên tắc "merge, không reset" mà js/permissions.js đã áp dụng cho
+  // RolePermission — KHÔNG bump `A.RBAC_SCHEMA` chỉ để thêm account demo (bump RBAC_SCHEMA sẽ kéo
+  // theo reseed toàn bộ role/account/ui state, quá rộng so với thay đổi thật sự cần).
   function mergeNewDefaultAccounts(stored) {
     const ids = new Set(stored.map(a => a.id));
     const additions = defaultAccounts().filter(a => !ids.has(a.id));
@@ -90,9 +147,10 @@
   }
   function loadAccounts() {
     try {
-      // RBAC V1 migration: mảng account đã lưu từ bản role cũ (roleIds như 'bql'/'lanhdao'/
-      // 'tieuthuong') không tương thích — chỉ dùng lại nếu đúng schema hiện tại, ngược lại bỏ và
-      // seed lại từ defaultAccounts() (đã dùng role id V1).
+      // Schema migration: mảng account đã lưu từ bản role/market cũ không tương thích (RBAC_SCHEMA
+      // đã bump — xem js/core.js) — chỉ dùng lại nếu đúng schema hiện tại, ngược lại bỏ và seed lại
+      // từ defaultAccounts() (12 chợ, 6 role). Không cố "vá" account role đã nghỉ hưu (mục 25: fallback
+      // an toàn, không tự nâng quyền).
       if (localStorage.getItem(ASCHEMA_KEY) === String(A.RBAC_SCHEMA)) {
         const s = localStorage.getItem(AKEY);
         if (s) {
@@ -159,33 +217,6 @@
     return accounts;
   }
   let ACCOUNTS = loadAccounts();
-  function normalizePc3aAccounts() {
-    let changed = false;
-    const manager = ACCOUNTS.find(a => a.id === 'AC-NV01');
-    if (manager && manager.roleIds && manager.roleIds[0] === 'market_manager') {
-      manager.marketScopes = Array.isArray(manager.marketScopes) ? manager.marketScopes : [];
-      if (manager.marketScopes.indexOf('ALL') !== -1) {
-        manager.marketScopes = ['CL', 'TTD'];
-        changed = true;
-      }
-      if (manager.marketScopes.indexOf('CL') === -1) {
-        manager.marketScopes.push('CL');
-        changed = true;
-      }
-      if (manager.marketScopes.indexOf('TTD') === -1) {
-        manager.marketScopes.push('TTD');
-        changed = true;
-      }
-    }
-    const clStaff = ACCOUNTS.find(a => a.id === 'AC-NV08');
-    const sameName = ACCOUNTS.find(a => a.id !== 'AC-NV08' && a.fullName === 'Nguyễn Thanh Bình');
-    if (!clStaff && !sameName) {
-      ACCOUNTS.push({ id: 'AC-NV08', code: 'BQL-CL-01', fullName: 'Nguyễn Thanh Bình', phone: '', accountType: 'Nhân viên Ban Quản lý chợ', title: 'Nhân viên Ban Quản lý Chợ Cao Lãnh', roleIds: ['market_staff'], organization: 'Ban Quản lý Chợ Cao Lãnh', marketScopes: ['CL'], status: 'active' });
-      changed = true;
-    }
-    if (changed) saveAccounts();
-  }
-  normalizePc3aAccounts();
   function saveAccounts() {
     try {
       localStorage.setItem(AKEY, JSON.stringify(ACCOUNTS));
@@ -203,6 +234,9 @@
     // chỉ cần sửa đúng hàm này (thêm UI chọn role trong account), mọi nơi khác đang gọi hàm này
     // không cần sửa.
     primaryRole: account => (account && account.roleIds && account.roleIds[0]) || null,
+    // scopeType (mục 5 yêu cầu) — suy ra từ marketScopes, KHÔNG lưu field riêng (xem comment đầu
+    // file). 'GLOBAL' = system_admin/ward_leader (marketScopes chứa 'ALL'); 'MARKET' = còn lại.
+    scopeType: account => (account && Array.isArray(account.marketScopes) && account.marketScopes.indexOf('ALL') !== -1) ? 'GLOBAL' : 'MARKET',
     // Tài khoản Mini App liên kết với 1 traderId (TRADER_PROFILE_AND_MINIAPP_WORKFLOW) — chỉ tìm
     // trong account role 'trader', KHÔNG giả định 1-1 tuyệt đối ở tầng dữ liệu (phòng thủ dữ liệu
     // hỏng/nhiều account cùng trỏ 1 traderId) nhưng UI/nghiệp vụ luôn coi là 1-1.

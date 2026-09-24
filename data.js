@@ -41,7 +41,20 @@ window.DATA = (function () {
   // v13 also retains the upstream session/finance seeds below; the version is a
   // compatibility marker for the complete combined seed shape.
   // v13 also adds TTĐ overdue debt seed rows for Cong no & nhac no.
-  const VERSION = 13;
+  // v14 (RBAC_MARKET_SCOPE_MIGRATION — mở rộng market master 2 → 12 chợ theo yêu cầu nghiệp vụ mới):
+  // thêm 10 phần tử MỚI vào MARKETS (id 'HA'/'TVH'/'TTT'/'TL'/'TT'/'TTH'/'MN'/'LH'/'XB'/'SQ'), mỗi
+  // phần tử chỉ có thông tin CẤP CHỢ (tên/địa điểm/hạng) + `floors: []` — CỐ Ý KHÔNG sinh cấu trúc
+  // Khối/Tầng/Khu/điểm kinh doanh cho 10 chợ này (ngoài phạm vi yêu cầu, xem RBAC_MARKET_SCOPE_
+  // MIGRATION_REPORT.md) — build() bên dưới vẫn chạy AN TOÀN cho market floors:[] (forEach rỗng =
+  // không sinh thêm stall nào). KHÔNG đổi/xoá 2 phần tử 'CL'/'TTD' hiện có (id, floors, toàn bộ dữ
+  // liệu nghiệp vụ demo GIỮ NGUYÊN). Đồng thời cập nhật 3 dòng D.STAFF có chức danh thuộc role RBAC
+  // đã bị loại bỏ ('Kế toán', 'Nhân viên Ban Quản lý chợ' — xem js/permissions.js) sang đúng 1 trong
+  // 6 role RBAC còn hiệu lực, để dropdown "Người xử lý" (Phản ánh & sự cố) và STAFF_ROLE_MAP
+  // (js/accounts.js) không còn tham chiếu role đã nghỉ hưu nào. Bump version để cache A.db cũ (thiếu
+  // stall của market mới — vốn không có gì để sinh — và còn giữ role text cũ) tự rebuild.
+  // 14 → 15 (PHAN_CONG_NHAN_VIEN_THU_PHI): thêm field collectorId (null mặc định) trên mỗi điểm kinh
+  // doanh — cache A.db cũ chưa có field này cần rebuild để field tồn tại nhất quán trên mọi điểm.
+  const VERSION = 15;
   const TODAY = new Date(2026, 8, 13); // 13/09/2026
 
   // Giá dịch vụ sử dụng diện tích bán hàng – QĐ 480/QĐ-UBND ngày 14/02/2026 (đ/m²/ngày, đã gồm VAT)
@@ -170,7 +183,22 @@ window.DATA = (function () {
           ]
         }
       ]
-    }
+    },
+    // 10 chợ còn lại trong phạm vi quản lý mới (RBAC_MARKET_SCOPE_MIGRATION — mục 4 yêu cầu) — CHỈ
+    // khai báo thông tin CẤP CHỢ (tên/địa điểm/hạng), `floors: []` vì chưa khảo sát hạ tầng, KHÔNG
+    // thuộc phạm vi công việc này (xem ghi chú v14 ở đầu file). `kind: 'daily'` (chợ họp hằng ngày,
+    // giống Chợ Cao Lãnh) là giả định hợp lý cho prototype — không có dữ liệu khảo sát thật để phân
+    // biệt "daily"/"session" cho từng chợ trong số này.
+    { id: 'HA', name: 'Chợ Hòa An', short: 'Chợ Hòa An', hang: 'Chợ hạng 2', kind: 'daily', address: 'Khóm Hòa Khánh, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '', floors: [] },
+    { id: 'TVH', name: 'Chợ Tân Việt Hòa', short: 'Chợ Tân Việt Hòa', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm Tân Hòa Việt, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '', floors: [] },
+    { id: 'TTT', name: 'Chợ Tân Thuận Tây', short: 'Chợ Tân Thuận Tây', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm Tân Dân, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '', floors: [] },
+    { id: 'TL', name: 'Chợ Thông Lưu', short: 'Chợ Thông Lưu', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm Đông Bình, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '', floors: [] },
+    { id: 'TT', name: 'Chợ Tân Tịch', short: 'Chợ Tân Tịch', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm Tân Thuận, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '', floors: [] },
+    { id: 'TTH', name: 'Chợ Tịnh Thới', short: 'Chợ Tịnh Thới', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm Tịnh Long, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '', floors: [] },
+    { id: 'MN', name: 'Chợ Mỹ Ngãi', short: 'Chợ Mỹ Ngãi', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm 1, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '', floors: [] },
+    { id: 'LH', name: 'Chợ Long Hồi', short: 'Chợ Long Hồi', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm Tịnh Hưng, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '', floors: [] },
+    { id: 'XB', name: 'Chợ Xẻo Bèo (CDC)', short: 'Chợ Xẻo Bèo', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm Hòa Mỹ, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '', floors: [] },
+    { id: 'SQ', name: 'Chợ Sáu Quốc', short: 'Chợ Sáu Quốc', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm Hòa Long, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '', floors: [] }
   ];
 
   const STATUS = {
@@ -200,26 +228,35 @@ window.DATA = (function () {
     { id: 'dong', label: 'Đóng' }
   ];
 
+  // RBAC_MARKET_SCOPE_MIGRATION: role RBAC 'accountant' (Kế toán) và 'market_staff' (Nhân viên Ban
+  // Quản lý chợ chung chung) đã bị loại khỏi role master (js/permissions.js) — 3 dòng chức danh bên
+  // dưới (NV02/NV08/NV09) migrate sang đúng 1 trong 6 role RBAC còn hiệu lực theo nghiệp vụ thực tế
+  // gần nhất (mục 26 yêu cầu): Kế toán → Nhân viên thu phí (nghiệp vụ thu/khoản phải thu gần nhất,
+  // "xác nhận tiền nộp về" chuyển hẳn sang Trưởng BQL); Nhân viên Ban Quản lý chợ (TTD, chưa có ai
+  // giữ mảng kỹ thuật) → Nhân viên kỹ thuật, lấp đúng chỗ trống role này ở TTD. Không đổi tên/mã/chợ.
   const STAFF = [
     { id: 'NV01', name: 'Trần Minh Khoa', role: 'Trưởng Ban Quản lý chợ', market: 'CL' },
-    { id: 'NV02', name: 'Lê Thị Ngọc Hân', role: 'Kế toán', market: 'CL' },
+    { id: 'NV02', name: 'Lê Thị Ngọc Hân', role: 'Nhân viên thu phí', market: 'CL' },
     { id: 'NV03', name: 'Phạm Văn Lợi', role: 'Nhân viên thu phí', market: 'CL' },
     { id: 'NV04', name: 'Nguyễn Thị Diễm', role: 'Nhân viên thu phí', market: 'CL' },
     { id: 'NV05', name: 'Võ Hoàng Tuấn', role: 'Nhân viên kỹ thuật (điện, nước)', market: 'CL' },
     { id: 'NV06', name: 'Huỳnh Thanh Tâm', role: 'Trưởng Ban Quản lý chợ', market: 'TTD' },
     { id: 'NV07', name: 'Đỗ Thị Kim Yến', role: 'Nhân viên thu phí phiên', market: 'TTD' },
-    { id: 'NV08', name: 'Mai Thị Thanh Xuân', role: 'Kế toán', market: 'TTD' },
-    { id: 'NV09', name: 'Nguyễn Hoàng Phúc', role: 'Nhân viên Ban Quản lý chợ', market: 'TTD' }
+    { id: 'NV08', name: 'Mai Thị Thanh Xuân', role: 'Nhân viên thu phí', market: 'TTD' },
+    { id: 'NV09', name: 'Nguyễn Hoàng Phúc', role: 'Nhân viên kỹ thuật (điện, nước)', market: 'TTD' }
   ];
 
+  // RBAC_MARKET_SCOPE_MIGRATION: bảng tài liệu (KHÔNG được bất kỳ view nào đọc — chỉ còn 1 self
+  // reference trong comment js/permissions.js) — cập nhật cho khớp đúng 6 role RBAC hiện hành, bỏ
+  // "Kế toán"/không còn "Nhân viên Ban Quản lý chợ" chung chung, để không còn bảng nào liệt kê role
+  // đã nghỉ hưu dù không có tác dụng runtime.
   const ROLES = [
-    { role: 'Lãnh đạo UBND phường', scope: 'Tất cả chợ', rights: 'Xem cổng giám sát, báo cáo, tra cứu; xử lý phản ánh vượt cấp' },
+    { role: 'Lãnh đạo UBND phường', scope: 'Toàn hệ thống (12 chợ)', rights: 'Xem cổng giám sát, báo cáo, tra cứu; xử lý phản ánh vượt cấp' },
     { role: 'Trưởng Ban Quản lý chợ', scope: 'Chợ được giao', rights: 'Toàn quyền nghiệp vụ; phê duyệt miễn giảm, thanh lý hợp đồng' },
-    { role: 'Kế toán', scope: 'Chợ được giao', rights: 'Phát hành khoản phải thu, đối soát, báo cáo tài chính' },
-    { role: 'Nhân viên thu phí', scope: 'Chợ được giao', rights: 'Thu tiền, phát hành biên lai, ghi chỉ số điện nước' },
+    { role: 'Nhân viên thu phí', scope: 'Chợ được giao', rights: 'Thu tiền, phát hành biên lai, ghi chỉ số điện nước, nhắc nợ' },
     { role: 'Nhân viên kỹ thuật', scope: 'Chợ được giao', rights: 'Nhận và xử lý công việc, sự cố được phân công' },
     { role: 'Tiểu thương', scope: 'Điểm kinh doanh của mình', rights: 'Mini app: xem, thanh toán khoản phải nộp; xem hợp đồng; gửi phản ánh' },
-    { role: 'Quản trị hệ thống', scope: 'Toàn hệ thống', rights: 'Tài khoản, phân quyền, cấu hình đơn giá, kỳ thu, nhật ký' }
+    { role: 'Quản trị hệ thống', scope: 'Toàn hệ thống (12 chợ)', rights: 'Tài khoản, phân quyền, danh mục chợ, cấu hình đơn giá, kỳ thu, nhật ký' }
   ];
 
   const HO = ['Nguyễn', 'Trần', 'Lê', 'Phạm', 'Huỳnh', 'Võ', 'Phan', 'Đặng', 'Bùi', 'Đỗ', 'Ngô', 'Dương', 'Lý', 'Hồ', 'Mai', 'Trương', 'Châu', 'Lâm'];
@@ -258,12 +295,21 @@ window.DATA = (function () {
         else status = r < 0.10 ? 'trong' : r < 0.14 ? 'ngung' : r < 0.21 ? 'no' : r < 0.225 ? 'tranhchap' : 'thue';
         stalls.push({
           id: m.id + '-' + code, code, market: m.id, floor: f.id, section: s.id, sectionName: s.name,
-          row, num: i, type: s.type, pointType: s.pointType || null, cat: s.cat, area, hasMeter: !!s.meter, status, traderId: null,
+          // areaType is the physical-area taxonomy used by the Mặt bằng table/filter.
+          // `type` remains the service-rate category; pointType remains the legacy retail point type.
+          row, num: i, type: s.type, areaType: ({ kiot: 'covered', nhalong: 'covered', ngoai: 'self_produced', phien: 'session' }[s.type] || 'covered'), pointType: s.pointType || null, cat: s.cat, area, hasMeter: !!s.meter, status, traderId: null,
           // sellerId (CHỈ Chợ Cao Lãnh — màn "Điểm kinh doanh"): người TRỰC TIẾP bán tại điểm, THAM
           // CHIẾU đúng entity `traders` sẵn có (không tạo entity/duplicate tên) — null = "chưa xác
           // định/giống người thuê hiện hành" (gán cụ thể ở bước tạo tiểu thương bên dưới cho điểm đã
           // có người thuê). KHÔNG dùng cho bất kỳ logic tài chính/hợp đồng/công nợ nào — các nghiệp
           // vụ đó GIỮ NGUYÊN gắn với traderId.
+          // collectorId (PHAN_CONG_NHAN_VIEN_THU_PHI): THAM CHIẾU account.id (js/accounts.js, role
+          // 'collector'), KHÔNG tạo entity nhân viên riêng. null = "chưa phân công". Gán qua UI "Sửa
+          // dãy" (js/v-cautruc.js) — chọn 1 NV cho cả dãy sẽ set field này trên MỌI điểm thật thuộc
+          // dãy đó, nhưng field luôn ở cấp ĐIỂM (không phải cấp dãy) — dãy chỉ là cách chọn nhanh.
+          // Đây CHỈ là dữ liệu phân công (ai phụ trách điểm nào), KHÔNG thay đổi RBAC — quyền hạn vẫn
+          // do role 'collector' quyết định (permissions.js), không suy ra từ field này.
+          collectorId: null,
           sellerId: null, contractId: null, history: []
         });
       }
