@@ -27,7 +27,12 @@
   };
 
   function ensureDemoData() {
-    const cl = A.db.traders.find(t => t.id === 'TT0001' && t.market === 'CL') || A.db.traders.find(t => t.market === 'CL');
+    // Không chạy dữ liệu demo khi database chưa sẵn sàng
+    if (!A.db || !Array.isArray(A.db.traders)) return;
+
+    const cl =
+        A.db.traders.find(t => t.id === 'TT0001' && t.market === 'CL') ||
+        A.db.traders.find(t => t.market === 'CL');
     if (cl && !vehiclesFor(cl.id).length) {
       db().push(
         { id: 'VEH-0001', traderId: cl.id, market: 'CL', type: 'MOTORBIKE', plateNumber: '66-P1 123.45', description: 'Honda Vision', note: 'Dữ liệu mẫu', status: 'ACTIVE', createdAt: U.today(), updatedAt: U.today() },
