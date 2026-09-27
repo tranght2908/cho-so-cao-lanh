@@ -32,6 +32,13 @@
     return A.save();
   };
 
+  // Rebuilds the legacy lookup indexes after a collection insert (same call the
+  // legacy commands make). Domain-neutral: it does not know which collection changed.
+  data.reindex = function () {
+    if (typeof A.reindex !== 'function') throw new Error('Legacy reindex adapter is unavailable.');
+    return A.reindex();
+  };
+
   // Feature-specific legacy sources can be registered without teaching this
   // shared adapter about any business domain or storage implementation.
   data.registerSource = function (name, source) {

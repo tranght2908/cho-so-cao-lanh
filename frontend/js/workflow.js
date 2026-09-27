@@ -7,25 +7,24 @@
   const RECENT_POINT_KEY = 'choso-caolanh-workflow-recent-point';
   const trader = id => A.idx.trader.get(id);
   const stall = id => A.idx.stall.get(id);
-  const accountFor = id => A.ACCOUNTS.byTraderId(id);
+  const accounts = A.features.accounts.service;
+  const accountFor = id => accounts.byTraderId(id);
+  const contracts = A.features.contracts.service;
   const marketName = id => U.mShort(id);
   const pointPrice = s => {
     const policy = U.appliedStallPrice ? U.appliedStallPrice(s) : null;
     const unit = policy ? Number(policy.amount || 0) : Number((A.D.UNIT || {})[s.type] || 0);
     return { unit, monthly: Math.round(Number(s.area || 0) * unit * 30 / 1000) * 1000, label: policy ? U.unitLabel(s) : 'Chưa cấu hình biểu phí' };
   };
-  const nextContractId = market => {
-    const max = A.db.contracts.reduce((n, c) => Math.max(n, +(String(c.id).match(/-(\d+)$/) || [0, 0])[1]), 0);
-    return 'HĐ-' + market + '-' + new Date(U.today()).getFullYear() + '-' + U.pad(max + 1, 4);
-  };
+  const nextContractId = market => contracts.nextId(market, new Date(U.today()).getFullYear(), U.pad);
   const nextTraderId = () => {
     const max = A.db.traders.reduce((n, t) => Math.max(n, +(String(t.id).match(/TT(\d+)/) || [0, 0])[1]), 0);
     return 'TT' + U.pad(max + 1, 4);
   };
   const allowedMarket = market => A.allowedMarkets(A.currentAccount()).includes(market);
-  const needsContract = market => A.db.traders.filter(t => t.market === market && !A.db.contracts.some(c => active(c) && c.traderId === t.id));
+  const needsContract = market => A.db.traders.filter(t => t.market === market && !contracts.hasActiveForTrader(t.id));
   const needsAccount = () => A.db.traders.filter(t => {
-    const c = A.db.contracts.find(x => active(x) && x.traderId === t.id);
+    const c = contracts.activeForTrader(t.id);
     return !!c && !!stall(c.stallId) && !accountFor(t.id);
   });
   A.WORKFLOW = {
@@ -88,23 +87,11 @@
   }
   const contractView = A.VIEWS['hop-dong'];
   A.VIEWS['hop-dong'] = function () { return contractTaskHtml() + contractView(); };
-  function contractFilesHtml() { return '<div class="small muted">Có thể cập nhật ảnh/scan sau khi tạo hợp đồng trong màn chi tiết (mock).</div>'; }
-  function openContract(traderId) {
-    const t = trader(traderId);
-    const market = t ? t.market : ui.market;
-    const traders = A.db.traders.filter(x => x.market === market && !A.db.contracts.some(c => active(c) && c.traderId === x.id));
-    const points = A.db.stalls.filter(s => s.market === market && s.status === 'trong' && !A.db.contracts.some(c => active(c) && c.stallId === s.id));
-    if (!points.length) return U.toast('Không còn điểm kinh doanh trống phù hợp.');
-    const selectedTrader = t || traders[0];
-    if (!selectedTrader) return U.toast('Chưa có hồ sơ tiểu thương phù hợp.');
-    const start = U.today(), end = new Date(new Date(start).setFullYear(new Date(start).getFullYear() + 1));
-    A.modal(A.mHead('Tạo hợp đồng') + `<div class="modal-b"><section><h4>A. TIỂU THƯƠNG</h4><select class="input" id="wf-ct-trader">${traders.map(x => `<option value="${x.id}" ${x.id === selectedTrader.id ? 'selected' : ''}>${x.id} · ${U.esc(x.name)} · ${U.maskPhone(x.phone)}</option>`).join('')}</select></section><section><h4>B. ĐIỂM KINH DOANH</h4><select class="input" id="wf-ct-stall">${points.map(s => `<option value="${s.id}">${s.code} · ${U.esc(s.sectionName)} · ${s.area} m²</option>`).join('')}</select><div class="note info" style="margin-top:8px">Điểm được lấy từ mặt bằng hiện có; không nhập lại vị trí, diện tích hay ngành hàng.</div></section><section><h4>C. THỜI HẠN</h4><div class="form-grid"><div class="field"><label>Ngày bắt đầu</label><input class="input" id="wf-ct-start" type="date" value="${start}"></div><div class="field"><label>Ngày kết thúc</label><input class="input" id="wf-ct-end" type="date" value="${end.toISOString().slice(0, 10)}"></div></div></section><section><h4>D. KHOẢN THU / MỨC THU</h4><div class="field"><label>Đơn giá tháng</label><input class="input" id="wf-ct-monthly" type="number" min="0" value="0"></div><div class="field"><label>Khoản thu kèm theo (tên: số tiền, mỗi dòng)</label><textarea class="input" id="wf-ct-fees" rows="3"></textarea></div></section><section><h4>E. HỒ SƠ HỢP ĐỒNG</h4>${contractFilesHtml()}</section></div><div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="wf-contract-save">Tạo hợp đồng</button></div>`);
-  }
   let contractFiles = [];
   function workflowOpenContract(traderId) {
     const selected = trader(traderId), market = selected ? selected.market : ui.market;
-    const traders = A.db.traders.filter(t => t.market === market && !A.db.contracts.some(c => active(c) && c.traderId === t.id));
-    const points = A.db.stalls.filter(s => s.market === market && s.status === 'trong' && !A.db.contracts.some(c => active(c) && c.stallId === s.id));
+    const traders = contracts.tradersWithoutActive(market);
+    const points = contracts.availablePoints(market);
     if (!traders.length || !points.length) return U.toast(!points.length ? 'Không còn điểm kinh doanh trống phù hợp.' : 'Chưa có hồ sơ tiểu thương phù hợp.');
     const t = selected || traders[0], s = points[0], rate = pointPrice(s), start = U.today(), end = new Date(new Date(start).setFullYear(new Date(start).getFullYear() + 1));
     contractFiles = [];
@@ -131,12 +118,14 @@
   };
   A.ACT['wf-contract-save'] = () => {
     const t = trader(A.$('#wf-ct-trader').value), s = stall(A.$('#wf-ct-stall').value), start = A.$('#wf-ct-start').value, end = A.$('#wf-ct-end').value;
-    if (!t || !s || !start || !end || end < start || s.status !== 'trong' || A.db.contracts.some(c => active(c) && (c.traderId === t.id || c.stallId === s.id))) return U.toast('Vui lòng kiểm tra tiểu thương, điểm kinh doanh và thời hạn.');
+    if (!t || !s || !start || !end || end < start || s.status !== 'trong' || contracts.hasActiveForTrader(t.id) || contracts.hasActiveForPoint(s.id)) return U.toast('Vui lòng kiểm tra tiểu thương, điểm kinh doanh và thời hạn.');
     const fees = A.$('#wf-ct-fees').value.split('\n').map(x => { const p = x.split(':'); return p.length > 1 ? { name: p[0].trim(), amount: Number(p.slice(1).join(':').trim()) || 0 } : null; }).filter(Boolean);
     const rate = pointPrice(s);
     const c = { id: nextContractId(s.market), traderId: t.id, stallId: s.id, market: s.market, kind: 'Hợp đồng thuê điểm kinh doanh', signedDate: start, start, end, monthly: Number(A.$('#wf-ct-monthly').value) || rate.monthly, unit: rate.unit, unitLabel: 'đ/tháng', deposit: 0, feeSnapshot: fees, signedCopies: contractFiles.slice(), history: [], status: 'hieuluc' };
     c.history.unshift({ at: U.dmy(U.today()) + ' ' + U.nowTime(), action: 'Khởi tạo hợp đồng', detail: 'Tạo từ luồng hồ sơ tiểu thương' });
-    A.db.contracts.push(c); A.reindex(); s.status = 'thue'; s.traderId = t.id; s.contractId = c.id; if (!t.stalls.includes(s.id)) t.stalls.push(s.id); s.history = s.history || []; s.history.unshift(U.dmy(U.today()) + ': ký ' + c.id + ' với ' + t.name); A.WORKFLOW.markRecentPoint(s.id); A.save(); A.closeModal(); A.render();
+    // Contract + point occupancy + trader link + point history + single save (Phase 9 use case).
+    contracts.createWithPointAllocation({ contract: c, traderId: t.id, pointId: s.id, pointHistoryEntry: U.dmy(U.today()) + ': ký ' + c.id + ' với ' + t.name, beforeSave: () => A.WORKFLOW.markRecentPoint(s.id) });
+    A.closeModal(); A.render();
     A.modal(A.mHead('Tạo hợp đồng thành công') + `<div class="modal-b"><dl class="kv"><dt>Hợp đồng</dt><dd><b>${c.id}</b></dd><dt>Tiểu thương</dt><dd>${U.esc(t.name)}</dd><dt>Điểm kinh doanh</dt><dd>${s.code}</dd><dt>Thời hạn</dt><dd>${U.dmy(start)} → ${U.dmy(end)}</dd></dl></div><div class="modal-f"><button class="btn" data-act="wf-go-stall" data-id="${s.id}">Đi tới điểm kinh doanh</button><button class="btn primary" data-act="ct-view" data-id="${c.id}">Xem hợp đồng</button></div>`);
     U.toast('Tạo hợp đồng thành công');
   };
@@ -158,8 +147,8 @@
   A.ACT['wf-account-create'] = el => {
     if (!A.canDo('tai-khoan.tao-moi')) return;
     const t = trader(el.dataset.id); if (!t || accountFor(t.id)) return;
-    const n = A.ACCOUNTS.list().reduce((max, a) => Math.max(max, +(String(a.id).match(/^AC-TT(\d+)$/) || [0, 0])[1]), 0) + 1, id = 'AC-TT' + U.pad(n, 2);
-    A.ACCOUNTS.add({ id, code: id.replace('AC-', ''), fullName: t.name, phone: t.phone, accountType: 'Tiểu thương', title: 'Tiểu thương', roleIds: ['trader'], organization: marketName(t.market), marketScopes: [t.market], status: 'PENDING_ACTIVATION', traderId: t.id });
+    const id = accounts.nextTraderAccountId(U.pad);
+    accounts.add({ id, code: id.replace('AC-', ''), fullName: t.name, phone: t.phone, accountType: 'Tiểu thương', title: 'Tiểu thương', roleIds: ['trader'], organization: marketName(t.market), marketScopes: [t.market], status: 'PENDING_ACTIVATION', traderId: t.id });
     A.closeModal(); A.render(); A.modal(A.mHead('Tạo tài khoản thành công') + `<div class="modal-b"><b>${U.esc(t.name)}</b><div>${U.maskPhone(t.phone)}</div></div><div class="modal-f"><button class="btn primary" data-act="wf-send-activation" data-id="${t.id}">Gửi thông báo kích hoạt</button></div>`); U.toast('Tạo tài khoản thành công');
   };
   A.ACT['wf-send-activation'] = el => { const t = trader(el.dataset.id); if (!t || !accountFor(t.id)) return; A.closeModal(); U.toast('Đã gửi thông báo kích hoạt: dùng số điện thoại đã đăng ký để đăng nhập OTP.'); };

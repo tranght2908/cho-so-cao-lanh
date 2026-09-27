@@ -2023,6 +2023,8 @@
   const TS = A.features.traders.service;
   // Business-point display lookups (Phase 7) — src/features/business-points/service.js.
   const BP = A.features.businessPoints.service;
+  // Contract read access for trader display (Phase 8) — src/features/contracts/service.js.
+  const CS = A.features.contracts.service;
   // HOTFIX (mục 9-11 yêu cầu): giấy tờ đang chờ thay thế trong EDIT MODE hiện tại — { [docKey]:
   // {fileName} }. CHỈ là state tạm phía FE, chưa ghi vào trader.docFiles cho tới khi bấm "Lưu thay
   // đổi" (tt-edit-save); "Hủy" xóa sạch, không để sót giữa các lần mở drawer khác nhau.
@@ -2108,7 +2110,7 @@
   // "liên kết hồ sơ đăng ký") — CHỈ đổi label hiển thị, KHÔNG đổi giá trị kỹ thuật NOT_LINKED/LINKED/
   // LOCKED (giữ nguyên để tương thích, xem A.ACCOUNTS.byTraderId/ttCreateLinkedAccount dùng chung
   // cho cả wizard cũ đã bỏ lẫn luồng OTP mới).
-  function ttLinkedAccount(t) { return A.ACCOUNTS.byTraderId(t.id); }
+  function ttLinkedAccount(t) { return A.features.accounts.service.byTraderId(t.id); }
   function ttMiniAppState(t) {
     const acc = ttLinkedAccount(t);
     return acc ? (acc.status === 'active' ? 'LINKED' : 'LOCKED') : 'NOT_LINKED';
@@ -2338,7 +2340,7 @@
     const acc = ttLinkedAccount(t);
     if (!acc) return;
     const next = acc.status === 'active' ? 'disabled' : 'active';
-    A.ACCOUNTS.setStatus(acc.id, next);
+    A.features.accounts.service.setStatus(acc.id, next);
     U.log(`${next === 'active' ? 'Mở khóa' : 'Khóa'} truy cập Mini App của ${t.name} (${t.id})`);
     ttRerenderDrawer(t);
     A.render();
@@ -2357,7 +2359,7 @@
     const editing = canEdit && ttEditId === t.id;
     const canCongNo = U.can('cong-no');
     const debt = U.traderDebt(t.id);
-    const unpaidCount = A.db.invoices.filter(i => i.traderId === t.id && i.status !== 'paid').length;
+    const unpaidCount = A.features.finance.service.unpaidInvoicesForTrader(t.id).length;
     const status = ttProfileStatus(t);
     return `<div class="drawer-h detail-form-head" style="flex-wrap:wrap"><div><div class="row" style="gap:9px"><h3>${U.esc(t.name)}</h3>${ttProfileStatusTag(t)}</div><div class="small muted" style="margin-top:2px">${t.id} · ${U.esc(U.mShort(t.market))}</div></div><span class="spacer"></span>
         ${canEdit && !editing ? `<button class="btn sm" data-act="tt-edit-open" data-id="${t.id}">${U.icon('edit')}Chỉnh sửa thông tin</button>` : ''}
@@ -2378,7 +2380,7 @@
         </section>
         <section class="tt-detail-card">
         <div class="tt-detail-card-h"><span>${U.icon('file')}</span><div><b>Lịch sử hợp đồng</b><div class="small muted">Truy vết từ quan hệ Contract, không sao chép vào hồ sơ tiểu thương</div></div></div>
-        ${(()=>{const cs=A.db.contracts.filter(c=>c.traderId===t.id).sort((a,b)=>b.start.localeCompare(a.start));return cs.length?U.table([{t:'Mã HĐ'},{t:'Điểm KD'},{t:'Thời hạn'},{t:'Trạng thái'},{t:''}],cs.map(c=>`<tr><td>${c.id}</td><td>${A.idx.stall.get(c.stallId)?A.idx.stall.get(c.stallId).code:'—'}</td><td>${U.dmy(c.start)} – ${U.dmy(c.end)}</td><td>${c.status==='hieuluc'?'<span class="tag ok">Hiệu lực</span>':'<span class="tag">'+(c.status==='chamdut'?'Đã chấm dứt':'Đã kết thúc')+'</span>'}</td><td><button class="btn sm" data-act="ct-view" data-id="${c.id}">Xem</button></td></tr>`)): '<div class="empty small">Chưa có hợp đồng.</div>';})()}
+        ${(()=>{const cs=CS.listByTrader(t.id).sort((a,b)=>b.start.localeCompare(a.start));return cs.length?U.table([{t:'Mã HĐ'},{t:'Điểm KD'},{t:'Thời hạn'},{t:'Trạng thái'},{t:''}],cs.map(c=>`<tr><td>${c.id}</td><td>${A.idx.stall.get(c.stallId)?A.idx.stall.get(c.stallId).code:'—'}</td><td>${U.dmy(c.start)} – ${U.dmy(c.end)}</td><td>${c.status==='hieuluc'?'<span class="tag ok">Hiệu lực</span>':'<span class="tag">'+(c.status==='chamdut'?'Đã chấm dứt':'Đã kết thúc')+'</span>'}</td><td><button class="btn sm" data-act="ct-view" data-id="${c.id}">Xem</button></td></tr>`)): '<div class="empty small">Chưa có hợp đồng.</div>';})()}
         </section>
         ${A.VEHICLES ? A.VEHICLES.traderSection(t) : ''}<section class="tt-detail-card">
         <div class="tt-detail-card-h"><span>${U.icon('money')}</span><div><b>E. Tình trạng công nợ</b><div class="small muted">Tóm tắt các khoản cần theo dõi</div></div></div>
@@ -2397,7 +2399,7 @@
   // Chi tiết hồ sơ theo mô hình mới: dữ liệu kinh doanh nằm theo từng điểm,
   // không còn đưa Contract hoặc Mini App vào popup hồ sơ.
   function ttDrawerHtmlCL(t) {
-    const canEdit=A.canDo('tieu-thuong.them-moi',t.market), editing=canEdit&&ttEditId===t.id, debt=U.traderDebt(t.id), unpaid=A.db.invoices.filter(i=>i.traderId===t.id&&i.status!=='paid').length;
+    const canEdit=A.canDo('tieu-thuong.them-moi',t.market), editing=canEdit&&ttEditId===t.id, debt=U.traderDebt(t.id), unpaid=A.features.finance.service.unpaidInvoicesForTrader(t.id).length;
     return `<div class="drawer-h detail-form-head"><div><div class="row" style="gap:9px"><h3>${U.esc(t.name)}</h3>${ttProfileStatusTag(t)}</div><div class="small muted">${t.id} · ${U.esc(U.mShort(t.market))}</div></div><span class="spacer"></span>${canEdit&&!editing?`<button class="btn sm" data-act="tt-edit-open" data-id="${t.id}">${U.icon('edit')}Chỉnh sửa thông tin</button>`:''}<button class="x" data-act="close" aria-label="Đóng">×</button></div><div class="drawer-b tt-detail-body"><section class="tt-detail-card"><div class="tt-detail-card-h"><span>${U.icon('users')}</span><div><b>A. Thông tin tiểu thương</b><div class="small muted">Thông tin nhận dạng và liên hệ</div></div></div>${editing?ttSectionAEditHtml(t):ttSectionAViewHtml(t)}</section><section class="tt-detail-card"><div class="tt-detail-card-h"><span>${U.icon('file')}</span><div><b>B. Giấy tờ & hồ sơ đính kèm</b><div class="small muted">Giấy tờ cá nhân và tài liệu liên quan</div></div></div>${editing?`<div class="tt-doc-grid">${TT_DOCS.map(x=>ttDocRowEdit(x)).join('')}</div>`:ttDetailDocRowsHtml(t)}</section><section class="tt-detail-card tt-points-card"><div class="tt-detail-card-h"><span>${U.icon('store')}</span><div><b>C. Điểm kinh doanh đang sử dụng</b><div class="small muted">Thông tin kinh doanh tại từng điểm</div></div></div><div class="plan">${t.stalls.length?t.stalls.map(id=>ttPointCardHtml(t,id)).join(''):'<div class="empty small">Tiểu thương chưa có điểm kinh doanh đang sử dụng.</div>'}</div></section>${A.VEHICLES?A.VEHICLES.traderSection(t,{editable:editing}):''}<section class="tt-detail-card"><div class="tt-detail-card-h"><span>${U.icon('money')}</span><div><b>E. Tình trạng công nợ</b><div class="small muted">Tóm tắt các khoản cần theo dõi</div></div></div><dl class="kv"><dt>Công nợ hiện tại</dt><dd>${debt?`<b class="tt-debt-value">${U.money(debt)}</b>`:'<span class="tag ok">Không nợ</span>'}</dd><dt>Khoản chưa thanh toán</dt><dd>${unpaid}</dd></dl></section></div>`;
   }
   A.ACT['tt-placement-view'] = el => {
@@ -2482,7 +2484,7 @@
       return;
     }
     const invs = A.db.invoices.filter(i => i.traderId === t.id).sort((a, b) => b.period.localeCompare(a.period)).slice(0, 8);
-    const cts = A.db.contracts.filter(c => c.traderId === t.id);
+    const cts = CS.listByTrader(t.id);
     const pays = A.db.payments.filter(p => p.traderId === t.id).slice(-6).reverse();
     A.modal(A.mHead(U.esc(t.name) + ' · ' + t.id) + `<div class="modal-b"><div class="grid g2">
       <dl class="kv"><dt>Giới tính / năm sinh</dt><dd>${t.gender} · ${t.birth}</dd><dt>Điện thoại</dt><dd>${U.maskPhone(t.phone)}</dd>
@@ -2804,255 +2806,4 @@
     ttRerenderDrawer(t);
     A.render(); U.toast('Đã cập nhật hồ sơ ' + t.id);
   };
-
-  // ---------- Hợp đồng ----------
-  function hdFixedContract(c) {
-    const st = c && A.idx.stall.get(c.stallId);
-    return st && U.rentalKind(st) === 'fixed';
-  }
-  A.VIEWS['hop-dong'] = function () {
-    const q = (f.hdSearch || '').toLowerCase(), tab = ui.contractTab;
-    const canNew = A.canDo('so-do.tao-hop-dong', ui.market) || A.canDo('hop-dong.tao', ui.market);
-    const canExtend = A.canDo('hop-dong.gia-han', ui.market);
-    const canEnd = A.canDo('hop-dong.thanh-ly', ui.market);
-    const rows = A.db.contracts.filter(c => U.inM(c) && hdFixedContract(c)
-      && (tab === 'all' ? c.status === 'hieuluc' : tab === 'exp' ? c.status === 'hieuluc' && U.days(U.today(), c.end) <= 30 : c.status === 'thanhly')
-      && (!q || c.id.toLowerCase().includes(q) || A.idx.trader.get(c.traderId).name.toLowerCase().includes(q) || A.idx.stall.get(c.stallId).code.toLowerCase().includes(q)))
-      .sort((a, b) => tab === 'exp' ? a.end.localeCompare(b.end) : 0);
-    const pg = U.pager('hd' + tab, rows.length, 25);
-    const n = k => A.db.contracts.filter(c => U.inM(c) && hdFixedContract(c) && (k === 'all' ? c.status === 'hieuluc' : k === 'exp' ? c.status === 'hieuluc' && U.days(U.today(), c.end) <= 30 : c.status === 'thanhly')).length;
-    return `<div class="card"><div class="card-h">
-      <div class="seg">${[['all', 'Đang hiệu lực'], ['exp', 'Sắp hết hạn ≤ 30 ngày'], ['end', 'Đã thanh lý']].map(x => `<button class="${tab === x[0] ? 'on' : ''}" data-act="hd-tab" data-id="${x[0]}">${x[1]} (${n(x[0])})</button>`).join('')}</div>
-      <span class="spacer"></span><input class="input" placeholder="Số HĐ, tiểu thương, mã điểm" data-in="hd-search" value="${U.esc(f.hdSearch || '')}">
-      ${canNew ? '<button class="btn primary" data-act="ct-new">+ Tạo hợp đồng</button>' : ''}</div>
-      <div class="card-b">${U.table([{ t: 'Số hợp đồng' }, { t: 'Tiểu thương' }, { t: 'Điểm KD' }, { t: 'Loại' }, { t: 'Thời hạn' }, { t: 'Còn lại', num: true }, { t: 'Giá/tháng', num: true }, { t: 'Bản số hóa' }, { t: '' }],
-        rows.slice(pg.start, pg.end).map(c => {
-          const left = U.days(U.today(), c.end);
-          return `<tr><td>${c.id}</td><td><a href="#" data-act="trader" data-id="${c.traderId}">${U.esc(A.idx.trader.get(c.traderId).name)}</a></td><td>${A.idx.stall.get(c.stallId).code}</td><td class="small">${c.kind}</td>
-            <td class="nowrap">${U.dmy(c.start)} – ${U.dmy(c.end)}</td><td class="num">${c.status === 'hieuluc' ? (left <= 30 ? `<span class="tag danger">${left} ngày</span>` : left + ' ngày') : '–'}</td>
-            <td class="num">${U.money(c.monthly)}</td><td>${c.scanned ? '<span class="tag info">PDF</span>' : '<span class="tag warn">Chưa scan</span>'}</td>
-            <td class="nowrap">${c.status === 'hieuluc' ? `${canExtend ? `<button class="btn sm" data-act="ct-extend" data-id="${c.id}">Gia hạn</button>` : ''} ${canEnd ? `<button class="btn sm danger" data-act="ct-end" data-id="${c.id}">Thanh lý</button>` : ''}` : ''}</td></tr>`;
-        }))}${pg.html}
-        <div class="small muted" style="margin-top:8px">Màn này chỉ quản lý hợp đồng thuê cố định quầy tháng/quý. Quầy thuê theo phiên/khách vãng lai xử lý ở màn Phiên chợ quê.</div></div></div>`;
-  };
-  A.ACT['hd-tab'] = el => { ui.contractTab = el.dataset.id; A.render(); };
-  A.IN['hd-search'] = el => { f.hdSearch = el.value; ui.page['hd' + ui.contractTab] = 0; A.render(); };
-  A.ACT['ct-extend'] = el => {
-    const c = A.idx.contract.get(el.dataset.id);
-    if (!hdFixedContract(c)) return;
-    if (!A.canDo('hop-dong.gia-han', c.market)) return;
-    A.modal(A.mHead('Gia hạn ' + c.id) + `<div class="modal-b"><p>Hợp đồng hiện hết hạn ngày <b>${U.dmy(c.end)}</b>.</p>
-      <div class="field"><label>Gia hạn thêm</label><select class="input" id="ext-m"><option value="12">12 tháng</option><option value="24">24 tháng</option><option value="36" selected>36 tháng</option></select></div></div>
-      <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="ct-extend-save" data-id="${c.id}">Gia hạn</button></div>`);
-  };
-  A.ACT['ct-extend-save'] = el => {
-    const c = A.idx.contract.get(el.dataset.id);
-    if (!hdFixedContract(c)) return;
-    if (!A.canDo('hop-dong.gia-han', c.market)) return;
-    const m = Number(A.$('#ext-m').value);
-    const d = new Date(c.end); d.setMonth(d.getMonth() + m);
-    c.end = d.toISOString().slice(0, 10);
-    U.log(`Gia hạn hợp đồng ${c.id} thêm ${m} tháng`);
-    A.save(); A.closeModal(); A.render(); U.toast(`Đã gia hạn ${c.id} đến ${U.dmy(c.end)}`);
-  };
-  A.ACT['ct-end'] = el => {
-    const c = A.idx.contract.get(el.dataset.id);
-    if (!hdFixedContract(c)) return;
-    if (!A.canDo('hop-dong.thanh-ly', c.market)) return;
-    const debt = U.sum(A.db.invoices.filter(i => i.contractId === c.id && i.status !== 'paid'), U.due);
-    A.modal(A.mHead('Thanh lý ' + c.id) + `<div class="modal-b"><p>Thanh lý hợp đồng với <b>${U.esc(A.idx.trader.get(c.traderId).name)}</b> tại điểm <b>${A.idx.stall.get(c.stallId).code}</b>. Điểm kinh doanh sẽ chuyển sang "Còn trống".</p>
-      ${debt ? `<div class="note">Tiểu thương còn nợ ${U.money(debt)}. Cần thu hoặc cấn trừ tiền đặt cọc trước khi thanh lý.</div>` : ''}</div>
-      <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn danger" data-act="ct-end-save" data-id="${c.id}">Xác nhận thanh lý</button></div>`);
-  };
-  A.ACT['ct-end-save'] = el => {
-    const c = A.idx.contract.get(el.dataset.id);
-    if (!hdFixedContract(c)) return;
-    if (!A.canDo('hop-dong.thanh-ly', c.market)) return;
-    const st = A.idx.stall.get(c.stallId), t = A.idx.trader.get(c.traderId);
-    c.status = 'thanhly'; c.end = U.today();
-    st.history = st.history || []; st.history.unshift(`${U.dmy(U.today())}: thanh lý ${c.id} (${t.name})`);
-    st.status = 'trong'; st.traderId = null; st.contractId = null;
-    t.stalls = t.stalls.filter(id => id !== st.id);
-    U.log(`Thanh lý hợp đồng ${c.id}`);
-    A.save(); A.closeModal(); A.render(); U.toast('Đã thanh lý ' + c.id);
-  };
-  A.ACT['ct-new'] = el => {
-    if (!A.canDo('so-do.tao-hop-dong', ui.market) && !A.canDo('hop-dong.tao', ui.market)) return;
-    const pre = el.dataset.id;
-    const empty = A.db.stalls.filter(s => s.status === 'trong' && U.rentalKind(s) === 'fixed' && (pre ? s.id === pre : U.inM(s)));
-    if (!empty.length) { U.toast('Không còn điểm kinh doanh trống'); return; }
-    const mk = empty[0].market;
-    const traders = A.db.traders.filter(t => t.market === mk || t.stalls.length === 0).slice(-60).reverse();
-    A.modal(A.mHead('Tạo hợp đồng thuê điểm kinh doanh') + `<div class="modal-b"><div class="form-grid">
-      <div class="field"><label>Điểm kinh doanh còn trống</label><select class="input" id="nc-stall">${empty.map(s => `<option value="${s.id}">${s.code} · ${U.esc(s.sectionName)} · ${s.area.toLocaleString('vi-VN')} m²</option>`).join('')}</select></div>
-      <div class="field"><label>Tiểu thương</label><select class="input" id="nc-trader">${traders.map(t => `<option value="${t.id}">${t.id} · ${U.esc(t.name)}</option>`).join('')}</select></div>
-      <div class="field"><label>Thời hạn</label><select class="input" id="nc-term"><option value="12">12 tháng</option><option value="36" selected>36 tháng</option></select></div>
-      <div class="field"><label>Ngày bắt đầu</label><input class="input" value="${U.dmy(U.today())}" disabled></div></div>
-      <div class="note info" style="margin-top:12px">Chỉ tạo hợp đồng cho quầy thuê cố định tháng/quý. Quầy thuê theo phiên/khách vãng lai không được chọn ở màn này.</div></div>
-      <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="ct-new-save">Tạo hợp đồng</button></div>`);
-  };
-  A.ACT['ct-new-save'] = () => {
-    const st = A.idx.stall.get(A.$('#nc-stall').value);
-    if (!st || st.status !== 'trong' || U.rentalKind(st) !== 'fixed' || (!A.canDo('so-do.tao-hop-dong', st.market) && !A.canDo('hop-dong.tao', st.market))) return;
-    const t = A.idx.trader.get(A.$('#nc-trader').value), term = Number(A.$('#nc-term').value);
-    const end = new Date(U.today()); end.setMonth(end.getMonth() + term); end.setDate(end.getDate() - 1);
-    const fixedPolicy = D.RATE_POLICY_SEED.stallPrices.find(x => x.marketId === st.market && x.marketModel === D.RATE_MARKET_MODEL.FIXED_MONTHLY && x.status === 'active');
-    const unit = fixedPolicy ? fixedPolicy.amount : D.UNIT[st.type];
-    const monthly = Math.round(st.area * unit * 30 / 1000) * 1000;
-    const c = { id: 'HĐ-' + st.market + '-2026-' + U.pad(A.db.contracts.length + 1, 4), stallId: st.id, traderId: t.id, market: st.market, kind: 'Hợp đồng thuê cố định quầy tháng/quý', start: U.today(), end: end.toISOString().slice(0, 10), unit, monthly, deposit: monthly, status: 'hieuluc', scanned: true };
-    A.db.contracts.push(c); A.idx.contract.set(c.id, c);
-    st.status = 'thue'; st.traderId = t.id; st.contractId = c.id; t.stalls.push(st.id);
-    if (t.cat === 'Chưa gán') t.cat = st.cat;
-    st.history = st.history || []; st.history.unshift(`${U.dmy(U.today())}: ký ${c.id} với ${t.name}`);
-    U.log(`Tạo hợp đồng ${c.id} cho điểm ${st.code}`);
-    A.save(); A.closeModal(); A.render(); U.toast('Đã tạo ' + c.id);
-  };
-})(window.APP);
-
-// Detail-layout refresh: mirrors the compact two-column contract dossier while
-// preserving the Contract V1 actions and data model above.
-(function (A) {
-  'use strict';
-  const U = A.U;
-  const active = c => c && c.status === 'hieuluc';
-  const days = c => U.days(U.today(), c.end);
-  const point = c => A.idx.stall.get(c.stallId);
-  const trader = c => A.idx.trader.get(c.traderId);
-  const tag = c => c.status === 'thanhly' ? '<span class="tag">Đã thanh lý</span>' : c.status === 'chamdut' ? '<span class="tag danger">Đã chấm dứt</span>' : active(c) ? '<span class="tag ok">Đang hiệu lực</span>' : '<span class="tag">Đã kết thúc</span>';
-  const price = c => c.monthly ? U.money(c.monthly) + '/tháng' : 'Theo phiên';
-  function section(icon, key, title, body, tone) {
-    return `<section class="contract-detail-section ${tone || ''}"><h4><span>${U.icon(icon)}</span>${key}. ${title}</h4>${body}</section>`;
-  }
-  function pairs(rows) { return `<dl class="contract-detail-kv">${rows.map(r => `<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('')}</dl>`; }
-  function detail(c) {
-    const t = trader(c), s = point(c), files = c.signedCopies || [], h = c.history || [];
-    const warning = active(c) && days(c) <= 30 ? `<b class="${days(c) <= 15 ? 'contract-danger-text' : 'contract-warn-text'}">${days(c)} ngày · Sắp hết hạn</b>` : active(c) ? days(c) + ' ngày' : '—';
-    const contract = section('file', 'A', 'THÔNG TIN HỢP ĐỒNG', pairs([['Mã hợp đồng', '<b>' + c.id + '</b>'], ['Ngày ký', U.dmy(c.signedDate || c.start)], ['Ngày hiệu lực', U.dmy(c.start)], ['Ngày hết hạn', U.dmy(c.end)], ['Trạng thái', tag(c)], ['Thời hạn còn lại', warning]]), 'contract-amber');
-    const traderBlock = section('users', 'B', 'TIỂU THƯƠNG', pairs([['Tiểu thương', t ? '<b>' + U.esc(t.name) + ' · ' + t.id + '</b>' : '—'], ['Điện thoại', t ? '☎ ' + U.maskPhone(t.phone) : '—'], ['Loại / diện tích', s ? 'Loại: ' + U.esc(U.typeLabel(s.type)) + '<br>Diện tích: <b>' + s.area + ' m²</b>' : '—']]) + (t ? `<div class="contract-section-action"><button class="btn sm" data-act="trader" data-id="${t.id}">${U.icon('eye')}Xem hồ sơ tiểu thương</button></div>` : ''), 'contract-blue');
-    const pointBlock = section('store', 'C', 'ĐIỂM KINH DOANH', pairs([['Mã điểm', '<b>' + (s ? s.code : '—') + '</b>'], ['Khu vực', s ? U.esc(s.sectionName) : '—'], ['Loại / diện tích', s ? U.esc(U.typeLabel(s.type)) + ' · <b>' + s.area + ' m²</b>' : '—']]) + (s ? `<div class="contract-section-action"><button class="btn sm" data-act="dk-open" data-id="${s.id}">${U.icon('store')}Xem chi tiết điểm</button></div>` : ''), 'contract-mint');
-    const vehicleFees = (c.vehicleFeeSnapshot || []).length ? `<div class="contract-vehicle-snapshot"><b>PHƯƠNG TIỆN</b><br>${c.vehicleFeeSnapshot.map(x => U.esc((x.plateNumber || x.type || 'Phương tiện')) + ': ' + U.money(x.amount) + ' / tháng').join('<br>')}<br><b>Tổng phí phương tiện: ${U.money(c.vehicleFeeSnapshot.reduce((n, x) => n + Number(x.amount || 0), 0))} / tháng</b></div>` : '';
-    const regularFees = (c.feeSnapshot || []).filter(x => !String(x.name || '').startsWith('Phí phương tiện'));
-    const fees = (regularFees.length ? regularFees.map(x => U.esc(x.name) + ': ' + U.money(x.amount)).join('<br>') : (vehicleFees ? '' : 'Chưa ghi nhận')) + vehicleFees;
-    const finance = section('money', 'D', 'ĐƠN GIÁ & KHOẢN PHÍ', pairs([['Đơn giá snapshot', c.unit ? U.money(c.unit) + (c.unitLabel ? ' ' + U.esc(c.unitLabel) : '') : '—'], ['Giá thuê', '<b>' + price(c) + '</b>'], ['Khoản phí kèm theo', fees]]), 'contract-sky');
-    const copies = section('attachment', 'E', 'BẢN SỐ HÓA HỢP ĐỒNG', files.length ? `<div class="contract-copy-list">${files.map((x,i) => `<div class="contract-copy"><span class="contract-copy-icon">${U.icon('file')}</span><span><b>Ảnh trang ${x.page || i + 1}</b><small>${U.esc(x.name)}</small></span><span class="tag ok">Đã lưu</span><button class="btn sm" data-act="ct-copy-view" data-id="${c.id}" data-file="${i}">Xem</button></div>`).join('')}</div>` : `<div class="contract-empty-copy"><span>${U.icon('file')}</span><div><b>Chưa cập nhật ảnh hợp đồng giấy đã ký.</b><small>Vui lòng thêm ảnh chụp/scan hợp đồng sau khi hai bên ký giấy.</small></div></div>` + (A.canDo('hop-dong.cap-nhat-ban-ky', c.market) ? `<button class="btn sm contract-add-copy" data-act="ct-copy-add" data-id="${c.id}">+ Thêm ảnh</button>` : ''), 'contract-purple');
-    const history = section('refresh', 'F', 'LỊCH SỬ', h.length ? `<div class="tbl-wrap"><table class="tbl contract-history"><thead><tr><th>Thời gian</th><th>Sự kiện</th><th>Mô tả</th><th>Người thực hiện</th></tr></thead><tbody>${h.map(x => `<tr><td>${U.esc(x.at || '—')}</td><td><b>${U.esc(x.action || '—')}</b></td><td>${U.esc(x.detail || '—')}</td><td>${U.esc(x.by || 'Hệ thống')}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty small">Chưa có lịch sử xử lý.</div>', 'contract-history-section');
-    return A.mHead(`${U.icon('file')}Hợp đồng ${c.id}`) + `<div class="modal-b contract-detail-body"><div class="contract-detail-grid">${contract}${traderBlock}${pointBlock}${finance}</div>${copies}${history}</div><div class="modal-f contract-detail-footer">${A.canDo('hop-dong.in', c.market) ? `<button class="btn primary" data-act="ct-print" data-id="${c.id}">${U.icon('print')}In hợp đồng</button>` : ''}${active(c) && A.canDo('hop-dong.gia-han', c.market) ? `<button class="btn" data-act="ct-renew" data-id="${c.id}">${U.icon('file')}Gia hạn / Tạo HĐ mới</button>` : ''}${active(c) && A.canDo('hop-dong.cham-dut', c.market) ? `<button class="btn danger" data-act="ct-terminate" data-id="${c.id}">× Chấm dứt</button>` : ''}${(active(c) || c.status === 'chamdut') && A.canDo('hop-dong.thanh-ly', c.market) ? `<button class="btn danger" data-act="ct-liquidate" data-id="${c.id}">⌁ Thanh lý</button>` : ''}<button class="btn" data-act="close">Đóng</button></div>`;
-  }
-  A.contractDetailLayoutV2 = detail;
-  A.ACT['ct-view'] = el => { const c = A.idx.contract.get(el.dataset.id); if (c) A.modal(detail(c), true); };
-})(window.APP);
-
-// The Contract V1 handlers are initialized after the layout helper above; set
-// the final view action here so the new dossier layout remains authoritative.
-(function (A) {
-  'use strict';
-  A.ACT['ct-view'] = el => {
-    const c = A.idx.contract.get(el.dataset.id);
-    if (c && A.contractDetailLayoutV2) A.modal(A.contractDetailLayoutV2(c), true);
-  };
-})(window.APP);
-
-// CONTRACT_MANAGEMENT_V1: contract records remain compatible with the legacy
-// fields (`stallId`, `traderId`, `start`, `end`, `monthly`, `status`). New
-// fields below are additive snapshots / audit metadata only.
-(function (A) {
-  'use strict';
-  const U = A.U, ui = A.ui, f = ui.f;
-  const active = c => c && c.status === 'hieuluc';
-  const left = c => U.days(U.today(), c.end);
-  const warn = c => !active(c) || left(c) > 30 ? '' : 'Sắp hết hạn';
-  const cStatus = c => c.status === 'thanhly' ? 'Đã thanh lý' : c.status === 'chamdut' ? 'Đã chấm dứt' : active(c) ? 'Đang hiệu lực' : 'Đã kết thúc';
-  const cTag = c => c.status === 'thanhly' ? '<span class="tag">Đã thanh lý</span>' : c.status === 'chamdut' ? '<span class="tag danger">Đã chấm dứt</span>' : active(c) ? '<span class="tag ok">Đang hiệu lực</span>' : '<span class="tag">Đã kết thúc</span>';
-  const point = c => A.idx.stall.get(c.stallId), trader = c => A.idx.trader.get(c.traderId);
-  const money = c => c.monthly ? U.money(c.monthly) + '/tháng' : 'Theo phiên';
-  const event = (c, action, detail) => {
-    c.history = c.history || [];
-    c.history.unshift({ at: U.dmy(U.today()) + ' ' + U.nowTime(), action, detail: detail || '' });
-  };
-  const nextId = market => {
-    const y = new Date(U.today()).getFullYear();
-    const max = A.db.contracts.reduce((n, c) => Math.max(n, +(String(c.id).match(/-(\d+)$/) || [0, 0])[1]), 0);
-    return 'HĐ-' + market + '-' + y + '-' + U.pad(max + 1, 4);
-  };
-  function expiryNotifications(c) {
-    if (!active(c)) return;
-    const d = left(c); [30, 15].forEach(m => {
-      if (d > m) return;
-      const key = 'contract-expiry:' + c.id + ':' + m;
-      if (A.db.notifications.some(n => n.eventKey === key)) return;
-      const t = trader(c), s = point(c); if (!t || !s) return;
-      A.db.notifications.unshift({ id: 'TB-' + U.pad(32 + A.db.notifications.length, 3), at: U.today(), title: 'Hợp đồng ' + c.id + ' còn ' + d + ' ngày', body: 'Hợp đồng thuê điểm ' + s.code + ' của bạn sẽ hết hạn ngày ' + U.dmy(c.end) + '.', group: c.market, traderId: t.id, channels: ['Web BQL', 'Mini app'], sent: 1, delivered: 1, read: 0, auto: true, eventKey: key });
-      event(c, 'Cảnh báo ' + m + ' ngày', 'Đã tạo mock notification cho BQL và tiểu thương');
-    });
-  }
-  function syncExpiry() { A.db.contracts.filter(c => U.inM(c)).forEach(expiryNotifications); }
-  function vacantCandidates(market, selected) {
-    return A.db.stalls.filter(s => s.market === market && (selected ? s.id === selected : true) && s.status === 'trong' && !A.db.contracts.some(c => active(c) && c.stallId === s.id));
-  }
-  function contractDetail(c) {
-    const t = trader(c), s = point(c), files = c.signedCopies || [], hist = c.history || [];
-    const canPrint = A.canDo('hop-dong.in', c.market), canCopy = A.canDo('hop-dong.cap-nhat-ban-ky', c.market), canRenew = A.canDo('hop-dong.gia-han', c.market), canTerminate = A.canDo('hop-dong.cham-dut', c.market), canLiquidate = A.canDo('hop-dong.thanh-ly', c.market);
-    return A.mHead('Hợp đồng ' + c.id) + `<div class="modal-b"><section><h4>A. THÔNG TIN HỢP ĐỒNG</h4><dl class="kv"><dt>Mã hợp đồng</dt><dd>${c.id}</dd><dt>Ngày ký</dt><dd>${U.dmy(c.signedDate || c.start)}</dd><dt>Hiệu lực</dt><dd>${U.dmy(c.start)}</dd><dt>Hết hạn</dt><dd>${U.dmy(c.end)}</dd><dt>Trạng thái</dt><dd>${cTag(c)}</dd><dt>Thời hạn còn lại</dt><dd>${active(c) ? (left(c) + ' ngày' + (warn(c) ? ' · <b>' + warn(c) + '</b>' : '')) : '—'}</dd></dl></section><section><h4>B. TIỂU THƯƠNG</h4><dl class="kv"><dt>Tiểu thương</dt><dd>${t ? U.esc(t.name) + ' · ' + t.id : '—'}</dd><dt>Điện thoại</dt><dd>${t ? U.maskPhone(t.phone) : '—'}</dd></dl>${t ? `<button class="btn sm" data-act="trader" data-id="${t.id}">Xem hồ sơ tiểu thương</button>` : ''}</section><section><h4>C. ĐIỂM KINH DOANH</h4><dl class="kv"><dt>Mã điểm</dt><dd>${s ? s.code : '—'}</dd><dt>Khu vực</dt><dd>${s ? U.esc(s.sectionName) : '—'}</dd><dt>Loại / diện tích</dt><dd>${s ? U.typeLabel(s.type) + ' · ' + s.area + ' m²' : '—'}</dd></dl>${s ? `<button class="btn sm" data-act="dk-open" data-id="${s.id}">Xem chi tiết điểm</button>` : ''}</section><section><h4>D. ĐƠN GIÁ & KHOẢN PHÍ</h4><dl class="kv"><dt>Đơn giá snapshot</dt><dd>${c.unit ? U.money(c.unit) + (c.unitLabel ? ' ' + U.esc(c.unitLabel) : '') : '—'}</dd><dt>Giá thuê</dt><dd>${money(c)}</dd><dt>Khoản phí kèm theo</dt><dd>${(c.feeSnapshot || []).length ? c.feeSnapshot.map(x => U.esc(x.name) + ': ' + U.money(x.amount)).join('<br>') : 'Chưa ghi nhận'}</dd></dl></section><section><h4>E. BẢN SỐ HÓA HỢP ĐỒNG</h4>${files.length ? files.map((x, i) => `<div class="row" style="padding:5px 0"><span style="flex:1">Ảnh trang ${x.page || i + 1} · ${U.esc(x.name)}</span><span class="tag ok">Đã lưu</span><button class="btn sm" data-act="ct-copy-view" data-id="${c.id}" data-file="${i}">Xem</button></div>`).join('') : '<div class="small muted">Chưa cập nhật ảnh hợp đồng giấy đã ký.</div>'}${canCopy ? `<div style="margin-top:8px"><button class="btn sm" data-act="ct-copy-add" data-id="${c.id}">+ Thêm ảnh</button></div>` : ''}</section><section><h4>F. LỊCH SỬ</h4>${hist.length ? `<div class="small">${hist.map(x => `<div style="padding:4px 0">${U.esc(x.at || '')} · <b>${U.esc(x.action || '')}</b>${x.detail ? ' — ' + U.esc(x.detail) : ''}</div>`).join('')}</div>` : '<div class="small muted">Chưa có sự kiện lịch sử.</div>'}</section></div><div class="modal-f">${canPrint ? `<button class="btn" data-act="ct-print" data-id="${c.id}">${U.icon('print')}In hợp đồng</button>` : ''}${active(c) && canRenew ? `<button class="btn" data-act="ct-renew" data-id="${c.id}">Gia hạn / Tạo HĐ mới</button>` : ''}${active(c) && canTerminate ? `<button class="btn danger" data-act="ct-terminate" data-id="${c.id}">Chấm dứt</button>` : ''}${(c.status === 'chamdut' || active(c)) && canLiquidate ? `<button class="btn danger" data-act="ct-liquidate" data-id="${c.id}">Thanh lý</button>` : ''}<button class="btn" data-act="close">Đóng</button></div>`;
-  }
-  A.VIEWS['hop-dong'] = function () {
-    syncExpiry();
-    const q = (f.hdSearch || '').toLowerCase(), tab = ui.contractTab || 'all', status = f.hdStatus || 'all';
-    const all = A.db.contracts.filter(c => U.inM(c));
-    const pick = c => (tab === 'all' || (tab === 'active' && active(c)) || (tab === '30' && active(c) && left(c) <= 30 && left(c) > 15) || (tab === '15' && active(c) && left(c) <= 15) || (tab === 'end' && !active(c))) && (status === 'all' || c.status === status || (status === 'expired' && active(c) && left(c) < 0));
-    const rows = all.filter(c => pick(c) && (!q || [c.id, trader(c) && trader(c).name, c.traderId, point(c) && point(c).code].join(' ').toLowerCase().includes(q))).sort((a,b) => a.end.localeCompare(b.end));
-    const count = fn => all.filter(fn).length, pg = U.pager('hd' + tab, rows.length, 25);
-    const cards = [['all','Tổng hợp đồng',count(()=>true)],['active','Đang hiệu lực',count(active)],['30','Sắp hết hạn ≤ 30 ngày',count(c=>active(c)&&left(c)<=30&&left(c)>15)],['15','Sắp hết hạn ≤ 15 ngày',count(c=>active(c)&&left(c)<=15)],['end','Đã kết thúc',count(c=>!active(c))]];
-    return `<div class="grid g4" style="margin-bottom:14px">${cards.map(x=>`<button class="card" data-act="hd-tab" data-id="${x[0]}" style="text-align:left"><div class="small muted">${x[1]}</div><div style="font-size:24px;font-weight:800;margin-top:5px">${x[2]}</div></button>`).join('')}</div><div class="card contract-table-card"><div class="card-h"><div class="seg">${[['all','Tất cả'],['active','Đang hiệu lực'],['30','Sắp hết hạn'],['15','Sắp hết hạn ≤ 15 ngày'],['end','Đã kết thúc']].map(x=>`<button class="${tab===x[0]?'on':''}" data-act="hd-tab" data-id="${x[0]}">${x[1]}</button>`).join('')}</div><span class="spacer"></span><input class="input" placeholder="Tìm mã HĐ, tên/mã tiểu thương, mã điểm..." data-in="hd-search" value="${U.esc(f.hdSearch||'')}">${A.canDo('hop-dong.tao',ui.market)?'<button class="btn primary" data-act="ct-new">+ Khởi tạo hợp đồng</button>':''}</div><div class="card-b">${U.table([{t:'Mã HĐ'},{t:'Tiểu thương'},{t:'Điểm KD'},{t:'Hiệu lực'},{t:'Hết hạn'},{t:'Đơn giá',num:true},{t:'Thời hạn còn lại'},{t:'Trạng thái'},{t:'Thao tác'}],rows.slice(pg.start,pg.end).map(c=>`<tr><td><b>${c.id}</b></td><td>${trader(c)?U.esc(trader(c).name)+'<div class="small muted">'+c.traderId+'</div>':'—'}</td><td>${point(c)?point(c).code:'—'}</td><td>${U.dmy(c.start)}</td><td>${U.dmy(c.end)}</td><td class="num">${money(c)}</td><td>${active(c)?(warn(c)?`<span class="tag ${left(c)<=15?'danger':'warn'}">${warn(c)} · ${left(c)} ngày</span>`:left(c)+' ngày'):'—'}</td><td>${cTag(c)}</td><td><button class="btn sm" data-act="ct-view" data-id="${c.id}">Xem</button></td></tr>`))}${pg.html}</div></div>`;
-  };
-  A.ACT['hd-tab'] = el => { ui.contractTab = el.dataset.id; ui.page['hd' + ui.contractTab] = 0; A.render(); };
-  A.IN['hd-search'] = el => { f.hdSearch = el.value; A.render(); };
-  // Status filter is intentionally separate from expiry tabs: it filters the
-  // actual persisted lifecycle status, while tabs remain quick monitoring views.
-  const contractViewWithStatusFilter = A.VIEWS['hop-dong'];
-  A.VIEWS['hop-dong'] = function () {
-    const current = f.hdStatus || 'all';
-    const select = `<select class="input contract-status-filter" data-ch="hd-status" aria-label="Lọc theo trạng thái hợp đồng"><option value="all" ${current === 'all' ? 'selected' : ''}>Tất cả trạng thái</option><option value="hieuluc" ${current === 'hieuluc' ? 'selected' : ''}>Đang hiệu lực</option><option value="expired" ${current === 'expired' ? 'selected' : ''}>Đã hết hạn</option><option value="chamdut" ${current === 'chamdut' ? 'selected' : ''}>Đã chấm dứt / Chờ thanh lý</option><option value="thanhly" ${current === 'thanhly' ? 'selected' : ''}>Đã thanh lý</option></select>`;
-    const filtered = current !== 'all' || !!f.hdSearch || (ui.contractTab || 'all') !== 'all';
-    const clear = filtered ? '<button class="btn" data-act="hd-clear-filters">Xóa bộ lọc</button>' : '';
-    return contractViewWithStatusFilter().replace('<span class="spacer"></span>', select + clear + '<span class="spacer"></span>');
-  };
-  A.CH['hd-status'] = el => { f.hdStatus = el.value; ui.page['hd' + (ui.contractTab || 'all')] = 0; A.render(); };
-  A.ACT['hd-clear-filters'] = () => { f.hdStatus = 'all'; f.hdSearch = ''; ui.contractTab = 'all'; ui.page.hdall = 0; A.render(); };
-  A.ACT['ct-view'] = el => { const c=A.idx.contract.get(el.dataset.id); if(c) A.modal(A.contractDetailLayoutV2 ? A.contractDetailLayoutV2(c) : contractDetail(c), true); };
-  A.ACT['ct-new'] = el => {
-    const old = el.dataset.id ? A.idx.contract.get(el.dataset.id) : null, market = old ? old.market : ui.market, options = old ? vacantCandidates(market, old.stallId).concat([point(old)]) : vacantCandidates(market);
-    if (!options.length) return U.toast('Không có điểm kinh doanh phù hợp để cho thuê');
-    const ts = A.db.traders.filter(t => t.market === market); const d0 = old ? new Date(old.end) : new Date(U.today()); if(old) d0.setDate(d0.getDate()+1);
-    A.modal(A.mHead(old ? 'Tạo hợp đồng mới từ ' + old.id : 'Khởi tạo hợp đồng') + `<div class="modal-b"><div class="form-grid"><div class="field"><label>Mẫu hợp đồng *</label><select class="input" id="ct-template"><option>Hợp đồng thuê điểm kinh doanh</option><option>Đăng ký quầy theo năm</option></select></div><div class="field"><label>Tiểu thương *</label><select class="input" id="ct-trader">${ts.map(t=>`<option value="${t.id}" ${old&&t.id===old.traderId?'selected':''}>${t.id} · ${U.esc(t.name)}</option>`).join('')}</select></div><div class="field"><label>Điểm kinh doanh *</label><select class="input" id="ct-stall">${options.map(s=>`<option value="${s.id}" ${old&&s.id===old.stallId?'selected':''}>${s.code} · ${U.esc(s.sectionName)} · ${s.area} m²</option>`).join('')}</select></div><div class="field"><label>Ngày ký *</label><input class="input" id="ct-sign" type="date" value="${U.today()}"></div><div class="field"><label>Ngày hiệu lực *</label><input class="input" id="ct-start" type="date" value="${d0.toISOString().slice(0,10)}"></div><div class="field"><label>Ngày hết hạn *</label><input class="input" id="ct-end" type="date" value="${new Date(d0.getFullYear()+1,d0.getMonth(),d0.getDate()-1).toISOString().slice(0,10)}"></div><div class="field"><label>Đơn giá/tháng *</label><input class="input" id="ct-monthly" type="number" min="0" value="${old?old.monthly:0}"></div><div class="field"><label>Khoản phí kèm theo (tên: số tiền, mỗi dòng)</label><textarea class="input" id="ct-fees" rows="3">${old&&(old.feeSnapshot||[]).map(x=>x.name+': '+x.amount).join('\n')}</textarea></div></div><div class="note info">Mã hợp đồng được hệ thống tự sinh. Giá và phí được snapshot tại thời điểm khởi tạo; sau này không thay đổi theo cấu hình giá.</div></div><div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="ct-new-save" data-prev="${old?old.id:''}">Khởi tạo</button></div>`, true);
-  };
-  A.ACT['ct-new-save'] = el => {
-    const s= A.idx.stall.get(A.$('#ct-stall').value), t=A.idx.trader.get(A.$('#ct-trader').value), start=A.$('#ct-start').value, end=A.$('#ct-end').value, monthly=Number(A.$('#ct-monthly').value);
-    if(!s||!t||!start||!end||end<start||monthly<0||!A.canDo('hop-dong.tao',s.market)) return U.toast('Vui lòng kiểm tra lại tiểu thương, điểm, thời hạn và đơn giá.');
-    if(s.market!==ui.market||A.db.contracts.some(c=>active(c)&&c.stallId===s.id)) return U.toast('Điểm kinh doanh đã có hợp đồng hiệu lực.');
-    const feeSnapshot=(A.$('#ct-fees').value||'').split('\n').map(x=>x.trim()).filter(Boolean).map(x=>{const a=x.split(':');return {name:a[0].trim(),amount:Number((a.slice(1).join(':')||'0').replace(/[^0-9.-]/g,''))||0};});
-    const c={id:nextId(s.market),stallId:s.id,traderId:t.id,market:s.market,kind:A.$('#ct-template').value,start,end,signedDate:A.$('#ct-sign').value||start,unit:monthly,unitLabel:'đ/tháng',monthly,deposit:monthly,status:'hieuluc',scanned:false,feeSnapshot,signedCopies:[],history:[],previousContractId:el.dataset.prev||null};
-    event(c,'Khởi tạo hợp đồng','Từ mẫu '+c.kind); A.db.contracts.push(c); A.reindex(); s.status='thue';s.traderId=t.id;s.contractId=c.id;if(!t.stalls.includes(s.id))t.stalls.push(s.id); s.history=s.history||[];s.history.unshift(U.dmy(U.today())+': ký '+c.id+' với '+t.name); expiryNotifications(c);U.log('Khởi tạo hợp đồng '+c.id);A.save();A.closeModal();A.render();U.toast('Đã khởi tạo '+c.id);
-  };
-  A.ACT['ct-renew'] = el => { const c=A.idx.contract.get(el.dataset.id); if(c&&A.canDo('hop-dong.gia-han',c.market)){A.closeModal(); A.ACT['ct-new']({dataset:{id:c.id}});} };
-  // Legacy action aliases are deliberately redirected: renewal must never mutate
-  // the old record's end date or price snapshot.
-  A.ACT['ct-extend'] = el => A.ACT['ct-renew'](el);
-  A.ACT['ct-extend-save'] = el => A.ACT['ct-renew'](el);
-  A.ACT['ct-end'] = el => A.ACT['ct-liquidate'](el);
-  A.ACT['ct-end-save'] = el => A.ACT['ct-liquidate-save'](el);
-  A.ACT['ct-copy-add'] = el => { const c=A.idx.contract.get(el.dataset.id); if(!c||!A.canDo('hop-dong.cap-nhat-ban-ky',c.market))return; const input=document.createElement('input');input.type='file';input.accept='image/*,.pdf';input.style.display='none';document.body.appendChild(input);input.onchange=()=>{if(input.files[0]){c.signedCopies=c.signedCopies||[];c.signedCopies.push({name:input.files[0].name,page:c.signedCopies.length+1,addedAt:U.today(),mock:true});c.scanned=true;event(c,'Cập nhật bản ký','Đã lưu metadata '+input.files[0].name);A.save();A.closeModal();A.modal(contractDetail(c),true);}input.remove();};input.click(); };
-  A.ACT['ct-copy-view'] = el => { const c=A.idx.contract.get(el.dataset.id), x=c&&(c.signedCopies||[])[+el.dataset.file]; if(x)A.modal(A.mHead('Bản số hóa')+`<div class="modal-b"><p><b>${U.esc(x.name)}</b></p><div class="note info">Prototype chỉ lưu metadata; không có upload hoặc storage thật.</div></div><div class="modal-f"><button class="btn" data-act="close">Đóng</button></div>`); };
-  A.ACT['ct-print'] = el => { const c=A.idx.contract.get(el.dataset.id),t=trader(c),s=point(c);if(!c||!A.canDo('hop-dong.in',c.market))return;event(c,'In hợp đồng','In biểu mẫu để ký giấy');A.save();const w=window.open('','_blank');if(!w)return U.toast('Trình duyệt đã chặn cửa sổ in.');w.document.write(`<html><head><title>${c.id}</title><style>body{font:15px Arial;max-width:760px;margin:40px auto;line-height:1.7}h1{text-align:center}table{width:100%;border-collapse:collapse}td{border:1px solid #555;padding:8px}.sign{display:flex;justify-content:space-between;margin-top:80px;text-align:center}</style></head><body><h1>HỢP ĐỒNG THUÊ ĐIỂM KINH DOANH</h1><p><b>Mã hợp đồng:</b> ${c.id}</p><p><b>Ban Quản lý:</b> Chợ ${U.mShort(c.market)} · UBND phường Cao Lãnh</p><table><tr><td>Tiểu thương</td><td>${t?U.esc(t.name)+' · '+t.id:''}</td></tr><tr><td>Điểm kinh doanh</td><td>${s?s.code+' · '+U.esc(s.sectionName):''}</td></tr><tr><td>Thời hạn</td><td>${U.dmy(c.start)} – ${U.dmy(c.end)}</td></tr><tr><td>Đơn giá</td><td>${money(c)}</td></tr><tr><td>Khoản phí</td><td>${(c.feeSnapshot||[]).map(x=>U.esc(x.name)+': '+U.money(x.amount)).join('<br>')||'Không'}</td></tr></table><div class="sign"><div>ĐẠI DIỆN BQL<br><br><br><br>Ký, ghi rõ họ tên</div><div>TIỂU THƯƠNG<br><br><br><br>Ký, ghi rõ họ tên</div></div><script>window.onload=()=>window.print()<\/script></body></html>`);w.document.close(); };
-  function release(c){const s=point(c),t=trader(c);if(s&&!A.db.contracts.some(x=>x.id!==c.id&&active(x)&&x.stallId===s.id)){s.status='trong';s.traderId=null;s.contractId=null;}if(t)t.stalls=t.stalls.filter(id=>!s||id!==s.id);}
-  A.ACT['ct-terminate'] = el => {const c=A.idx.contract.get(el.dataset.id);if(!c||!A.canDo('hop-dong.cham-dut',c.market))return;const t=trader(c),s=point(c),remaining=U.days(U.today(),c.end),fees=(c.feeSnapshot||[]).map(x=>U.esc(x.name)).join(', ')||'Chưa ghi nhận',file=c._terminationDraftAttachment;A.modal(`<div class="terminate-head"><span class="terminate-head-icon">${U.icon('file')}</span><div><h3>Chấm dứt hợp đồng</h3><p>Ghi nhận việc kết thúc hợp đồng trước thời hạn.</p></div><button class="x" data-act="close" aria-label="Đóng">×</button></div><div class="modal-b terminate-body"><section class="terminate-info"><h4>${U.icon('file')}Thông tin hợp đồng</h4><div class="terminate-info-grid"><dl class="kv"><dt>Mã hợp đồng</dt><dd><b>${c.id}</b></dd><dt>Tiểu thương</dt><dd><b>${t?U.esc(t.name)+' · '+t.id:'—'}</b></dd><dt>Điểm kinh doanh</dt><dd><b>${s?s.code:'—'}</b></dd><dt>Ngày ký</dt><dd>${U.dmy(c.signedDate||c.start)}</dd><dt>Ngày hiệu lực</dt><dd>${U.dmy(c.start)}</dd><dt>Ngày hết hạn</dt><dd>${U.dmy(c.end)}</dd></dl><dl class="kv"><dt>Trạng thái hiện tại</dt><dd><span class="tag ok">Đang hiệu lực</span></dd><dt>Thời hạn còn lại</dt><dd><b>${remaining} ngày</b> (${U.dmy(c.end)})</dd><dt>Đơn giá thuê</dt><dd><b>${c.monthly?U.money(c.monthly)+'/tháng':'Theo phiên'}</b></dd><dt>Các khoản phí</dt><dd>${fees}</dd></dl></div><button class="btn sm terminate-view-contract" data-act="ct-view" data-id="${c.id}">${U.icon('eye')}Xem chi tiết hợp đồng</button></section><section class="terminate-section"><h4>${U.icon('file')}Thông tin chấm dứt</h4><div class="terminate-form-grid"><div class="field"><label>Ngày chấm dứt <b>*</b></label><input id="ct-stop-date" type="date" class="input" value="${U.today()}"></div><div class="field"><label>Lý do chấm dứt <b>*</b></label><select id="ct-stop-reason" class="input"><option value="">— Chọn lý do —</option><option>Tiểu thương xin nghỉ</option><option>Chuyển địa điểm kinh doanh</option><option>Vi phạm điều khoản hợp đồng</option><option>Theo thỏa thuận hai bên</option><option>Lý do khác</option></select></div></div><div class="field"><label>Chi tiết lý do <span class="muted">*</span></label><textarea id="ct-stop-detail" class="input" rows="3" placeholder="Nhập chi tiết lý do chấm dứt hợp đồng..."></textarea></div></section><section class="terminate-section terminate-files"><h4>${U.icon('attachment')}Tài liệu kèm theo (nếu có)</h4><div class="terminate-file-add"><button class="btn sm" data-act="ct-terminate-file" data-id="${c.id}">+ Thêm tài liệu</button><span>Đính kèm biên bản, quyết định, văn bản liên quan... (ảnh chụp/mock)</span></div>${file?`<div class="terminate-file-row"><span>${U.icon('file')}</span><div><b>${U.esc(file.name)}</b><small>Mock metadata · ${U.dmy(U.today())}</small></div><button class="btn sm" data-act="ct-terminate-file-remove" data-id="${c.id}">Xóa</button></div>`:''}</section><section class="terminate-section terminate-note"><h4>${U.icon('chat')}Ghi chú (không bắt buộc)</h4><textarea id="ct-stop-note" class="input" rows="2" placeholder="Nhập ghi chú..."></textarea></section><div class="terminate-warning"><span>${U.icon('warning')}</span><div><b>Lưu ý: Sau khi xác nhận chấm dứt, hợp đồng sẽ chuyển sang trạng thái Đã chấm dứt.</b><small>Nếu các nghĩa vụ liên quan (công nợ, bàn giao điểm...) chưa hoàn tất, hợp đồng sẽ ở trạng thái Chờ thanh lý.</small></div></div></div><div class="modal-f terminate-footer"><button class="btn" data-act="close">Hủy</button><button class="btn danger" data-act="ct-terminate-save" data-id="${c.id}">× Xác nhận chấm dứt</button></div>`,true);};
-  A.ACT['ct-terminate-file']=el=>{const c=A.idx.contract.get(el.dataset.id);if(!c||!A.canDo('hop-dong.cham-dut',c.market))return;const input=document.createElement('input');input.type='file';input.accept='image/*,.pdf';input.style.display='none';document.body.appendChild(input);input.onchange=()=>{if(input.files[0])c._terminationDraftAttachment={name:input.files[0].name,mock:true};input.remove();A.ACT['ct-terminate']({dataset:{id:c.id}});};input.click();};
-  A.ACT['ct-terminate-file-remove']=el=>{const c=A.idx.contract.get(el.dataset.id);if(!c)return;delete c._terminationDraftAttachment;A.ACT['ct-terminate']({dataset:{id:c.id}});};
-  A.ACT['ct-terminate-save']=el=>{const c=A.idx.contract.get(el.dataset.id),reason=A.$('#ct-stop-reason').value.trim(),date=A.$('#ct-stop-date').value,detail=A.$('#ct-stop-detail').value.trim();if(!c||!reason||!date||!detail||!A.canDo('hop-dong.cham-dut',c.market))return U.toast('Cần nhập ngày, lý do và chi tiết lý do chấm dứt.');c.status='chamdut';c.termination={date,reason,detail,note:A.$('#ct-stop-note').value.trim(),attachment:c._terminationDraftAttachment||null};delete c._terminationDraftAttachment;event(c,'Chấm dứt hợp đồng',reason);release(c);A.save();A.closeModal();A.render();U.toast('Đã chấm dứt '+c.id);};
-  A.ACT['ct-liquidate']=el=>{const c=A.idx.contract.get(el.dataset.id);if(!c||!A.canDo('hop-dong.thanh-ly',c.market))return;if(c.status!=='chamdut'&&U.days(U.today(),c.end)>0)return U.toast('Chỉ thanh lý hợp đồng đã hết hạn hoặc đã chấm dứt.');const t=trader(c),s=point(c),debt=U.sum(A.db.invoices.filter(i=>i.contractId===c.id&&i.status!=='paid'),U.due),d=c._liquidationDraft||{checks:{},copies:[]},checks=d.checks||{},copies=d.copies||[];const required=['pointReturned','conditionChecked','damagesRecorded','compensationResolved','keysHandedOver','minutesPrepared','minutesSigned'];const bqlDone=required.filter(k=>checks[k]).length,remaining=(debt?2:0)+(required.length-bqlDone)+(copies.length?0:1),system=(title,detail,ok,action)=>`<div class="liquidate-system-row"><span class="${ok?'system-ok':'system-warn'}">${ok?'✓':'!'}</span><div><b>${title}</b><small>${detail}</small></div><span class="tag ${ok?'ok':'warn'}">${ok?'Hoàn tất':'Chưa hoàn tất'}</span>${action||''}</div>`,manual=(key,title,detail)=>`<label class="liquidate-manual-row"><input type="checkbox" data-act="ct-liquidate-toggle" data-id="${c.id}" data-key="${key}" ${checks[key]?'checked':''}><span></span><div><b>${title}</b><small>${detail}</small></div></label>`;A.modal(`<div class="liquidate-head"><span class="liquidate-head-icon">${U.icon('file')}</span><div><h3>Thanh lý hợp đồng</h3><p>Checklist xác nhận hoàn tất quan hệ thuê và giải phóng điểm kinh doanh.</p></div><button class="x" data-act="close" aria-label="Đóng">×</button></div><div class="modal-b liquidate-body liquidation-v2"><section class="liquidate-info"><h4>${U.icon('file')}Thông tin hợp đồng</h4><div class="liquidate-info-grid"><dl class="kv"><dt>Mã hợp đồng</dt><dd><b>${c.id}</b></dd><dt>Tiểu thương</dt><dd><b>${t?U.esc(t.name)+' · '+t.id:'—'}</b></dd><dt>Điểm kinh doanh</dt><dd><b>${s?s.code+' ('+U.esc(s.sectionName)+')':'—'}</b></dd></dl><dl class="kv"><dt>Ngày ký</dt><dd>${U.dmy(c.signedDate||c.start)}</dd><dt>Hiệu lực</dt><dd>${U.dmy(c.start)}</dd><dt>Hết hạn</dt><dd>${U.dmy(c.end)}</dd><dt>Trạng thái</dt><dd>${c.status==='chamdut'?'<span class="tag warn">Đã chấm dứt</span>':'<span class="tag">Đã hết hạn</span>'}</dd></dl></div></section><div class="liquidate-notice"><span>${U.icon('warning')}</span><div><b>Checklist xác nhận của NV BQL</b><small>Công nợ được hệ thống tự kiểm tra; các điều kiện thực tế bên dưới do NV BQL xác nhận.</small></div></div><section class="liquidation-group"><h4>1. Công nợ & chi phí <span class="small muted">(hệ thống kiểm tra)</span></h4>${system('Đã thanh toán tiền thuê đến ngày kết thúc',debt?'Còn phải thu: '+U.money(debt):'Không còn khoản phải thu theo hợp đồng.',!debt,`<button class="btn sm" data-act="ct-liquidate-info" data-text="Công nợ & chi phí">Xem chi tiết</button>`)}${system('Đã xử lý điện, nước và các khoản phí dịch vụ',debt?'Còn có khoản phải thu cần xử lý.':'Không phát hiện khoản phí chưa hoàn tất.',!debt,'')}${system('Đã xử lý các khoản công nợ còn lại',debt?'Còn công nợ '+U.money(debt)+', không thể xác nhận thanh lý.':'Không còn công nợ.',!debt,'')}${system('Đã xử lý tiền đặt cọc (nếu có)',c.deposit?'Tiền đặt cọc snapshot: '+U.money(c.deposit)+' — NV BQL xác nhận trong biên bản.':'Không có tiền đặt cọc.',!!checks.depositHandled,'')}</section><section class="liquidation-group"><h4>2. Bàn giao điểm kinh doanh / tài sản <span class="small muted">(NV BQL xác nhận)</span></h4>${manual('pointReturned','Tiểu thương đã hoàn trả điểm kinh doanh','Đã bàn giao mặt bằng cho Ban quản lý.')}${manual('conditionChecked','Đã kiểm tra hiện trạng điểm / tài sản','Ghi nhận hiện trạng thực tế tại thời điểm bàn giao.')}${manual('damagesRecorded','Đã ghi nhận hư hỏng, mất mát nếu có','Không áp dụng nếu không phát sinh.')}${manual('compensationResolved','Đã hoàn tất nghĩa vụ bồi thường nếu phát sinh','Không áp dụng nếu không phát sinh.')}</section><section class="liquidation-group"><h4>3. Hồ sơ bàn giao <span class="small muted">(NV BQL xác nhận)</span></h4>${manual('keysHandedOver','Đã bàn giao chìa khóa / thẻ / giấy tờ liên quan','Xác nhận đã thu hồi toàn bộ vật dụng liên quan.')}${manual('minutesPrepared','Đã lập biên bản thanh lý / bàn giao','In biên bản để hai bên ký giấy.')}${manual('minutesSigned','Hai bên đã ký biên bản','Xác nhận biên bản giấy đã được ký.')}</section><section class="liquidation-docs"><h4>${U.icon('attachment')}Biên bản thanh lý đã ký</h4><div class="liquidation-doc-actions"><button class="btn sm" data-act="ct-liquidate-print" data-id="${c.id}">${U.icon('print')}In biên bản thanh lý</button><button class="btn sm" data-act="ct-liquidate-copy-add" data-id="${c.id}">+ Cập nhật bản đã ký</button></div>${copies.length?`<div class="liquidation-copy-list">${copies.map((x,i)=>`<div><span>${U.icon('file')}</span><b>Ảnh trang ${i+1} · ${U.esc(x.name)}</b><span class="tag ok">Đã lưu</span><button class="btn sm" data-act="ct-liquidate-copy-remove" data-id="${c.id}" data-file="${i}">Xóa</button></div>`).join('')}</div><div class="liquidation-signed-ok">✓ Đã lưu bản thanh lý có chữ ký</div>`:`<div class="liquidation-no-copy">Chưa có bản thanh lý đã ký. In biên bản → ký giấy → cập nhật ảnh chụp/scan (metadata mock).</div>`}</section><div class="field liquidate-note"><label>Ghi chú (không bắt buộc)</label><textarea class="input" id="ct-liquidate-note" rows="2" placeholder="Nhập ghi chú về việc thanh lý hợp đồng..."></textarea></div><div class="liquidate-warning"><span>${U.icon('warning')}</span><div><b>Lưu ý: Sau khi thanh lý, hợp đồng sẽ không thể khôi phục.</b><small>Quy trình pháp lý, mẫu biên bản và tài liệu bắt buộc vẫn cần BQL xác nhận.</small></div></div></div><div class="modal-f liquidate-footer"><span class="liquidate-remaining">${remaining?'Còn '+remaining+' điều kiện chưa hoàn tất':'Tất cả điều kiện bắt buộc đã hoàn tất'}</span><button class="btn" data-act="close">Hủy</button><button class="btn danger" data-act="ct-liquidate-save" data-id="${c.id}" ${remaining?'disabled':''}>${U.icon('check')}Xác nhận thanh lý</button></div>`,true);};
-  A.ACT['ct-liquidate-info']=el=>U.toast(el.dataset.text+' — dữ liệu công nợ được đọc từ khoản phải thu của hợp đồng.');
-  A.ACT['ct-liquidate-toggle']=el=>{const c=A.idx.contract.get(el.dataset.id);if(!c||!A.canDo('hop-dong.thanh-ly',c.market))return;c._liquidationDraft=c._liquidationDraft||{checks:{},copies:[]};c._liquidationDraft.checks[el.dataset.key]=el.checked;A.ACT['ct-liquidate']({dataset:{id:c.id}});};
-  A.ACT['ct-liquidate-copy-add']=el=>{const c=A.idx.contract.get(el.dataset.id);if(!c||!A.canDo('hop-dong.thanh-ly',c.market))return;const input=document.createElement('input');input.type='file';input.accept='image/*,.pdf';input.style.display='none';document.body.appendChild(input);input.onchange=()=>{if(input.files[0]){c._liquidationDraft=c._liquidationDraft||{checks:{},copies:[]};c._liquidationDraft.copies.push({name:input.files[0].name,mock:true});}input.remove();A.ACT['ct-liquidate']({dataset:{id:c.id}});};input.click();};
-  A.ACT['ct-liquidate-copy-remove']=el=>{const c=A.idx.contract.get(el.dataset.id);if(!c||!c._liquidationDraft)return;c._liquidationDraft.copies.splice(+el.dataset.file,1);A.ACT['ct-liquidate']({dataset:{id:c.id}});};
-  A.ACT['ct-liquidate-print']=el=>{const c=A.idx.contract.get(el.dataset.id),t=trader(c),s=point(c);if(!c||!A.canDo('hop-dong.thanh-ly',c.market))return;const w=window.open('','_blank');if(!w)return U.toast('Trình duyệt đã chặn cửa sổ in.');w.document.write(`<html><head><title>Biên bản thanh lý ${c.id}</title><style>body{font:15px Arial;max-width:720px;margin:40px auto;line-height:1.7}h1{text-align:center}table{border-collapse:collapse;width:100%}td{border:1px solid #666;padding:8px}.sign{display:flex;justify-content:space-between;text-align:center;margin-top:80px}</style></head><body><h1>BIÊN BẢN THANH LÝ HỢP ĐỒNG</h1><p>Mã hợp đồng: <b>${c.id}</b></p><table><tr><td>Tiểu thương</td><td>${t?U.esc(t.name)+' · '+t.id:''}</td></tr><tr><td>Điểm kinh doanh</td><td>${s?s.code:''}</td></tr><tr><td>Thời hạn hợp đồng</td><td>${U.dmy(c.start)} – ${U.dmy(c.end)}</td></tr></table><p>Hai bên xác nhận hoàn tất quan hệ thuê theo biên bản này.</p><div class="sign"><div>ĐẠI DIỆN BQL<br><br><br>Ký, ghi rõ họ tên</div><div>TIỂU THƯƠNG<br><br><br>Ký, ghi rõ họ tên</div></div><script>window.onload=()=>window.print()<\/script></body></html>`);w.document.close();};
-  A.ACT['ct-liquidate-save']=el=>{const c=A.idx.contract.get(el.dataset.id),d=c&&c._liquidationDraft,debt=c?U.sum(A.db.invoices.filter(i=>i.contractId===c.id&&i.status!=='paid'),U.due):0,required=['pointReturned','conditionChecked','damagesRecorded','compensationResolved','keysHandedOver','minutesPrepared','minutesSigned'];if(!c||!d||!A.canDo('hop-dong.thanh-ly',c.market)||c.status!=='chamdut'&&U.days(U.today(),c.end)>0||debt||!required.every(k=>d.checks[k])||!d.copies.length)return U.toast('Chưa thể thanh lý: cần hoàn tất công nợ, checklist NV BQL và bản thanh lý đã ký.');const note=A.$('#ct-liquidate-note');c.status='thanhly';c.liquidatedAt=U.today();c.liquidationNote=note?note.value.trim():'';c.liquidationChecklist=d.checks;c.liquidationSignedCopies=d.copies;delete c._liquidationDraft;event(c,'Thanh lý hợp đồng',c.liquidationNote||'Checklist và bản thanh lý ký đã hoàn tất');release(c);A.save();A.closeModal();A.render();U.toast('Đã thanh lý '+c.id);};
 })(window.APP);

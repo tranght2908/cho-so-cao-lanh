@@ -262,4 +262,15 @@
     setStatus: (id, status) => { const a = A.ACCOUNTS.get(id); if (a) a.status = status; saveAccounts(); },
     resetDefault: () => { ACCOUNTS = defaultAccounts(); saveAccounts(); }
   };
+  // Phase 12: expose this store to src/features/accounts through the shared data
+  // adapter (same pattern as marketcatalog.js). Persistence stays here (AKEY).
+  if (A.data && typeof A.data.registerSource === 'function') {
+    A.data.registerSource('accounts', {
+      list: () => A.ACCOUNTS.list(),
+      get: id => A.ACCOUNTS.get(id),
+      byTraderId: traderId => A.ACCOUNTS.byTraderId(traderId),
+      add: acc => A.ACCOUNTS.add(acc),
+      setStatus: (id, status) => A.ACCOUNTS.setStatus(id, status)
+    });
+  }
 })(window.APP);

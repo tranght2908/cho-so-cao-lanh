@@ -15,5 +15,8 @@
   // edit flow logs between mutation and save, so persistence stays a separate step.
   service.updateProfile = function (id, profile) { return repository.updateProfile(id, profile); };
   service.updateDocuments = function (id, files, updatedAt) { return repository.updateDocuments(id, files, updatedAt); };
+  // In-memory link used by contract orchestration; the use case saves once.
+  service.linkPoint = function (id, pointId) { return repository.linkPoint(id, pointId); };
+  service.unlinkPoint = function (id, pointId) { return repository.unlinkPoint(id, pointId); };
   service.save = function () { return repository.save(); };
 })(window.APP);

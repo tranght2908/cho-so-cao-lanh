@@ -38,5 +38,21 @@
     }
     return t;
   };
+  // Point link on the trader record (trader.stalls), used only by contract
+  // orchestration. Point/contract records are owned by their own features.
+  repository.linkPoint = function (id, pointId) {
+    const t = repository.get(id);
+    if (!t) return null;
+    if (!t.stalls.includes(pointId)) t.stalls.push(pointId);
+    return t;
+  };
+  // Legacy release semantics: trader.stalls is reassigned to a filtered copy; with no
+  // resolvable point (pointId null) every link is kept.
+  repository.unlinkPoint = function (id, pointId) {
+    const t = repository.get(id);
+    if (!t) return null;
+    t.stalls = t.stalls.filter(x => !pointId || x !== pointId);
+    return t;
+  };
   repository.save = function () { return A.data.save(); };
 })(window.APP);

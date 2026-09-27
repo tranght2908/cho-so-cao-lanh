@@ -3,11 +3,18 @@
 `repository.js` is a domain-neutral compatibility adapter over the current legacy runtime:
 
 ```text
-Feature repository (future)
+Feature repository
 → APP.data
-→ APP.db / APP.save()
+→ APP.db / APP.save() / APP.reindex()   (mock legacy source now)
 ```
 
-It does not know traders, contracts, invoices or any business collection. It does not create a new storage key, clone state, migrate data, or replace `APP.db` / `APP.save()`.
+| Method | Purpose |
+|---|---|
+| `getDb()`, `getCollection(name)`, `findById(collection, id)` | Live legacy references (read-only for callers). |
+| `save()` | Delegates to `A.save()`. |
+| `reindex()` | Delegates to `A.reindex()` (added in Phase 9; the legacy create command rebuilds indexes after an insert). |
+| `registerSource(name, source)` / `getSource(name)` | Legacy stores with their own persistence (`market-catalog`, `accounts`) expose themselves to feature repositories. |
 
-The Phase 2 adapter deliberately returns existing collection references for compatibility. A future feature repository must treat read results as read-only and route explicit writes through a command/service boundary.
+It does not know traders, contracts, invoices or any business collection. It does not create a storage key, clone state, migrate data, or replace `APP.db` / `APP.save()`.
+
+When the Spring Boot API arrives, feature repositories switch from `APP.data` to an API client in `src/shared/api/`. Services and views keep their contracts.
