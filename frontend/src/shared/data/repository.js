@@ -6,6 +6,7 @@
 
   const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
   const data = A.data || (A.data = {});
+  const sources = data._sources || (data._sources = Object.create(null));
 
   // This adapter intentionally returns the existing A.db references. Phase 2 does
   // not migrate state or change legacy mutation semantics; future repositories
@@ -29,5 +30,17 @@
   data.save = function () {
     if (typeof A.save !== 'function') throw new Error('Legacy save adapter is unavailable.');
     return A.save();
+  };
+
+  // Feature-specific legacy sources can be registered without teaching this
+  // shared adapter about any business domain or storage implementation.
+  data.registerSource = function (name, source) {
+    if (typeof name !== 'string' || !name || !source) return null;
+    if (!sources[name]) sources[name] = source;
+    return sources[name];
+  };
+
+  data.getSource = function (name) {
+    return typeof name === 'string' ? sources[name] || null : null;
   };
 })(window.APP);

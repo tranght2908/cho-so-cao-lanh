@@ -168,4 +168,17 @@
     },
     resetDefault: () => { LIST = defaultCatalog(); save(); }
   };
+  if (A.data && typeof A.data.registerSource === 'function') {
+    A.data.registerSource('market-catalog', {
+      rows: MC.rows,
+      get: MC.get,
+      priceConfig: MC.priceConfig,
+      codeTaken: MC.codeTaken,
+      add: MC.add,
+      update: MC.update,
+      RANKS: MC.RANKS,
+      STATUS: MC.STATUS,
+      PRICE_CONFIGS: MC.PRICE_CONFIGS
+    });
+  }
 })(window.APP);

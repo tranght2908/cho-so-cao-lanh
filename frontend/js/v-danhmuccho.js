@@ -9,7 +9,7 @@
  */
 (function (A) {
   'use strict';
-  const U = A.U, ui = A.ui, MC = A.MARKET_CATALOG;
+  const U = A.U, ui = A.ui, MC = A.features.markets.service;
 
   function filterState() { return ui.dmcFilter || (ui.dmcFilter = { search: '', rank: '', status: '' }); }
   function filteredRows() {
