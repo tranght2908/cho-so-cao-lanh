@@ -1,0 +1,15 @@
+{
+ "label": "Phase 15.1 approved runtime",
+ "commit": "20b9a11",
+ "dirty": false,
+ "recordedAt": "2026-09-27T21:20:11.650Z",
+ "reason": "Initial persisted baseline: Phase 15.1 (app namespace extraction) approved at commit 20b9a11; replaces the scratchpad harness baselines.",
+ "steps": 229,
+ "totalSaves": 11,
+ "registry": {
+  "views": 21,
+  "actions": 393,
+  "inputHandlers": 62,
+  "changeHandlers": 149
+ }
+}

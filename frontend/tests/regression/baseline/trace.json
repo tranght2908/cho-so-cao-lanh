@@ -1,0 +1,4104 @@
+{
+ "steps": [
+  {
+   "name": "route AC-QT01 CL tong-quan",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "a93c0309d723",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-QT01 CL danh-muc-cho",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "ef4b8fa56c75",
+   "ret": "37ccf9d73121"
+  },
+  {
+   "name": "route AC-QT01 CL mat-bang",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "a35c3aac7301",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "route AC-QT01 CL diem-kd",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "fb3d33a59cdd",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "route AC-QT01 CL tai-san",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "a93c0309d723",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-QT01 CL phien-cho",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "a93c0309d723",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-QT01 CL tieu-thuong",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "78d7f71e9284",
+   "ret": "7f267273cc8f"
+  },
+  {
+   "name": "route AC-QT01 CL hop-dong",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "b6e0e32862bf",
+   "ret": "ddda7cb92f57"
+  },
+  {
+   "name": "route AC-QT01 CL cau-hinh-gia",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "c803cf3aeef0",
+   "ret": "b01149a84901"
+  },
+  {
+   "name": "route AC-QT01 CL tai-khoan-ngan-hang",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "d31ac8b2f96b",
+   "ret": "8504392dfbf5"
+  },
+  {
+   "name": "route AC-QT01 CL dien-nuoc",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "a93c0309d723",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-QT01 CL phai-thu",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "a93c0309d723",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-QT01 CL thu-tien",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "a93c0309d723",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-QT01 CL doi-soat",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "a93c0309d723",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-QT01 CL cong-no",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "a93c0309d723",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-QT01 CL su-co",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "a93c0309d723",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-QT01 CL thong-bao",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "a93c0309d723",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-QT01 CL bao-cao",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "71232f76039e",
+   "ret": "52a8b2422502"
+  },
+  {
+   "name": "route AC-QT01 CL tai-khoan",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "99d44eb89e9e",
+   "ret": "a408dde2433c"
+  },
+  {
+   "name": "route AC-QT01 CL cai-dat",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "de74719ae1ae",
+   "ret": "f425e3703418"
+  },
+  {
+   "name": "route AC-QT01 CL mini-app",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "a93c0309d723",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-QT01 TTD tong-quan",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "b3b12dfee834",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-QT01 TTD danh-muc-cho",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "ef4b8fa56c75",
+   "ret": "37ccf9d73121"
+  },
+  {
+   "name": "route AC-QT01 TTD mat-bang",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "3d8f44ff0892",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "route AC-QT01 TTD diem-kd",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "8d9af81297fb",
+   "ret": "9e35ec91a7df"
+  },
+  {
+   "name": "route AC-QT01 TTD tai-san",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "b3b12dfee834",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-QT01 TTD phien-cho",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "b3b12dfee834",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-QT01 TTD tieu-thuong",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "48b35d779755",
+   "ret": "7f267273cc8f"
+  },
+  {
+   "name": "route AC-QT01 TTD hop-dong",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "31ee2dd97921",
+   "ret": "ddda7cb92f57"
+  },
+  {
+   "name": "route AC-QT01 TTD cau-hinh-gia",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "04d4a33d1f64",
+   "ret": "b01149a84901"
+  },
+  {
+   "name": "route AC-QT01 TTD tai-khoan-ngan-hang",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "00c464d54440",
+   "ret": "8504392dfbf5"
+  },
+  {
+   "name": "route AC-QT01 TTD dien-nuoc",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "b3b12dfee834",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-QT01 TTD phai-thu",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "b3b12dfee834",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-QT01 TTD thu-tien",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "b3b12dfee834",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-QT01 TTD doi-soat",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "b3b12dfee834",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-QT01 TTD cong-no",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "b3b12dfee834",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-QT01 TTD su-co",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "b3b12dfee834",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-QT01 TTD thong-bao",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "b3b12dfee834",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-QT01 TTD bao-cao",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "ccda06f24ad2",
+   "ret": "52a8b2422502"
+  },
+  {
+   "name": "route AC-QT01 TTD tai-khoan",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "99d44eb89e9e",
+   "ret": "a408dde2433c"
+  },
+  {
+   "name": "route AC-QT01 TTD cai-dat",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "de74719ae1ae",
+   "ret": "f425e3703418"
+  },
+  {
+   "name": "route AC-QT01 TTD mini-app",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "b3b12dfee834",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-LD01 CL tong-quan",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "903e15d9c523",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-LD01 CL danh-muc-cho",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "3cc8b4fda119",
+   "ret": "37ccf9d73121"
+  },
+  {
+   "name": "route AC-LD01 CL mat-bang",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "a35c3aac7301",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "route AC-LD01 CL diem-kd",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "88890fe69029",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "fb3d33a59cdd",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "route AC-LD01 CL tai-san",
+   "err": null,
+   "saves": 1,
+   "toasts": [],
+   "db": "7bf2316f1621",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "0745b7622f1b",
+   "ret": "febb7d2ebeac"
+  },
+  {
+   "name": "route AC-LD01 CL phien-cho",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "7bf2316f1621",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "903e15d9c523",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-LD01 CL tieu-thuong",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "7bf2316f1621",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "78d7f71e9284",
+   "ret": "7f267273cc8f"
+  },
+  {
+   "name": "route AC-LD01 CL hop-dong",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "7bf2316f1621",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "b6e0e32862bf",
+   "ret": "ddda7cb92f57"
+  },
+  {
+   "name": "route AC-LD01 CL cau-hinh-gia",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "7bf2316f1621",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "c803cf3aeef0",
+   "ret": "b01149a84901"
+  },
+  {
+   "name": "route AC-LD01 CL tai-khoan-ngan-hang",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "7bf2316f1621",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "6c474e3b760f",
+   "ret": "8504392dfbf5"
+  },
+  {
+   "name": "route AC-LD01 CL dien-nuoc",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "7bf2316f1621",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "903e15d9c523",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-LD01 CL phai-thu",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "7bf2316f1621",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "f4a3a44439e4",
+   "ret": "15775bed1ed1"
+  },
+  {
+   "name": "route AC-LD01 CL thu-tien",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "7bf2316f1621",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "903e15d9c523",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-LD01 CL doi-soat",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "7bf2316f1621",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "a53bf71e5cad",
+   "ret": "b13acf3f9d83"
+  },
+  {
+   "name": "route AC-LD01 CL cong-no",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "7bf2316f1621",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "ac98ac12eed2",
+   "ret": "15575f6a7ddd"
+  },
+  {
+   "name": "route AC-LD01 CL su-co",
+   "err": null,
+   "saves": 1,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "9026e4bd585b",
+   "ret": "b4d3bb211507"
+  },
+  {
+   "name": "route AC-LD01 CL thong-bao",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "c42e5b783147",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-LD01 CL bao-cao",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "71232f76039e",
+   "ret": "52a8b2422502"
+  },
+  {
+   "name": "route AC-LD01 CL tai-khoan",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "c42e5b783147",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-LD01 CL cai-dat",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "c42e5b783147",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-LD01 CL mini-app",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "c42e5b783147",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "route AC-NV01 CL tong-quan",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "335b5d305a2d",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "route AC-NV01 CL danh-muc-cho",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "335b5d305a2d",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "route AC-NV01 CL mat-bang",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "c4c838c95db7",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "route AC-NV01 CL diem-kd",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "335b5d305a2d",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "route AC-NV01 CL tai-san",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "7219d16fb07a",
+   "ret": "febb7d2ebeac"
+  },
+  {
+   "name": "route AC-NV01 CL phien-cho",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "335b5d305a2d",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "route AC-NV01 CL tieu-thuong",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "550ec9a9523f",
+   "ret": "7f267273cc8f"
+  },
+  {
+   "name": "route AC-NV01 CL hop-dong",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "1067a060a207",
+   "ret": "ddda7cb92f57"
+  },
+  {
+   "name": "route AC-NV01 CL cau-hinh-gia",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "25ca2004c5f3",
+   "ret": "b01149a84901"
+  },
+  {
+   "name": "route AC-NV01 CL tai-khoan-ngan-hang",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "6c474e3b760f",
+   "ret": "8504392dfbf5"
+  },
+  {
+   "name": "route AC-NV01 CL dien-nuoc",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "ea063d5680e3",
+   "ret": "c3640b04338a"
+  },
+  {
+   "name": "route AC-NV01 CL phai-thu",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "a4be0626c220",
+   "ret": "15775bed1ed1"
+  },
+  {
+   "name": "route AC-NV01 CL thu-tien",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "062fe3507806",
+   "ret": "fcf70bd6fb44"
+  },
+  {
+   "name": "route AC-NV01 CL doi-soat",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "16ce6130060c",
+   "ret": "b13acf3f9d83"
+  },
+  {
+   "name": "route AC-NV01 CL cong-no",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "d817776b5a4b",
+   "ret": "15575f6a7ddd"
+  },
+  {
+   "name": "route AC-NV01 CL su-co",
+   "err": null,
+   "saves": 1,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "e9edb9e92977",
+   "ret": "b4d3bb211507"
+  },
+  {
+   "name": "route AC-NV01 CL thong-bao",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "cd0b7ead19a7",
+   "ret": "eaa0da8a5b19"
+  },
+  {
+   "name": "route AC-NV01 CL bao-cao",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "6d029b670a10",
+   "ret": "52a8b2422502"
+  },
+  {
+   "name": "route AC-NV01 CL tai-khoan",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "335b5d305a2d",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "route AC-NV01 CL cai-dat",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "335b5d305a2d",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "route AC-NV01 CL mini-app",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "335b5d305a2d",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "route AC-NV07 TTD tong-quan",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "3d8f44ff0892",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "route AC-NV07 TTD danh-muc-cho",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "3d8f44ff0892",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "route AC-NV07 TTD mat-bang",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "3d8f44ff0892",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "route AC-NV07 TTD diem-kd",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "8d9af81297fb",
+   "ret": "9e35ec91a7df"
+  },
+  {
+   "name": "route AC-NV07 TTD tai-san",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4539a0e30ac2",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "3d8f44ff0892",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "route AC-NV07 TTD phien-cho",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "268db99dfbda",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "ac88d41ee7de",
+   "ret": "ca78322200c8"
+  },
+  {
+   "name": "route AC-NV07 TTD tieu-thuong",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "268db99dfbda",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "8e5e08a96429",
+   "ret": "7f267273cc8f"
+  },
+  {
+   "name": "route AC-NV07 TTD hop-dong",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "268db99dfbda",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "b2c1939f011d",
+   "ret": "ddda7cb92f57"
+  },
+  {
+   "name": "route AC-NV07 TTD cau-hinh-gia",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "268db99dfbda",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "3d8f44ff0892",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "route AC-NV07 TTD tai-khoan-ngan-hang",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "268db99dfbda",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "3d8f44ff0892",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "route AC-NV07 TTD dien-nuoc",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "268db99dfbda",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "b14bb66cc282",
+   "ret": "c3640b04338a"
+  },
+  {
+   "name": "route AC-NV07 TTD phai-thu",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "268db99dfbda",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "191f39c1b75d",
+   "ret": "15775bed1ed1"
+  },
+  {
+   "name": "route AC-NV07 TTD thu-tien",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "268db99dfbda",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "77d5bfd8c9d8",
+   "ret": "fcf70bd6fb44"
+  },
+  {
+   "name": "route AC-NV07 TTD doi-soat",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "268db99dfbda",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "3d8f44ff0892",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "route AC-NV07 TTD cong-no",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "268db99dfbda",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "649a899d9f0c",
+   "ret": "15575f6a7ddd"
+  },
+  {
+   "name": "route AC-NV07 TTD su-co",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "268db99dfbda",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "3d8f44ff0892",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "route AC-NV07 TTD thong-bao",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "268db99dfbda",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "3d8f44ff0892",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "route AC-NV07 TTD bao-cao",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "268db99dfbda",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "3d8f44ff0892",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "route AC-NV07 TTD tai-khoan",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "268db99dfbda",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "3d8f44ff0892",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "route AC-NV07 TTD cai-dat",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "268db99dfbda",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "3d8f44ff0892",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "route AC-NV07 TTD mini-app",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "dc77bd740661",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "0cd6cf6a7b2b",
+   "ret": "94e6705b4fb3"
+  },
+  {
+   "name": "needsContract CL",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "dc77bd740661",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "550ec9a9523f",
+   "ret": "97d170e1550e"
+  },
+  {
+   "name": "needsAccount",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "dc77bd740661",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "550ec9a9523f",
+   "ret": "422793481df2"
+  },
+  {
+   "name": "trader drawer",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "385937a1e8f1",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "40773aa15d10",
+   "view": "550ec9a9523f"
+  },
+  {
+   "name": "trader edit open",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "385937a1e8f1",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "b07bf164c200",
+   "view": "550ec9a9523f"
+  },
+  {
+   "name": "trader edit save",
+   "err": null,
+   "saves": 1,
+   "toasts": [
+    "Đã cập nhật hồ sơ TT0001"
+   ],
+   "db": "95afaacc78ba",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "901d5e25c30a",
+   "view": "5c8225136a9c"
+  },
+  {
+   "name": "hop-dong view",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "95afaacc78ba",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "901d5e25c30a",
+   "view": "1067a060a207",
+   "ret": "0a451383e080"
+  },
+  {
+   "name": "hd-tab all",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "95afaacc78ba",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "901d5e25c30a",
+   "view": "1067a060a207"
+  },
+  {
+   "name": "hd-tab active",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "95afaacc78ba",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "901d5e25c30a",
+   "view": "9e865e6c36cb"
+  },
+  {
+   "name": "hd-tab 30",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "95afaacc78ba",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "901d5e25c30a",
+   "view": "4b620aba883e"
+  },
+  {
+   "name": "hd-tab 15",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "95afaacc78ba",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "901d5e25c30a",
+   "view": "e1b17f1e6aba"
+  },
+  {
+   "name": "hd-tab end",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "95afaacc78ba",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "901d5e25c30a",
+   "view": "a7204ef77397"
+  },
+  {
+   "name": "hd-status chamdut",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "95afaacc78ba",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "901d5e25c30a",
+   "view": "8d73385bc331"
+  },
+  {
+   "name": "hd-clear",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "95afaacc78ba",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "901d5e25c30a",
+   "view": "1067a060a207"
+  },
+  {
+   "name": "hd-search",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "95afaacc78ba",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "901d5e25c30a",
+   "view": "fb0785613070"
+  },
+  {
+   "name": "hd-search clear",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "95afaacc78ba",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "901d5e25c30a",
+   "view": "1067a060a207"
+  },
+  {
+   "name": "ct-view",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "95afaacc78ba",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "3538b59318db",
+   "view": "1067a060a207"
+  },
+  {
+   "name": "ct-copy-view",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "95afaacc78ba",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "3538b59318db",
+   "view": "1067a060a207"
+  },
+  {
+   "name": "trader drawer w/ contracts",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "95afaacc78ba",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "901d5e25c30a",
+   "view": "1067a060a207"
+  },
+  {
+   "name": "tt-new",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "95afaacc78ba",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "bae0b3bcae4b",
+   "view": "1067a060a207"
+  },
+  {
+   "name": "wf-profile-save",
+   "err": null,
+   "saves": 1,
+   "toasts": [
+    "Đã tạo hồ sơ tiểu thương"
+   ],
+   "db": "b3ebb03fca7c",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "5c5cc5aef5ee",
+   "view": "1067a060a207"
+  },
+  {
+   "name": "wf-profile-contract",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "b3ebb03fca7c",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "51df4ea91de5",
+   "view": "eb9200780e3e"
+  },
+  {
+   "name": "ct-new (toolbar)",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "b3ebb03fca7c",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "51df4ea91de5",
+   "view": "eb9200780e3e"
+  },
+  {
+   "name": "wf-contract-open",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "b3ebb03fca7c",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "51df4ea91de5",
+   "view": "eb9200780e3e"
+  },
+  {
+   "name": "wf-contract-file",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "b3ebb03fca7c",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "51df4ea91de5",
+   "view": "eb9200780e3e"
+  },
+  {
+   "name": "wf-contract-save invalid",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Vui lòng kiểm tra tiểu thương, điểm kinh doanh và thời hạn."
+   ],
+   "db": "b3ebb03fca7c",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "51df4ea91de5",
+   "view": "eb9200780e3e"
+  },
+  {
+   "name": "wf-contract-save",
+   "err": null,
+   "saves": 1,
+   "toasts": [
+    "Tạo hợp đồng thành công"
+   ],
+   "db": "868bd7875688",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "add350e07c0f",
+   "view": "4cb16be9b3df"
+  },
+  {
+   "name": "after create: records",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "868bd7875688",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "add350e07c0f",
+   "view": "4cb16be9b3df",
+   "ret": "b4b4e18dea7f"
+  },
+  {
+   "name": "after create: needsContract",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "868bd7875688",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "add350e07c0f",
+   "view": "4cb16be9b3df",
+   "ret": "97d170e1550e"
+  },
+  {
+   "name": "after create: needsAccount",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "868bd7875688",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "add350e07c0f",
+   "view": "4cb16be9b3df",
+   "ret": "143f5823322b"
+  },
+  {
+   "name": "wf-contract-save duplicate",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Chưa có hồ sơ tiểu thương phù hợp.",
+    "Vui lòng kiểm tra tiểu thương, điểm kinh doanh và thời hạn."
+   ],
+   "db": "868bd7875688",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "add350e07c0f",
+   "view": "4cb16be9b3df"
+  },
+  {
+   "name": "wf-go-stall",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "868bd7875688",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "954073ca5de7",
+   "view": "3f06f579bd5b"
+  },
+  {
+   "name": "wf-account-open",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "868bd7875688",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "63701f3d3ba6",
+   "view": "0835eb3a97e9"
+  },
+  {
+   "name": "wf-account-create",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Tạo tài khoản thành công"
+   ],
+   "db": "868bd7875688",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "1f0d0368d436",
+   "view": "9f7a092f9a06"
+  },
+  {
+   "name": "after account: needsAccount",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "868bd7875688",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "1f0d0368d436",
+   "view": "9f7a092f9a06",
+   "ret": "422793481df2"
+  },
+  {
+   "name": "wf-send-activation",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã gửi thông báo kích hoạt: dùng số điện thoại đã đăng ký để đăng nhập OTP."
+   ],
+   "db": "868bd7875688",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "9f7a092f9a06"
+  },
+  {
+   "name": "ct-renew",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Chưa có hồ sơ tiểu thương phù hợp."
+   ],
+   "db": "868bd7875688",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "4cb16be9b3df"
+  },
+  {
+   "name": "ct-extend alias",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Chưa có hồ sơ tiểu thương phù hợp."
+   ],
+   "db": "868bd7875688",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "4cb16be9b3df"
+  },
+  {
+   "name": "ct-copy-add",
+   "err": null,
+   "saves": 1,
+   "toasts": [],
+   "db": "556d8014f10d",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "2f6e1287cbc8",
+   "view": "4cb16be9b3df"
+  },
+  {
+   "name": "ct-print",
+   "err": null,
+   "saves": 1,
+   "toasts": [
+    "Trình duyệt đã chặn cửa sổ in."
+   ],
+   "db": "a7af75f87fa1",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "2f6e1287cbc8",
+   "view": "4cb16be9b3df"
+  },
+  {
+   "name": "ct-terminate open",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "a7af75f87fa1",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "26d0027e3576",
+   "view": "4cb16be9b3df"
+  },
+  {
+   "name": "ct-terminate-file",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "93478bb0bb28",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "10f5d600d9de",
+   "view": "4cb16be9b3df"
+  },
+  {
+   "name": "ct-terminate-save invalid",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Cần nhập ngày, lý do và chi tiết lý do chấm dứt."
+   ],
+   "db": "93478bb0bb28",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "10f5d600d9de",
+   "view": "4cb16be9b3df"
+  },
+  {
+   "name": "ct-terminate-save",
+   "err": null,
+   "saves": 1,
+   "toasts": [
+    "Đã chấm dứt HĐ-CL-2023-0001"
+   ],
+   "db": "8834813e71f2",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "74ea2ef430bb"
+  },
+  {
+   "name": "after terminate: records",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "8834813e71f2",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "74ea2ef430bb",
+   "ret": "801a20740bf6"
+  },
+  {
+   "name": "ct-liquidate open",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "8834813e71f2",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "e5613878e81e",
+   "view": "74ea2ef430bb"
+  },
+  {
+   "name": "ct-liquidate-toggle pointReturned",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "228930550116",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "7b47f65555a6",
+   "view": "74ea2ef430bb"
+  },
+  {
+   "name": "ct-liquidate-toggle conditionChecked",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "ac497f3b8be9",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "752554865159",
+   "view": "74ea2ef430bb"
+  },
+  {
+   "name": "ct-liquidate-toggle damagesRecorded",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "6513d2724835",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "611eaf6fc071",
+   "view": "74ea2ef430bb"
+  },
+  {
+   "name": "ct-liquidate-toggle compensationResolved",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "d0bf75864d40",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "5d04270629a2",
+   "view": "74ea2ef430bb"
+  },
+  {
+   "name": "ct-liquidate-toggle keysHandedOver",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "52c324a70258",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "f55680220731",
+   "view": "74ea2ef430bb"
+  },
+  {
+   "name": "ct-liquidate-toggle minutesPrepared",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "7e1b1d59d279",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "563f89dfd33d",
+   "view": "74ea2ef430bb"
+  },
+  {
+   "name": "ct-liquidate-toggle minutesSigned",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "da5d5c1fd63c",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "344256de1650",
+   "view": "74ea2ef430bb"
+  },
+  {
+   "name": "ct-liquidate-save missing copy",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Chưa thể thanh lý: cần hoàn tất công nợ, checklist NV BQL và bản thanh lý đã ký."
+   ],
+   "db": "da5d5c1fd63c",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "344256de1650",
+   "view": "74ea2ef430bb"
+  },
+  {
+   "name": "ct-liquidate-copy-add",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "491f3a132de2",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "23ca6077a854",
+   "view": "74ea2ef430bb"
+  },
+  {
+   "name": "ct-liquidate-save",
+   "err": null,
+   "saves": 1,
+   "toasts": [
+    "Đã thanh lý HĐ-CL-2023-0001"
+   ],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "74ea2ef430bb"
+  },
+  {
+   "name": "after liquidate: records",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "74ea2ef430bb",
+   "ret": "621e2ad30b02"
+  },
+  {
+   "name": "ct-liquidate active (not expired)",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Chỉ thanh lý hợp đồng đã hết hạn hoặc đã chấm dứt."
+   ],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "74ea2ef430bb"
+  },
+  {
+   "name": "ct-end alias",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Chỉ thanh lý hợp đồng đã hết hạn hoặc đã chấm dứt."
+   ],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "74ea2ef430bb"
+  },
+  {
+   "name": "final needsContract",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "74ea2ef430bb",
+   "ret": "a425691f9bc2"
+  },
+  {
+   "name": "final needsAccount",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "74ea2ef430bb",
+   "ret": "53cdca75fc8e"
+  },
+  {
+   "name": "post route AC-QT01 CL tong-quan",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "1dd8af613597",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "post route AC-QT01 CL danh-muc-cho",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "ef4b8fa56c75",
+   "ret": "37ccf9d73121"
+  },
+  {
+   "name": "post route AC-QT01 CL mat-bang",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "16c027385f6d",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "post route AC-QT01 CL diem-kd",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "12aac33fccd7",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "post route AC-QT01 CL tai-san",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "1dd8af613597",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "post route AC-QT01 CL phien-cho",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "1dd8af613597",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "post route AC-QT01 CL tieu-thuong",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "64b3d765efab",
+   "ret": "7f267273cc8f"
+  },
+  {
+   "name": "post route AC-QT01 CL hop-dong",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "4cd8d7a8345e",
+   "ret": "ddda7cb92f57"
+  },
+  {
+   "name": "post route AC-QT01 CL cau-hinh-gia",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "c803cf3aeef0",
+   "ret": "b01149a84901"
+  },
+  {
+   "name": "post route AC-QT01 CL tai-khoan-ngan-hang",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "d31ac8b2f96b",
+   "ret": "8504392dfbf5"
+  },
+  {
+   "name": "post route AC-QT01 CL dien-nuoc",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "1dd8af613597",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "post route AC-QT01 CL phai-thu",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "1dd8af613597",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "post route AC-QT01 CL thu-tien",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "1dd8af613597",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "post route AC-QT01 CL doi-soat",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "1dd8af613597",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "post route AC-QT01 CL cong-no",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "1dd8af613597",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "post route AC-QT01 CL su-co",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "1dd8af613597",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "post route AC-QT01 CL thong-bao",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "1dd8af613597",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "post route AC-QT01 CL bao-cao",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "71232f76039e",
+   "ret": "52a8b2422502"
+  },
+  {
+   "name": "post route AC-QT01 CL tai-khoan",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "b80e30e08432",
+   "ret": "a408dde2433c"
+  },
+  {
+   "name": "post route AC-QT01 CL cai-dat",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "de74719ae1ae",
+   "ret": "f425e3703418"
+  },
+  {
+   "name": "post route AC-QT01 CL mini-app",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "1dd8af613597",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "post route AC-QT01 TTD tong-quan",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "1f6f5015e97c",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "post route AC-QT01 TTD danh-muc-cho",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "ef4b8fa56c75",
+   "ret": "37ccf9d73121"
+  },
+  {
+   "name": "post route AC-QT01 TTD mat-bang",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "3d8f44ff0892",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "post route AC-QT01 TTD diem-kd",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "8d9af81297fb",
+   "ret": "9e35ec91a7df"
+  },
+  {
+   "name": "post route AC-QT01 TTD tai-san",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "1f6f5015e97c",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "post route AC-QT01 TTD phien-cho",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "1f6f5015e97c",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "post route AC-QT01 TTD tieu-thuong",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "48b35d779755",
+   "ret": "7f267273cc8f"
+  },
+  {
+   "name": "post route AC-QT01 TTD hop-dong",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "31ee2dd97921",
+   "ret": "ddda7cb92f57"
+  },
+  {
+   "name": "post route AC-QT01 TTD cau-hinh-gia",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "04d4a33d1f64",
+   "ret": "b01149a84901"
+  },
+  {
+   "name": "post route AC-QT01 TTD tai-khoan-ngan-hang",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "00c464d54440",
+   "ret": "8504392dfbf5"
+  },
+  {
+   "name": "post route AC-QT01 TTD dien-nuoc",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "1f6f5015e97c",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "post route AC-QT01 TTD phai-thu",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "1f6f5015e97c",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "post route AC-QT01 TTD thu-tien",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "1f6f5015e97c",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "post route AC-QT01 TTD doi-soat",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "1f6f5015e97c",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "post route AC-QT01 TTD cong-no",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "1f6f5015e97c",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "post route AC-QT01 TTD su-co",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "1f6f5015e97c",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "post route AC-QT01 TTD thong-bao",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "1f6f5015e97c",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "post route AC-QT01 TTD bao-cao",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "ccda06f24ad2",
+   "ret": "52a8b2422502"
+  },
+  {
+   "name": "post route AC-QT01 TTD tai-khoan",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "b80e30e08432",
+   "ret": "a408dde2433c"
+  },
+  {
+   "name": "post route AC-QT01 TTD cai-dat",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "de74719ae1ae",
+   "ret": "f425e3703418"
+  },
+  {
+   "name": "post route AC-QT01 TTD mini-app",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "1f6f5015e97c",
+   "ret": "98ceff75c636"
+  },
+  {
+   "name": "post route AC-NV01 CL tong-quan",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "fcd88b805d84",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "post route AC-NV01 CL danh-muc-cho",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "fcd88b805d84",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "post route AC-NV01 CL mat-bang",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "ad215e0879dc",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "post route AC-NV01 CL diem-kd",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "fcd88b805d84",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "post route AC-NV01 CL tai-san",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "7219d16fb07a",
+   "ret": "febb7d2ebeac"
+  },
+  {
+   "name": "post route AC-NV01 CL phien-cho",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "fcd88b805d84",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "post route AC-NV01 CL tieu-thuong",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "03eb4541cabf",
+   "ret": "7f267273cc8f"
+  },
+  {
+   "name": "post route AC-NV01 CL hop-dong",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "74ea2ef430bb",
+   "ret": "ddda7cb92f57"
+  },
+  {
+   "name": "post route AC-NV01 CL cau-hinh-gia",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "25ca2004c5f3",
+   "ret": "b01149a84901"
+  },
+  {
+   "name": "post route AC-NV01 CL tai-khoan-ngan-hang",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "6c474e3b760f",
+   "ret": "8504392dfbf5"
+  },
+  {
+   "name": "post route AC-NV01 CL dien-nuoc",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "d7c1f7064fc6",
+   "ret": "c3640b04338a"
+  },
+  {
+   "name": "post route AC-NV01 CL phai-thu",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "bb039ef204d2",
+   "ret": "15775bed1ed1"
+  },
+  {
+   "name": "post route AC-NV01 CL thu-tien",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "062fe3507806",
+   "ret": "fcf70bd6fb44"
+  },
+  {
+   "name": "post route AC-NV01 CL doi-soat",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "16ce6130060c",
+   "ret": "b13acf3f9d83"
+  },
+  {
+   "name": "post route AC-NV01 CL cong-no",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "d817776b5a4b",
+   "ret": "15575f6a7ddd"
+  },
+  {
+   "name": "post route AC-NV01 CL su-co",
+   "err": null,
+   "saves": 1,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "e9edb9e92977",
+   "ret": "b4d3bb211507"
+  },
+  {
+   "name": "post route AC-NV01 CL thong-bao",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "874544eec3fc",
+   "ret": "eaa0da8a5b19"
+  },
+  {
+   "name": "post route AC-NV01 CL bao-cao",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "6d029b670a10",
+   "ret": "52a8b2422502"
+  },
+  {
+   "name": "post route AC-NV01 CL tai-khoan",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "fcd88b805d84",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "post route AC-NV01 CL cai-dat",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "fcd88b805d84",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "post route AC-NV01 CL mini-app",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "77e83f6870db",
+   "accounts": "da1604702f00",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "session:choso-caolanh-workflow-recent-point"
+   ],
+   "session": "f853286b05e9",
+   "modal": "da39a3ee5e6b",
+   "view": "fcd88b805d84",
+   "ret": "05112a7e198c"
+  },
+  {
+   "name": "reload db equal",
+   "err": null,
+   "ret": "EQUAL"
+  }
+ ],
+ "totalSaves": 11
+}
