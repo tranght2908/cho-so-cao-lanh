@@ -2021,6 +2021,8 @@
   let ttEditId = null;
   // Trader profile read/edit/document data access (Phase 6) — src/features/traders/service.js.
   const TS = A.features.traders.service;
+  // Business-point display lookups (Phase 7) — src/features/business-points/service.js.
+  const BP = A.features.businessPoints.service;
   // HOTFIX (mục 9-11 yêu cầu): giấy tờ đang chờ thay thế trong EDIT MODE hiện tại — { [docKey]:
   // {fileName} }. CHỈ là state tạm phía FE, chưa ghi vào trader.docFiles cho tới khi bấm "Lưu thay
   // đổi" (tt-edit-save); "Hủy" xóa sạch, không để sót giữa các lần mở drawer khác nhau.
@@ -2071,17 +2073,17 @@
   function ttUsageStart(t, st) { const u = ttUsageFor(t, st.id); return u ? u.startDate : ((st.contractId && A.idx.contract.get(st.contractId) || {}).start || t.since || ''); }
   function ttPointPath(st) { const p = A.mbLayoutPathForPoint ? A.mbLayoutPathForPoint(st.market, st) : null; return p ? [p.khu, p.tang, p.day, st.code].filter(x => x && x !== '—').join(' → ') : [st.sectionName, st.code].filter(Boolean).join(' → '); }
   function ttSectionsOf(t) {
-    return t.stalls.map(id => A.idx.stall.get(id)).filter(Boolean).map(st => st.section);
+    return t.stalls.map(id => BP.get(id)).filter(Boolean).map(st => st.section);
   }
   // Cột "Khu vực" ở bảng danh sách (mục 3-4 yêu cầu hotfix) — suy ra từ ĐÚNG quan hệ Trader → Điểm
   // KD (t.stalls) → st.sectionName đã có, KHÔNG thêm field "area" giả vào trader. Dedupe bằng Set để
   // nhiều điểm cùng khu vực không lặp tên khu (mục 4 yêu cầu: "Khu A, Khu A" → chỉ còn "Khu A").
   function ttSectionNamesOf(t) {
-    const names = t.stalls.map(id => A.idx.stall.get(id)).filter(Boolean).map(st => st.sectionName);
+    const names = t.stalls.map(id => BP.get(id)).filter(Boolean).map(st => st.sectionName);
     return Array.from(new Set(names));
   }
   function ttCatsOf(t) {
-    const stalls = t.stalls.map(id => A.idx.stall.get(id)).filter(Boolean);
+    const stalls = t.stalls.map(id => BP.get(id)).filter(Boolean);
     return stalls.length ? Array.from(new Set(stalls.map(st => st.cat))) : [t.cat || 'Chưa gán'];
   }
   // ==================== TRADER_PROFILE_AND_MINIAPP_WORKFLOW ====================
@@ -2124,7 +2126,7 @@
     if (t.phone.includes(q)) return true;
     if ((t.idNo || '').includes(q)) return true;
     if (t.id.toLowerCase().includes(q)) return true;
-    return t.stalls.some(id => { const st = A.idx.stall.get(id); return st && st.code.toLowerCase().includes(q); });
+    return t.stalls.some(id => { const st = BP.get(id); return st && st.code.toLowerCase().includes(q); });
   }
   // Lọc kết hợp được (giống pattern đã dùng ở Điểm kinh doanh CL): 1 tiểu thương = 1 dòng, chỉ cần
   // MỘT trong các điểm đang thuê thỏa khu vực/ngành hàng đang lọc là đủ để tiểu thương đó xuất hiện —
@@ -2132,7 +2134,7 @@
   function ttRowsCL() {
     const q = (f.ttclSearch || '').trim().toLowerCase();
     return TS.list().filter(t => U.inM(t)
-      && (!f.ttclFloor || t.stalls.some(id => { const st=A.idx.stall.get(id); return st && st.floor===f.ttclFloor; }))
+      && (!f.ttclFloor || t.stalls.some(id => { const st=BP.get(id); return st && st.floor===f.ttclFloor; }))
       && (!f.ttclSection || ttSectionsOf(t).includes(f.ttclSection))
       && (!f.ttclCat || ttCatsOf(t).includes(f.ttclCat))
       && (!f.ttclApp || ttMiniAppState(t) === f.ttclApp)
@@ -2143,7 +2145,7 @@
     // Bảng chính bỏ Điện thoại/Địa chỉ/CCCD đầy đủ (mục 4/35 yêu cầu) — dữ liệu model KHÔNG đổi, vẫn
     // xem đủ trong drawer chi tiết (Section A) và vẫn tìm được qua ô search (ttSearchMatchCL).
     const area = ttSectionNamesOf(t).join(', ') || '–';
-    const points = t.stalls.map(id => A.idx.stall.get(id)).filter(Boolean);
+    const points = t.stalls.map(id => BP.get(id)).filter(Boolean);
     const pointLabel = points.length > 1 ? points.length + ' điểm' : (points[0] ? points[0].code : '–');
     const updated = (t.updatedAt || t.since || '').split('-').reverse().join('/');
     return `<tr class="click" data-act="trader" data-id="${t.id}">
@@ -2190,7 +2192,7 @@
     const q = (f.ttSearch || '').toLowerCase();
     return TS.list().filter(t => U.inM(t)
       && (!f.ttApp || (f.ttApp === 'yes') === !!t.app)
-      && (!q || t.name.toLowerCase().includes(q) || t.phone.includes(q) || t.id.toLowerCase().includes(q) || t.stalls.some(id => A.idx.stall.get(id).code.toLowerCase().includes(q))));
+      && (!q || t.name.toLowerCase().includes(q) || t.phone.includes(q) || t.id.toLowerCase().includes(q) || t.stalls.some(id => BP.get(id).code.toLowerCase().includes(q))));
   }
   function ttViewGeneric() {
     const rows = ttRows(), pg = U.pager('tt', rows.length, 25);
@@ -2202,7 +2204,7 @@
         rows.slice(pg.start, pg.end).map(t => {
           const debt = U.traderDebt(t.id), over = U.traderOverdue(t.id);
           return `<tr class="click" data-act="trader" data-id="${t.id}"><td>${t.id}</td><td><b>${U.esc(t.name)}</b></td><td>${U.maskPhone(t.phone)}</td><td>${U.mShort(t.market)}</td><td>${U.esc(t.cat)}</td>
-            <td>${t.stalls.map(id => A.idx.stall.get(id).code).join(', ') || '–'}</td><td>${t.app ? '<span class="tag ok">Đã cài</span>' : '<span class="tag">Chưa</span>'}</td>
+            <td>${t.stalls.map(id => BP.get(id).code).join(', ') || '–'}</td><td>${t.app ? '<span class="tag ok">Đã cài</span>' : '<span class="tag">Chưa</span>'}</td>
             <td class="num" style="${over ? 'color:#df2225;font-weight:600' : ''}">${debt ? U.money(debt) : '–'}</td></tr>`;
         }))}${pg.html}
         <div class="small muted" style="margin-top:8px">Số điện thoại, số giấy tờ được che trên danh sách theo Nghị định 356/2025/NĐ-CP về bảo vệ dữ liệu cá nhân.</div></div></div>`;
@@ -2264,7 +2266,7 @@
   // clickable, tái dùng NGUYÊN action tt-seller-view/permission hiện có (A.canDo bên trong handler
   // đó không đổi) — không tạo luồng nghiệp vụ mới, không thêm nút "Xem" riêng.
   function ttPointCardHtml(t, stallId) {
-    const st = A.idx.stall.get(stallId);
+    const st = BP.get(stallId);
     if (!st) return '';
     const usage = ttUsageFor(t, st.id);
     const seller = dkSeller(st);
