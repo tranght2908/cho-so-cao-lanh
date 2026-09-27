@@ -2019,6 +2019,8 @@
   // cần lưu theo từng trader. Reset về null mỗi khi mở lại drawer từ đầu (A.ACT.trader) hoặc sau khi
   // Hủy/Lưu — đảm bảo "mặc định mở drawer: VIEW MODE" (mục 2 yêu cầu).
   let ttEditId = null;
+  // Trader profile read/edit/document data access (Phase 6) — src/features/traders/service.js.
+  const TS = A.features.traders.service;
   // HOTFIX (mục 9-11 yêu cầu): giấy tờ đang chờ thay thế trong EDIT MODE hiện tại — { [docKey]:
   // {fileName} }. CHỈ là state tạm phía FE, chưa ghi vào trader.docFiles cho tới khi bấm "Lưu thay
   // đổi" (tt-edit-save); "Hủy" xóa sạch, không để sót giữa các lần mở drawer khác nhau.
@@ -2129,7 +2131,7 @@
   // không flatten theo điểm nên không thể duplicate dòng.
   function ttRowsCL() {
     const q = (f.ttclSearch || '').trim().toLowerCase();
-    return A.db.traders.filter(t => U.inM(t)
+    return TS.list().filter(t => U.inM(t)
       && (!f.ttclFloor || t.stalls.some(id => { const st=A.idx.stall.get(id); return st && st.floor===f.ttclFloor; }))
       && (!f.ttclSection || ttSectionsOf(t).includes(f.ttclSection))
       && (!f.ttclCat || ttCatsOf(t).includes(f.ttclCat))
@@ -2186,7 +2188,7 @@
   // ---- Chợ quê TTĐ / fallback: danh sách tổng quát cũ, KHÔNG đổi (ngoài phạm vi task CL) ----
   function ttRows() {
     const q = (f.ttSearch || '').toLowerCase();
-    return A.db.traders.filter(t => U.inM(t)
+    return TS.list().filter(t => U.inM(t)
       && (!f.ttApp || (f.ttApp === 'yes') === !!t.app)
       && (!q || t.name.toLowerCase().includes(q) || t.phone.includes(q) || t.id.toLowerCase().includes(q) || t.stalls.some(id => A.idx.stall.get(id).code.toLowerCase().includes(q))));
   }
@@ -2234,7 +2236,7 @@
   // đúng giấy tờ có file mới trong ttPendingDocs, chưa ghi gì vào dữ liệu thật cho tới khi Lưu.
   function ttDocRowEdit(doc) {
     const pending = ttPendingDocs[doc.key];
-    const current = (A.idx.trader.get(ttEditId) || {}).docFiles || {};
+    const current = (TS.getProfile(ttEditId) || {}).docFiles || {};
     const file = pending || current[doc.key];
     return `<div style="padding:7px 0;border-bottom:1px solid #eef2f7">
       <div class="row" style="justify-content:space-between">
@@ -2404,7 +2406,7 @@
     A.modal(ttFileViewHtml('Hồ sơ bố trí · ' + st.code, file));
   };
   A.ACT['tt-doc-view'] = el => {
-    const t = A.idx.trader.get(el.dataset.id);
+    const t = TS.getProfile(el.dataset.id);
     const file = t && (t.docFiles || {})[el.dataset.key];
     if (!file) return U.toast('Không tìm thấy tệp hồ sơ.');
     A.modal(ttFileViewHtml(ttDocLabel(el.dataset.key), file));
@@ -2415,7 +2417,7 @@
   // "Hủy" (tt-edit-cancel) xóa sạch state tạm này. Re-check permission tại đây, không chỉ dựa vào
   // nút đã được ẩn/hiện đúng theo canEdit (mục 12 yêu cầu: handler phải tự kiểm tra lại).
   A.ACT['tt-doc-replace'] = el => {
-    const t = A.idx.trader.get(ttEditId);
+    const t = TS.getProfile(ttEditId);
     if (!t || !A.canDo('tieu-thuong.them-moi', t.market)) return;
     const key = el.dataset.key;
     // Gắn input vào DOM (ẩn) thay vì tạo rời rạc rồi bỏ ngay — input.click() vẫn mở đúng file picker
@@ -2499,7 +2501,7 @@
   A.ACT.trader = (el, e) => {
     if (e) e.preventDefault();
     A.drawerReset();
-    A.openTraderDrawer(A.idx.trader.get(el.dataset.id));
+    A.openTraderDrawer(TS.getProfile(el.dataset.id));
   };
 
   // ==================== TÀI KHOẢN MINI APP — find-or-create khi kích hoạt (CORRECTION) ====================
@@ -2769,37 +2771,32 @@
     A.$('#modal-root').innerHTML = `<div class="drawer-overlay" data-act="close"></div><div class="drawer drawer-tt-cl">${A.drawerBackHtml()}${ttDrawerHtmlCL(t)}</div>`;
   }
   A.ACT['tt-edit-open'] = el => {
-    const t = A.idx.trader.get(el.dataset.id);
+    const t = TS.getProfile(el.dataset.id);
     if (!t || !A.canDo('tieu-thuong.them-moi', t.market)) return;
     ttEditId = t.id;
     ttPendingDocs = {};
     ttRerenderDrawer(t);
   };
   A.ACT['tt-edit-cancel'] = el => {
-    const t = A.idx.trader.get(el.dataset.id);
+    const t = TS.getProfile(el.dataset.id);
     if (!t) return;
     ttEditId = null;
     ttPendingDocs = {}; // bỏ luôn file vừa chọn để thay thế, chưa lưu thì không áp dụng (mục 11)
     ttRerenderDrawer(t);
   };
   A.ACT['tt-edit-save'] = el => {
-    const t = A.idx.trader.get(el.dataset.id);
+    const t = TS.getProfile(el.dataset.id);
     if (!t || !A.canDo('tieu-thuong.them-moi', t.market)) return;
     const name = A.$('#tte-name').value.trim(), idNo = A.$('#tte-idno').value.trim(), phone = A.$('#tte-phone').value.trim();
     if (!name || !idNo || !phone) { U.toast('Vui lòng nhập đủ họ tên, số CCCD và điện thoại'); return; }
-    if (A.db.traders.some(x => x.idNo === idNo && x.id !== t.id)) { U.toast('Số CCCD đã tồn tại trong hệ thống'); return; }
-    t.name = name; t.idNo = idNo; t.phone = phone;
-    t.idType = A.$('#tte-idtype').value;
+    if (TS.idNoTaken(idNo, t.id)) { U.toast('Số CCCD đã tồn tại trong hệ thống'); return; }
+    TS.updateProfile(t.id, { name, idNo, phone, idType: A.$('#tte-idtype').value });
     // Hồ sơ số hóa: CHỈ ghi đè đúng giấy tờ có file thay thế đang chờ (mục 10 yêu cầu) — giấy tờ
     // không bấm "Thay thế" giữ nguyên tham chiếu cũ, không bắt upload lại toàn bộ khi chỉ sửa field
     // thông tin khác.
-    const pendingKeys = Object.keys(ttPendingDocs);
-    if (pendingKeys.length) {
-      t.docFiles = t.docFiles || {};
-      pendingKeys.forEach(key => { t.docFiles[key] = Object.assign({}, ttPendingDocs[key], { updatedAt: U.today() }); });
-    }
+    TS.updateDocuments(t.id, ttPendingDocs, U.today());
     U.log('Cập nhật hồ sơ tiểu thương ' + t.id + ' – ' + name);
-    A.save();
+    TS.save();
     ttEditId = null;
     ttPendingDocs = {};
     ttRerenderDrawer(t);
