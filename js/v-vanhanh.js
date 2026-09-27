@@ -549,21 +549,26 @@
       (!f.type || a.accountType === f.type) &&
       (!f.role || (a.roleIds || []).includes(f.role)) &&
       (!f.market || A.allowedMarkets(a).includes(f.market)) &&
-      (!f.status || a.status === f.status) &&
+      (!f.status || A.ACCOUNTS.authStatus(a) === f.status) &&
       (!q || a.fullName.toLowerCase().includes(q) || a.code.toLowerCase().includes(q) || (a.phone || '').includes(q)));
   }
   function accStats() {
     const all = A.ACCOUNTS.list();
     return {
-      total: all.length, active: all.filter(a => a.status === 'active').length,
-      disabled: all.filter(a => a.status === 'disabled').length,
+      total: all.length, active: all.filter(a => A.ACCOUNTS.authStatus(a) === 'ACTIVE').length,
+      pending: all.filter(a => A.ACCOUNTS.authStatus(a) === 'PENDING_ACTIVATION').length,
+      disabled: all.filter(a => A.ACCOUNTS.authStatus(a) === 'LOCKED').length,
       traders: all.filter(a => a.accountType === 'Tiểu thương').length
     };
+  }
+  function accStatusTag(a) {
+    const status = A.ACCOUNTS.authStatus(a);
+    return status === 'ACTIVE' ? '<span class="tag ok">Đang hoạt động</span>' : status === 'PENDING_ACTIVATION' ? '<span class="tag">Chờ kích hoạt</span>' : '<span class="tag danger">Đã khóa</span>';
   }
   function accDrawerHtml(a) {
     const canEdit = A.canDo('tai-khoan.sua');
     return `<div class="drawer-h"><span class="avatar lg">${U.esc(accInitials(a.fullName))}</span>
-        <div><h3>${U.esc(a.fullName)}</h3><div class="small muted">${U.esc(a.code)} · ${a.status === 'active' ? '<span class="tag ok">Hoạt động</span>' : '<span class="tag danger">Tạm khoá</span>'}</div></div>
+        <div><h3>${U.esc(a.fullName)}</h3><div class="small muted">${U.esc(a.code)} · ${accStatusTag(a)}</div></div>
         <span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
       <div class="drawer-b">
         <dl class="kv">
@@ -618,7 +623,7 @@
       <div class="field"><label>Loại tài khoản</label><select class="input" data-ch="af-type">${A.ACCOUNTS.ACCOUNT_TYPES.map(t => `<option ${d.accountType === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
       <div class="field"><label>Vai trò (Role)</label><select class="input" data-ch="af-role" ${dis}><option value="">— Chưa gán —</option>${A.PERM.roles().map(r => `<option value="${r.id}" ${(d.roleIds && d.roleIds[0]) === r.id ? 'selected' : ''}>${U.esc(r.name)}</option>`).join('')}</select></div>
       <div class="field"><label>Đơn vị</label><input class="input" data-ch="af-org" value="${U.esc(d.organization || '')}"></div>
-      <div class="field"><label>Trạng thái</label><select class="input" data-ch="af-status"><option value="active" ${d.status === 'active' ? 'selected' : ''}>Hoạt động</option><option value="disabled" ${d.status === 'disabled' ? 'selected' : ''}>Tạm khoá</option></select></div>
+      <div class="field"><label>Trạng thái</label><select class="input" data-ch="af-status"><option value="ACTIVE" ${A.ACCOUNTS.authStatus(d) === 'ACTIVE' ? 'selected' : ''}>Đang hoạt động</option><option value="LOCKED" ${A.ACCOUNTS.authStatus(d) === 'LOCKED' ? 'selected' : ''}>Đã khóa</option></select></div>
     </div>
     ${afScopeSectionHtml(d, dis)}
     ${!canAssign ? '<div class="note" style="margin-top:12px">Bạn không có quyền gán vai trò / phạm vi chợ nên các trường này đang bị khoá.</div>' : ''}
@@ -641,6 +646,7 @@
     <div class="kpis">
       ${k('Tổng tài khoản', st.total)}
       ${k('Đang hoạt động', st.active)}
+      ${k('Chờ kích hoạt', st.pending)}
       ${k('Tạm khoá', st.disabled)}
       ${k('Tiểu thương', st.traders)}
     </div>
@@ -649,7 +655,7 @@
       <select class="input" data-ch="acc-type"><option value="">Loại tài khoản: Tất cả</option>${A.ACCOUNTS.ACCOUNT_TYPES.map(t => `<option ${f.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
       <select class="input" data-ch="acc-role"><option value="">Vai trò: Tất cả</option>${A.PERM.roles().map(r => `<option value="${r.id}" ${f.role === r.id ? 'selected' : ''}>${U.esc(r.name)}</option>`).join('')}</select>
       <select class="input" data-ch="acc-market"><option value="">Chợ / phạm vi: Tất cả</option>${D.MARKETS.map(m => `<option value="${m.id}" ${f.market === m.id ? 'selected' : ''}>${m.short}</option>`).join('')}</select>
-      <select class="input" data-ch="acc-status"><option value="">Trạng thái: Tất cả</option><option value="active" ${f.status === 'active' ? 'selected' : ''}>Hoạt động</option><option value="disabled" ${f.status === 'disabled' ? 'selected' : ''}>Tạm khoá</option></select>
+      <select class="input" data-ch="acc-status"><option value="">Trạng thái: Tất cả</option><option value="ACTIVE" ${f.status === 'ACTIVE' ? 'selected' : ''}>Đang hoạt động</option><option value="PENDING_ACTIVATION" ${f.status === 'PENDING_ACTIVATION' ? 'selected' : ''}>Chờ kích hoạt</option><option value="LOCKED" ${f.status === 'LOCKED' ? 'selected' : ''}>Đã khóa</option></select>
       <button class="btn" data-act="acc-clear">Đặt lại</button></div></div>
     <div class="card"><div class="card-b">
       ${U.table([{ t: 'Mã' }, { t: 'Người dùng' }, { t: 'Loại tài khoản' }, { t: 'Vai trò' }, { t: 'Đơn vị / Chợ' }, { t: 'Trạng thái' }, { t: '' }],
@@ -659,10 +665,10 @@
           <td class="small">${U.esc(a.accountType)}</td>
           <td>${accRoleBadges(a.roleIds)}</td>
           <td class="small">${U.esc(a.organization || '')}<div class="muted">${accScopeLabel(a.marketScopes)}</div></td>
-          <td>${a.status === 'active' ? '<span class="tag ok">Hoạt động</span>' : '<span class="tag danger">Tạm khoá</span>'}</td>
+          <td>${accStatusTag(a)}</td>
           <td class="nowrap">
             ${canEdit ? `<button class="btn sm" data-act="acc-edit" data-id="${a.id}">Sửa</button>` : ''}
-            ${canToggle ? `<button class="btn sm ${a.status === 'active' ? 'danger' : ''}" data-act="acc-toggle" data-id="${a.id}">${a.status === 'active' ? 'Khoá' : 'Mở khoá'}</button>` : ''}
+            ${canToggle ? `<button class="btn sm ${A.ACCOUNTS.authStatus(a) === 'ACTIVE' ? 'danger' : ''}" data-act="acc-toggle" data-id="${a.id}">${A.ACCOUNTS.authStatus(a) === 'ACTIVE' ? 'Khoá' : 'Mở khoá'}</button>` : ''}
           </td></tr>`), { empty: 'Không tìm thấy tài khoản phù hợp' })}${pg.html}</div></div>`;
   };
   A.IN['acc-search'] = el => { ui.acc.search = el.value; ui.page.acc = 0; A.render(); };
@@ -682,7 +688,7 @@
     // vai trò trước (A.CH['af-role'] tự hiện đúng dạng Phạm vi), rồi mới tick chợ. "Loại tài khoản"
     // mặc định ACCOUNT_TYPES[3] = tên role 'collector' (thứ tự cố định theo defaultRoles(),
     // js/permissions.js) — vai trò vận hành phổ biến nhất, tránh mặc định thiên về quyền cao.
-    ui.accForm = { id: null, code: '', fullName: '', phone: '', accountType: A.ACCOUNTS.ACCOUNT_TYPES[3], roleIds: [], organization: '', marketScopes: [], status: 'active' };
+    ui.accForm = { id: null, code: '', fullName: '', phone: '', accountType: A.ACCOUNTS.ACCOUNT_TYPES[3], roleIds: [], organization: '', marketScopes: [], status: 'ACTIVE' };
     renderAccForm();
   };
   A.ACT['acc-edit'] = el => {
@@ -757,11 +763,11 @@
     if (!A.canDo('tai-khoan.khoa-mo-khoa')) return;
     const a = A.ACCOUNTS.get(el.dataset.id);
     if (!a) return;
-    const was = a.status;
-    A.ACCOUNTS.setStatus(a.id, was === 'active' ? 'disabled' : 'active');
-    U.log((was === 'active' ? 'Tạm khoá' : 'Mở khoá') + ' tài khoản "' + a.fullName + '" (' + a.code + ')');
+    const wasActive = A.ACCOUNTS.authStatus(a) === 'ACTIVE';
+    A.ACCOUNTS.setStatus(a.id, wasActive ? 'LOCKED' : 'ACTIVE');
+    U.log((wasActive ? 'Tạm khoá' : 'Mở khoá') + ' tài khoản "' + a.fullName + '" (' + a.code + ')');
     A.render();
-    U.toast(was === 'active' ? 'Đã tạm khoá tài khoản ' + a.code : 'Đã mở khoá tài khoản ' + a.code);
+    U.toast(wasActive ? 'Đã tạm khoá tài khoản ' + a.code : 'Đã mở khoá tài khoản ' + a.code);
   };
 
   // ---------- Cài đặt ----------

@@ -35,7 +35,7 @@
         <button class="btn menu-toggle" type="button" data-act="menu" aria-label="Mở menu"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
         <h1 id="page-title">Tổng quan</h1>
         <div class="row" style="align-items:center">
-          <span class="label-sm">Tài khoản demo</span>
+          <span class="label-sm" id="account-mode-label">Tài khoản demo</span>
           <div class="row" id="role-seg" style="gap:10px"></div>
           <span class="small muted" id="active-role-label"></span>
         </div>
@@ -47,6 +47,7 @@
       <main class="content" id="view"></main>
     </div>
   </div>
+  <div id="auth-root"></div>
   <div id="modal-root"></div>
   <div class="toasts" id="toasts"></div>
   <script src="data.js"></script>
@@ -66,5 +67,7 @@
   <script src="js/v-taisan.js"></script>
   <script src="js/v-baocao-mau.js"></script>
   <script src="js/mini.js"></script>
+  <script src="js/workflow.js"></script>
+  <script src="js/auth.js"></script>
 </body>
 </html>

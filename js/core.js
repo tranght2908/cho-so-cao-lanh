@@ -684,10 +684,18 @@ window.APP = (function () {
     }).join('');
     // RBAC_MARKET_SCOPE_MIGRATION mục 11-14 + DEMO_ACCOUNT_BAR_COMPACT_GROUPING: thanh "Tài khoản
     // demo" lọc theo ui.market (selectedMarket) và nhóm theo scope/role — xem demoAccountBarHtml().
-    $('#role-seg').innerHTML = demoAccountBarHtml();
+    const demoMode = A.isDemoMode && A.isDemoMode();
+    const accountModeLabel = $('#account-mode-label');
+    if (demoMode) {
+      if (accountModeLabel) accountModeLabel.style.display = '';
+      $('#role-seg').innerHTML = demoAccountBarHtml();
+    } else {
+      if (accountModeLabel) accountModeLabel.style.display = 'none';
+      $('#role-seg').innerHTML = A.userHeaderHtml ? A.userHeaderHtml(A.currentAccount()) : '';
+    }
     const activeRole = A.PERM.role(ui.role);
     const roleLabelEl = $('#active-role-label');
-    if (roleLabelEl) roleLabelEl.textContent = activeRole ? ('Vai trò: ' + activeRole.name) : '';
+    if (roleLabelEl) roleLabelEl.textContent = demoMode && activeRole ? ('Vai trò: ' + activeRole.name) : '';
     // MARKET_SELECTOR_ALL_UNIFICATION: market selector dropdown — CÓ lựa chọn "Tất cả" (value='ALL')
     // khi account đang dùng có scopeType GLOBAL (A.ACCOUNTS.scopeType() — system_admin/ward_leader).
     // Với account MARKET, dropdown chỉ liệt kê ĐÚNG (các) chợ trong marketScopes của account đó,
@@ -815,6 +823,7 @@ window.APP = (function () {
       if (!acc || acc.status !== 'active') return;
       if (A.resetMiniRequestState) A.resetMiniRequestState();
       ui.currentDemoAccountId = acc.id;
+      ui.sessionAccountId = acc.id;
       A.syncAccountContext();
       A.saveUi();
       const role = A.PERM.role(ui.role);
@@ -875,7 +884,7 @@ window.APP = (function () {
     A.route();
     let seen = false;
     try { seen = !!localStorage.getItem(GUIDEKEY); localStorage.setItem(GUIDEKEY, '1'); } catch (e) { /* bỏ qua */ }
-    if (!seen) A.guide();
+    if (!seen && (!A.isLoggedIn || A.isLoggedIn())) A.guide();
   }
   A.resetAll = function () {
     try { localStorage.removeItem(KEY); } catch (e) { /* bỏ qua */ }

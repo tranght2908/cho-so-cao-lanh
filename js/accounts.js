@@ -229,6 +229,18 @@
     ACCOUNT_TYPES: ACCOUNT_TYPES,
     list: () => ACCOUNTS,
     get: id => ACCOUNTS.find(a => a.id === id),
+    normalizePhone: phone => String(phone || '').replace(/\D/g, ''),
+    byPhone: phone => {
+      const normalized = String(phone || '').replace(/\D/g, '');
+      return normalized ? ACCOUNTS.find(a => String(a.phone || '').replace(/\D/g, '') === normalized) || null : null;
+    },
+    authStatus: account => {
+      const status = account && account.status;
+      if (status === 'PENDING_ACTIVATION') return 'PENDING_ACTIVATION';
+      if (status === 'LOCKED' || status === 'locked' || status === 'disabled') return 'LOCKED';
+      return 'ACTIVE';
+    },
+    isActive: account => !!account && !['LOCKED', 'locked', 'disabled', 'PENDING_ACTIVATION'].includes(account.status),
     // V1 chỉ dùng roleIds[0] làm role hiệu lực (mỗi account seed đúng 1 role). Cấu trúc roleIds[]
     // vẫn là mảng để sau này hỗ trợ nhiều role/account mà không phải đổi shape dữ liệu — khi đó
     // chỉ cần sửa đúng hàm này (thêm UI chọn role trong account), mọi nơi khác đang gọi hàm này

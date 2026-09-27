@@ -1307,7 +1307,7 @@
         // Bộ lọc dùng chung Sơ đồ/Bảng (js/v-cautruc.js A.mbMatchesFilter) — điểm không khớp mờ đi,
         // cùng cách xử lý đã có cho điểm cấu trúc "Đã tách" (mục 7 yêu cầu redesign).
         const dim = structural || !A.mbMatchesFilter(st);
-        return `<button class="cell s-${st.status} ${sec.type === 'kiot' ? 'kiot' : ''} ${dim ? 'dim' : ''}" data-act="stall" data-id="${st.id}" title="${mbPointTitle(st, t, structural)}">${st.code}</button>`;
+        return `<button class="cell s-${st.status} ${sec.type === 'kiot' ? 'kiot' : ''} ${dim ? 'dim' : ''}" data-act="stall" data-id="${st.id}" title="${mbPointTitle(st, t, structural)}">${st.code}${A.WORKFLOW && A.WORKFLOW.isRecentPoint(st.id) ? '<small class="workflow-grid-new">Mới</small>' : ''}</button>`;
       }).join('')}</div></div>`;
     }).join('<div class="aisle"></div>');
     // PHAN_CONG_NHAN_VIEN_THU_PHI (mục 6 yêu cầu): thêm ĐÚNG 1 dòng nhỏ, không làm nặng giao diện —
@@ -1340,7 +1340,7 @@
         // chung Sơ đồ/Bảng (A.mbMatchesFilter) cộng thêm — mờ nếu KHÔNG khớp legend/search tại khu
         // NÀY hoặc KHÔNG khớp bộ lọc chung ở thanh trên (mục 7 yêu cầu redesign).
         const dim = st.structuralStatus === 'SPLIT' || !stallMatch(st) || !A.mbMatchesFilter(st);
-        return `<button class="cell s-${st.status} ${sec.type === 'kiot' ? 'kiot' : ''} ${dim ? 'dim' : ''} ${ui.sel === st.id ? 'sel' : ''}" data-act="stall" data-id="${st.id}" title="${mbPointTitle(st, t, st.structuralStatus === 'SPLIT')}">${st.code}</button>`;
+        return `<button class="cell s-${st.status} ${sec.type === 'kiot' ? 'kiot' : ''} ${dim ? 'dim' : ''} ${ui.sel === st.id ? 'sel' : ''}" data-act="stall" data-id="${st.id}" title="${mbPointTitle(st, t, st.structuralStatus === 'SPLIT')}">${st.code}${A.WORKFLOW && A.WORKFLOW.isRecentPoint(st.id) ? '<small class="workflow-grid-new">Mới</small>' : ''}</button>`;
       }).join('')}</div></div>`;
     }).join('<div class="aisle"></div>');
     // PHAN_CONG_NHAN_VIEN_THU_PHI (mục 6 yêu cầu): nối thêm vào ĐÚNG dòng meta nhỏ sẵn có, không tạo

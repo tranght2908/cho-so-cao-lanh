@@ -45,11 +45,10 @@
   }
   function dkRowHtmlCL(s, pos) {
     const t = s.traderId ? A.idx.trader.get(s.traderId) : null;
-    const seller = dkSeller(s);
     const path = A.mbLayoutPathForPoint('CL', s);
     const collectorLabel = dkCollectorLabel(s);
     return `<tr class="click" data-act="dk-open" data-id="${s.id}">
-      <td class="mb-col-code"><b>${s.code}</b></td>
+      <td class="mb-col-code"><b>${s.code}</b>${A.WORKFLOW && A.WORKFLOW.isRecentPoint(s.id) ? '<div><span class="workflow-new">Mới cập nhật</span></div>' : ''}</td>
       ${pos.zone ? `<td class="mb-col-zone">${U.esc(path.khu)}</td>` : ''}
       ${pos.floor ? `<td class="mb-col-floor">${U.esc(path.tang)}</td>` : ''}
       ${pos.row ? `<td class="mb-col-row" title="${U.esc(s.sectionName)}">${U.esc(path.day)}</td>` : ''}
@@ -57,7 +56,6 @@
       <td class="mb-col-area-type">${U.esc(U.areaTypeLabel(s.areaType) || 'Chưa có thông tin')}</td>
       <td class="mb-col-category" title="${U.esc(s.cat)}">${U.esc(s.cat)}</td>
       <td class="mb-col-trader" title="${t ? U.esc(t.name) : ''}">${t ? U.esc(t.name) : '<span class="muted">–</span>'}</td>
-      <td class="mb-col-seller" title="${seller ? U.esc(seller.name) : ''}">${seller ? U.esc(seller.name) : '<span class="muted">–</span>'}</td>
       <td class="small mb-col-collector">${U.esc(collectorLabel)}</td>
       <td class="mb-col-status">${U.statusTag(s.status)}</td>
       <td class="nowrap mb-col-actions"><button class="btn sm" data-act="dk-open" data-id="${s.id}">Xem</button></td>
@@ -78,7 +76,7 @@
       <button class="btn" data-act="dkcl-clear" ${dkclHasFilter() ? '' : 'disabled'}>↺ Xóa bộ lọc</button>
       <span class="spacer"></span>
       <button class="btn" data-act="dkcl-csv">⬇ Xuất Excel</button></div>
-      <div class="card-b">${U.table([{ t: '<span class="mb-col-code">Mã điểm</span>' }, pos.zone && { t: '<span class="mb-col-zone">Khu</span>' }, pos.floor && { t: '<span class="mb-col-floor">Tầng</span>' }, pos.row && { t: '<span class="mb-col-row">Dãy</span>' }, { t: '<span class="mb-col-area">Diện tích (m²)</span>', num: true }, { t: '<span class="mb-col-area-type">Loại diện tích</span>' }, { t: '<span class="mb-col-category">Ngành hàng</span>' }, { t: '<span class="mb-col-trader">Tiểu thương</span>' }, { t: '<span class="mb-col-seller">Người bán thực tế</span>' }, { t: '<span class="mb-col-collector">NV thu phí</span>' }, { t: '<span class="mb-col-status">Trạng thái</span>' }, { t: '<span class="mb-col-actions">Thao tác</span>' }].filter(Boolean),
+      <div class="card-b">${U.table([{ t: '<span class="mb-col-code">Mã điểm</span>' }, pos.zone && { t: '<span class="mb-col-zone">Khu</span>' }, pos.floor && { t: '<span class="mb-col-floor">Tầng</span>' }, pos.row && { t: '<span class="mb-col-row">Dãy</span>' }, { t: '<span class="mb-col-area">Diện tích (m²)</span>', num: true }, { t: '<span class="mb-col-area-type">Loại diện tích</span>' }, { t: '<span class="mb-col-category">Ngành hàng</span>' }, { t: '<span class="mb-col-trader">Tiểu thương</span>' }, { t: '<span class="mb-col-collector">NV thu phí</span>' }, { t: '<span class="mb-col-status">Trạng thái</span>' }, { t: '<span class="mb-col-actions">Thao tác</span>' }].filter(Boolean),
         rows.slice(pg.start, pg.end).map(s => dkRowHtmlCL(s, pos)), { empty: 'Không có điểm kinh doanh phù hợp bộ lọc.' })}${pg.html}</div></div>`;
   }
   A.dkTableHtml = mid => mid === 'CL' ? dkViewCL() : null;
@@ -161,7 +159,7 @@
   }
   function dkPopupShell(st, m, active, content) {
     const canEdit=A.canDo('cau-truc.edit',st.market);
-    return `<div class="drawer-h dk-popup-head"><div><div class="row" style="gap:10px"><h3>${st.code}</h3>${U.statusTag(st.status)}</div><div class="small muted dk-popup-meta">${U.esc(dkPointTypeLabel(st))} · ${U.esc((m.floors.find(fl=>fl.id===st.floor)||{}).name||'')} · ${U.esc(m.name)}</div></div><span class="spacer"></span>${canEdit?`<button class="btn sm" data-act="dkcl-edit-open" data-id="${st.id}">Chỉnh sửa thông tin</button>`:''}<button class="x" data-act="close" aria-label="Đóng">×</button></div>${dkDetailTabsHtml(active)}<div class="drawer-b dk-detail-body dk-tab-content">${content}</div><div class="drawer-f dk-popup-footer"><button class="btn" data-act="close">Đóng</button></div>`;
+    return `<div class="drawer-h dk-popup-head"><div><div class="row" style="gap:10px"><h3>${st.code}</h3>${U.statusTag(st.status)}${A.WORKFLOW && A.WORKFLOW.isRecentPoint(st.id) ? '<span class="workflow-new">Mới cập nhật</span>' : ''}</div><div class="small muted dk-popup-meta">${U.esc(dkPointTypeLabel(st))} · ${U.esc((m.floors.find(fl=>fl.id===st.floor)||{}).name||'')} · ${U.esc(m.name)}</div></div><span class="spacer"></span>${canEdit?`<button class="btn sm" data-act="dkcl-edit-open" data-id="${st.id}">Chỉnh sửa thông tin</button>`:''}<button class="x" data-act="close" aria-label="Đóng">×</button></div>${dkDetailTabsHtml(active)}<div class="drawer-b dk-detail-body dk-tab-content">${content}</div><div class="drawer-f dk-popup-footer"><button class="btn" data-act="close">Đóng</button></div>`;
   }
   function dkDirectSellerSummaryHtml(st) {
     const a=dkDirectSellerActive(st);
@@ -173,7 +171,7 @@
     const historyHtml = `<section class="dk-detail-card dk-single-card" style="margin-top:12px"><div class="dk-detail-card-h"><span class="dk-card-icon orange">${U.icon('refresh')}</span><div><b>Lịch sử người thuê</b><div class="small muted">Derived từ Contract; mã điểm ${st.code} không thay đổi khi đổi người thuê</div></div></div>${history.length ? U.table([{t:'Hợp đồng'},{t:'Tiểu thương'},{t:'Thời hạn'},{t:'Trạng thái'}], history.map(x=>`<tr><td>${x.id}</td><td>${A.idx.trader.get(x.traderId)?U.esc(A.idx.trader.get(x.traderId).name):x.traderId}</td><td>${U.dmy(x.start)} – ${U.dmy(x.end)}</td><td>${x.status==='hieuluc'?'<span class="tag ok">Đang hiệu lực</span>':'<span class="tag">'+(x.status==='chamdut'?'Đã chấm dứt':'Đã kết thúc')+'</span>'}</td></tr>`)) : '<div class="small muted">Chưa có lịch sử hợp đồng.</div>'}</section>`;
     if(!c)return `<section class="dk-detail-card dk-single-card"><div class="dk-detail-card-h"><span class="dk-card-icon green">${U.icon('file')}</span><div><b>Chưa có hợp đồng hiện hành</b><div class="small muted">Điểm kinh doanh này hiện chưa có hợp đồng đang hiệu lực.</div></div></div></section>${historyHtml}`;
     const left=U.days(U.today(),c.end);
-    return `<section class="dk-detail-card dk-single-card"><div class="dk-detail-card-h"><span class="dk-card-icon green">${U.icon('file')}</span><div><b>Hợp đồng hiện hành</b><div class="small muted">Thông tin hợp đồng gắn với điểm kinh doanh</div></div></div><dl class="kv"><dt>Mã hợp đồng</dt><dd><b>${c.id}</b></dd><dt>Trạng thái</dt><dd>${c.status==='hieuluc'?'<span class="tag ok">Đang hiệu lực</span>':U.esc(c.status)}</dd><dt>Chủ thể hợp đồng</dt><dd>${t?`${U.esc(t.name)} · ${t.id}`:'Chưa có'}</dd><dt>Điểm kinh doanh</dt><dd>${st.code}</dd><dt>Ngày bắt đầu</dt><dd>${U.dmy(c.start)}</dd><dt>Ngày kết thúc</dt><dd>${U.dmy(c.end)}</dd><dt>Thời hạn còn lại</dt><dd>${left} ngày</dd></dl>${t&&A.canDo('so-do.xem-ho-so',st.market)?`<div class="row" style="margin-top:12px"><button class="btn sm" data-act="dkcl-open-trader" data-id="${t.id}" data-stall="${st.id}">Xem hồ sơ tiểu thương</button></div>`:''}</section>${historyHtml}`;
+    return `<section class="dk-detail-card dk-single-card"><div class="dk-detail-card-h"><span class="dk-card-icon green">${U.icon('file')}</span><div><b>Hợp đồng hiện hành</b><div class="small muted">Thông tin hợp đồng gắn với điểm kinh doanh</div></div></div><dl class="kv"><dt>Mã hợp đồng</dt><dd><b>${c.id}</b></dd><dt>Trạng thái</dt><dd>${c.status==='hieuluc'?'<span class="tag ok">Đang hiệu lực</span>':U.esc(c.status)}</dd><dt>Chủ thể hợp đồng</dt><dd>${t?`${U.esc(t.name)} · ${t.id}`:'Chưa có'}</dd><dt>Điểm kinh doanh</dt><dd>${st.code}</dd><dt>Ngày bắt đầu</dt><dd>${U.dmy(c.start)}</dd><dt>Ngày kết thúc</dt><dd>${U.dmy(c.end)}</dd><dt>Thời hạn còn lại</dt><dd>${left} ngày</dd></dl><div class="row" style="margin-top:12px">${t&&A.canDo('so-do.xem-ho-so',st.market)?`<button class="btn sm" data-act="dkcl-open-trader" data-id="${t.id}" data-stall="${st.id}">Xem hồ sơ tiểu thương</button>`:''}<button class="btn sm" data-act="ct-view" data-id="${c.id}">Xem hợp đồng</button></div></section>${historyHtml}`;
   }
   function dkDetailHtmlCL(st) {
     if (dkDirectSellerPointId === st.id) return dkDirectSellerFormHtml(st);
