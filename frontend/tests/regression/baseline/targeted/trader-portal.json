@@ -1,0 +1,241 @@
+{
+ "meta": {
+  "suite": "trader-portal",
+  "sourceCommit": "b9f5c74",
+  "recordedAt": "2026-09-27T22:16:07.745Z",
+  "reason": "Pre-migration action-level trader portal and mock OTP coverage for Phase 15.21; source is the untouched approved checkpoint.",
+  "steps": 14,
+  "totalSaves": 1
+ },
+ "steps": [
+  {
+   "name": "portal login render",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "dcb2474d4497",
+   "ret": "94e6705b4fb3"
+  },
+  {
+   "name": "portal phone lookup",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "dcb2474d4497",
+   "ret": "c11c3a6319a0"
+  },
+  {
+   "name": "portal otp send",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "dcb2474d4497"
+  },
+  {
+   "name": "portal otp verify",
+   "err": null,
+   "saves": 1,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "dcb2474d4497"
+  },
+  {
+   "name": "portal trader home",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "dcb2474d4497",
+   "ret": "94e6705b4fb3"
+  },
+  {
+   "name": "portal tab bills",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "dcb2474d4497"
+  },
+  {
+   "name": "portal tab contract",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "dcb2474d4497"
+  },
+  {
+   "name": "portal tab register",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "dcb2474d4497"
+  },
+  {
+   "name": "portal tab notice",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "dcb2474d4497"
+  },
+  {
+   "name": "portal tab report",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "dcb2474d4497"
+  },
+  {
+   "name": "portal tab home",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "dcb2474d4497"
+  },
+  {
+   "name": "portal logout",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "choso-caolanh-ui"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "dcb2474d4497"
+  },
+  {
+   "name": "portal collector render",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "2a981ddc8f3b",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "choso-caolanh-ui"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "0cd6cf6a7b2b",
+   "ret": "94e6705b4fb3"
+  },
+  {
+   "name": "portal collector home",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "2a981ddc8f3b",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state",
+    "choso-caolanh-ui"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "0cd6cf6a7b2b"
+  }
+ ],
+ "totalSaves": 1
+}

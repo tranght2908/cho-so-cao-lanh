@@ -8,8 +8,39 @@
  "totalSaves": 11,
  "registry": {
   "views": 21,
-  "actions": 393,
-  "inputHandlers": 62,
-  "changeHandlers": 149
- }
+  "actions": 307,
+  "inputHandlers": 29,
+  "changeHandlers": 116
+ },
+ "approvedChanges": [
+  {
+   "batch": "15.17",
+   "decision": "Q1 DROP (point-change requests, staff + Mini App) and Q2 DROP (legacy trader wizard, vehicle draft editor, V1 contract create + vehicle enhancement)",
+   "files": [
+    "shape.json",
+    "../invariants.js"
+   ],
+   "removed": {
+    "actions": "307 remain (-86: Q1 73, Q2 13)",
+    "inputHandlers": "-33 (Q1 23, Q2 10)",
+    "changeHandlers": "-33 (Q1 21, Q2 12)",
+    "appKeys": [
+     "pointReq",
+     "resetMiniRequestState"
+    ]
+   },
+   "unchanged": "229-step trace.json untouched (replay still equal); views, U keys, ui shape, routes, storage identical"
+  },
+  {
+   "batch": "15.21",
+   "decision": "Q3 DROP (fixed-stall application flow)",
+   "files": [
+    "../../src/features/trader-portal/page.js"
+   ],
+   "removed": {
+    "behavior": "Mini App no longer renders a monthly/quarterly fixed-stall choice and no longer creates fixedStallApplications records."
+   },
+   "unchanged": "The existing fixedStallApplications collection is still initialized for persisted mock-data compatibility; registry counts, routes, storage and the 229-step trace remain unchanged."
+  }
+ ]
 }

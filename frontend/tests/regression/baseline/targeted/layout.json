@@ -1,0 +1,1689 @@
+{
+ "meta": {
+  "suite": "layout",
+  "sourceCommit": "b9f5c74",
+  "recordedAt": "2026-09-27T21:46:06.517Z",
+  "reason": "Pre-migration coverage for market layout (navigation, filters, block/floor/zone CRUD, planned points, collector assignment, reset), business points (diagram drawer, point drawer, edit, direct seller, status change, TTD generic table) and trader UI (filters, drawer, edit, documents, vehicles) before batches 15.14-15.16.",
+  "steps": 99,
+  "totalSaves": 8
+ },
+ "steps": [
+  {
+   "name": "mat-bang CL overview",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "c4c838c95db7",
+   "ret": "10de64e4f262"
+  },
+  {
+   "name": "layout ids",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "c4c838c95db7",
+   "ret": "c35866bac597"
+  },
+  {
+   "name": "mb toggle tree",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "08a37c9b8220"
+  },
+  {
+   "name": "mb sel block",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "465838a12570"
+  },
+  {
+   "name": "mb sel floor",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "ba1b853abb67"
+  },
+  {
+   "name": "mb sel zone",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "2a16f7514fbb"
+  },
+  {
+   "name": "mb toggle node",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "2a16f7514fbb"
+  },
+  {
+   "name": "mb legend filter",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "a5d2fc57c0dd"
+  },
+  {
+   "name": "mb plan search",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "072ef06ccfb4"
+  },
+  {
+   "name": "mb plan search clear",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "a5d2fc57c0dd"
+  },
+  {
+   "name": "mb view table",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "30f70ac7da4c"
+  },
+  {
+   "name": "mb filter status",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "af44402611ff"
+  },
+  {
+   "name": "mb filter search",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "1cc610a3d341"
+  },
+  {
+   "name": "mb filter cat",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "59a34347919c"
+  },
+  {
+   "name": "mb filter area type",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "a8b5e9e846e3"
+  },
+  {
+   "name": "mb filter clear",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "30f70ac7da4c"
+  },
+  {
+   "name": "mb dkcl csv",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã xuất tệp diem-kinh-doanh-cho-cao-lanh.csv (mở được bằng Excel)"
+   ],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "30f70ac7da4c"
+  },
+  {
+   "name": "mb dkcl clear",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "30f70ac7da4c"
+  },
+  {
+   "name": "mb view grid",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "a5d2fc57c0dd"
+  },
+  {
+   "name": "mb sel overview",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "08a37c9b8220"
+  },
+  {
+   "name": "qh add block",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "b76b2f501cbe",
+   "view": "08a37c9b8220"
+  },
+  {
+   "name": "qh add block save",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã thêm khối/nhà chợ \"Khối thử nghiệm\""
+   ],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "db5b3c8e1d64"
+  },
+  {
+   "name": "qh edit block",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "b842d7a4d820",
+   "view": "db5b3c8e1d64"
+  },
+  {
+   "name": "qh edit block save",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã cập nhật"
+   ],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "97b979a8e5ca"
+  },
+  {
+   "name": "qh add floor",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "6ab776b2d062",
+   "view": "97b979a8e5ca"
+  },
+  {
+   "name": "qh add floor save",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã thêm tầng \"Tầng thử\""
+   ],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "40518cceb12d"
+  },
+  {
+   "name": "qh add zone",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "d3821ba0cbf3",
+   "view": "88453e9a90c4"
+  },
+  {
+   "name": "qh add zone save",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã thêm khu ZT1. Vui lòng khai báo thêm thông tin chi tiết."
+   ],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "06c4a741d726",
+   "view": "df6d1fd19fd0"
+  },
+  {
+   "name": "qh zone edit open",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "06c4a741d726",
+   "view": "d8080ba327e1"
+  },
+  {
+   "name": "qh zone field name",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "ff58865a8e91",
+   "view": "1f763fda56c5"
+  },
+  {
+   "name": "qh zone field area",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "b999b44de45a",
+   "view": "1f763fda56c5"
+  },
+  {
+   "name": "qh pt add",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "5efa1e95f6f3",
+   "view": "1f763fda56c5"
+  },
+  {
+   "name": "qh pt field",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "c563464ab668",
+   "view": "e344cb00b280"
+  },
+  {
+   "name": "qh save draft",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã lưu nháp khu ZT1"
+   ],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "c563464ab668",
+   "view": "e344cb00b280"
+  },
+  {
+   "name": "qh save final",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã lưu khu ZT1: 5 điểm dự kiến, 0 m²"
+   ],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "775534583e31",
+   "view": "bcf58c6a470b"
+  },
+  {
+   "name": "layout stored after zone edits",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "775534583e31",
+   "view": "bcf58c6a470b",
+   "ret": "6a0362d67a72"
+  },
+  {
+   "name": "qh pt del",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã xóa loại diện tích"
+   ],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "41baedb6fc60",
+   "view": "38e85dabb0a6"
+  },
+  {
+   "name": "qh del floor blocked",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Tầng \"Tầng thử\" đang có 1 khu, cần xóa hết các khu trước."
+   ],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "41baedb6fc60",
+   "view": "38e85dabb0a6"
+  },
+  {
+   "name": "qh del zone",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "8093b5214b51",
+   "view": "38e85dabb0a6"
+  },
+  {
+   "name": "qh del zone ok",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã xóa khu"
+   ],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "40518cceb12d"
+  },
+  {
+   "name": "qh del floor",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "d60b4838bde4",
+   "view": "40518cceb12d"
+  },
+  {
+   "name": "qh del floor ok",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã xóa tầng"
+   ],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "97b979a8e5ca"
+  },
+  {
+   "name": "qh del block",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "a990b200c1c5",
+   "view": "97b979a8e5ca"
+  },
+  {
+   "name": "qh del block ok",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã xóa khối/nhà chợ"
+   ],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "08a37c9b8220"
+  },
+  {
+   "name": "layout stored after deletes",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "08a37c9b8220",
+   "ret": "63456b061dfa"
+  },
+  {
+   "name": "qh zone collector (existing zone)",
+   "err": null,
+   "saves": 1,
+   "toasts": [
+    "Đã phân công Phạm Văn Lợi phụ trách thu phí dãy Ki-ốt mặt tiền tầng 1"
+   ],
+   "db": "036cac6f2293",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "460f511ab5a6",
+   "view": "dee6a3d204d7",
+   "ret": "646e07da714a"
+  },
+  {
+   "name": "qh reset",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "036cac6f2293",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "5d04e3999e8d",
+   "view": "dee6a3d204d7"
+  },
+  {
+   "name": "qh reset ok",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã khôi phục cấu trúc mặc định cho Chợ Cao Lãnh"
+   ],
+   "db": "036cac6f2293",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "c6f37280aeaa"
+  },
+  {
+   "name": "layout stored",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "036cac6f2293",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "c6f37280aeaa",
+   "ret": "b23d60ee4e02"
+  },
+  {
+   "name": "stall click (diagram drawer)",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "036cac6f2293",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "99a847cf42b9",
+   "view": "c6f37280aeaa"
+  },
+  {
+   "name": "mb open trader",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "a14e6bff5499",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "ab9d3fa68ed2",
+   "view": "c6f37280aeaa"
+  },
+  {
+   "name": "drawer back",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "a14e6bff5499",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "99a847cf42b9",
+   "view": "c6f37280aeaa"
+  },
+  {
+   "name": "mb open diemkd",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "a14e6bff5499",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "c84b9bcaa0fc",
+   "view": "c6f37280aeaa"
+  },
+  {
+   "name": "dk open",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "a14e6bff5499",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "99a847cf42b9",
+   "view": "c6f37280aeaa"
+  },
+  {
+   "name": "dk detail tab info",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "a14e6bff5499",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "99a847cf42b9",
+   "view": "c6f37280aeaa"
+  },
+  {
+   "name": "dk detail tab contract",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "a14e6bff5499",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "c3e89e5b3c1e",
+   "view": "c6f37280aeaa"
+  },
+  {
+   "name": "dk detail tab history",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "a14e6bff5499",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "1117c144c0c5",
+   "view": "c6f37280aeaa"
+  },
+  {
+   "name": "dk detail tab seller",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "a14e6bff5499",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "99a847cf42b9",
+   "view": "c6f37280aeaa"
+  },
+  {
+   "name": "dk detail seller",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "a14e6bff5499",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "4ee6500550be",
+   "view": "c6f37280aeaa"
+  },
+  {
+   "name": "dkcl open trader",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "a14e6bff5499",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "ab9d3fa68ed2",
+   "view": "c6f37280aeaa"
+  },
+  {
+   "name": "dkcl edit open",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "a14e6bff5499",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "06ed5bc56007",
+   "view": "c6f37280aeaa"
+  },
+  {
+   "name": "dkcl edit save",
+   "err": null,
+   "saves": 1,
+   "toasts": [
+    "Đã cập nhật thông tin KA-A01"
+   ],
+   "db": "a990f90a2ab1",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "4f8a71b6ed72",
+   "view": "c6f37280aeaa",
+   "ret": "368caf21c8a1"
+  },
+  {
+   "name": "dkcl edit cancel",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "a990f90a2ab1",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "4f8a71b6ed72",
+   "view": "c6f37280aeaa"
+  },
+  {
+   "name": "dkds open",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "a990f90a2ab1",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "723b8445085e",
+   "view": "c6f37280aeaa"
+  },
+  {
+   "name": "dkds save",
+   "err": null,
+   "saves": 1,
+   "toasts": [
+    "Đã lưu đăng ký, chờ xác minh."
+   ],
+   "db": "eab0b7603066",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "f8dbcb0cb585",
+   "view": "c6f37280aeaa",
+   "ret": "3028f51407d8"
+  },
+  {
+   "name": "dkds verify open",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "eab0b7603066",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "58fa1e2b7b00",
+   "view": "c6f37280aeaa"
+  },
+  {
+   "name": "dkds verify save",
+   "err": null,
+   "saves": 1,
+   "toasts": [
+    "Đã xác minh người trực tiếp kinh doanh."
+   ],
+   "db": "bf561d87317e",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "fa8863945f65",
+   "view": "c6f37280aeaa"
+  },
+  {
+   "name": "stall status open",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "bf561d87317e",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "7476433866d4",
+   "view": "c6f37280aeaa"
+  },
+  {
+   "name": "stall status save",
+   "err": null,
+   "saves": 1,
+   "toasts": [
+    "Đã cập nhật trạng thái KA-A13"
+   ],
+   "db": "4df2f11e7ccc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "d42f9410ca3b",
+   "ret": "1e811c3980ae"
+  },
+  {
+   "name": "stall status denied (collector)",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4df2f11e7ccc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "d42f9410ca3b"
+  },
+  {
+   "name": "dkcl edit denied (collector)",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4df2f11e7ccc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "d42f9410ca3b"
+  },
+  {
+   "name": "mat-bang TTD",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4df2f11e7ccc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "76689eebf670",
+   "ret": "0a16b6402aa2"
+  },
+  {
+   "name": "stall click TTD (stallPanel)",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4df2f11e7ccc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "83e93f66ba7e",
+   "view": "76689eebf670"
+  },
+  {
+   "name": "dk open TTD (modal)",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4df2f11e7ccc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "77932d831fd2",
+   "view": "76689eebf670"
+  },
+  {
+   "name": "diem-kd TTD generic",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4df2f11e7ccc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "77932d831fd2",
+   "view": "8d9af81297fb",
+   "ret": "9e35ec91a7df"
+  },
+  {
+   "name": "dk section filter",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4df2f11e7ccc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "77932d831fd2",
+   "view": "8d9af81297fb"
+  },
+  {
+   "name": "dk status filter",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4df2f11e7ccc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "77932d831fd2",
+   "view": "9a3a25276471"
+  },
+  {
+   "name": "dk search",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4df2f11e7ccc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "77932d831fd2",
+   "view": "4c8b7d78866f"
+  },
+  {
+   "name": "dk csv",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã xuất tệp diem-kinh-doanh.csv (mở được bằng Excel)"
+   ],
+   "db": "4df2f11e7ccc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "77932d831fd2",
+   "view": "4c8b7d78866f"
+  },
+  {
+   "name": "ttcl search",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4df2f11e7ccc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "77932d831fd2",
+   "view": "623167e64d75"
+  },
+  {
+   "name": "ttcl section",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4df2f11e7ccc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "77932d831fd2",
+   "view": "623167e64d75"
+  },
+  {
+   "name": "ttcl floor",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4df2f11e7ccc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "77932d831fd2",
+   "view": "623167e64d75"
+  },
+  {
+   "name": "ttcl cat",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4df2f11e7ccc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "77932d831fd2",
+   "view": "f4854f6fb1a5"
+  },
+  {
+   "name": "ttcl clear",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4df2f11e7ccc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "77932d831fd2",
+   "view": "d1f8b359b295"
+  },
+  {
+   "name": "trader drawer",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4df2f11e7ccc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "b232e30e80c9",
+   "view": "d1f8b359b295"
+  },
+  {
+   "name": "tt doc view",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Không tìm thấy tệp hồ sơ."
+   ],
+   "db": "4df2f11e7ccc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "b232e30e80c9",
+   "view": "d1f8b359b295"
+  },
+  {
+   "name": "tt edit open",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4df2f11e7ccc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "174e87b26087",
+   "view": "d1f8b359b295"
+  },
+  {
+   "name": "tt doc replace",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "4df2f11e7ccc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "6377593801f0",
+   "view": "d1f8b359b295"
+  },
+  {
+   "name": "tt edit save",
+   "err": null,
+   "saves": 1,
+   "toasts": [
+    "Đã cập nhật hồ sơ TT0001"
+   ],
+   "db": "b55514bf2653",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "0d10ffeb29af",
+   "view": "d1f8b359b295",
+   "ret": "3962f057510f"
+  },
+  {
+   "name": "tt edit cancel",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "b55514bf2653",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "0d10ffeb29af",
+   "view": "d1f8b359b295"
+  },
+  {
+   "name": "tt open congno",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "b55514bf2653",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "0d10ffeb29af",
+   "view": "d817776b5a4b"
+  },
+  {
+   "name": "vehicle add",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "b55514bf2653",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "2c0cd44d231f",
+   "view": "d1f8b359b295"
+  },
+  {
+   "name": "vehicle save",
+   "err": null,
+   "saves": 1,
+   "toasts": [
+    "Đã thêm phương tiện."
+   ],
+   "db": "a1adda619d01",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "65f9314d6683",
+   "view": "d1f8b359b295",
+   "ret": "356a192b7913"
+  },
+  {
+   "name": "vehicle edit",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "a1adda619d01",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "b9e5fc09fb9e",
+   "view": "d1f8b359b295"
+  },
+  {
+   "name": "vehicle deactivate",
+   "err": null,
+   "saves": 1,
+   "toasts": [
+    "Đã ngừng sử dụng phương tiện; lịch sử vẫn được giữ."
+   ],
+   "db": "842ffeb24747",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "26723c4667bc",
+   "view": "d1f8b359b295"
+  },
+  {
+   "name": "trader denied edit (collector)",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "842ffeb24747",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "e057522f560f",
+   "view": "d1f8b359b295"
+  },
+  {
+   "name": "tt search TTD",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "842ffeb24747",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "e057522f560f",
+   "view": "ded1cdbaeadc"
+  },
+  {
+   "name": "tt app filter TTD",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "842ffeb24747",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "e057522f560f",
+   "view": "7d9d247fabda"
+  },
+  {
+   "name": "trader drawer TTD",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "842ffeb24747",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-layout",
+    "choso-caolanh-permissions",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "4c53ea680aed",
+   "view": "7d9d247fabda"
+  }
+ ],
+ "totalSaves": 8
+}

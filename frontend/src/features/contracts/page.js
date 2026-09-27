@@ -39,9 +39,6 @@
     });
   }
   function syncExpiry() { CS.list().filter(c => U.inM(c)).forEach(expiryNotifications); }
-  function vacantCandidates(market, selected) {
-    return A.db.stalls.filter(s => s.market === market && (selected ? s.id === selected : true) && s.status === 'trong' && !A.db.contracts.some(c => active(c) && c.stallId === s.id));
-  }
   function contractDetail(c) {
     const t = trader(c), s = point(c), files = c.signedCopies || [], hist = c.history || [];
     const canPrint = A.canDo('hop-dong.in', c.market), canCopy = A.canDo('hop-dong.cap-nhat-ban-ky', c.market), canRenew = A.canDo('hop-dong.gia-han', c.market), canTerminate = A.canDo('hop-dong.cham-dut', c.market), canLiquidate = A.canDo('hop-dong.thanh-ly', c.market);
@@ -62,7 +59,7 @@
   // Status filter is intentionally separate from expiry tabs: it filters the
   // actual persisted lifecycle status, while tabs remain quick monitoring views.
   const contractViewWithStatusFilter = A.VIEWS['hop-dong'];
-  A.VIEWS['hop-dong'] = function () {
+  const contractPageView = function () {
     const current = f.hdStatus || 'all';
     const select = `<select class="input contract-status-filter" data-ch="hd-status" aria-label="Lọc theo trạng thái hợp đồng"><option value="all" ${current === 'all' ? 'selected' : ''}>Tất cả trạng thái</option><option value="hieuluc" ${current === 'hieuluc' ? 'selected' : ''}>Đang hiệu lực</option><option value="expired" ${current === 'expired' ? 'selected' : ''}>Đã hết hạn</option><option value="chamdut" ${current === 'chamdut' ? 'selected' : ''}>Đã chấm dứt / Chờ thanh lý</option><option value="thanhly" ${current === 'thanhly' ? 'selected' : ''}>Đã thanh lý</option></select>`;
     const filtered = current !== 'all' || !!f.hdSearch || (ui.contractTab || 'all') !== 'all';
@@ -72,20 +69,6 @@
   A.CH['hd-status'] = el => { f.hdStatus = el.value; ui.page['hd' + (ui.contractTab || 'all')] = 0; A.render(); };
   A.ACT['hd-clear-filters'] = () => { f.hdStatus = 'all'; f.hdSearch = ''; ui.contractTab = 'all'; ui.page.hdall = 0; A.render(); };
   A.ACT['ct-view'] = el => { const c=CS.get(el.dataset.id); if(c) A.modal(A.contractDetailLayoutV2 ? A.contractDetailLayoutV2(c) : contractDetail(c), true); };
-  A.ACT['ct-new'] = el => {
-    const old = el.dataset.id ? A.idx.contract.get(el.dataset.id) : null, market = old ? old.market : ui.market, options = old ? vacantCandidates(market, old.stallId).concat([point(old)]) : vacantCandidates(market);
-    if (!options.length) return U.toast('Không có điểm kinh doanh phù hợp để cho thuê');
-    const ts = A.db.traders.filter(t => t.market === market); const d0 = old ? new Date(old.end) : new Date(U.today()); if(old) d0.setDate(d0.getDate()+1);
-    A.modal(A.mHead(old ? 'Tạo hợp đồng mới từ ' + old.id : 'Khởi tạo hợp đồng') + `<div class="modal-b"><div class="form-grid"><div class="field"><label>Mẫu hợp đồng *</label><select class="input" id="ct-template"><option>Hợp đồng thuê điểm kinh doanh</option><option>Đăng ký quầy theo năm</option></select></div><div class="field"><label>Tiểu thương *</label><select class="input" id="ct-trader">${ts.map(t=>`<option value="${t.id}" ${old&&t.id===old.traderId?'selected':''}>${t.id} · ${U.esc(t.name)}</option>`).join('')}</select></div><div class="field"><label>Điểm kinh doanh *</label><select class="input" id="ct-stall">${options.map(s=>`<option value="${s.id}" ${old&&s.id===old.stallId?'selected':''}>${s.code} · ${U.esc(s.sectionName)} · ${s.area} m²</option>`).join('')}</select></div><div class="field"><label>Ngày ký *</label><input class="input" id="ct-sign" type="date" value="${U.today()}"></div><div class="field"><label>Ngày hiệu lực *</label><input class="input" id="ct-start" type="date" value="${d0.toISOString().slice(0,10)}"></div><div class="field"><label>Ngày hết hạn *</label><input class="input" id="ct-end" type="date" value="${new Date(d0.getFullYear()+1,d0.getMonth(),d0.getDate()-1).toISOString().slice(0,10)}"></div><div class="field"><label>Đơn giá/tháng *</label><input class="input" id="ct-monthly" type="number" min="0" value="${old?old.monthly:0}"></div><div class="field"><label>Khoản phí kèm theo (tên: số tiền, mỗi dòng)</label><textarea class="input" id="ct-fees" rows="3">${old&&(old.feeSnapshot||[]).map(x=>x.name+': '+x.amount).join('\n')}</textarea></div></div><div class="note info">Mã hợp đồng được hệ thống tự sinh. Giá và phí được snapshot tại thời điểm khởi tạo; sau này không thay đổi theo cấu hình giá.</div></div><div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="ct-new-save" data-prev="${old?old.id:''}">Khởi tạo</button></div>`, true);
-  };
-  A.ACT['ct-new-save'] = el => {
-    const s= A.idx.stall.get(A.$('#ct-stall').value), t=A.idx.trader.get(A.$('#ct-trader').value), start=A.$('#ct-start').value, end=A.$('#ct-end').value, monthly=Number(A.$('#ct-monthly').value);
-    if(!s||!t||!start||!end||end<start||monthly<0||!A.canDo('hop-dong.tao',s.market)) return U.toast('Vui lòng kiểm tra lại tiểu thương, điểm, thời hạn và đơn giá.');
-    if(s.market!==ui.market||A.db.contracts.some(c=>active(c)&&c.stallId===s.id)) return U.toast('Điểm kinh doanh đã có hợp đồng hiệu lực.');
-    const feeSnapshot=(A.$('#ct-fees').value||'').split('\n').map(x=>x.trim()).filter(Boolean).map(x=>{const a=x.split(':');return {name:a[0].trim(),amount:Number((a.slice(1).join(':')||'0').replace(/[^0-9.-]/g,''))||0};});
-    const c={id:nextId(s.market),stallId:s.id,traderId:t.id,market:s.market,kind:A.$('#ct-template').value,start,end,signedDate:A.$('#ct-sign').value||start,unit:monthly,unitLabel:'đ/tháng',monthly,deposit:monthly,status:'hieuluc',scanned:false,feeSnapshot,signedCopies:[],history:[],previousContractId:el.dataset.prev||null};
-    event(c,'Khởi tạo hợp đồng','Từ mẫu '+c.kind); A.db.contracts.push(c); A.reindex(); s.status='thue';s.traderId=t.id;s.contractId=c.id;if(!t.stalls.includes(s.id))t.stalls.push(s.id); s.history=s.history||[];s.history.unshift(U.dmy(U.today())+': ký '+c.id+' với '+t.name); expiryNotifications(c);U.log('Khởi tạo hợp đồng '+c.id);A.save();A.closeModal();A.render();U.toast('Đã khởi tạo '+c.id);
-  };
   A.ACT['ct-renew'] = el => { const c=CS.get(el.dataset.id); if(c&&A.canDo('hop-dong.gia-han',c.market)){A.closeModal(); A.ACT['ct-new']({dataset:{id:c.id}});} };
   // Legacy action aliases are deliberately redirected: renewal must never mutate
   // the old record's end date or price snapshot.
@@ -107,4 +90,6 @@
   A.ACT['ct-liquidate-copy-remove']=el=>{const c=CS.get(el.dataset.id);if(!c||!c._liquidationDraft)return;c._liquidationDraft.copies.splice(+el.dataset.file,1);A.ACT['ct-liquidate']({dataset:{id:c.id}});};
   A.ACT['ct-liquidate-print']=el=>{const c=CS.get(el.dataset.id),t=trader(c),s=point(c);if(!c||!A.canDo('hop-dong.thanh-ly',c.market))return;const w=window.open('','_blank');if(!w)return U.toast('Trình duyệt đã chặn cửa sổ in.');w.document.write(`<html><head><title>Biên bản thanh lý ${c.id}</title><style>body{font:15px Arial;max-width:720px;margin:40px auto;line-height:1.7}h1{text-align:center}table{border-collapse:collapse;width:100%}td{border:1px solid #666;padding:8px}.sign{display:flex;justify-content:space-between;text-align:center;margin-top:80px}</style></head><body><h1>BIÊN BẢN THANH LÝ HỢP ĐỒNG</h1><p>Mã hợp đồng: <b>${c.id}</b></p><table><tr><td>Tiểu thương</td><td>${t?U.esc(t.name)+' · '+t.id:''}</td></tr><tr><td>Điểm kinh doanh</td><td>${s?s.code:''}</td></tr><tr><td>Thời hạn hợp đồng</td><td>${U.dmy(c.start)} – ${U.dmy(c.end)}</td></tr></table><p>Hai bên xác nhận hoàn tất quan hệ thuê theo biên bản này.</p><div class="sign"><div>ĐẠI DIỆN BQL<br><br><br>Ký, ghi rõ họ tên</div><div>TIỂU THƯƠNG<br><br><br>Ký, ghi rõ họ tên</div></div><script>window.onload=()=>window.print()<\/script></body></html>`);w.document.close();};
   A.ACT['ct-liquidate-save']=el=>{const c=CS.get(el.dataset.id),d=c&&c._liquidationDraft,debt=c?U.sum(A.features.finance.service.unpaidInvoicesForContract(c.id),U.due):0,required=['pointReturned','conditionChecked','damagesRecorded','compensationResolved','keysHandedOver','minutesPrepared','minutesSigned'];if(!c||!d||!A.canDo('hop-dong.thanh-ly',c.market)||c.status!=='chamdut'&&U.days(U.today(),c.end)>0||debt||!required.every(k=>d.checks[k])||!d.copies.length)return U.toast('Chưa thể thanh lý: cần hoàn tất công nợ, checklist NV BQL và bản thanh lý đã ký.');const note=A.$('#ct-liquidate-note'),liquidationNote=note?note.value.trim():'';CS.liquidate(c.id,{liquidatedAt:U.today(),liquidationNote,liquidationChecklist:d.checks,liquidationSignedCopies:d.copies},eventEntry('Thanh lý hợp đồng',liquidationNote||'Checklist và bản thanh lý ký đã hoàn tất'));A.closeModal();A.render();U.toast('Đã thanh lý '+c.id);};
+  // Route = contract task (create.js) + contract list with status filter.
+  A.VIEWS['hop-dong'] = function () { return A.features.contracts.contractTaskHtml() + contractPageView(); };
 })(window.APP);

@@ -6,6 +6,7 @@ const fs = require('fs'), path = require('path');
 const { checkScripts, captureShape } = require('./shape');
 const { runScenarios } = require('./scenarios');
 const { compareTraces } = require('./compare');
+const { SUITES, runSuite } = require('./targeted');
 const INV = require('./invariants');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -66,6 +67,17 @@ function main() {
   const cmp = compareTraces(baseTrace.steps, trace.steps);
   check(`behaviour replay = baseline (${baseTrace.steps.length} steps)`, !cmp.diffs && trace.totalSaves === baseTrace.totalSaves,
     (cmp.diffs ? cmp.diffs + ' differing step(s)\n' + cmp.lines.join('\n') : '') + (trace.totalSaves !== baseTrace.totalSaves ? `\ntotal saves ${baseTrace.totalSaves} -> ${trace.totalSaves}` : ''));
+
+  // 5. Targeted suites against their pre-migration baselines (baseline/targeted/<suite>.json).
+  SUITES.forEach(name => {
+    let base;
+    try { base = readJson(path.join('targeted', name + '.json')); } catch (e) { check(`targeted '${name}': baseline present`, false, 'record it from the pre-migration runtime with record-targeted.js'); return; }
+    let t;
+    try { t = runSuite(ROOT, name); } catch (e) { check(`targeted '${name}' runs`, false, e.stack); return; }
+    const c = compareTraces(base.steps, t.steps);
+    check(`targeted '${name}' = baseline (${base.steps.length} steps, source ${base.meta.sourceCommit})`, !c.diffs && t.totalSaves === base.totalSaves,
+      (c.diffs ? c.diffs + ' differing step(s)\n' + c.lines.join('\n') : '') + (t.totalSaves !== base.totalSaves ? `\ntotal saves ${base.totalSaves} -> ${t.totalSaves}` : ''));
+  });
   return report();
 }
 

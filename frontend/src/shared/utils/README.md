@@ -1,5 +1,5 @@
-# Shared utilities boundary
+# Shared utilities
 
-This future boundary will hold pure cross-feature utilities after characterization. Existing helpers remain under `APP.U` in `frontend/js/core.js` for compatibility.
+`format.js` (Phase 15.2) owns the `A.U` namespace object and the pure formatters (`pad`, `esc`, `money`, `moneyShort`, `pct`, `pctTxt`, `dmy`, `per`, `days`, `sum`, `maskPhone`, `maskId`, `nowTime`) plus the prototype clock `U.today()` (reads `A.db.today`).
 
-Do not duplicate `APP.U` helpers in Phase 2.
+Domain helpers that live on `A.U` (market, business-point, fee, finance labels) belong to their features, not here.

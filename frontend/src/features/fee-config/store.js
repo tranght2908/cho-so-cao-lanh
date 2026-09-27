@@ -11,6 +11,7 @@
 (function (A) {
   'use strict';
   const D = window.DATA;
+  const U = A.U;
   const SKEY = 'choso-caolanh-serviceconfig';
   let seq = 0;
   const newId = p => p + '_' + Date.now().toString(36) + (++seq);
@@ -142,5 +143,24 @@
       SC.log(rec, user, 'Xoá tài liệu', att ? att.name : '');
     },
     resetDefault: () => { CFG = defaultConfig(); save(); }
+  };
+
+  // Applied price helpers (from js/core.js, Phase 15.6).
+  // Đơn giá hiện hành của điểm KD lấy từ "Chính sách thu và biểu phí", không phải
+  // đơn giá snapshot của hợp đồng. NEED_CONFIRMATION: quy tắc mapping biểu phí
+  // theo khu vực/loại điểm cần được nghiệp vụ xác nhận khi có API/backend.
+  U.appliedStallPrice = st => {
+    if (!st) return null;
+    const stallType = { kiot: 'Ki-ốt', nhalong: 'Trong nhà lồng chợ', ngoai: 'Tự sản tự tiêu', phien: 'Quầy theo phiên' }[st.type];
+    if (!stallType) return null;
+    const prices = A.SERVICE_CFG ? A.SERVICE_CFG.list('stallPrices') : ((D.RATE_POLICY_SEED || {}).stallPrices || []);
+    const today = U.today ? U.today() : '';
+    return prices.find(r => r.marketId === st.market && r.stallType === stallType && r.status === 'active'
+      && (!r.effectiveFrom || r.effectiveFrom <= today) && (!r.effectiveTo || r.effectiveTo >= today)) || null;
+  };
+  U.unitLabel = st => {
+    const price = U.appliedStallPrice(st);
+    if (!price) return 'Chưa cấu hình';
+    return U.money(price.amount) + '/' + String(price.unit || '').replace(/^đ\//, '');
   };
 })(window.APP);

@@ -26,6 +26,7 @@
 (function (A) {
   'use strict';
   const D = A.D;
+  const U = A.U;
   const CKEY = 'choso-caolanh-marketcatalog';
 
   // Hạng chợ (enum V1, KHÁC với D.MARKETS[].hang — chuỗi mô tả tự do dùng hiển thị ở Mặt bằng chợ,
@@ -181,4 +182,8 @@
       PRICE_CONFIGS: MC.PRICE_CONFIGS
     });
   }
+
+  // Market master lookup helpers (from js/core.js, Phase 15.5).
+  U.market = id => D.MARKETS.find(m => m.id === id);
+  U.mShort = id => U.market(id).short;
 })(window.APP);

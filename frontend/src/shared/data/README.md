@@ -1,5 +1,7 @@
 # Shared data boundary
 
+`store.js` (Phase 15.3) is the single owner of the persisted prototype state: `A.db` (localStorage `choso-caolanh-state`), `A.idx`, `A.reindex`, `A.save`, `A.fresh`, `APP.data.loadDb` (load + additive migration) and `APP.data.clearPersisted`. `audit.js` owns `U.log` (appends to `A.db.extraLog`).
+
 `repository.js` is a domain-neutral compatibility adapter over the current legacy runtime:
 
 ```text

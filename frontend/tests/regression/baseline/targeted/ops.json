@@ -1,0 +1,1745 @@
+{
+ "meta": {
+  "suite": "ops",
+  "sourceCommit": "b9f5c74",
+  "recordedAt": "2026-09-27T21:59:51.517Z",
+  "reason": "Pre-migration coverage for settings, fee config, bank accounts, accounts, roles, assets, reports, complaints, notifications and demo reset (re-recorded on the untouched b9f5c74 export after adding the reset steps).",
+  "steps": 91,
+  "totalSaves": 25
+ },
+ "steps": [
+  {
+   "name": "cai-dat tab kythu",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "0e417746b801"
+  },
+  {
+   "name": "cai-dat tab quytac",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "8665d759947b"
+  },
+  {
+   "name": "cai-dat tab vaitro",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "de74719ae1ae"
+  },
+  {
+   "name": "cai-dat tab tichhop",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "2e92484d69ea"
+  },
+  {
+   "name": "cai-dat tab nhatky",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "460a6da6b151"
+  },
+  {
+   "name": "billing cycle change",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "e10981bc3682",
+   "ret": "1add418a900a"
+  },
+  {
+   "name": "billing rule change",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "44d8259b0e6c",
+   "ret": "3361efc7b9a4"
+  },
+  {
+   "name": "role select + perm toggle",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "364eb47585e3",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "57f5cf708def",
+   "ret": "f6817e81fe67"
+  },
+  {
+   "name": "role new form",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "364eb47585e3",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "b70a828209de",
+   "view": "57f5cf708def"
+  },
+  {
+   "name": "role form save",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã thêm vai trò \"Vai trò thử\""
+   ],
+   "db": "f122c02f51fc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "172acb3f6b85",
+   "ret": "15c3ddec1b4f"
+  },
+  {
+   "name": "role perm focus",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "f122c02f51fc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "07b74a2ebd47"
+  },
+  {
+   "name": "cau-hinh-gia tab gia",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "f122c02f51fc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "25ca2004c5f3"
+  },
+  {
+   "name": "cau-hinh-gia tab dien-nuoc",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "f122c02f51fc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "b555dcd3278a"
+  },
+  {
+   "name": "cau-hinh-gia tab dich-vu",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "f122c02f51fc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "16d057862fcd"
+  },
+  {
+   "name": "cfg price view",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "f122c02f51fc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "a2252358123a",
+   "view": "25ca2004c5f3"
+  },
+  {
+   "name": "cfg price new",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "f122c02f51fc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "deb81ddcbabf",
+   "view": "25ca2004c5f3"
+  },
+  {
+   "name": "cfg price form save",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã thêm phí mới ở trạng thái Chưa áp dụng"
+   ],
+   "db": "f122c02f51fc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "d2bee42c6e9a",
+   "ret": "c1dfd96eea8c"
+  },
+  {
+   "name": "cfg fee apply",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã áp dụng phí mới"
+   ],
+   "db": "f122c02f51fc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "dce8670ddd55"
+  },
+  {
+   "name": "cfg fee toggle",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã khóa phí đang áp dụng"
+   ],
+   "db": "f122c02f51fc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "45bc2f24a6b1"
+  },
+  {
+   "name": "cfg util view",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "f122c02f51fc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "3c6b488dd5fa",
+   "view": "b555dcd3278a"
+  },
+  {
+   "name": "cfg svc new",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "f122c02f51fc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "298bd9de8fb1",
+   "view": "16d057862fcd"
+  },
+  {
+   "name": "cfg legal edit",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã cập nhật căn cứ"
+   ],
+   "db": "f122c02f51fc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "16d057862fcd"
+  },
+  {
+   "name": "stall applied price",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "f122c02f51fc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "16d057862fcd",
+   "ret": "61fceebbf903"
+  },
+  {
+   "name": "ba search",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "f122c02f51fc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "d326f3dc78fe"
+  },
+  {
+   "name": "ba clear",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "f122c02f51fc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "d31ac8b2f96b"
+  },
+  {
+   "name": "ba sort",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "f122c02f51fc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "74bc72703ec3"
+  },
+  {
+   "name": "ba new",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "f122c02f51fc",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "d8c54facf93a",
+   "view": "74bc72703ec3"
+  },
+  {
+   "name": "ba form save",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã thêm tài khoản 0123456789"
+   ],
+   "db": "d4a066094ae3",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "d184624c13d2",
+   "ret": "ac3478d69a3c"
+  },
+  {
+   "name": "ba edit",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "d4a066094ae3",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "debe0e3698f4",
+   "view": "d184624c13d2"
+  },
+  {
+   "name": "ba csv",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã xuất tệp tai-khoan-ngan-hang.csv (mở được bằng Excel)"
+   ],
+   "db": "d4a066094ae3",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "debe0e3698f4",
+   "view": "d184624c13d2"
+  },
+  {
+   "name": "acc search",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "d4a066094ae3",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "debe0e3698f4",
+   "view": "d5a0ae59c761"
+  },
+  {
+   "name": "acc filter role",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "d4a066094ae3",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "debe0e3698f4",
+   "view": "1af7c67a47b8"
+  },
+  {
+   "name": "acc clear",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "d4a066094ae3",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "debe0e3698f4",
+   "view": "693f668020fb"
+  },
+  {
+   "name": "acc open",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "d4a066094ae3",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "50ca7ca6fe54",
+   "view": "693f668020fb"
+  },
+  {
+   "name": "acc new",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "d4a066094ae3",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "ab4da5651d9a",
+   "view": "693f668020fb"
+  },
+  {
+   "name": "acc form save",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã thêm tài khoản NV99"
+   ],
+   "db": "4f9fdba024cf",
+   "accounts": "3ca28ec7cfea",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "a59499b9fd8a",
+   "ret": "fe2ef495a115"
+  },
+  {
+   "name": "acc toggle",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã tạm khoá tài khoản NV03"
+   ],
+   "db": "1f28f112a23e",
+   "accounts": "03e3f3a882e5",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "54ebc94c38a4"
+  },
+  {
+   "name": "acc toggle back",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã mở khoá tài khoản NV03"
+   ],
+   "db": "f07cb44abb0f",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "a59499b9fd8a"
+  },
+  {
+   "name": "asset filter",
+   "err": null,
+   "saves": 1,
+   "toasts": [],
+   "db": "d77d1808f905",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "be2a142ed088"
+  },
+  {
+   "name": "asset reset",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "d77d1808f905",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "216f91501837"
+  },
+  {
+   "name": "asset open",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "d77d1808f905",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "bf97771d066d",
+   "view": "216f91501837"
+  },
+  {
+   "name": "asset tab",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "d77d1808f905",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "bf97771d066d",
+   "view": "216f91501837"
+  },
+  {
+   "name": "asset new",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "d77d1808f905",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "c3b65731cc78",
+   "view": "216f91501837"
+  },
+  {
+   "name": "asset edit",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "d77d1808f905",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "96b70378701a",
+   "view": "216f91501837"
+  },
+  {
+   "name": "report lapday",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "d77d1808f905",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "96b70378701a",
+   "view": "71232f76039e"
+  },
+  {
+   "name": "report thu",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "d77d1808f905",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "96b70378701a",
+   "view": "71232f76039e"
+  },
+  {
+   "name": "report congno",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "d77d1808f905",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "96b70378701a",
+   "view": "a9b91a94fd6c"
+  },
+  {
+   "name": "report suco",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "d77d1808f905",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "96b70378701a",
+   "view": "eb4d4c43d900"
+  },
+  {
+   "name": "report mau01a",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "d77d1808f905",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "96b70378701a",
+   "view": "71232f76039e"
+  },
+  {
+   "name": "report mau02a",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "d77d1808f905",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "96b70378701a",
+   "view": "71232f76039e"
+  },
+  {
+   "name": "report mau03a",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "d77d1808f905",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "96b70378701a",
+   "view": "71232f76039e"
+  },
+  {
+   "name": "report mau03d",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "d77d1808f905",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "96b70378701a",
+   "view": "71232f76039e"
+  },
+  {
+   "name": "report bieu10",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "d77d1808f905",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "96b70378701a",
+   "view": "71232f76039e"
+  },
+  {
+   "name": "report save",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã lưu mẫu báo cáo (mô phỏng)"
+   ],
+   "db": "d77d1808f905",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "96b70378701a",
+   "view": "71232f76039e"
+  },
+  {
+   "name": "report csv",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã xuất tệp bao-cao-lapday.csv (mở được bằng Excel)"
+   ],
+   "db": "d77d1808f905",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "96b70378701a",
+   "view": "71232f76039e"
+  },
+  {
+   "name": "su-co cat filter",
+   "err": null,
+   "saves": 2,
+   "toasts": [],
+   "db": "ccbfa3dc9ff1",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "96b70378701a",
+   "view": "00df75781718"
+  },
+  {
+   "name": "su-co cat clear",
+   "err": null,
+   "saves": 1,
+   "toasts": [],
+   "db": "ccbfa3dc9ff1",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "96b70378701a",
+   "view": "e9edb9e92977"
+  },
+  {
+   "name": "su-co flow tab all",
+   "err": null,
+   "saves": 1,
+   "toasts": [],
+   "db": "ccbfa3dc9ff1",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "96b70378701a",
+   "view": "4aeb98b6c072"
+  },
+  {
+   "name": "su-co flow tab tiepnhan",
+   "err": null,
+   "saves": 1,
+   "toasts": [],
+   "db": "ccbfa3dc9ff1",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "96b70378701a",
+   "view": "e9edb9e92977"
+  },
+  {
+   "name": "su-co flow tab phancong",
+   "err": null,
+   "saves": 1,
+   "toasts": [],
+   "db": "ccbfa3dc9ff1",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "96b70378701a",
+   "view": "e9edb9e92977"
+  },
+  {
+   "name": "su-co flow tab dangxuly",
+   "err": null,
+   "saves": 1,
+   "toasts": [],
+   "db": "ccbfa3dc9ff1",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "96b70378701a",
+   "view": "e9edb9e92977"
+  },
+  {
+   "name": "su-co flow tab chonghiemthu",
+   "err": null,
+   "saves": 1,
+   "toasts": [],
+   "db": "ccbfa3dc9ff1",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "96b70378701a",
+   "view": "e9edb9e92977"
+  },
+  {
+   "name": "su-co flow tab hoanthanh",
+   "err": null,
+   "saves": 1,
+   "toasts": [],
+   "db": "ccbfa3dc9ff1",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "96b70378701a",
+   "view": "e9edb9e92977"
+  },
+  {
+   "name": "su-co flow tab dong",
+   "err": null,
+   "saves": 1,
+   "toasts": [],
+   "db": "ccbfa3dc9ff1",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "96b70378701a",
+   "view": "e9edb9e92977"
+  },
+  {
+   "name": "inc new v2",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "ccbfa3dc9ff1",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "893d18ea361b",
+   "view": "e9edb9e92977"
+  },
+  {
+   "name": "inc new v2 save",
+   "err": null,
+   "saves": 2,
+   "toasts": [
+    "Đã tạo SC-0121"
+   ],
+   "db": "bc63d231cc19",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "4727e4bd7bcd",
+   "ret": "472b07b9fcf2"
+  },
+  {
+   "name": "inc open",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "bc63d231cc19",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "3dc68821d2bb",
+   "view": "4727e4bd7bcd"
+  },
+  {
+   "name": "inc detail tab",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "bc63d231cc19",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "3dc68821d2bb",
+   "view": "4727e4bd7bcd"
+  },
+  {
+   "name": "inc assign open",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "bc63d231cc19",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "eef21113a471",
+   "view": "4727e4bd7bcd"
+  },
+  {
+   "name": "inc assign save",
+   "err": null,
+   "saves": 2,
+   "toasts": [
+    "Đã phân công xử lý."
+   ],
+   "db": "814c54835518",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "a8a112c8be7f",
+   "ret": "a68e6e118787"
+  },
+  {
+   "name": "inc inspect open (technician)",
+   "err": null,
+   "saves": 1,
+   "toasts": [],
+   "db": "814c54835518",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "a26067dccaa9",
+   "view": "e65b4f62e3d2"
+  },
+  {
+   "name": "inc inspect save",
+   "err": null,
+   "saves": 2,
+   "toasts": [
+    "Đã bắt đầu xử lý."
+   ],
+   "db": "c389cb7cc302",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "72087ddccb36",
+   "ret": "6b154a5b6d2c"
+  },
+  {
+   "name": "inc work open",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "c389cb7cc302",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "f252bc1e6827",
+   "view": "72087ddccb36"
+  },
+  {
+   "name": "inc work save",
+   "err": null,
+   "saves": 2,
+   "toasts": [
+    "Đã lưu cập nhật."
+   ],
+   "db": "5241ade533f8",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "72087ddccb36",
+   "ret": "6b154a5b6d2c"
+  },
+  {
+   "name": "inc work submit",
+   "err": null,
+   "saves": 2,
+   "toasts": [
+    "Đã cập nhật hoàn thành và thông báo kết quả."
+   ],
+   "db": "6ec989d71588",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "2d6c76c31b92",
+   "ret": "dc629525a8c6"
+  },
+  {
+   "name": "inc denied accept (technician)",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "6ec989d71588",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "2d6c76c31b92"
+  },
+  {
+   "name": "inc accept open",
+   "err": null,
+   "saves": 1,
+   "toasts": [],
+   "db": "6ec989d71588",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "991de7ab7e49"
+  },
+  {
+   "name": "inc accept save",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "6ec989d71588",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "991de7ab7e49",
+   "ret": "dc629525a8c6"
+  },
+  {
+   "name": "inc close open",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "6ec989d71588",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "851dd3c53b06",
+   "view": "991de7ab7e49"
+  },
+  {
+   "name": "inc close save",
+   "err": null,
+   "saves": 2,
+   "toasts": [
+    "Đã đóng sự cố."
+   ],
+   "db": "eee3908c6aea",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "991de7ab7e49",
+   "ret": "41b2843ead26"
+  },
+  {
+   "name": "inc existing transitions",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "eee3908c6aea",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "2c1dcce69f32",
+   "view": "991de7ab7e49"
+  },
+  {
+   "name": "tb group",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "eee3908c6aea",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "2c1dcce69f32",
+   "view": "1d952682669d"
+  },
+  {
+   "name": "tb send",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Cần tiêu đề và ít nhất một kênh gửi"
+   ],
+   "db": "eee3908c6aea",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "2c1dcce69f32",
+   "view": "1d952682669d",
+   "ret": "c1dfd96eea8c"
+  },
+  {
+   "name": "denied ba new (market manager)",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "eee3908c6aea",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "2c1dcce69f32",
+   "view": "1d952682669d"
+  },
+  {
+   "name": "settings audit tab",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "eee3908c6aea",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "2c1dcce69f32",
+   "view": "774b5d622450"
+  },
+  {
+   "name": "reset open",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "eee3908c6aea",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig",
+    "choso-caolanh-state"
+   ],
+   "session": "97d170e1550e",
+   "modal": "927df302b17c",
+   "view": "774b5d622450"
+  },
+  {
+   "name": "reset ok",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Đã đặt lại dữ liệu nghiệp vụ mẫu"
+   ],
+   "db": "17a087036cea",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "460a6da6b151",
+   "ret": "ed9923f697aa"
+  },
+  {
+   "name": "denied cfg price new (collector)",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "460a6da6b151"
+  },
+  {
+   "name": "denied acc new (collector)",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "460a6da6b151"
+  },
+  {
+   "name": "denied role new (collector)",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "460a6da6b151"
+  },
+  {
+   "name": "denied inc assign (collector)",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "e798bc28bece",
+   "storageKeys": [
+    "choso-caolanh-accounts",
+    "choso-caolanh-accounts-schema",
+    "choso-caolanh-bankaccounts",
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions",
+    "choso-caolanh-serviceconfig"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "460a6da6b151"
+  }
+ ],
+ "totalSaves": 25
+}

@@ -1,4 +1,4 @@
-/* Business-point (Điểm kinh doanh) read-only access over the legacy A.db.stalls collection. */
+/* Business-point (Điểm kinh doanh) data access over A.db.stalls. */
 (function (A) {
   'use strict';
 
@@ -37,5 +37,10 @@
     point.history = point.history || [];
     point.history.unshift(entry);
     return point;
+  };
+  // One active fee collector per point (AGENTS §17); history of past collections is not rewritten.
+  repository.assignCollector = function (points, collectorId) {
+    points.forEach(st => { st.collectorId = collectorId; });
+    return points;
   };
 })(window.APP);

@@ -54,5 +54,11 @@
     t.stalls = t.stalls.filter(x => !pointId || x !== pointId);
     return t;
   };
+  // Appends a new profile and rebuilds lookup indexes (same order as the legacy create).
+  repository.add = function (profile) {
+    A.data.getCollection(COLLECTION).push(profile);
+    A.data.reindex();
+    return profile;
+  };
   repository.save = function () { return A.data.save(); };
 })(window.APP);

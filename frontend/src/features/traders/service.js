@@ -19,4 +19,6 @@
   service.linkPoint = function (id, pointId) { return repository.linkPoint(id, pointId); };
   service.unlinkPoint = function (id, pointId) { return repository.unlinkPoint(id, pointId); };
   service.save = function () { return repository.save(); };
+  // Profile create: push + reindex + single save (the effective tt-new flow).
+  service.create = function (profile) { repository.add(profile); repository.save(); return profile; };
 })(window.APP);

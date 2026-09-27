@@ -17,89 +17,14 @@
 (function (A) {
   'use strict';
   const D = A.D, U = A.U, ui = A.ui;
-  const LKEY = 'choso-caolanh-layout';
-
-  const CATS = ['Ki-ốt tổng hợp', 'Thủy hải sản', 'Thịt, gia cầm', 'Rau củ, trái cây', 'Lương thực, thực phẩm khô',
-    'Bách hóa tổng hợp', 'May mặc, giày dép', 'Ăn uống', 'Dịch vụ', 'Nông sản tự sản tự tiêu',
-    'Ẩm thực dân dã', 'Nông sản, đặc sản', 'Trải nghiệm', 'Khác'];
-
-  let seq = 0;
-  const newKey = p => p + '_' + (++seq) + '_' + Math.random().toString(36).slice(2, 6);
-
-  // ---------- cấu trúc mặc định: gợi ý dựa theo MARKETS hiện có (chỉ đọc, không ghi ngược) ----------
-  function defaultLayout() {
-    const out = {};
-    D.MARKETS.forEach(m => {
-      const blocks = [];
-      m.floors.forEach(fl => {
-        if (fl.parking) return; // tầng hầm: không quy hoạch điểm kinh doanh
-        const bname = m.kind === 'session' ? 'Khu chợ quê' : 'Nhà chợ chính';
-        let block = blocks.find(b => b.name === bname);
-        if (!block) { block = { key: newKey('b'), name: bname, floors: [] }; blocks.push(block); }
-        const floor = { key: newKey('f'), name: fl.name, zones: [] };
-        fl.sections.forEach(s => {
-          const avg = +((s.area[0] + s.area[1]) / 2).toFixed(1);
-          const qty = s.rows.length * s.per;
-          floor.zones.push({
-            key: newKey('z'), code: s.id, name: s.name, blockId: block.key, floorId: floor.key,
-            catMain: s.cat, catSub: '', area: Math.round(avg * qty), note: '', status: 'chinhthuc',
-            planned: [{ key: newKey('p'), name: U.areaTypeLabel(({ kiot: 'covered', nhalong: 'covered', ngoai: 'self_produced', phien: 'session' }[s.type] || 'covered')), std: avg, qty: qty }]
-          });
-        });
-        block.floors.push(floor);
-      });
-      out[m.id] = { blocks: blocks };
-    });
-    return out;
-  }
-
-  function loadLayout() {
-    try { const s = localStorage.getItem(LKEY); if (s) return JSON.parse(s); } catch (e) { /* bỏ qua */ }
-    return defaultLayout();
-  }
-  let LAYOUT = loadLayout();
-  function saveLayout() { try { localStorage.setItem(LKEY, JSON.stringify(LAYOUT)); } catch (e) { /* bỏ qua */ } }
+  const S = A.features.marketLayout.store;
+  const mbCollectorAccounts = mid => A.features.businessPoints.service.collectorAccounts(mid);
+  const mbZoneCollectorId = (mid, z) => A.features.businessPoints.service.zoneCollectorId(mid, z);
+  const { CATS, newKey, save: saveLayout, blocksOf, findBlock, floorsOfBlock, findFloor, firstFloorKey, firstZonePlace, findFloorOfZone, findZone, codeTaken } = S;
 
   if (!ui.qh) ui.qh = { market: 'CL', selZone: null };
   function qhMarket() { return ui.market === 'ALL' ? ui.qh.market : ui.market; }
 
-  // ---------- truy vấn cấu trúc ----------
-  function blocksOf(mid) { return LAYOUT[mid].blocks; }
-  function findBlock(mid, bk) { return blocksOf(mid).find(b => b.key === bk); }
-  function floorsOfBlock(mid, bk) { const b = findBlock(mid, bk); return b ? b.floors : []; }
-  function findFloor(mid, bk, fk) { return floorsOfBlock(mid, bk).find(f => f.key === fk); }
-  function firstFloorKey(mid, bk) { const fs = floorsOfBlock(mid, bk); return fs.length ? fs[0].key : null; }
-  function firstZonePlace(mid) {
-    const b = blocksOf(mid)[0];
-    const f = b && b.floors[0];
-    return b && f ? { blockId: b.key, floorId: f.key } : null;
-  }
-  function findFloorOfZone(mid, zk) {
-    for (const b of blocksOf(mid)) for (const f of b.floors) if (f.zones.some(z => z.key === zk)) return f;
-    return null;
-  }
-  function findZone(mid, zk) {
-    for (const b of blocksOf(mid)) for (const f of b.floors) { const z = f.zones.find(x => x.key === zk); if (z) return z; }
-    return null;
-  }
-  function flatZones(mid) {
-    const out = [];
-    blocksOf(mid).forEach(b => b.floors.forEach(f => f.zones.forEach(z => out.push(z))));
-    return out;
-  }
-  function codeTaken(mid, code, excludeKey) {
-    const c = code.trim().toLowerCase();
-    return flatZones(mid).some(z => z.key !== excludeKey && (z.code || '').trim().toLowerCase() === c);
-  }
-  function marketLayoutStats(mid) {
-    const zs = flatZones(mid);
-    let pts = 0, area = 0, draft = 0;
-    zs.forEach(z => {
-      if (z.status === 'nhap') draft++;
-      z.planned.forEach(p => { pts += Number(p.qty) || 0; area += (Number(p.std) || 0) * (Number(p.qty) || 0); });
-    });
-    return { blocks: blocksOf(mid).length, floors: U.sum(blocksOf(mid), b => b.floors.length), zones: zs.length, pts: pts, area: area, draft: draft };
-  }
   function validateZone(z) {
     const errs = [];
     if (!z.code || !z.code.trim()) errs.push('Chưa nhập Mã khu.');
@@ -201,32 +126,6 @@
   // dropdown lọc ngành hàng.
   A.mbCatOptions = function (mid) { return Array.from(new Set(A.mbBusinessPointsForMarket(mid).map(st => st.cat).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'vi')); };
   function mbCan(mid) { return { edit: A.canDo('cau-truc.edit', mid), del: A.canDo('cau-truc.delete', mid), reset: A.canDo('cau-truc.reset', mid) }; }
-  // PHAN_CONG_NHAN_VIEN_THU_PHI: tài khoản demo role 'collector' (Nhân viên thu phí) thuộc phạm vi
-  // chợ mid — REUSE A.ACCOUNTS (mục 1 yêu cầu: không tạo danh sách nhân viên riêng), cùng cách lọc
-  // dkCollectorLabel() đã có ở js/v-tieuthuong.js (không dùng D.STAFF — đó là roster cũ, khác nguồn).
-  function mbCollectorAccounts(mid) {
-    return A.ACCOUNTS.list().filter(a => a.status === 'active' && A.ACCOUNTS.primaryRole(a) === 'collector' && A.allowedMarkets(a).indexOf(mid) !== -1);
-  }
-  // Trạng thái phân công NV thu phí của 1 dãy — suy TỪ collectorId trên CHÍNH các điểm kinh doanh
-  // thật thuộc dãy (mục 2 yêu cầu: "dãy chỉ là cách chọn nhanh", KHÔNG lưu field riêng ở cấp dãy):
-  //   null     = dãy chưa có điểm thật (đang quy hoạch)
-  //   ''       = có điểm thật nhưng chưa điểm nào được phân công
-  //   'MIXED'  = các điểm trong dãy đang có nhiều NV khác nhau
-  //   <acc id> = mọi điểm trong dãy cùng 1 NV
-  function mbZoneCollectorId(mid, z) {
-    const pts = mbZonePoints(mid, z);
-    if (!pts.length) return null;
-    const ids = Array.from(new Set(pts.map(p => p.collectorId || '')));
-    return ids.length === 1 ? ids[0] : 'MIXED';
-  }
-  function mbZoneCollectorLabel(mid, z) {
-    const id = mbZoneCollectorId(mid, z);
-    if (id === null || id === '') return id === null ? null : 'Chưa phân công';
-    if (id === 'MIXED') return 'Nhiều NV phụ trách';
-    const acc = A.ACCOUNTS.get(id);
-    return acc ? acc.fullName : 'Chưa phân công';
-  }
-  A.mbZoneCollectorLabel = mbZoneCollectorLabel;
   function mbActions(list) { list = list.filter(Boolean); return list.length ? `<span class="mb-actions">${list.join('')}</span>` : ''; }
   // Chợ chỉ có đúng 1 khối + 1 tầng (vd. chợ quê TTĐ — xem defaultLayout()): cây gộp 2 cấp Khối/Tầng
   // thành 1 hàng (mục 11 — suy ra từ CHÍNH cấu trúc dữ liệu, không hard-code theo market id), nên
@@ -516,7 +415,7 @@
     'qh-reset-ok': () => {
       const mid = qhMarket();
       if (!A.canDo('cau-truc.reset', mid)) return;
-      LAYOUT[mid] = defaultLayout()[mid];
+      S.resetMarket(mid);
       ui.qh.selZone = null; ui.mb.sel = null; // key cũ không còn hợp lệ sau khi tái tạo cấu trúc
       saveLayout(); A.closeModal(); A.render(); U.toast('Đã khôi phục cấu trúc mặc định cho ' + U.mShort(mid));
     },
@@ -531,7 +430,7 @@
       if (mid === 'TTD' || !A.canDo('cau-truc.edit', mid)) return;
       const name = A.$('#qhb-name').value.trim();
       if (!name) { U.toast('Vui lòng nhập tên khối/nhà chợ'); return; }
-      LAYOUT[mid].blocks.push({ key: newKey('b'), name: name, floors: [] });
+      S.of(mid).blocks.push({ key: newKey('b'), name: name, floors: [] });
       saveLayout(); A.closeModal(); A.render(); U.toast('Đã thêm khối/nhà chợ "' + name + '"');
     },
     'qh-edit-block': el => {
@@ -564,7 +463,7 @@
     'qh-del-block-ok': el => {
       const mid = qhMarket();
       if (mid === 'TTD' || !A.canDo('cau-truc.delete', mid)) return;
-      const L = LAYOUT[mid];
+      const L = S.of(mid);
       // Phòng thủ lại (business rule): không xoá khối còn khu bên trong, dù nút Xoá ở bước trước
       // đã tự chặn — đúng theo yêu cầu "preserve existing child/dependency checks" (mục 8).
       const b = L.blocks.find(x => x.key === el.dataset.id);
@@ -745,8 +644,7 @@
     const pts = mbZonePoints(mid, z);
     if (!pts.length) return;
     const collectorId = el.value || null;
-    pts.forEach(st => { st.collectorId = collectorId; });
-    A.save();
+    A.features.businessPoints.service.assignCollector(pts, collectorId);
     const acc = collectorId ? A.ACCOUNTS.get(collectorId) : null;
     U.toast(acc ? `Đã phân công ${acc.fullName} phụ trách thu phí dãy ${z.name || z.code}` : `Đã bỏ phân công thu phí dãy ${z.name || z.code}`);
     A.render(); qhSyncDrawer();

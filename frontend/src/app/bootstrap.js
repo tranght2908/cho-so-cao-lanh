@@ -2,43 +2,12 @@
 (function (A) {
   'use strict';
   const D = A.D;
-  const KEY = 'choso-caolanh-state', UIKEY = 'choso-caolanh-ui', GUIDEKEY = 'choso-caolanh-guide';
+  const UIKEY = 'choso-caolanh-ui', GUIDEKEY = 'choso-caolanh-guide';
   const RBAC_SCHEMA = A.RBAC_SCHEMA;
   const ui = A.ui;
   const $ = A.$;
+  const U = A.U;
 
-  // ---------- tiện ích ----------
-  const U = A.U = {};
-  U.pad = (n, l) => String(n).padStart(l || 2, '0');
-  U.esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  U.money = n => Math.round(n || 0).toLocaleString('vi-VN') + ' đ';
-  U.moneyShort = n => {
-    n = n || 0;
-    if (Math.abs(n) >= 1e9) return (n / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 }) + ' tỷ';
-    if (Math.abs(n) >= 1e6) return (n / 1e6).toLocaleString('vi-VN', { maximumFractionDigits: 1 }) + ' tr';
-    if (Math.abs(n) >= 1e3) return Math.round(n / 1e3).toLocaleString('vi-VN') + 'k';
-    return String(Math.round(n));
-  };
-  U.pct = (a, b) => b ? Math.round(a * 1000 / b) / 10 : 0;
-  U.pctTxt = v => (v || 0).toLocaleString('vi-VN', { maximumFractionDigits: 1 }) + '%';
-  U.dmy = s => s ? s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4) : '';
-  U.per = p => p.slice(5) + '/' + p.slice(0, 4);
-  U.days = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
-  U.sum = (arr, f) => arr.reduce((a, x) => a + (f ? f(x) : x), 0);
-  U.maskPhone = p => p ? p.slice(0, 3) + '****' + p.slice(-3) : '';
-  U.maskId = s => s ? s.slice(0, 3) + '******' + s.slice(-3) : '';
-  // Bộ icon SVG inline dùng chung: không phụ thuộc emoji/font của thiết bị. `title` chỉ dùng khi icon
-  // đứng một mình; icon đi kèm text là decorative để screen reader không đọc lặp lại.
-  const ICON_PATHS = {
-    dashboard: '<path d="M4 13h6V4H4v9Zm0 7h6v-4H4v4Zm10 0h6v-9h-6v9Zm0-16v4h6V4h-6Z"/>',
-    vehicle: '<path d="M3 16v-3l2-5h14l2 5v3M5 16v3m14-3v3M3 13h18M7 16h.01M17 16h.01"/>',
-    map: '<path d="m9 18-6 3V6l6-3 6 3 6-3v15l-6 3-6-3Zm0-12v12m6-9v12"/>',
-    store: '<path d="M3 10h18M5 10v10h14V10M4 4h16l1 6H3l1-6Zm5 10h6"/>', users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m17-7a4 4 0 1 0 0-8m-7 5a4 4 0 1 0 0-8"/>',
-    file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm0 0v6h6M8 13h8m-8 4h8"/>', money: '<path d="M12 2v20m5-16.5A4 4 0 0 0 13.5 4h-3A3.5 3.5 0 0 0 10.5 11h3a3.5 3.5 0 1 1 0 7h-3A4 4 0 0 1 7 16.5"/>', bank: '<path d="m3 10 9-6 9 6M5 10v8m4-8v8m6-8v8m4-8v8M3 21h18"/>', bolt: '<path d="m13 2-9 12h7l-1 8 9-12h-7l1-8Z"/>', receipt: '<path d="M4 2v20l2-1.5L8 22l2-1.5 2 1.5 2-1.5 2 1.5 2-1.5 2 1.5V2H4Zm4 5h8m-8 4h8m-8 4h5"/>', card: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18m-14 5h3"/>', refresh: '<path d="M20 11a8 8 0 1 0 2 5.3M20 4v7h-7"/>', bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 13h4"/>', chart: '<path d="M3 3v18h18M7 16l4-5 3 3 5-7"/>', settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.1 2.1-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5v.2h-3v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1L6.6 17l.1-.1A1.7 1.7 0 0 0 7 15a1.7 1.7 0 0 0-1.5-1H5v-3h.5A1.7 1.7 0 0 0 7 10a1.7 1.7 0 0 0-.3-1.9l-.1-.1 2.1-2.1.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V4h3v.8a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 8l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.1v3h-.1a1.7 1.7 0 0 0-1.5 1Z"/>', phone: '<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/>', camera: '<path d="M4 7h3l2-3h6l2 3h3v13H4V7Zm8 9a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/>', print: '<path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2m-2-4H8v7h8v-7Z"/>', edit: '<path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Zm10-13 3 3"/>', trash: '<path d="M4 7h16m-10 4v6m4-6v6M9 7V4h6v3m-9 0 1 14h10l1-14"/>', close: '<path d="m6 6 12 12M18 6 6 18"/>', menu: '<path d="M4 6h16M4 12h16M4 18h16"/>', check: '<path d="m5 12 4 4L19 6"/>', warning: '<path d="m12 3 10 18H2L12 3Zm0 6v4m0 4h.01"/>', attachment: '<path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/>'
-  };
-  U.icon = (name, title) => `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${title ? ` role="img" aria-label="${U.esc(title)}"` : ' aria-hidden="true"'}>${ICON_PATHS[name] || ICON_PATHS.file}</svg>`;
-  U.market = id => D.MARKETS.find(m => m.id === id);
-  U.mShort = id => U.market(id).short;
   // MARKET_SELECTOR_ALL_UNIFICATION: ui.market có thể là 'ALL' (account GLOBAL). U.inM chỉ dùng ở
   // các màn 'BOTH'/'CL'/'TTD' (theo A.SCREEN_MARKET) — renderer của các màn đó KHÔNG BAO GIỜ chạy
   // khi ui.market === 'ALL' (A.render() chặn trước, xem A.marketRequiredHtml()), nên so sánh trực
@@ -48,34 +17,6 @@
   // thể HOẶC 'ALL' làm tham số, KHÔNG đọc ui.market toàn cục. 'ALL' ở đây là "Tất cả" của bộ lọc
   // NỘI BỘ màn đó (xem A.xmMarket()), không phải selectedMarket.
   U.inScope = (x, m) => m === 'ALL' || x.market === m;
-  U.staffName = id => { const s = D.STAFF.find(x => x.id === id); return s ? s.name : (id || ''); };
-  U.typeLabel = t => ({ kiot: 'Ki-ốt', nhalong: 'Trong nhà lồng', ngoai: 'Ngoài nhà lồng', phien: 'Quầy phiên' }[t]);
-  // Physical-area taxonomy for Mặt bằng only; it is separate from `type` and `pointType`.
-  U.areaTypeLabel = t => ({ covered: 'Có mái che', uncovered: 'Không mái che', self_produced: 'Tự sản tự tiêu', session: 'Theo phiên' }[t]);
-  // Các mã loại diện tích dùng chung cho dropdown/filter của màn Mặt bằng.
-  U.AREA_TYPE_CODES = ['covered', 'uncovered', 'self_produced', 'session'];
-  // Đơn giá hiện hành của điểm KD lấy từ "Chính sách thu và biểu phí", không phải
-  // đơn giá snapshot của hợp đồng. NEED_CONFIRMATION: quy tắc mapping biểu phí
-  // theo khu vực/loại điểm cần được nghiệp vụ xác nhận khi có API/backend.
-  U.appliedStallPrice = st => {
-    if (!st) return null;
-    const stallType = { kiot: 'Ki-ốt', nhalong: 'Trong nhà lồng chợ', ngoai: 'Tự sản tự tiêu', phien: 'Quầy theo phiên' }[st.type];
-    if (!stallType) return null;
-    const prices = A.SERVICE_CFG ? A.SERVICE_CFG.list('stallPrices') : ((D.RATE_POLICY_SEED || {}).stallPrices || []);
-    const today = U.today ? U.today() : '';
-    return prices.find(r => r.marketId === st.market && r.stallType === stallType && r.status === 'active'
-      && (!r.effectiveFrom || r.effectiveFrom <= today) && (!r.effectiveTo || r.effectiveTo >= today)) || null;
-  };
-  U.unitLabel = st => {
-    const price = U.appliedStallPrice(st);
-    if (!price) return 'Chưa cấu hình';
-    return U.money(price.amount) + '/' + String(price.unit || '').replace(/^đ\//, '');
-  };
-  U.rentalKind = st => st && st.type === 'phien' ? 'session' : 'fixed';
-  U.rentalLabel = st => U.rentalKind(st) === 'session' ? 'Quầy thuê theo phiên / khách vãng lai' : 'Quầy thuê cố định tháng/quý';
-  U.statusTag = s => `<span class="tag"><span class="dot" style="background:${D.STATUS[s].color}"></span>${D.STATUS[s].label}</span>`;
-  U.today = () => A.db.today;
-  U.nowTime = () => { const d = new Date(); return U.pad(d.getHours()) + ':' + U.pad(d.getMinutes()); };
   U.due = i => i.amount - i.paid;
   U.isOver = i => i.status !== 'paid' && i.due < U.today();
   U.overDays = i => Math.max(0, U.days(i.due, U.today()));
@@ -84,37 +25,6 @@
       : U.isOver(i) ? `<span class="tag danger">Quá hạn ${U.overDays(i)} ngày</span>` : '<span class="tag">Chưa đến hạn</span>';
   U.traderDebt = id => U.sum(A.db.invoices.filter(i => i.traderId === id && i.status !== 'paid'), U.due);
   U.traderOverdue = id => U.sum(A.db.invoices.filter(i => i.traderId === id && U.isOver(i)), U.due);
-  // CAN_VIEW_SCREEN (RBAC_V1_SPEC.md mục 7) = account active AND screen permission AND market
-  // scope/context hợp lệ AND screen applicable với selectedMarket. Không thay permission matrix —
-  // chỉ thêm 2 điều kiện market vào đúng 1 điểm kiểm tra dùng chung cho mọi nơi (menu, router,
-  // liên kết chéo screen), tránh rải hard-code if(screen===...)/if(market===...) ở từng view.
-  U.can = r => {
-    const it = A.menuItem(r), role = A.PERM.role(ui.role);
-    const acc = A.currentAccount();
-    if (!it || !role || !role.active || !acc || acc.status !== 'active') return false;
-    const screenAllowed = r === 'mat-bang' && ui.market === 'CL'
-      ? (A.PERM.canScreen(ui.role, 'mat-bang') || A.PERM.canScreen(ui.role, 'diem-kd'))
-      : A.PERM.canScreen(ui.role, r);
-    if (!screenAllowed) return false;
-    return A.screenMarketOk(r, acc);
-  };
-  // Phase 4B — CAN_DO_ACTION: điểm kiểm tra DUY NHẤT để THỰC THI 1 action mutation (không chỉ hiển
-  // thị nút). Dùng ở cả UI gate (build HTML) LẪN handler gate (ngay trước khi ghi dữ liệu) — cùng 1
-  // hàm, không lặp lại điều kiện account/market rải rác ở từng file view.
-  //   actionKey    : phần sau 'action:' trong CATALOG (vd. 'thu-tien.thu').
-  //   targetMarket : market của bản ghi đang thao tác (vd. invoice.market, st.market, r.market...).
-  //                  Bỏ qua (undefined/null) cho action không gắn với 1 chợ cụ thể (vd. tai-khoan.*,
-  //                  cai-dat.*). Nếu có, PHẢI khớp đúng selectedMarket hiện tại (ui.market) — vì
-  //                  ui.market luôn nằm trong A.allowedMarkets(account) theo bất biến của Phase 2
-  //                  (A.syncAccountContext), so khớp với ui.market đã bao hàm luôn điều kiện
-  //                  "targetMarket ∈ account.marketScopes" mà không cần kiểm tra lại 2 lần.
-  A.canDo = function (actionKey, targetMarket) {
-    const acc = A.currentAccount();
-    if (!acc || acc.status !== 'active') return false;
-    if (!A.PERM.canAction(ui.role, actionKey)) return false;
-    if (targetMarket != null && targetMarket !== ui.market) return false;
-    return true;
-  };
   A.canDirectCollect = function (targetMarket) {
     return targetMarket === 'TTD' && ui.market === 'TTD' && U.can('thu-tien') && A.canDo('thu-tien.thu', targetMarket);
   };
@@ -122,111 +32,11 @@
     return (targetMarket === 'CL' || targetMarket === 'TTD')
       && U.can('thu-tien') && A.canDo('thu-tien.thu', targetMarket);
   };
-  U.pager = (key, total, size) => {
-    const pages = Math.max(1, Math.ceil(total / size));
-    const p = Math.min(ui.page[key] || 0, pages - 1);
-    ui.page[key] = p;
-    return {
-      start: p * size, end: p * size + size,
-      html: `<div class="pager">${total ? (p * size + 1) + '–' + Math.min(total, p * size + size) + ' / ' + total : '0 dòng'}
-        <button class="btn sm" data-act="page" data-k="${key}" data-d="-1" ${p === 0 ? 'disabled' : ''}>‹ Trước</button>
-        <button class="btn sm" data-act="page" data-k="${key}" data-d="1" ${p >= pages - 1 ? 'disabled' : ''}>Sau ›</button></div>`
-    };
-  };
-  U.table = (cols, rows, opts) => {
-    opts = opts || {};
-    return `<div class="tbl-wrap"><table class="tbl"><thead><tr>${cols.map(c => `<th class="${c.num ? 'num' : ''}">${c.t}</th>`).join('')}</tr></thead>
-      <tbody>${rows.length ? rows.join('') : `<tr><td colspan="${cols.length}" class="empty">${opts.empty || 'Không có dữ liệu'}</td></tr>`}</tbody></table></div>`;
-  };
-  U.csv = (name, cols, rows) => {
-    const csv = '﻿' + [cols].concat(rows).map(r => r.map(v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"').join(',')).join('\r\n');
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-    a.download = name + '.csv';
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1500);
-    U.toast('Đã xuất tệp ' + name + '.csv (mở được bằng Excel)');
-  };
-  U.toast = msg => {
-    const el = document.createElement('div');
-    el.className = 'toast'; el.textContent = msg;
-    $('#toasts').appendChild(el);
-    setTimeout(() => el.remove(), 3600);
-  };
-  U.log = what => { const acc = A.currentAccount(); A.db.extraLog.unshift({ at: U.dmy(U.today()) + ' ' + U.nowTime(), who: acc ? acc.fullName : 'Không rõ', what }); };
 
-  // Mã QR minh họa (không phải QR thật)
-  U.qr = (text, size) => {
-    let h = 2166136261;
-    for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619); }
-    const N = 25, cells = [];
-    const rnd = () => { h ^= h << 13; h ^= h >>> 17; h ^= h << 5; return (h >>> 0) / 4294967296; };
-    const finder = (x, y) => (x < 7 && y < 7) || (x >= N - 7 && y < 7) || (x < 7 && y >= N - 7);
-    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (!finder(x, y) && rnd() < 0.48) cells.push(`<rect x="${x}" y="${y}" width="1" height="1"/>`);
-    const fp = (x, y) => `<rect x="${x}" y="${y}" width="7" height="7"/><rect x="${x + 1}" y="${y + 1}" width="5" height="5" fill="#fff"/><rect x="${x + 2}" y="${y + 2}" width="3" height="3"/>`;
-    return `<svg viewBox="-2 -2 29 29" width="${size || 170}" height="${size || 170}" role="img" aria-label="Mã QR minh họa"><rect x="-2" y="-2" width="29" height="29" fill="#fff"/><g fill="#0d2e55">${cells.join('')}${fp(0, 0)}${fp(N - 7, 0)}${fp(0, N - 7)}</g><rect x="10" y="10" width="5" height="5" rx="1" fill="#0089df"/></svg>`;
-  };
-
-  // ---------- biểu đồ ----------
-  const niceMax = v => { const p = Math.pow(10, Math.floor(Math.log10(v))); const n = v / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p; };
-  U.bars = (labels, series, o) => {
-    o = Object.assign({ h: 230, stacked: true, fmt: U.moneyShort, max: null }, o || {});
-    const W = 660, H = o.h, L = 54, B = 28, Tp = 12, Rt = 8;
-    const tot = labels.map((_, i) => o.stacked ? U.sum(series, s => s.values[i]) : Math.max.apply(null, series.map(s => s.values[i])));
-    const max = o.max || niceMax(Math.max.apply(null, tot.concat([1])));
-    const ph = H - Tp - B, bw = (W - L - Rt) / labels.length;
-    let g = '';
-    for (let k = 0; k <= 4; k++) {
-      const y = Tp + ph * (1 - k / 4);
-      g += `<line x1="${L}" x2="${W - Rt}" y1="${y}" y2="${y}" stroke="#e5eaf1"/><text x="${L - 6}" y="${y + 4}" text-anchor="end" font-size="11" fill="#6b7683">${o.fmt(max * k / 4)}</text>`;
-    }
-    labels.forEach((lb, i) => {
-      const x0 = L + i * bw;
-      if (o.stacked) {
-        let acc = 0; const w = bw * 0.62, x = x0 + (bw - w) / 2;
-        series.forEach(s => {
-          const v = s.values[i], hh = ph * v / max, y = Tp + ph - ph * (acc + v) / max;
-          g += `<rect x="${x}" y="${y}" width="${w}" height="${Math.max(0, hh)}" fill="${s.color}" rx="2"><title>${lb} · ${s.name}: ${o.fmt(v)}</title></rect>`;
-          acc += v;
-        });
-      } else {
-        const w = bw * 0.7 / series.length;
-        series.forEach((s, j) => {
-          const v = s.values[i], hh = ph * v / max;
-          g += `<rect x="${x0 + bw * 0.15 + j * w}" y="${Tp + ph - hh}" width="${w - 2}" height="${Math.max(0, hh)}" fill="${s.color}" rx="2"><title>${lb} · ${s.name}: ${o.fmt(v)}</title></rect>`;
-        });
-      }
-      g += `<text x="${x0 + bw / 2}" y="${H - 9}" text-anchor="middle" font-size="11" fill="#5c646f">${lb}</text>`;
-    });
-    return `<div class="chart"><svg viewBox="0 0 ${W} ${H}">${g}</svg><div class="chart-legend">${series.map(s => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join('')}</div></div>`;
-  };
-  U.donut = (parts, center) => {
-    const total = U.sum(parts, p => p.value) || 1;
-    let off = 25, arcs = '';
-    parts.forEach(p => {
-      const len = p.value * 100 / total;
-      arcs += `<circle r="15.9155" cx="21" cy="21" fill="none" stroke="${p.color}" stroke-width="6" stroke-dasharray="${len} ${100 - len}" stroke-dashoffset="${off}"><title>${p.label}: ${p.value}</title></circle>`;
-      off -= len;
-    });
-    return `<div class="donut-wrap"><svg viewBox="0 0 42 42">${arcs}<text x="21" y="21" text-anchor="middle" font-size="6.5" font-weight="700" fill="#0f1e32">${center ? center[0] : ''}</text><text x="21" y="27" text-anchor="middle" font-size="3.2" fill="#5c646f">${center ? center[1] : ''}</text></svg>
-      <div class="donut-legend">${parts.map(p => `<div><span class="tag"><span class="dot" style="background:${p.color}"></span>${p.label}</span><b>${p.value}</b></div>`).join('')}</div></div>`;
-  };
-
-  // ---------- dữ liệu ----------
-  A.reindex = function () {
-    const db = A.db;
-    A.idx = {
-      stall: new Map(db.stalls.map(s => [s.id, s])),
-      trader: new Map(db.traders.map(s => [s.id, s])),
-      contract: new Map(db.contracts.map(s => [s.id, s])),
-      invoice: new Map(db.invoices.map(s => [s.id, s]))
-    };
-  };
   A.refreshStall = function (st) {
     if (st.status !== 'thue' && st.status !== 'no') return;
     st.status = A.db.invoices.some(i => i.stallId === st.id && U.isOver(i)) ? 'no' : 'thue';
   };
-  A.save = function () { try { localStorage.setItem(KEY, JSON.stringify(A.db)); } catch (e) { /* bỏ qua */ } };
 
   // ---------- RBAC V1 — Account Demo đang dùng ----------
   // Nguồn xác thực runtime: currentDemoAccountId → account → account.status → account.roleIds.
@@ -336,11 +146,6 @@
   };
 
   A.saveUi = function () { try { localStorage.setItem(UIKEY, JSON.stringify({ schemaVersion: RBAC_SCHEMA, currentDemoAccountId: ui.currentDemoAccountId, market: ui.market })); } catch (e) { /* bỏ qua */ } };
-  A.fresh = function () {
-    A.db = D.build();
-    A.reindex();
-    A.db.stalls.forEach(A.refreshStall);
-  };
   // TRADER_PROFILE_AND_MINIAPP_WORKFLOW — demo case "hồ sơ đã có sẵn + Mini App ĐÃ LIÊN KẾT" (mục
   // 37 Case 1): account.traderId không thể seed cứng trong js/accounts.js (module đó chạy TRƯỚC
   // khi A.db tồn tại — data.js chỉ build() khi A.load()/A.fresh() được gọi ở init()) và tên 2
@@ -361,18 +166,7 @@
     }
   };
   A.load = function () {
-    try {
-      const s = localStorage.getItem(KEY);
-      if (s) { const x = JSON.parse(s); if (x && x.version === D.VERSION) A.db = x; }
-    } catch (e) { A.db = null; }
-    if (A.db) A.reindex(); else A.fresh();
-    // FE/localStorage migration: preserve existing records and legacy fields, adding only areaType.
-    const areaTypeByLegacyType = { kiot: 'covered', nhalong: 'covered', ngoai: 'self_produced', phien: 'session' };
-    const migratedAreaType = A.db.stalls.some(st => !st.areaType);
-    if (migratedAreaType) {
-      A.db.stalls.forEach(st => { if (!st.areaType) st.areaType = areaTypeByLegacyType[st.type] || 'covered'; });
-      A.save();
-    }
+    A.data.loadDb();
     A.ensureMiniAppDemoLink();
     // RBAC V1 migration: ui state cũ (schema khác, hoặc còn giữ shape {role, market} kiểu cũ
     // không có currentDemoAccountId) không tương thích — bỏ qua, để currentDemoAccountId=null rồi
@@ -431,36 +225,6 @@
     });
     A.save();
     return out;
-  };
-
-  // ---------- modal ----------
-  A.modal = function (html, wide) {
-    $('#modal-root').innerHTML = `<div class="overlay" data-act="overlay"><div class="modal ${wide ? 'wide' : ''}" role="dialog" aria-modal="true">${html}</div></div>`;
-  };
-  A.closeModal = function () { A.drawerReset(); $('#modal-root').innerHTML = ''; };
-  A.mHead = t => `<div class="modal-h"><h3>${t}</h3><button class="x" data-act="close" aria-label="Đóng">×</button></div>`;
-
-  // ---------- điều hướng drawer (back stack nhỏ, dùng chung) ----------
-  // Cho phép nút "← Quay lại" hoạt động khi 1 drawer được mở TỪ 1 drawer khác (vd Mặt bằng chợ →
-  // Hồ sơ tiểu thương/Điểm kinh doanh) — KHÔNG phải router mới, KHÔNG hard-code từng cặp biến kiểu
-  // backToTGA04/backToKAA01. Chỉ 1 stack {label, render} dùng chung cho mọi drawer trong app:
-  //   label  : nhãn hiển thị trên nút "← Quay lại <label>" — LẤY ĐỘNG từ chính điểm/đối tượng
-  //            nguồn (vd mã điểm 'TG-A04'), không hard-code theo tên màn hình.
-  //   render : hàm KHÔNG tham số (tự đóng gói qua closure) chỉ để VẼ LẠI đúng drawer nguồn — hàm
-  //            này KHÔNG được tự push/reset stack, để các cấp back xa hơn (nếu có) không bị sai.
-  let drawerStack = [];
-  // Gọi TRƯỚC khi vẽ 1 drawer CON (drill-down từ drawer đang mở).
-  A.drawerPush = function (label, render) { drawerStack.push({ label, render }); };
-  // Gọi khi mở 1 drawer ĐỘC LẬP (không phải drill-down từ drawer khác, vd mở trực tiếp từ 1 dòng
-  // trong bảng danh sách) — đảm bảo không hiện "← Quay lại" giả khi drawer không có drawer cha.
-  A.drawerReset = function () { drawerStack = []; };
-  A.drawerBack = function () { const prev = drawerStack.pop(); if (prev) prev.render(); };
-  // "← Quay lại <label>" — CHỈ trả về khi thực sự có drawer cha (stack không rỗng); rỗng thì không
-  // render gì (không có back giả).
-  A.drawerBackHtml = function () {
-    if (!drawerStack.length) return '';
-    const label = drawerStack[drawerStack.length - 1].label;
-    return `<div class="drawer-back-row"><button class="btn sm" data-act="drawer-back">← Quay lại ${U.esc(label)}</button></div>`;
   };
 
   function receiptSessionPayment(p) {
@@ -768,8 +532,6 @@
 
   // ---------- hành động chung ----------
   Object.assign(A.ACT, {
-    overlay: (el, e) => { if (e.target === el) A.closeModal(); },
-    close: () => A.closeModal(),
     print: () => window.print(),
     menu: () => $('#sidebar').classList.toggle('open'),
     'demo-account': el => {
@@ -781,7 +543,6 @@
       // đúng screen (hoặc trạng thái "chưa có quyền") nếu không hợp lệ với account mới.
       const acc = A.ACCOUNTS.get(el.dataset.id);
       if (!acc || acc.status !== 'active') return;
-      if (A.resetMiniRequestState) A.resetMiniRequestState();
       ui.currentDemoAccountId = acc.id;
       ui.sessionAccountId = acc.id;
       A.syncAccountContext();
@@ -802,11 +563,9 @@
       else if (A.allowedMarkets(acc).indexOf(id) === -1) return;
       ui.market = id; ui.page = {}; ui.sel = null; A.saveUi(); A.route();
     },
-    page: el => { ui.page[el.dataset.k] = (ui.page[el.dataset.k] || 0) + Number(el.dataset.d); A.render(); },
     go: el => A.go(el.dataset.to),
     receipt: el => A.showReceipt(A.db.payments.filter(p => p.receipt === el.dataset.id && U.inM(p) && A.receiptBusinessStateOk(p))),
-    guide: () => A.guide(),
-    'drawer-back': () => A.drawerBack()
+    guide: () => A.guide()
   });
   // Cầu nối cho dropdown thay hàng nút .seg cũ (RBAC_MARKET_SCOPE_MIGRATION mục 8) — tái dùng
   // NGUYÊN VẸN logic A.ACT.market đã có (không tạo helper thứ 2), chỉ đổi nguồn đọc giá trị từ
@@ -846,10 +605,5 @@
     try { seen = !!localStorage.getItem(GUIDEKEY); localStorage.setItem(GUIDEKEY, '1'); } catch (e) { /* bỏ qua */ }
     if (!seen && (!A.isLoggedIn || A.isLoggedIn())) A.guide();
   }
-  A.resetAll = function () {
-    try { localStorage.removeItem(KEY); } catch (e) { /* bỏ qua */ }
-    A.fresh(); ui.sel = null; ui.page = {};
-    ui.mini = { traderId: null, step: 'login', tab: 'home', pay: null, lastPays: null, attach: false, bill: null };
-  };
   document.addEventListener('DOMContentLoaded', init);
 })(window.APP);

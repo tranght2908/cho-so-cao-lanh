@@ -1,0 +1,324 @@
+{
+ "meta": {
+  "suite": "finance",
+  "sourceCommit": "b9f5c74",
+  "recordedAt": "2026-09-27T22:19:40.135Z",
+  "reason": "Pre-migration action-level finance coverage for Phase 15.20; source is the untouched approved checkpoint, including V3 meter period-close handlers.",
+  "steps": 20,
+  "totalSaves": 0
+ },
+ "steps": [
+  {
+   "name": "finance policy manager CL",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "da39a3ee5e6b",
+   "ret": "e458034cd8a3"
+  },
+  {
+   "name": "finance policy manager TTD",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "da39a3ee5e6b",
+   "ret": "54733c1e57e3"
+  },
+  {
+   "name": "meter V3 render",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "da39a3ee5e6b",
+   "view": "ea063d5680e3",
+   "ret": "c3640b04338a"
+  },
+  {
+   "name": "meter point open",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "88b96b52e1eb",
+   "view": "ea063d5680e3"
+  },
+  {
+   "name": "meter detail",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "717ca5dec987",
+   "view": "ea063d5680e3"
+  },
+  {
+   "name": "meter close period open",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "48bd4e444d54",
+   "view": "ea063d5680e3"
+  },
+  {
+   "name": "meter close period confirm",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "48bd4e444d54",
+   "view": "ea063d5680e3"
+  },
+  {
+   "name": "receivables render",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "48bd4e444d54",
+   "view": "a4be0626c220",
+   "ret": "15775bed1ed1"
+  },
+  {
+   "name": "receivables status filter",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "48bd4e444d54",
+   "view": "1d462fb64dec"
+  },
+  {
+   "name": "receivable open",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "cd9244fce40b",
+   "view": "1d462fb64dec"
+  },
+  {
+   "name": "collection render",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "cd9244fce40b",
+   "view": "062fe3507806",
+   "ret": "fcf70bd6fb44"
+  },
+  {
+   "name": "collection policy collector CL",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "cd9244fce40b",
+   "view": "062fe3507806",
+   "ret": "e458034cd8a3"
+  },
+  {
+   "name": "collection search",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "cd9244fce40b",
+   "view": "8d78817dfcae"
+  },
+  {
+   "name": "collection open",
+   "err": null,
+   "saves": 0,
+   "toasts": [
+    "Không thể thu khoản phải thu trong phạm vi tài khoản hiện tại"
+   ],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "cd9244fce40b",
+   "view": "8d78817dfcae"
+  },
+  {
+   "name": "reconciliation render",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "cd9244fce40b",
+   "view": "16ce6130060c",
+   "ret": "b13acf3f9d83"
+  },
+  {
+   "name": "reconciliation bank tab",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "cd9244fce40b",
+   "view": "16ce6130060c"
+  },
+  {
+   "name": "reconciliation cash tab",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "cd9244fce40b",
+   "view": "16ce6130060c"
+  },
+  {
+   "name": "debt render",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "cd9244fce40b",
+   "view": "d817776b5a4b",
+   "ret": "15575f6a7ddd"
+  },
+  {
+   "name": "debt origin filter",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "cd9244fce40b",
+   "view": "d817776b5a4b"
+  },
+  {
+   "name": "refresh stall semantics",
+   "err": null,
+   "saves": 0,
+   "toasts": [],
+   "db": "17a087036cea",
+   "accounts": "4c8f542c7130",
+   "storageKeys": [
+    "choso-caolanh-guide",
+    "choso-caolanh-permissions"
+   ],
+   "session": "97d170e1550e",
+   "modal": "cd9244fce40b",
+   "view": "d817776b5a4b",
+   "ret": "f2fd90bac515"
+  }
+ ],
+ "totalSaves": 0
+}
