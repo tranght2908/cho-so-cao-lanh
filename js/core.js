@@ -588,8 +588,9 @@ window.APP = (function () {
       { id: 'diem-kd', ico: U.icon('store'), label: 'Điểm kinh doanh', hidden: true },
       { id: 'phien-cho', ico: U.icon('store'), label: 'Phiên chợ quê' }
     ] },
-    { group: 'Tiểu thương', items: [
-      { id: 'tieu-thuong', ico: U.icon('users'), label: 'Hồ sơ tiểu thương' }
+    { group: 'Tiểu thương & hợp đồng', items: [
+      { id: 'tieu-thuong', ico: U.icon('users'), label: 'Hồ sơ tiểu thương' },
+      { id: 'hop-dong', ico: U.icon('file'), label: 'Hợp đồng', badge: () => A.db.contracts.filter(c => U.inM(c) && c.status === 'hieuluc' && U.days(U.today(), c.end) <= 30).length }
     ] },
     { group: 'Tài chính', items: [
       { sub: 'Quản lý khai báo' },
@@ -751,10 +752,6 @@ window.APP = (function () {
     // đổi account/market mà chưa qua chrome() lần nào.
     A.syncAccountContext();
     let r = (location.hash || '').replace(/^#\/?/, '');
-    // Hợp đồng không còn là màn nghiệp vụ độc lập. Giữ route/view cũ và các
-    // permission liên quan cho tương thích dữ liệu/phụ thuộc nội bộ, nhưng mọi
-    // truy cập hash cũ đều quay về Hồ sơ tiểu thương.
-    if (r === 'hop-dong') r = 'tieu-thuong';
     // Phase 7 — tương thích ngược 2 hash cũ trước khi chuẩn hóa screen permission (so-do/cau-truc
     // → mat-bang, xem MARKET_LAYOUT_SCREEN_PERMISSION_IMPLEMENTATION_REPORT.md): đổi thẳng sang
     // 'mat-bang' NGAY TẠI ĐÂY, trước khi đánh giá U.can(r) — không cần nhánh xử lý riêng, logic

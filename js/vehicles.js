@@ -67,8 +67,8 @@
     return `<section class="tt-detail-card trader-vehicle-card"><div class="tt-detail-card-h"><span>${U.icon('store')}</span><div><b>D. Phương tiện đăng ký</b><div class="small muted">Phương tiện đang đăng ký tại các điểm kinh doanh</div></div><span class="spacer"></span>${canEdit?`<button class="btn sm" data-act="vehicle-add" data-trader="${t.id}">+ Thêm phương tiện</button>`:''}</div>${list.length?`<div class="vehicle-list">${list.map(v=>{const tt=typeOf(v.type),st=v.pointId&&A.idx.stall.get(v.pointId);return `<div class="vehicle-row ${v.status==='INACTIVE'?'is-inactive':''}"><div style="min-width:130px"><b>${tt.label}</b><small>${esc(v.plateNumber||'Không có biển số')}</small></div><div class="small">SL: ${Number(v.quantity||1)}<br>${st?esc(st.code):'Chưa xác định điểm'}</div><div class="small">Từ ngày: ${U.dmy(v.startDate||v.createdAt)}<br><span class="tag ${v.status==='ACTIVE'?'ok':''}">${v.status==='ACTIVE'?'Đang sử dụng':'Ngừng sử dụng'}</span></div><span class="spacer"></span>${canEdit?`<button class="btn sm" data-act="vehicle-edit" data-id="${v.id}">Chỉnh sửa</button>${v.status==='ACTIVE'?`<button class="btn sm" data-act="vehicle-deactivate" data-id="${v.id}">Ngừng sử dụng</button>`:''}`:''}</div>`;}).join('')}</div>`:`<div class="row small"><span>Chưa đăng ký phương tiện.</span><span class="spacer"></span>${canEdit?`<button class="btn sm" data-act="vehicle-add" data-trader="${t.id}">+ Thêm phương tiện</button>`:''}</div>`}</section>`;
   }
   // Renderer active của popup hồ sơ: chỉ một action thêm, và row dùng label/value rõ ràng.
-  function traderSection(t) {
-    const canEdit = A.canDo('tieu-thuong.them-moi', t.market), list = vehiclesFor(t.id, false);
+  function traderSection(t, options) {
+    const canEdit = options && options.editable === false ? false : A.canDo('tieu-thuong.them-moi', t.market), list = vehiclesFor(t.id, false);
     const action = canEdit ? `<button class="btn sm" data-act="vehicle-add" data-trader="${t.id}">+ Thêm phương tiện</button>` : '';
     const rows = list.map(v => {
       const type = typeOf(v.type), point = v.pointId && A.idx.stall.get(v.pointId);
