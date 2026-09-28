@@ -260,6 +260,20 @@ window.DATA = (function () {
     { role: 'Quản trị hệ thống', scope: 'Toàn hệ thống (12 chợ)', rights: 'Tài khoản, phân quyền, danh mục chợ, cấu hình đơn giá, kỳ thu, nhật ký' }
   ];
 
+  // Danh mục actor nghiệp vụ chỉ dùng để hiển thị tại Cài đặt → Vai trò & phân quyền.
+  // roleId chỉ nối tới role RBAC đã tồn tại; null nghĩa là chưa có ma trận quyền hiện hữu.
+  // Danh mục này không cấp, thu hồi hay suy diễn quyền runtime.
+  const ACTORS = [
+    { id: 'A01', code: 'QT', name: 'Quản trị hệ thống', unit: 'Cán bộ CNTT/Trung tâm', scope: 'Toàn hệ thống', responsibility: 'Quản lý tài khoản, vai trò, phân quyền; danh mục 12 chợ; bảng giá QĐ 480; tra nhật ký.', roleId: 'system_admin' },
+    { id: 'A02', code: 'TT', name: 'Tổ trưởng Tổ Quản lý chợ', unit: 'Tổ Quản lý chợ, bến xe, bến khách ngang sông', scope: 'Chợ được phân công', responsibility: 'Quy hoạch khu, phân công nhân viên thu phí theo khu, khai báo mức thu, mở/chốt kỳ thu tháng, duyệt miễn giảm, duyệt tiểu thương, giao và theo dõi phản ánh, xem báo cáo.', roleId: 'market_manager' },
+    { id: 'A03', code: 'NVTP', name: 'Nhân viên thu phí', unit: 'Tổ Quản lý chợ', scope: 'Chỉ các khu/điểm kinh doanh mình phụ trách', responsibility: 'Thu phí tháng tại điểm kinh doanh, phát biên lai điện tử, nộp tiền mặt tháng cho kế toán Trung tâm, nhắc nộp phí.', roleId: 'collector' },
+    { id: 'A04', code: 'NVKT', name: 'Nhân viên kỹ thuật', unit: 'Tổ Quản lý chợ', scope: 'Phản ánh được giao', responsibility: 'Nhận và xử lý phản ánh của tiểu thương/người dân, cập nhật tiến độ, kết quả kèm ảnh.', roleId: 'technician' },
+    { id: 'A05', code: 'KTTT', name: 'Kế toán Trung tâm', unit: 'Tổ Văn phòng – Trung tâm Cung ứng dịch vụ công', scope: 'Chợ được phân công', responsibility: 'Xác nhận phiếu nộp tiền mặt của nhân viên thu phí, đối soát số thu kỳ tháng với chứng từ, gửi danh sách thu cho kế toán phường.', roleId: 'central_accountant' },
+    { id: 'A06', code: 'KTP', name: 'Kế toán phường', unit: 'UBND phường Cao Lãnh', scope: 'Kỳ thu đã được gửi', responsibility: 'Chỉ xem và xuất danh sách thu/báo cáo thu; không đối soát, không sửa dữ liệu.', roleId: 'ward_accountant' },
+    { id: 'A07', code: 'TTH', name: 'Tiểu thương', unit: 'Thương nhân kinh doanh tại chợ', scope: 'Chỉ dữ liệu của chính mình', responsibility: 'Tự đăng ký tài khoản, xem khoản phải nộp, thanh toán QR/chuyển khoản, xem biên lai, gửi và đánh giá phản ánh, nhận thông báo.', roleId: 'trader' },
+    { id: 'A08', code: 'LĐ', name: 'Lãnh đạo UBND phường', unit: 'UBND phường Cao Lãnh', scope: 'Tổng hợp 12 chợ (chỉ xem)', responsibility: 'Xem số liệu tổng hợp thu phí, công nợ, phản ánh của 12 chợ; không thao tác nghiệp vụ.', roleId: 'ward_leader' }
+  ];
+
   const HO = ['Nguyễn', 'Trần', 'Lê', 'Phạm', 'Huỳnh', 'Võ', 'Phan', 'Đặng', 'Bùi', 'Đỗ', 'Ngô', 'Dương', 'Lý', 'Hồ', 'Mai', 'Trương', 'Châu', 'Lâm'];
   const DEM_NU = ['Thị', 'Thị Kim', 'Thị Ngọc', 'Thị Thanh', 'Thị Mỹ', 'Thị Bích', 'Thị Hồng'];
   const DEM_NAM = ['Văn', 'Minh', 'Hoàng', 'Quốc', 'Thanh', 'Công', 'Hữu'];
@@ -997,9 +1011,12 @@ window.DATA = (function () {
       notifications, sessions, marketSessions, sessionRegistrations, sessionPayments, sessionReceipts, sessionNotifications, sessionAttendances, sessionReplacements, bank, months, audit, issuedPeriods: PERIODS.slice(), extraLog: [],
       meterPeriods: METER_PERIODS, meterAdjustRequests: [], receivableAdjustRequests: [],
       cashDeposits, cashConfirms, billingPeriods: BILLING_PERIODS,
+      // Metadata trình bày của actor. Identity/name/roleId tiếp tục chỉ thuộc DATA.ACTORS;
+      // collection này không được dùng cho RBAC và chỉ lưu hai field được phép chỉnh sửa trên UI.
+      actorMetadata: ACTORS.map(a => ({ id: a.id, unit: a.unit, responsibilities: String(a.responsibility || '').split(/[;,]\s*/).filter(Boolean) })),
       pointRequests, directSellerAssignments, miniLinkRequests
     };
   }
 
-  return { VERSION, TODAY, UNIT, SESSION_FEE, ELEC, WATER, RATE_MARKET_MODEL, RATE_COLLECTION_CYCLE, RATE_TAX_CLASS, WAIVER_TYPES, RATE_POLICY_SEED, BANK_BY_MARKET, BANKS, BANK_ACCOUNT_SEED, MARKETS, STATUS, POINT_TYPE, METHOD, INCIDENT_STATES, STAFF, ROLES, build };
+  return { VERSION, TODAY, UNIT, SESSION_FEE, ELEC, WATER, RATE_MARKET_MODEL, RATE_COLLECTION_CYCLE, RATE_TAX_CLASS, WAIVER_TYPES, RATE_POLICY_SEED, BANK_BY_MARKET, BANKS, BANK_ACCOUNT_SEED, MARKETS, STATUS, POINT_TYPE, METHOD, INCIDENT_STATES, STAFF, ROLES, ACTORS, build };
 })();

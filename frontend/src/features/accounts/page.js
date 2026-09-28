@@ -9,73 +9,64 @@
     const parts = (name || '').trim().split(/\s+/).filter(Boolean);
     return ((parts[0] || '')[0] || '') + ((parts[parts.length - 1] || '')[0] || '');
   }
-  // RBAC_MARKET_SCOPE_MIGRATION mục 21: không liệt kê hết tên chợ nếu account có nhiều chợ (table
-  // sẽ quá cao với market master 12 chợ) — chỉ hiện chợ đầu + "+N chợ", đầy đủ danh sách xem ở
-  // drawer chi tiết account (accDrawerHtml bên dưới vẫn gọi hàm này, nên khi cần liệt kê đủ, sửa ở
-  // đây 1 chỗ là đủ — hiện tại drawer cũng chỉ cần tóm tắt, không có yêu cầu liệt kê đầy đủ riêng).
-  function accScopeLabel(scopes) {
-    if (!scopes || !scopes.length) return '—';
-    if (scopes.includes('ALL')) return 'Toàn bộ ' + D.MARKETS.length + ' chợ';
-    if (scopes.length === 1) return U.mShort(scopes[0]);
-    return U.mShort(scopes[0]) + ' +' + (scopes.length - 1) + ' chợ';
+  // Phạm vi chợ = phạm vi phân quyền thực tế (A.allowedMarkets / marketScopes), không phải "Đơn vị".
+  // Nhiều chợ → chợ đầu + "+N"; danh sách đầy đủ ở tooltip và popup chi tiết.
+  function accScopeNames(a) { return A.allowedMarkets(a).map(id => U.mShort(id)); }
+  function accScopeLabel(a) {
+    if ((a.marketScopes || []).includes('ALL')) return 'Tất cả chợ';
+    const names = accScopeNames(a);
+    if (!names.length) return '<span class="muted">Chưa phân công</span>';
+    return U.esc(names[0]) + (names.length > 1 ? ` <span class="muted">+${names.length - 1}</span>` : '');
   }
-  function accRoleBadges(roleIds) {
-    return (roleIds || []).map(rid => { const r = A.PERM.role(rid); return `<span class="tag info">${U.esc(r ? r.name : rid)}</span>`; }).join(' ') || '<span class="muted small">Chưa gán</span>';
-  }
+  // "Loại người dùng" = nhóm danh tính, suy ra từ quan hệ sẵn có (vai trò trader / liên kết hồ sơ
+  // tiểu thương / accountType cũ) — KHÔNG thêm field mới, KHÔNG trùng với "Vai trò".
+  const USER_KIND = A.features.accounts.service.USER_KIND;
+  const accKind = a => A.features.accounts.service.userKind(a);
+  // Vai trò hiển thị từ role registry động (A.PERM.role), không map tên riêng.
+  function accRoleNames(a) { return (a.roleIds || []).map(rid => { const r = A.PERM.role(rid); return U.esc(r ? r.name : rid); }).join(', ') || '<span class="muted">Chưa gán</span>'; }
+  // SĐT là thông tin cá nhân: mặc định che, bấm biểu tượng mắt ở tiêu đề cột để hiện/ẩn (state UI, không lưu).
+  function accPhone(a) { return a.phone ? U.esc(ui.accShowPhone ? a.phone : U.maskPhone(a.phone)) : '<span class="muted">Chưa cấu hình</span>'; }
   function accRows() {
-    const f = ui.acc, q = (f.search || '').toLowerCase();
-    // TRADER_PROFILE_AND_MINIAPP_WORKFLOW (mục 31 yêu cầu — "S"): bảng MẶC ĐỊNH chỉ hiển thị account
-    // nội bộ (system_admin/ward_leader/market_manager/collector/technician), KHÔNG hiển thị account
-    // role 'trader' — account đó được quản lý về nghiệp vụ từ màn Hồ sơ tiểu thương → Tài khoản Mini
-    // App (xem js/v-tieuthuong.js, Section E). Chỉ ẨN mặc định (presentation filter, KHÔNG xoá
-    // account/role) — nếu admin CHỦ ĐỘNG lọc đúng "Tiểu thương" ở ô "Loại tài khoản" thì vẫn xem được
-    // (tra cứu khi cần), không khoá cứng.
-    const hideTraders = f.type !== 'Tiểu thương';
-    // Lọc theo A.allowedMarkets() (không phải marketScopes thô) — chỉ có vậy mới lọc đúng cho cả
-    // account GLOBAL ['ALL'] LẪN account MARKET scoped tới bất kỳ (các) chợ nào trong 12 chợ.
+    const f = ui.acc, q = (f.search || '').toLowerCase(), kind = accKindFilter();
+    // Mặc định chỉ hiện tài khoản nội bộ (Cán bộ/Nhân viên) như trước; tài khoản Tiểu thương tra cứu
+    // qua bộ lọc "Loại người dùng" (Tiểu thương hoặc Tất cả).
     return A.ACCOUNTS.list().filter(a =>
-      (!hideTraders || a.accountType !== 'Tiểu thương') &&
-      (!f.type || a.accountType === f.type) &&
+      (kind === 'all' || accKind(a) === kind) &&
       (!f.role || (a.roleIds || []).includes(f.role)) &&
       (!f.market || A.allowedMarkets(a).includes(f.market)) &&
       (!f.status || A.ACCOUNTS.authStatus(a) === f.status) &&
       (!q || a.fullName.toLowerCase().includes(q) || a.code.toLowerCase().includes(q) || (a.phone || '').includes(q)));
   }
+  // Giá trị cũ của ui.acc.type (tên accountType) được quy về nhóm mới; rỗng = tất cả.
+  function accKindFilter() { const t = ui.acc.type || 'all'; return t === 'all' || t === 'trader' || t === 'staff' ? t : t === 'Tiểu thương' ? 'trader' : 'all'; }
   function accStats() {
     const all = A.ACCOUNTS.list();
     return {
       total: all.length, active: all.filter(a => A.ACCOUNTS.authStatus(a) === 'ACTIVE').length,
       pending: all.filter(a => A.ACCOUNTS.authStatus(a) === 'PENDING_ACTIVATION').length,
-      disabled: all.filter(a => A.ACCOUNTS.authStatus(a) === 'LOCKED').length,
-      traders: all.filter(a => a.accountType === 'Tiểu thương').length
+      disabled: all.filter(a => A.ACCOUNTS.authStatus(a) === 'LOCKED').length
     };
   }
+  const ACC_STATUS = { ACTIVE: ['Đang hoạt động', 'ok'], PENDING_ACTIVATION: ['Chờ kích hoạt', 'warn'], LOCKED: ['Tạm khóa', 'danger'] };
   function accStatusTag(a) {
-    const status = A.ACCOUNTS.authStatus(a);
-    return status === 'ACTIVE' ? '<span class="tag ok">Đang hoạt động</span>' : status === 'PENDING_ACTIVATION' ? '<span class="tag">Chờ kích hoạt</span>' : '<span class="tag danger">Đã khóa</span>';
+    const x = ACC_STATUS[A.ACCOUNTS.authStatus(a)] || ACC_STATUS.LOCKED;
+    return `<span class="tag ${x[1]}">${x[0]}</span>`;
   }
   function accDrawerHtml(a) {
     const canEdit = A.canDo('tai-khoan.sua');
-    return `<div class="drawer-h"><span class="avatar lg">${U.esc(accInitials(a.fullName))}</span>
-        <div><h3>${U.esc(a.fullName)}</h3><div class="small muted">${U.esc(a.code)} · ${accStatusTag(a)}</div></div>
-        <span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
-      <div class="drawer-b">
-        <dl class="kv">
-          <dt>Họ tên</dt><dd>${U.esc(a.fullName)}</dd>
-          <dt>Số điện thoại</dt><dd>${a.phone ? U.esc(a.phone) : '<span class="muted">Chưa có</span>'}</dd>
-          <dt>Loại tài khoản</dt><dd>${U.esc(a.accountType)}</dd>
-          ${a.title ? `<dt>Chức danh</dt><dd>${U.esc(a.title)}</dd>` : ''}
-          <dt>Đơn vị</dt><dd>${U.esc(a.organization || '')}</dd>
-          <dt>Chợ</dt><dd>${accScopeLabel(a.marketScopes)}</dd>
-        </dl>
-        <div class="divider"></div>
-        <b class="small">Phân quyền</b>
-        <dl class="kv" style="margin-top:8px">
-          <dt>Vai trò</dt><dd>${accRoleBadges(a.roleIds)}</dd>
-          <dt>Phạm vi</dt><dd>${accScopeLabel(a.marketScopes)}</dd>
-        </dl>
-      </div>
-      <div class="drawer-f">${canEdit ? `<button class="btn primary" data-act="acc-edit" data-id="${a.id}">Chỉnh sửa</button>` : ''}<button class="btn" data-act="close">Đóng</button></div>`;
+    const t = a.traderId ? A.idx.trader.get(a.traderId) : null;
+    const pairs = rows => `<dl class="contract-detail-kv">${rows.map(r => `<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('')}</dl>`;
+    const sec = (icon, key, title, body) => `<section class="contract-detail-section"><h4><span>${U.icon(icon)}</span>${key}. ${title}</h4>${body}</section>`;
+    const scopeFull = (a.marketScopes || []).includes('ALL') ? 'Tất cả chợ' : (accScopeNames(a).map(U.esc).join(', ') || '<span class="muted">Chưa phân công</span>');
+    const userRows = [['Họ tên', `<b>${U.esc(a.fullName)}</b>`], ['Số điện thoại', accPhone(a)], ['Loại người dùng', USER_KIND[accKind(a)]]];
+    if (a.title && a.title !== accRoleNames(a)) userRows.push(['Chức danh', U.esc(a.title)]);
+    if (a.organization) userRows.push(['Đơn vị', U.esc(a.organization)]);
+    if (t) userRows.push(['Hồ sơ tiểu thương', `${U.esc(t.name)} · ${t.id}`]);
+    const body = sec('users', 'A', 'THÔNG TIN NGƯỜI DÙNG', pairs(userRows))
+      + sec('file', 'B', 'TÀI KHOẢN & PHÂN QUYỀN', pairs([['Mã tài khoản', `<b>${U.esc(a.code)}</b>`], ['Vai trò', accRoleNames(a)], ['Phạm vi chợ', scopeFull], ['Trạng thái', accStatusTag(a)]]));
+    return `<div class="drawer-h tt-dossier-head"><h3>${U.icon('users')}Chi tiết tài khoản</h3><button class="x" data-act="close" aria-label="Đóng">×</button></div>
+      <div class="drawer-b contract-detail-body"><div class="contract-detail-grid">${body}</div></div>
+      <div class="drawer-f contract-detail-footer">${canEdit ? `<button class="btn primary" data-act="acc-edit" data-id="${a.id}">${U.icon('edit')}Chỉnh sửa tài khoản</button>` : ''}<button class="btn" data-act="close">Đóng</button></div>`;
   }
   // RBAC_MARKET_SCOPE_MIGRATION mục 20: phần "Phạm vi" đổi theo vai trò đang chọn —
   //   system_admin → "Toàn hệ thống" (tĩnh, không chọn từng chợ)
@@ -105,14 +96,17 @@
     const d = ui.accForm, isNew = !d.id;
     const canAssign = isNew || A.canDo('tai-khoan.gan-quyen');
     const dis = canAssign ? '' : 'disabled';
-    A.modal(A.mHead(isNew ? 'Thêm tài khoản mới' : 'Sửa tài khoản') + `<div class="modal-b"><div class="form-grid">
+    // Tài khoản Tiểu thương chỉ tạo từ "Cần xử lý → Tạo tài khoản" (liên kết hồ sơ); form này dành cho
+    // tài khoản nội bộ nên khi tạo mới không có vai trò Tiểu thương. "Loại tài khoản" (accountType)
+    // vẫn tự đồng bộ theo vai trò như trước (A.CH['af-role']), không còn là ô chọn trùng với Vai trò.
+    const roles = A.PERM.roles().filter(r => !isNew || r.id !== 'trader');
+    A.modal(A.mHead(isNew ? 'Thêm tài khoản nội bộ' : 'Sửa tài khoản') + `<div class="modal-b"><div class="form-grid">
       <div class="field"><label>Mã tài khoản *</label><input class="input" data-ch="af-code" value="${U.esc(d.code || '')}" ${isNew ? '' : 'disabled'}></div>
       <div class="field"><label>Họ tên *</label><input class="input" data-ch="af-name" value="${U.esc(d.fullName || '')}"></div>
-      <div class="field"><label>Số điện thoại</label><input class="input" data-ch="af-phone" value="${U.esc(d.phone || '')}"></div>
-      <div class="field"><label>Loại tài khoản</label><select class="input" data-ch="af-type">${A.ACCOUNTS.ACCOUNT_TYPES.map(t => `<option ${d.accountType === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
-      <div class="field"><label>Vai trò (Role)</label><select class="input" data-ch="af-role" ${dis}><option value="">— Chưa gán —</option>${A.PERM.roles().map(r => `<option value="${r.id}" ${(d.roleIds && d.roleIds[0]) === r.id ? 'selected' : ''}>${U.esc(r.name)}</option>`).join('')}</select></div>
+      <div class="field"><label>Số điện thoại đăng nhập</label>${isNew ? `<input class="input" data-ch="af-phone" value="${U.esc(d.phone || '')}">` : `<input class="input" value="${U.esc(U.maskPhone(d.phone || ''))}" readonly><small class="muted">Số đăng nhập chỉ thay đổi qua quy trình yêu cầu, phê duyệt và OTP.</small>${A.phoneChangeAdminOpenButton ? A.phoneChangeAdminOpenButton(d.id) : ''}`}</div>
+      <div class="field"><label>Vai trò</label><select class="input" data-ch="af-role" ${dis}><option value="">— Chưa gán —</option>${roles.map(r => `<option value="${r.id}" ${(d.roleIds && d.roleIds[0]) === r.id ? 'selected' : ''}>${U.esc(r.name)}</option>`).join('')}</select></div>
       <div class="field"><label>Đơn vị</label><input class="input" data-ch="af-org" value="${U.esc(d.organization || '')}"></div>
-      <div class="field"><label>Trạng thái</label><select class="input" data-ch="af-status"><option value="ACTIVE" ${A.ACCOUNTS.authStatus(d) === 'ACTIVE' ? 'selected' : ''}>Đang hoạt động</option><option value="LOCKED" ${A.ACCOUNTS.authStatus(d) === 'LOCKED' ? 'selected' : ''}>Đã khóa</option></select></div>
+      <div class="field"><label>Trạng thái</label><select class="input" data-ch="af-status"><option value="ACTIVE" ${A.ACCOUNTS.authStatus(d) === 'ACTIVE' ? 'selected' : ''}>Đang hoạt động</option><option value="LOCKED" ${A.ACCOUNTS.authStatus(d) === 'LOCKED' ? 'selected' : ''}>Tạm khóa</option></select></div>
     </div>
     ${afScopeSectionHtml(d, dis)}
     ${!canAssign ? '<div class="note" style="margin-top:12px">Bạn không có quyền gán vai trò / phạm vi chợ nên các trường này đang bị khoá.</div>' : ''}
@@ -120,56 +114,113 @@
     <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="acc-form-save">Lưu</button></div>`);
   }
 
+  const ACC_VIEW = { ACCOUNTS: 'ACCOUNTS', PHONE_CHANGE_REQUESTS: 'PHONE_CHANGE_REQUESTS', PENDING_ACTIVATION: 'PENDING_ACTIVATION', TRADERS_WITHOUT_ACCOUNT: 'TRADERS_WITHOUT_ACCOUNT' };
+  function queueState() { return ui.accQueue || (ui.accQueue = { search: '', status: 'PENDING', market: '' }); }
+  function phoneRequestLabel(status) { return ({ PENDING: 'Chờ xử lý', APPROVED_PENDING_OTP: 'Chờ xác minh số mới', REJECTED: 'Đã từ chối', COMPLETED: 'Đã hoàn tất', CANCELLED: 'Đã hủy' })[status] || status; }
+  function phoneRequestTag(r) { return `<span class="tag ${r.status === 'REJECTED' ? 'danger' : r.status === 'COMPLETED' ? 'ok' : 'warn'}">${phoneRequestLabel(r.status)}</span>`; }
+  function queueTable(title, count, content, description) { return `<div class="card acc-table-card"><div class="card-h acc-table-head acc-queue-head"><div><button class="acc-queue-back" data-act="acc-queue-back">← Danh sách tài khoản</button><h3>${title} <span class="acc-queue-total">${count}</span></h3>${description ? `<p>${description}</p>` : ''}</div></div><div class="card-b">${content}</div></div>`; }
+  function phoneRequestQueue(canEdit) {
+    const q = queueState(), all = (A.db.phoneChangeRequests || []).slice(), rows = all.filter(r => (!q.status || r.status === q.status) && (!q.search || [r.oldPhone, r.newPhone, (A.ACCOUNTS.get(r.accountId) || {}).fullName, (A.ACCOUNTS.get(r.accountId) || {}).code].join(' ').toLowerCase().includes(q.search.toLowerCase()))), pg = U.pager('accQueue', rows.length, 15);
+    const filters = `<div class="card acc-filters"><div class="card-b row"><input class="input acc-search" placeholder="Tìm người dùng, mã tài khoản, số điện thoại..." data-in="accq-search" value="${U.esc(q.search)}"><select class="input" data-ch="accq-request-status"><option value="">Trạng thái yêu cầu: Tất cả</option>${['PENDING','APPROVED_PENDING_OTP','REJECTED','COMPLETED','CANCELLED'].map(x => `<option value="${x}" ${q.status === x ? 'selected' : ''}>${phoneRequestLabel(x)}</option>`).join('')}</select><button class="btn" data-act="accq-clear">Đặt lại</button></div></div>`;
+    const table = U.table([{ t: 'Người dùng' }, { t: 'SĐT hiện tại' }, { t: 'SĐT đề nghị' }, { t: 'Ngày gửi' }, { t: 'Trạng thái' }, { t: 'Thao tác' }], rows.slice(pg.start, pg.end).map(r => { const a = A.ACCOUNTS.get(r.accountId) || {}; return `<tr><td><b>${U.esc(a.fullName || '—')}</b><div class="small muted">${U.esc(a.code || '')}</div></td><td>${U.esc(U.maskPhone(r.oldPhone || ''))}</td><td>${U.esc(U.maskPhone(r.newPhone || ''))}</td><td>${U.dmy(r.requestedAt || '')}</td><td>${phoneRequestTag(r)}</td><td>${canEdit ? `<button class="btn sm" data-act="phone-change-admin-detail" data-id="${r.id}">Xem & xử lý</button>` : '<span class="muted small">Chỉ xem</span>'}</td></tr>`; }), { empty: 'Không có yêu cầu phù hợp' }) + pg.html;
+    return filters + queueTable('Yêu cầu đổi số điện thoại', rows.length + ' yêu cầu', table);
+  }
+  function pendingActivationQueue() {
+    const q = queueState(), rows = A.ACCOUNTS.list().filter(a => A.ACCOUNTS.authStatus(a) === 'PENDING_ACTIVATION' && (!q.search || [a.fullName, a.code, a.phone].join(' ').toLowerCase().includes(q.search.toLowerCase())) && (!q.type || accKind(a) === q.type) && (!q.role || (a.roleIds || []).includes(q.role)) && (!q.market || A.allowedMarkets(a).includes(q.market))), pg = U.pager('accQueue', rows.length, 15);
+    const filters = `<div class="card acc-filters"><div class="card-b row"><input class="input acc-search" placeholder="Tìm họ tên, mã tài khoản, số điện thoại..." data-in="accq-search" value="${U.esc(q.search)}"><select class="input" data-ch="accq-type"><option value="">Loại người dùng: Tất cả</option><option value="staff" ${q.type === 'staff' ? 'selected' : ''}>${USER_KIND.staff}</option><option value="trader" ${q.type === 'trader' ? 'selected' : ''}>${USER_KIND.trader}</option></select><select class="input" data-ch="accq-role"><option value="">Vai trò: Tất cả</option>${A.PERM.roles().map(r => `<option value="${r.id}" ${q.role === r.id ? 'selected' : ''}>${U.esc(r.name)}</option>`).join('')}</select><select class="input" data-ch="accq-market"><option value="">Phạm vi chợ: Tất cả</option>${D.MARKETS.map(m => `<option value="${m.id}" ${q.market === m.id ? 'selected' : ''}>${U.esc(m.short)}</option>`).join('')}</select><button class="btn" data-act="accq-clear">Đặt lại</button></div></div>`;
+    const table = U.table([{ t: 'Mã tài khoản' }, { t: 'Người dùng' }, { t: 'Số điện thoại' }, { t: 'Loại người dùng' }, { t: 'Vai trò' }, { t: 'Phạm vi chợ' }, { t: 'Ngày tạo' }, { t: 'Trạng thái' }, { t: 'Thao tác' }], rows.slice(pg.start, pg.end).map(a => `<tr class="click" data-act="acc-open" data-id="${a.id}"><td>${U.esc(a.code)}</td><td><b>${U.esc(a.fullName)}</b></td><td>${accPhone(a)}</td><td>${USER_KIND[accKind(a)]}</td><td>${accRoleNames(a)}</td><td>${accScopeLabel(a)}</td><td>${a.createdAt ? U.dmy(a.createdAt) : '—'}</td><td>${accStatusTag(a)}</td><td><button class="btn sm" data-act="acc-open" data-id="${a.id}">Xem</button></td></tr>`), { empty: 'Không có tài khoản chờ kích hoạt' }) + pg.html;
+    return filters + queueTable('Tài khoản chờ kích hoạt', rows.length + ' tài khoản', table);
+  }
+  function traderWithoutAccountQueue(canCreate) {
+    const q = queueState(), source = A.features.accounts.service.traderAccountRows ? A.features.accounts.service.traderAccountRows() : [], rows = source.filter(x => (!q.market || x.t.market === q.market) && (!q.search || [x.t.id, x.t.name, x.t.phone, x.c && x.c.id, x.s && x.s.code].join(' ').toLowerCase().includes(q.search.toLowerCase()))), pg = U.pager('accQueue', rows.length, 15);
+    const filters = `<div class="card acc-filters"><div class="card-b row"><input class="input acc-search" placeholder="Tìm mã tiểu thương, tên, SĐT, điểm, hợp đồng..." data-in="accq-search" value="${U.esc(q.search)}"><select class="input" data-ch="accq-market"><option value="">Chợ: Tất cả</option>${D.MARKETS.map(m => `<option value="${m.id}" ${q.market === m.id ? 'selected' : ''}>${U.esc(m.short)}</option>`).join('')}</select><button class="btn" data-act="accq-clear">Đặt lại</button></div></div>`;
+    const table = U.table([{ t: 'Mã tiểu thương' }, { t: 'Tiểu thương' }, { t: 'Số điện thoại' }, { t: 'Điểm kinh doanh' }, { t: 'Hợp đồng' }, { t: 'Chợ' }, { t: 'Trạng thái' }, { t: 'Thao tác' }], rows.slice(pg.start, pg.end).map(x => `<tr><td>${U.esc(x.t.id)}</td><td><b>${U.esc(x.t.name)}</b></td><td>${U.esc(U.maskPhone(x.t.phone || ''))}</td><td>${U.esc((x.s && x.s.code) || '—')}</td><td>${U.esc((x.c && x.c.id) || '—')}</td><td>${U.esc(U.mShort(x.t.market))}</td><td><span class="tag warn">Chưa có tài khoản</span></td><td>${canCreate ? `<button class="btn sm primary" data-act="wf-account-open" data-id="${x.t.id}">Tạo tài khoản</button>` : '<span class="muted small">Chỉ xem</span>'}</td></tr>`), { empty: 'Không có tiểu thương phù hợp' }) + pg.html;
+    return filters + queueTable('Tiểu thương chưa có tài khoản', rows.length + ' tiểu thương', table, 'Tiểu thương đã có hồ sơ/hợp đồng đủ điều kiện nhưng chưa được cấp tài khoản.');
+  }
   const accountsView = function () {
     const canCreate = A.canDo('tai-khoan.tao-moi');
     const canEdit = A.canDo('tai-khoan.sua');
     const canToggle = A.canDo('tai-khoan.khoa-mo-khoa');
-    const rows = accRows(), st = accStats(), f = ui.acc;
+    const mode = ui.acc.viewMode || ACC_VIEW.ACCOUNTS, rows = accRows(), st = accStats(), f = ui.acc, kind = accKindFilter();
     const pg = U.pager('acc', rows.length, 15);
     const k = (l, v) => `<div class="card kpi"><div class="k-label">${l}</div><div class="k-value">${v}</div></div>`;
-    return `
-    <div class="card"><div class="card-b row" style="padding-top:14px">
-      <div><h3 style="margin:0;font-size:var(--font-size-md)">Tài khoản người dùng</h3><div class="small muted">Quản lý và tra cứu các tài khoản được phép sử dụng hệ thống.</div></div>
-      <span class="spacer"></span>
-      ${canCreate ? '<button class="btn primary" data-act="acc-new">+ Thêm tài khoản</button>' : ''}</div></div>
-    <div class="kpis">
-      ${k('Tổng tài khoản', st.total)}
-      ${k('Đang hoạt động', st.active)}
-      ${k('Chờ kích hoạt', st.pending)}
-      ${k('Tạm khoá', st.disabled)}
-      ${k('Tiểu thương', st.traders)}
-    </div>
-    <div class="card"><div class="card-b row" style="padding-top:14px;flex-wrap:wrap">
-      <input class="input" style="min-width:220px;flex:1" placeholder="Tìm theo họ tên, mã, số điện thoại..." data-in="acc-search" value="${U.esc(f.search || '')}">
-      <select class="input" data-ch="acc-type"><option value="">Loại tài khoản: Tất cả</option>${A.ACCOUNTS.ACCOUNT_TYPES.map(t => `<option ${f.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
+    const statusOpts = Object.keys(ACC_STATUS).map(s => `<option value="${s}" ${f.status === s ? 'selected' : ''}>${ACC_STATUS[s][0]}</option>`).join('');
+    const pendingPhoneRequests = (A.db.phoneChangeRequests || []).filter(r => r.status === 'PENDING').length;
+    const tradersNeedingAccount = A.features.accounts.service && A.features.accounts.service.tradersNeedingAccount ? A.features.accounts.service.tradersNeedingAccount().length : 0;
+    const canProcess = canEdit || canCreate;
+    const workRow = (label, count, modeId, allowed) => {
+      if (!count) return '';
+      const content = `<span>${label}</span><span class="acc-work-count">${count}</span><span aria-hidden="true">›</span>`;
+      return allowed ? `<button class="acc-work-row ${mode === modeId ? 'on' : ''}" data-act="acc-queue" data-mode="${modeId}">${content}</button>` : `<div class="acc-work-row" aria-label="${label}: ${count}">${content}</div>`;
+    };
+    const defaultTable = `<div class="card acc-filters"><div class="card-b row">
+      <input class="input acc-search" placeholder="Tìm theo họ tên, mã, số điện thoại..." data-in="acc-search" value="${U.esc(f.search || '')}">
+      <select class="input" data-ch="acc-type"><option value="all" ${kind === 'all' ? 'selected' : ''}>Loại người dùng: Tất cả</option><option value="staff" ${kind === 'staff' ? 'selected' : ''}>Loại người dùng: ${USER_KIND.staff}</option><option value="trader" ${kind === 'trader' ? 'selected' : ''}>Loại người dùng: ${USER_KIND.trader}</option></select>
       <select class="input" data-ch="acc-role"><option value="">Vai trò: Tất cả</option>${A.PERM.roles().map(r => `<option value="${r.id}" ${f.role === r.id ? 'selected' : ''}>${U.esc(r.name)}</option>`).join('')}</select>
-      <select class="input" data-ch="acc-market"><option value="">Chợ / phạm vi: Tất cả</option>${D.MARKETS.map(m => `<option value="${m.id}" ${f.market === m.id ? 'selected' : ''}>${m.short}</option>`).join('')}</select>
-      <select class="input" data-ch="acc-status"><option value="">Trạng thái: Tất cả</option><option value="ACTIVE" ${f.status === 'ACTIVE' ? 'selected' : ''}>Đang hoạt động</option><option value="PENDING_ACTIVATION" ${f.status === 'PENDING_ACTIVATION' ? 'selected' : ''}>Chờ kích hoạt</option><option value="LOCKED" ${f.status === 'LOCKED' ? 'selected' : ''}>Đã khóa</option></select>
+      <select class="input" data-ch="acc-market"><option value="">Phạm vi chợ: Tất cả</option>${D.MARKETS.map(m => `<option value="${m.id}" ${f.market === m.id ? 'selected' : ''}>${U.esc(m.short)}</option>`).join('')}</select>
+      <select class="input" data-ch="acc-status"><option value="">Trạng thái: Tất cả</option>${statusOpts}</select>
       <button class="btn" data-act="acc-clear">Đặt lại</button></div></div>
-    <div class="card"><div class="card-b">
-      ${U.table([{ t: 'Mã' }, { t: 'Người dùng' }, { t: 'Loại tài khoản' }, { t: 'Vai trò' }, { t: 'Đơn vị / Chợ' }, { t: 'Trạng thái' }, { t: '' }],
-        rows.slice(pg.start, pg.end).map(a => `<tr class="click" data-act="acc-open" data-id="${a.id}">
-          <td>${U.esc(a.code)}</td>
-          <td><div class="row" style="gap:8px;flex-wrap:nowrap"><span class="avatar">${U.esc(accInitials(a.fullName))}</span><div><b>${U.esc(a.fullName)}</b>${a.phone ? `<div class="small muted">${U.esc(a.phone)}</div>` : ''}</div></div></td>
-          <td class="small">${U.esc(a.accountType)}</td>
-          <td>${accRoleBadges(a.roleIds)}</td>
-          <td class="small">${U.esc(a.organization || '')}<div class="muted">${accScopeLabel(a.marketScopes)}</div></td>
-          <td>${accStatusTag(a)}</td>
-          <td class="nowrap">
-            ${canEdit ? `<button class="btn sm" data-act="acc-edit" data-id="${a.id}">Sửa</button>` : ''}
-            ${canToggle ? `<button class="btn sm ${A.ACCOUNTS.authStatus(a) === 'ACTIVE' ? 'danger' : ''}" data-act="acc-toggle" data-id="${a.id}">${A.ACCOUNTS.authStatus(a) === 'ACTIVE' ? 'Khoá' : 'Mở khoá'}</button>` : ''}
-          </td></tr>`), { empty: 'Không tìm thấy tài khoản phù hợp' })}${pg.html}</div></div>`;
+    <div class="card acc-table-card"><div class="card-h acc-table-head"><h3>Danh sách tài khoản người dùng</h3><span class="spacer"></span>${canCreate ? '<button class="btn primary" data-act="acc-new">+ Thêm tài khoản nội bộ</button>' : ''}</div><div class="card-b">
+      ${U.table([{ t: 'Mã tài khoản' }, { t: 'Người dùng' }, { t: `<span class="tt-private-heading">Số điện thoại<button class="btn sm" data-act="acc-toggle-phone" aria-pressed="${ui.accShowPhone ? 'true' : 'false'}">${U.icon(ui.accShowPhone ? 'eye-off' : 'eye')}</button></span>` }, { t: 'Loại người dùng' }, { t: 'Vai trò' }, { t: 'Phạm vi chợ' }, { t: 'Trạng thái' }, { t: 'Thao tác' }], rows.slice(pg.start, pg.end).map(a => `<tr class="click" data-act="acc-open" data-id="${a.id}"><td class="nowrap">${U.esc(a.code)}</td><td><div class="row acc-user"><span class="avatar">${U.esc(accInitials(a.fullName))}</span><b>${U.esc(a.fullName)}</b></div></td><td class="nowrap">${accPhone(a)}</td><td>${USER_KIND[accKind(a)]}</td><td>${accRoleNames(a)}</td><td>${accScopeLabel(a)}</td><td>${accStatusTag(a)}</td><td class="nowrap acc-actions"><button class="btn sm" data-act="acc-open" data-id="${a.id}">Xem</button>${canEdit || canToggle ? `<button class="btn sm acc-more" data-act="acc-more" data-id="${a.id}">⋯</button>` : ''}</td></tr>`), { empty: 'Không tìm thấy tài khoản phù hợp' })}${pg.html}</div></div>`;
+    const activeTable = mode === ACC_VIEW.PHONE_CHANGE_REQUESTS ? phoneRequestQueue(canEdit) : mode === ACC_VIEW.PENDING_ACTIVATION ? pendingActivationQueue() : mode === ACC_VIEW.TRADERS_WITHOUT_ACCOUNT ? traderWithoutAccountQueue(canCreate) : defaultTable;
+    return `
+    <div class="acc-page-intro">Quản lý và tra cứu các tài khoản được phép sử dụng hệ thống.</div>
+    <div class="acc-overview">
+      <div class="kpis acc-kpis">
+        ${k('Tổng tài khoản', st.total)}
+        ${k('Đang hoạt động', st.active)}
+        ${k('Chờ kích hoạt', st.pending)}
+        ${k('Tạm khóa', st.disabled)}
+      </div>
+      <section class="card acc-work"><div class="card-b"><h3>Cần xử lý</h3>
+        ${workRow('Yêu cầu đổi số điện thoại', pendingPhoneRequests, ACC_VIEW.PHONE_CHANGE_REQUESTS, canEdit)}
+        ${workRow('Tài khoản chờ kích hoạt', st.pending, ACC_VIEW.PENDING_ACTIVATION, canProcess)}
+        ${workRow('Tiểu thương chưa có tài khoản', tradersNeedingAccount, ACC_VIEW.TRADERS_WITHOUT_ACCOUNT, canCreate)}
+        ${!pendingPhoneRequests && !st.pending && !tradersNeedingAccount ? '<div class="small muted">Không có việc cần xử lý.</div>' : ''}
+      </div></section>
+    </div>
+    ${activeTable}`;
   };
+  // Menu "⋯": chỉ hiện thao tác người dùng hiện tại được phép, và gọi lại ĐÚNG handler sẵn có
+  // (acc-edit / acc-toggle) — không có logic sửa/khóa thứ hai.
+  A.ACT['acc-more'] = el => {
+    const a = A.ACCOUNTS.get(el.dataset.id);
+    if (!a) return;
+    const canEdit = A.canDo('tai-khoan.sua'), canToggle = A.canDo('tai-khoan.khoa-mo-khoa');
+    if (!canEdit && !canToggle) return;
+    const active = A.ACCOUNTS.authStatus(a) === 'ACTIVE';
+    const r = el.getBoundingClientRect ? el.getBoundingClientRect() : { bottom: 0, right: 0 };
+    const top = Math.round(r.bottom + 4), left = Math.max(8, Math.round(r.right - 210));
+    A.$('#modal-root').innerHTML = `<div class="acc-menu-wrap" data-act="close"></div><div class="acc-menu" role="menu" style="top:${top}px;left:${left}px">
+      ${canEdit ? `<button class="acc-menu-item" role="menuitem" data-act="acc-edit" data-id="${a.id}">Chỉnh sửa tài khoản</button>` : ''}
+      ${canEdit && canToggle ? '<div class="acc-menu-sep"></div>' : ''}
+      ${canToggle ? `<button class="acc-menu-item ${active ? 'danger' : ''}" role="menuitem" data-act="acc-menu-toggle" data-id="${a.id}">${active ? 'Tạm khóa tài khoản' : 'Mở khóa tài khoản'}</button>` : ''}</div>`;
+  };
+  A.ACT['acc-toggle-phone'] = () => { ui.accShowPhone = !ui.accShowPhone; A.render(); };
+  A.ACT['acc-menu-toggle'] = el => { A.closeModal(); A.ACT['acc-toggle'](el); };
   A.IN['acc-search'] = el => { ui.acc.search = el.value; ui.page.acc = 0; A.render(); };
   A.CH['acc-type'] = el => { ui.acc.type = el.value; ui.page.acc = 0; A.render(); };
   A.CH['acc-role'] = el => { ui.acc.role = el.value; ui.page.acc = 0; A.render(); };
   A.CH['acc-market'] = el => { ui.acc.market = el.value; ui.page.acc = 0; A.render(); };
   A.CH['acc-status'] = el => { ui.acc.status = el.value; ui.page.acc = 0; A.render(); };
-  A.ACT['acc-clear'] = () => { ui.acc = { search: '', type: '', role: '', market: '', status: '' }; ui.page.acc = 0; A.render(); };
+  A.ACT['acc-clear'] = () => { ui.acc = { search: '', type: 'all', role: '', market: '', status: '' }; ui.page.acc = 0; A.render(); };
+  A.ACT['acc-queue'] = el => {
+    const mode = el.dataset.mode;
+    if (mode === ACC_VIEW.PHONE_CHANGE_REQUESTS && !A.canDo('tai-khoan.sua')) return;
+    if (mode === ACC_VIEW.PENDING_ACTIVATION && !A.canDo('tai-khoan.sua') && !A.canDo('tai-khoan.tao-moi')) return;
+    if (mode === ACC_VIEW.TRADERS_WITHOUT_ACCOUNT && !A.canDo('tai-khoan.tao-moi')) return;
+    ui.acc.viewMode = mode; ui.accQueue = { search: '', status: mode === ACC_VIEW.PHONE_CHANGE_REQUESTS ? 'PENDING' : '', market: '', type: '', role: '' }; ui.page.accQueue = 0; A.render();
+  };
+  A.ACT['acc-queue-back'] = () => { ui.acc.viewMode = ACC_VIEW.ACCOUNTS; ui.page.acc = 0; A.render(); };
+  A.IN['accq-search'] = el => { queueState().search = el.value; ui.page.accQueue = 0; A.render(); };
+  A.CH['accq-request-status'] = el => { queueState().status = el.value; ui.page.accQueue = 0; A.render(); };
+  A.CH['accq-market'] = el => { queueState().market = el.value; ui.page.accQueue = 0; A.render(); };
+  A.CH['accq-type'] = el => { queueState().type = el.value; ui.page.accQueue = 0; A.render(); };
+  A.CH['accq-role'] = el => { queueState().role = el.value; ui.page.accQueue = 0; A.render(); };
+  A.ACT['accq-clear'] = () => { ui.accQueue = { search: '', status: ui.acc.viewMode === ACC_VIEW.PHONE_CHANGE_REQUESTS ? 'PENDING' : '', market: '', type: '', role: '' }; ui.page.accQueue = 0; A.render(); };
   A.ACT['acc-open'] = el => {
-    const a = A.ACCOUNTS.get(el.dataset.id);
-    if (!a) return;
-    A.$('#modal-root').innerHTML = `<div class="drawer-overlay" data-act="close"></div><div class="drawer">${accDrawerHtml(a)}</div>`;
+    if (!U.can('tai-khoan') || !A.openAccountProfile) return;
+    A.openAccountProfile(el.dataset.id);
   };
   A.ACT['acc-new'] = () => {
     if (!A.canDo('tai-khoan.tao-moi')) return;
@@ -235,7 +286,7 @@
       else if (roleId === 'trader') marketScopes = existing ? existing.marketScopes : (d.marketScopes || []);
       else if (!marketScopes.length) { U.toast('Vui lòng chọn ít nhất một chợ được phân công.'); return; }
     }
-    const patch = { code: d.code.trim(), fullName: d.fullName.trim(), phone: (d.phone || '').trim(), accountType: d.accountType, roleIds: canAssign ? d.roleIds : (existing ? existing.roleIds : []), organization: (d.organization || '').trim(), marketScopes, status: d.status };
+    const patch = { code: d.code.trim(), fullName: d.fullName.trim(), phone: existing ? existing.phone : (d.phone || '').trim(), accountType: d.accountType, roleIds: canAssign ? d.roleIds : (existing ? existing.roleIds : []), organization: (d.organization || '').trim(), marketScopes, status: d.status };
     if (d.id) {
       A.ACCOUNTS.update(d.id, patch);
       U.log('Cập nhật tài khoản "' + patch.fullName + '" (' + patch.code + ')');
@@ -256,9 +307,10 @@
     A.ACCOUNTS.setStatus(a.id, wasActive ? 'LOCKED' : 'ACTIVE');
     U.log((wasActive ? 'Tạm khoá' : 'Mở khoá') + ' tài khoản "' + a.fullName + '" (' + a.code + ')');
     A.render();
-    U.toast(wasActive ? 'Đã tạm khoá tài khoản ' + a.code : 'Đã mở khoá tài khoản ' + a.code);
+    U.toast(wasActive ? 'Đã tạm khóa tài khoản ' + a.code : 'Đã mở khóa tài khoản ' + a.code);
   };
-  A.VIEWS['tai-khoan'] = function () { return A.features.accounts.traderAccountTaskHtml() + accountsView(); };
+  A.VIEWS['tai-khoan'] = function () { return accountsView(); };
 
-  if (!ui.acc) ui.acc = { search: '', type: '', role: '', market: '', status: '' };
+  if (!ui.acc) ui.acc = { search: '', type: 'all', role: '', market: '', status: '', viewMode: ACC_VIEW.ACCOUNTS };
+  if (!ui.acc.viewMode) ui.acc.viewMode = ACC_VIEW.ACCOUNTS;
 })(window.APP);

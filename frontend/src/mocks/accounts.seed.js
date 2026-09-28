@@ -17,7 +17,15 @@
     'Nhân viên kỹ thuật (điện, nước)': 'technician'
   };
   // Số demo phục vụ luồng đăng nhập SĐT + OTP của prototype; không phải dữ liệu thật.
-  const STAFF_DEMO_PHONE_BY_ID = { NV01: '0900000001', NV05: '0900000005' };
+  const STAFF_DEMO_PHONE_BY_ID = {
+    // Bộ tài khoản đăng nhập demo của Chợ Cao Lãnh. Các số này là dữ liệu
+    // minh hoạ, dùng cùng OTP mock; không phải số điện thoại cá nhân.
+    NV01: '0900000001',
+    NV02: '0900000002',
+    NV03: '0900000003',
+    NV04: '0900000004',
+    NV05: '0900000005'
+  };
 
   function defaultStaffAccounts() {
     return D.STAFF.map(s => {
@@ -78,6 +86,10 @@
       // vào từng market chỉ để thanh demo hoạt động").
       { id: 'AC-LD01', code: 'LD01', fullName: 'Nguyễn Văn Phúc', phone: '0909123456', accountType: roleName('ward_leader'), title: 'Phó Chủ tịch UBND phường', roleIds: ['ward_leader'], organization: 'UBND phường Cao Lãnh', marketScopes: ['ALL'], status: 'active' },
       { id: 'AC-QT01', code: 'QT01', fullName: 'Đặng Thị Thu', phone: '0909234567', accountType: roleName('system_admin'), title: 'Quản trị hệ thống', roleIds: ['system_admin'], organization: 'UBND phường Cao Lãnh', marketScopes: ['ALL'], status: 'active' },
+      // Hai actor kế toán đã có role RBAC cố định nhưng chưa có account demo.
+      // Chỉ bổ sung seed mặc định; không thay đổi permission assignment của role.
+      { id: 'AC-KTTT01', code: 'KTTT01', fullName: 'Nguyễn Thị Minh Anh', phone: '0900000006', accountType: roleName('central_accountant'), title: 'Kế toán Trung tâm', roleIds: ['central_accountant'], organization: 'Tổ Văn phòng – Trung tâm Cung ứng dịch vụ công', marketScopes: ['CL'], status: 'active' },
+      { id: 'AC-KTP01', code: 'KTP01', fullName: 'Lê Thị Bảo Trâm', phone: '0900000007', accountType: roleName('ward_accountant'), title: 'Kế toán phường', roleIds: ['ward_accountant'], organization: 'UBND phường Cao Lãnh', marketScopes: ['ALL'], status: 'active' },
       { id: 'AC-CHI-QUYET', code: 'CHI-QUYET', fullName: 'Chí Quyết', phone: '0909000001', accountType: roleName('trader'), title: 'Tiểu thương chợ quê', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'active', linkedTraderId: 'TTD-CQ', traderId: 'TTD-CQ' },
       { id: 'AC-TT-TTD', code: 'TT-TTD', fullName: 'Tiểu thương Chợ quê Tân Thuận Đông', phone: '0909666777', accountType: roleName('trader'), title: 'Tiểu thương chợ quê mẫu', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'active' },
       // TRADER_PROFILE_AND_MINIAPP_WORKFLOW: `traderId` — liên kết account Mini App với ĐÚNG 1

@@ -156,8 +156,6 @@
   // khớp, tránh gây hiểu lầm "AC-TT01 tên khác nhưng lại đại diện cho 1 trader tên khác".
   A.ensureMiniAppDemoLink = function () {
     if (!A.ACCOUNTS || !A.db) return;
-    const hasAnyLink = A.ACCOUNTS.list().some(a => A.ACCOUNTS.primaryRole(a) === 'trader' && a.traderId);
-    if (hasAnyLink) return;
     const acc = A.ACCOUNTS.get('AC-TT01');
     const kaA01 = A.db.stalls && A.db.stalls.find(s => s.id === 'CL-KA-A01');
     const trader = kaA01 && A.db.traders.find(t => t.id === kaA01.traderId);
@@ -373,7 +371,8 @@
   // gốc hoặc tạo role mới.
   const DEMO_ROLE_SHORT = {
     system_admin: 'QTHT', ward_leader: 'Lãnh đạo', market_manager: 'Trưởng BQL',
-    collector: 'Thu phí', technician: 'Kỹ thuật', trader: 'Tiểu thương'
+    collector: 'Thu phí', technician: 'Kỹ thuật', central_accountant: 'KT Trung tâm',
+    ward_accountant: 'KT phường', trader: 'Tiểu thương'
   };
   // DEMO_ACCOUNT_BAR_COMPACT_GROUPING (mục 4/5/6/10 yêu cầu): với 12 chợ, liệt kê phẳng mọi account
   // hợp lệ (bản cũ) làm thanh dài hàng chục nút khi selectedMarket='ALL'. Nhóm lại theo 2 tầng, vẫn
@@ -385,7 +384,7 @@
   //     12 chợ (mục 4).
   //   - selectedMarket=1 chợ cụ thể: thêm các nhóm MARKET-scoped account CÓ chợ đó trong marketScopes,
   //     xếp theo role (mục 5) — account KHÔNG thuộc chợ đang chọn không xuất hiện.
-  const DEMO_MARKET_ROLE_ORDER = ['market_manager', 'collector', 'technician', 'trader'];
+  const DEMO_MARKET_ROLE_ORDER = ['market_manager', 'collector', 'technician', 'central_accountant', 'trader'];
   function demoAccountBtnHtml(a, withRolePrefix) {
     const roleTxt = withRolePrefix ? (DEMO_ROLE_SHORT[A.ACCOUNTS.primaryRole(a)] || (A.PERM.role(A.ACCOUNTS.primaryRole(a)) || {}).name || '') : '';
     return `<button class="${ui.currentDemoAccountId === a.id ? 'on' : ''}" data-act="demo-account" data-id="${a.id}">${roleTxt ? U.esc(roleTxt) + ' — ' : ''}${U.esc(a.fullName)}</button>`;
@@ -445,6 +444,8 @@
       if (accountModeLabel) accountModeLabel.style.display = 'none';
       $('#role-seg').innerHTML = A.userHeaderHtml ? A.userHeaderHtml(A.currentAccount()) : '';
     }
+    const notificationHost = $('#personal-notification-host');
+    if (notificationHost) notificationHost.innerHTML = A.personalNotifications ? A.personalNotifications.headerHtml(A.currentAccount()) : '';
     const activeRole = A.PERM.role(ui.role);
     const roleLabelEl = $('#active-role-label');
     if (roleLabelEl) roleLabelEl.textContent = demoMode && activeRole ? ('Vai trò: ' + activeRole.name) : '';
@@ -463,7 +464,9 @@
     // trước) không đổi.
     $('#market-wrap').style.display = (A.current === 'mini-app' || A.current === 'tong-quan') ? 'none' : '';
     const it = A.menuItem(A.current);
-    const pageLabel = it && it.id === 'mat-bang' && ui.market === 'CL' ? 'Mặt bằng & điểm kinh doanh' : (it ? (it.id === 'su-co' ? suCoMenuLabel() : it.label) : '');
+    const pageLabel = it && it.id === 'mat-bang' && ui.market === 'CL'
+      ? 'Mặt bằng & điểm kinh doanh'
+      : (it ? (it.id === 'su-co' ? suCoMenuLabel() : it.label) : (A.PERSONAL_ROUTES && A.PERSONAL_ROUTES[A.current]) || '');
     $('#page-title').textContent = pageLabel;
     document.title = (pageLabel ? pageLabel + ' · ' : '') + 'Chợ số Cao Lãnh – Prototype';
   }
@@ -506,6 +509,9 @@
     for (const g of A.MENU) for (const it of g.items) if (!it.sub && U.can(it.id)) return it.id;
     return null;
   };
+  // Màn cá nhân của CHÍNH tài khoản đang đăng nhập (không phải màn nghiệp vụ, không có trong menu,
+  // không cần screen permission — ai đã đăng nhập đều xem được hồ sơ của mình).
+  A.PERSONAL_ROUTES = { 'thong-tin-ca-nhan': 'Thông tin cá nhân' };
   A.route = function () {
     // Đồng bộ role + selectedMarket từ account đang dùng TRƯỚC khi đánh giá quyền — đảm bảo
     // U.can() bên dưới luôn dựa trên context mới nhất, kể cả khi route() được gọi ngay sau khi
@@ -534,7 +540,7 @@
     // Không còn fallback hard-code 'tong-quan' — dò screen đầu tiên account thực sự có quyền VÀ
     // applicable với market hiện tại; nếu không còn screen nào, A.current = null và A.render() sẽ
     // hiện trạng thái "chưa được cấp quyền" thay vì render bất kỳ view nào.
-    if (!r || !U.can(r)) {
+    if (!r || (!U.can(r) && !(A.PERSONAL_ROUTES[r] && A.currentAccount()))) {
       const role = A.PERM.role(ui.role);
       r = (role && role.selfService && U.can('mini-app')) ? 'mini-app' : A.firstAccessibleScreen();
     }

@@ -2,6 +2,8 @@
 (function (A) {
   'use strict';
   const U = A.U, ui = A.ui;
+  // OTP mô phỏng của prototype (không gửi SMS thật).
+  const DEMO_OTP = '123456';
   const now = () => new Date().toISOString();
   const initials = name => {
     const words = String(name || '').trim().split(/\s+/).filter(Boolean);
@@ -9,9 +11,12 @@
   };
   const accountStatus = acc => A.ACCOUNTS.authStatus(acc);
   const accountActive = acc => accountStatus(acc) === 'ACTIVE';
+  const sessionDevice = () => { const p = (typeof navigator !== 'undefined' && navigator.platform) || ''; return /win/i.test(p) ? 'Windows' : /mac/i.test(p) ? 'macOS' : /linux/i.test(p) ? 'Linux' : /android/i.test(p) ? 'Android' : /iphone|ipad/i.test(p) ? 'iOS' : 'Chưa ghi nhận'; };
+  const sessionBrowser = () => { const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || ''; return /edg/i.test(ua) ? 'Microsoft Edge' : /chrome|crios/i.test(ua) ? 'Chrome' : /firefox/i.test(ua) ? 'Firefox' : /safari/i.test(ua) ? 'Safari' : 'Chưa ghi nhận'; };
+  const createSessionMetadata = acc => ({ accountId: acc.id, device: sessionDevice(), browser: sessionBrowser(), locationLabel: '', loginAt: now() });
   const traderFor = acc => acc && acc.traderId && A.idx && A.idx.trader.get(acc.traderId);
   const avatarHtml = (acc, extraClass) => {
-    const t = traderFor(acc), portrait = t && t.docFiles && t.docFiles.avatar;
+    const t = traderFor(acc), portrait = (t && t.docFiles && t.docFiles.avatar) || (acc && acc.avatar);
     if (portrait && portrait.dataUrl) return `<span class="avatar ${extraClass || ''} has-photo"><img src="${U.esc(portrait.dataUrl)}" alt=""></span>`;
     return `<span class="avatar ${extraClass || ''}">${U.esc(initials(acc && acc.fullName))}</span>`;
   };
@@ -29,16 +34,16 @@
   };
   const previousSaveUi = A.saveUi;
   A.saveUi = function () {
-    try { localStorage.setItem('choso-caolanh-ui', JSON.stringify({ schemaVersion: A.RBAC_SCHEMA, currentDemoAccountId: ui.currentDemoAccountId, sessionAccountId: ui.sessionAccountId, market: ui.market })); } catch (e) { previousSaveUi(); }
+    try { localStorage.setItem('choso-caolanh-ui', JSON.stringify({ schemaVersion: A.RBAC_SCHEMA, currentDemoAccountId: ui.currentDemoAccountId, sessionAccountId: ui.sessionAccountId, sessionMetadata: ui.sessionMetadata, market: ui.market })); } catch (e) { previousSaveUi(); }
   };
   const previousLoad = A.load;
   A.load = function () {
     previousLoad();
     try {
       const stored = JSON.parse(localStorage.getItem('choso-caolanh-ui') || 'null');
-      if (stored && stored.schemaVersion === A.RBAC_SCHEMA && stored.sessionAccountId) ui.sessionAccountId = stored.sessionAccountId;
+      if (stored && stored.schemaVersion === A.RBAC_SCHEMA && stored.sessionAccountId) { ui.sessionAccountId = stored.sessionAccountId; ui.sessionMetadata = stored.sessionMetadata && stored.sessionMetadata.accountId === stored.sessionAccountId ? stored.sessionMetadata : null; }
     } catch (e) { ui.sessionAccountId = null; }
-    if (!A.isLoggedIn()) ui.sessionAccountId = null;
+    if (!A.isLoggedIn()) { ui.sessionAccountId = null; ui.sessionMetadata = null; }
     if (A.isDemoMode() && !ui.currentDemoAccountId) {
       const firstDemo = A.ACCOUNTS.list().find(accountActive);
       ui.currentDemoAccountId = firstDemo ? firstDemo.id : null;
@@ -77,7 +82,7 @@
       ? `<div class="auth-brand-label">Chợ số Cao Lãnh</div><h1>Xác thực OTP</h1><p class="auth-lead">Mã xác thực đã được gửi đến số điện thoại <b>${U.maskPhone(d.phone)}</b></p>
         <div class="field"><label id="auth-otp-label">Mã OTP *</label><div class="auth-otp" role="group" aria-labelledby="auth-otp-label">${[0, 1, 2, 3, 4, 5].map(i => `<input class="input${invalid}" inputmode="numeric" autocomplete="one-time-code" maxlength="1" data-auth-otp="${i}" value="${U.esc(otp[i] || '')}" aria-label="Số ${i + 1}">`).join('')}</div>${error}</div>
         <button class="btn primary auth-submit" data-act="auth-verify">Xác nhận</button>
-        <div class="small muted auth-demo-otp">Prototype: OTP mô phỏng là <b>123456</b>, không gửi SMS thật.</div>
+        <div class="small muted auth-demo-otp">Prototype: đã tự điền OTP mô phỏng <b>${DEMO_OTP}</b>, không gửi SMS thật.</div>
         <div class="auth-links"><button class="btn link" data-act="auth-change-phone">← Đổi số điện thoại</button><button class="btn link" data-act="auth-resend">Gửi lại mã</button></div>`
       : `<div class="auth-brand-label">Chợ số Cao Lãnh</div><h1>Đăng nhập hệ thống</h1><p class="auth-lead">Sử dụng số điện thoại đã đăng ký để truy cập hệ thống.</p>
         <div class="field"><label for="auth-phone">Số điện thoại *</label><input id="auth-phone" class="input auth-input${invalid}" type="tel" inputmode="tel" autocomplete="tel" data-auth-phone value="${U.esc(d.phone || '')}" placeholder="Nhập số điện thoại">${error}</div>
@@ -98,7 +103,8 @@
       phone.addEventListener('input', () => { ui.auth.phone = phone.value; ui.auth.error = ''; });
       phone.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); ui.auth.phone = phone.value; A.ACT['auth-continue'](); } });
     }
-    const first = phone || Array.from(document.querySelectorAll('[data-auth-otp]')).find(x => !x.value);
+    const otpBoxes = Array.from(document.querySelectorAll('[data-auth-otp]'));
+    const first = phone || otpBoxes.find(x => !x.value) || otpBoxes[otpBoxes.length - 1];
     if (first && first.focus) first.focus();
   }
   // Danh sách Ban Quản lý chợ: CHỈ dữ liệu đã có (tên chợ + địa chỉ trong danh mục chợ). Chưa có số
@@ -130,16 +136,18 @@
   };
   A.userHeaderHtml = function (acc) {
     const role = A.PERM.role(A.ACCOUNTS.primaryRole(acc));
-    return `<button class="user-menu-trigger" data-act="auth-user-menu">${avatarHtml(acc)}<span><b>${U.esc(acc.fullName)}</b><small>${U.esc((role && role.name) || acc.title || '')}</small></span><span class="user-chevron">▾</span></button>`;
+    const open = ui.activeHeaderPopover === 'account';
+    return `<div class="header-popover-anchor user-menu-anchor"><button class="user-menu-trigger" data-act="auth-user-menu" aria-expanded="${open}">${avatarHtml(acc)}<span><b>${U.esc(acc.fullName)}</b><small>${U.esc((role && role.name) || acc.title || '')}</small></span><span class="user-chevron">▾</span></button>${open ? userMenuHtml(acc) : ''}</div>`;
   };
   function userMenuHtml(acc) {
-    const t = traderFor(acc), role = A.PERM.role(A.ACCOUNTS.primaryRole(acc));
-    return `<div class="user-popover">${avatarHtml(acc, 'lg')}<div><b>${U.esc(acc.fullName)}</b><small>${U.esc((role && role.name) || acc.title || '')}</small><small>${U.esc(acc.organization || '')}</small></div><div class="user-popover-actions"><button data-act="auth-profile">${t ? 'Hồ sơ của tôi' : 'Thông tin tài khoản'}</button><button data-act="auth-logout">Đăng xuất</button></div></div>`;
+    const role = A.PERM.role(A.ACCOUNTS.primaryRole(acc));
+    return `<div class="header-popover user-popover">${avatarHtml(acc, 'lg')}<div><b>${U.esc(acc.fullName)}</b><small>${U.esc((role && role.name) || acc.title || '')}</small><small>${U.esc(acc.organization || '')}</small></div><div class="user-popover-actions"><button data-act="auth-profile">Thông tin cá nhân</button><button data-act="auth-logout">Đăng xuất</button></div></div>`;
   }
   function completeLogin(acc) {
     if (accountStatus(acc) === 'PENDING_ACTIVATION') A.ACCOUNTS.update(acc.id, { status: 'ACTIVE', activatedAt: now() });
-    A.ACCOUNTS.update(acc.id, { lastLoginAt: now() });
+    const loginAt = now(); A.ACCOUNTS.update(acc.id, { lastLoginAt: loginAt });
     ui.sessionAccountId = acc.id; ui.currentDemoAccountId = null;
+    ui.sessionMetadata = Object.assign(createSessionMetadata(acc), { loginAt });
     if (A.ACCOUNTS.primaryRole(acc) === 'trader') Object.assign(ui.mini, { traderId: acc.traderId, step: 'app', tab: 'home', loginStep: 'phone', loginPhone: null, loginTraderId: null });
     A.saveUi();
     ui.auth = { step: 'phone', phone: '', otp: '', error: '' };
@@ -161,18 +169,20 @@
     const d = ui.auth || {}, acc = A.ACCOUNTS.byPhone(d.phone);
     if (!acc) { d.error = 'Số điện thoại chưa được đăng ký. Vui lòng liên hệ Ban Quản lý chợ.'; return A.showLogin(); }
     if (accountStatus(acc) === 'LOCKED') { d.error = 'Tài khoản hiện đang bị khóa. Vui lòng liên hệ Ban Quản lý chợ.'; return A.showLogin(); }
-    Object.assign(d, { step: 'otp', otp: '', error: '' }); A.showLogin();
+    // Prototype: tự điền sẵn OTP mô phỏng để trình diễn nhanh; người dùng vẫn bấm "Xác nhận".
+    Object.assign(d, { step: 'otp', otp: DEMO_OTP, error: '' }); A.showLogin();
   };
   A.ACT['auth-verify'] = () => {
     const d = ui.auth || {}, acc = A.ACCOUNTS.byPhone(d.phone);
     if (!acc || accountStatus(acc) === 'LOCKED') { d.step = 'phone'; d.error = 'Tài khoản hiện không thể đăng nhập. Vui lòng liên hệ Ban Quản lý chợ.'; return A.showLogin(); }
-    if (d.otp !== '123456') { d.error = 'Mã OTP không chính xác. Vui lòng kiểm tra lại.'; return A.showLogin(); }
+    if (d.otp !== DEMO_OTP) { d.error = 'Mã OTP không chính xác. Vui lòng kiểm tra lại.'; return A.showLogin(); }
     completeLogin(acc);
   };
   A.ACT['auth-resend'] = () => { ui.auth.error = ''; U.toast('Đã gửi lại OTP mô phỏng đến ' + U.maskPhone(ui.auth.phone) + '.'); };
   A.ACT['auth-change-phone'] = () => { Object.assign(ui.auth, { step: 'phone', otp: '', error: '' }); A.showLogin(); };
-  A.ACT['auth-user-menu'] = () => { const root = document.querySelector('#modal-root'), acc = A.currentAccount(); if (root && acc) root.innerHTML = `<div class="user-popover-wrap" data-act="close">${userMenuHtml(acc)}</div>`; };
-  A.ACT['auth-profile'] = () => { const acc = A.currentAccount(); A.closeModal(); if (acc && A.ACCOUNTS.primaryRole(acc) === 'trader') A.go('mini-app'); else A.modal(A.mHead('Thông tin tài khoản') + `<div class="modal-b"><dl class="kv"><dt>Họ tên</dt><dd>${U.esc(acc.fullName)}</dd><dt>Số điện thoại</dt><dd>${U.esc(acc.phone || 'Chưa cập nhật')}</dd><dt>Đơn vị</dt><dd>${U.esc(acc.organization || '')}</dd></dl></div><div class="modal-f"><button class="btn primary" data-act="close">Đóng</button></div>`); };
-  A.ACT['auth-logout'] = () => { ui.sessionAccountId = null; ui.currentDemoAccountId = null; A.saveUi(); A.closeModal(); document.body.classList.remove('trader-session'); ui.auth = { step: 'phone', phone: '', otp: '', error: '' }; A.showLogin(); };
+  A.ACT['auth-user-menu'] = () => { ui.activeHeaderPopover = ui.activeHeaderPopover === 'account' ? null : 'account'; ui.personalNotificationsExpanded = false; A.render(); };
+  // "Thông tin cá nhân": màn hồ sơ của CHÍNH tài khoản đang đăng nhập (accounts/profile.js).
+  A.ACT['auth-profile'] = () => { ui.activeHeaderPopover = null; A.closeModal(); if (A.currentAccount()) { ui.profile = { mode: 'self', accountId: null, tab: 'info' }; A.go('thong-tin-ca-nhan'); } };
+  A.ACT['auth-logout'] = () => { ui.activeHeaderPopover = null; ui.sessionAccountId = null; ui.currentDemoAccountId = null; ui.sessionMetadata = null; A.saveUi(); A.closeModal(); document.body.classList.remove('trader-session'); ui.auth = { step: 'phone', phone: '', otp: '', error: '' }; A.showLogin(); };
   A.ACT['mini-logout'] = () => A.ACT['auth-logout']();
 })(window.APP);

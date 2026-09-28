@@ -82,6 +82,7 @@
     // (xem được) — KHÔNG có 2 action này (chỉ đọc, đúng mục 2 yêu cầu).
     { key: 'action:danh-muc-cho.tao', kind: 'action', group: 'Điều hành', screenId: 'danh-muc-cho', label: 'Tạo chợ mới trong danh mục' },
     { key: 'action:danh-muc-cho.sua', kind: 'action', group: 'Điều hành', screenId: 'danh-muc-cho', label: 'Cập nhật thông tin chợ trong danh mục' },
+    { key: 'action:danh-muc-cho.xuat-excel', kind: 'action', group: 'Điều hành', screenId: 'danh-muc-cho', label: 'Xuất Excel danh mục chợ' },
     { key: 'action:cau-truc.edit', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Thêm/sửa khối, tầng, khu, loại điểm; lưu nháp/chính thức' },
     { key: 'action:cau-truc.delete', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Xoá khối, tầng, khu, loại điểm' },
     { key: 'action:cau-truc.reset', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Khôi phục cấu trúc mặc định' },
@@ -105,6 +106,9 @@
     { key: 'action:phien-cho.huy-phien', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Hủy phiên chợ quê' },
     { key: 'action:phien-cho.xem-bao-cao', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Xem báo cáo phiên chợ quê' },
     { key: 'action:mini-app.stall-registration.create', kind: 'action', group: 'Dành cho tiểu thương', screenId: 'mini-app', label: 'Tiểu thương tự đăng ký quầy chợ quê trong mini app' },
+    { key: 'action:mini-app.thanh-toan', kind: 'action', group: 'Dành cho tiểu thương', screenId: 'mini-app', label: 'Thanh toán trực tuyến trong mini app' },
+    { key: 'action:mini-app.gui-phan-anh', kind: 'action', group: 'Dành cho tiểu thương', screenId: 'mini-app', label: 'Gửi phản ánh trong mini app' },
+    { key: 'action:mini-app.danh-gia-phan-anh', kind: 'action', group: 'Dành cho tiểu thương', screenId: 'mini-app', label: 'Đánh giá kết quả phản ánh trong mini app' },
     { key: 'action:tieu-thuong.them-moi', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'tieu-thuong', label: 'Thêm hồ sơ tiểu thương' },
     // TRADER_PROFILE_AND_MINIAPP_WORKFLOW — permKey "quản lý truy cập Mini App của tiểu thương".
     // CORRECTION (xem TRADER_PROFILE_MINIAPP_CORRECTION_REPORT.md): phạm vi ban đầu rộng hơn (xác
@@ -131,8 +135,10 @@
     { key: 'action:doi-soat.xem-tien-mat', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Xem đối soát tiền mặt' },
     { key: 'action:doi-soat.xac-nhan-nop-quy', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Xác nhận đối soát nộp quỹ tiền mặt' },
     { key: 'action:doi-soat.xem-truy-vet', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Xem lịch sử truy vết đối soát' },
+    { key: 'action:doi-soat.xuat-excel', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Xuất Excel dữ liệu đối soát' },
     { key: 'action:cong-no.nhac-no', kind: 'action', group: 'Tài chính', screenId: 'cong-no', label: 'Nhắc nợ 1 tiểu thương' },
     { key: 'action:cong-no.nhac-no-hang-loat', kind: 'action', group: 'Tài chính', screenId: 'cong-no', label: 'Nhắc nợ hàng loạt' },
+    { key: 'action:cong-no.xuat-excel', kind: 'action', group: 'Tài chính', screenId: 'cong-no', label: 'Xuất Excel công nợ' },
     { key: 'action:su-co.tao-phan-anh', kind: 'action', group: 'Vận hành', screenId: 'su-co', label: 'Tạo phản ánh / sự cố thủ công' },
     { key: 'action:su-co.phan-cong', kind: 'action', group: 'Vận hành', screenId: 'su-co', label: 'Phân công người xử lý' },
     { key: 'action:su-co.cap-nhat-xu-ly', kind: 'action', group: 'Vận hành', screenId: 'su-co', label: 'Kiểm tra và cập nhật xử lý sự cố' },
@@ -151,6 +157,11 @@
     { key: 'action:cau-hinh-gia.chinh-sach-chung.ap-dung', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Áp dụng mức giá chính sách chung' },
     { key: 'action:cau-hinh-gia.chinh-sach-chung.khoa-mo', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Khóa / mở khóa mức giá chính sách chung' },
     { key: 'action:tai-khoan-ngan-hang.quan-ly', kind: 'action', group: 'Tài chính', screenId: 'tai-khoan-ngan-hang', label: 'Thêm/sửa/xoá/đổi trạng thái tài khoản ngân hàng' },
+    { key: 'action:tai-khoan-ngan-hang.xuat-excel', kind: 'action', group: 'Tài chính', screenId: 'tai-khoan-ngan-hang', label: 'Xuất Excel danh sách tài khoản ngân hàng' },
+    { key: 'action:diem-kd.xuat-excel', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'diem-kd', label: 'Xuất Excel danh sách điểm kinh doanh' },
+    { key: 'action:bao-cao.xuat-excel', kind: 'action', group: 'Vận hành', screenId: 'bao-cao', label: 'Xuất Excel báo cáo thống kê' },
+    { key: 'action:bao-cao.xuat-pdf-in', kind: 'action', group: 'Vận hành', screenId: 'bao-cao', label: 'Xuất PDF / in báo cáo thống kê' },
+    { key: 'action:bao-cao.luu-mau', kind: 'action', group: 'Vận hành', screenId: 'bao-cao', label: 'Lưu mẫu báo cáo' },
     { key: 'action:cai-dat.ky-thu', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Cấu hình kỳ thu' },
     { key: 'action:cai-dat.quy-tac-thu-phi', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Cấu hình quy tắc thu phí' },
     { key: 'action:cai-dat.vai-tro.tao', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Tạo vai trò mới' },
@@ -220,9 +231,13 @@
     return [
       { id: 'system_admin', name: 'Quản trị hệ thống', desc: 'Tạo/quản lý tài khoản, vai trò và phân quyền, danh mục 12 chợ, cấu hình dùng chung — phạm vi TOÀN HỆ THỐNG (GLOBAL)', scope: 'all', market: null, selfService: false, builtin: true, active: true },
       { id: 'ward_leader', name: 'Lãnh đạo UBND phường', desc: 'Xem Tổng quan liên chợ, dữ liệu tổng hợp 12 chợ, báo cáo, giám sát phản ánh quá hạn — phạm vi TOÀN HỆ THỐNG (GLOBAL), không mặc định có quyền chỉnh sửa nghiệp vụ', scope: 'all', market: null, selfService: false, builtin: true, active: true },
-      { id: 'market_manager', name: 'Trưởng Ban Quản lý chợ', desc: 'Quản lý mặt bằng, điểm kinh doanh, hợp đồng, mở/chốt kỳ thu, duyệt nghiệp vụ, xác nhận tiền nhân viên thu phí nộp về, tiếp nhận/phân công phản ánh — trong (các) chợ được giao qua account.marketScopes', scope: 'all', market: null, selfService: false, builtin: true, active: true },
+      { id: 'market_manager', name: 'Tổ trưởng Tổ Quản lý chợ', desc: 'Quản lý mặt bằng, điểm kinh doanh, hợp đồng, mở/chốt kỳ thu, duyệt nghiệp vụ, xác nhận tiền nhân viên thu phí nộp về, tiếp nhận/phân công phản ánh — trong (các) chợ được giao qua account.marketScopes', scope: 'all', market: null, selfService: false, builtin: true, active: true },
       { id: 'collector', name: 'Nhân viên thu phí', desc: 'Cập nhật hồ sơ tiểu thương, lập/cập nhật hợp đồng theo permission, ghi nhận thu, nộp tiền về Ban Quản lý, nhắc nợ — trong (các) chợ được giao qua account.marketScopes', scope: 'all', market: null, selfService: false, builtin: true, active: true },
       { id: 'technician', name: 'Nhân viên kỹ thuật', desc: 'Nhận, cập nhật tiến độ và kết quả xử lý phản ánh/sự cố được giao — trong (các) chợ được giao qua account.marketScopes', scope: 'all', market: null, selfService: false, builtin: true, active: true },
+      // Hai role kế toán chỉ là container RBAC để quản trị viên tự cấu hình. Cố ý không có
+      // dòng nào trong defaultRolePermissions(), nên không được cấp quyền nghiệp vụ mặc định.
+      { id: 'central_accountant', name: 'Kế toán Trung tâm', desc: 'Tổ Văn phòng – Trung tâm Cung ứng dịch vụ công', scope: 'all', market: null, selfService: false, builtin: true, active: true },
+      { id: 'ward_accountant', name: 'Kế toán phường', desc: 'UBND phường Cao Lãnh', scope: 'all', market: null, selfService: false, builtin: true, active: true },
       { id: 'trader', name: 'Tiểu thương', desc: 'Tự phục vụ qua mini app: xem hồ sơ/điểm kinh doanh/hợp đồng của chính mình, thanh toán, gửi phản ánh — chỉ dữ liệu thuộc merchantId/traderId của chính tài khoản (ownership)', scope: 'self', market: null, selfService: true, builtin: true, active: true }
     ];
   }
@@ -625,6 +640,18 @@
       try { localStorage.setItem(PKEY, JSON.stringify(fresh)); } catch (e) { /* bỏ qua */ }
       return fresh;
     }
+    // Chuẩn hoá nhãn hiển thị, giữ nguyên stable role id và toàn bộ rolePerms đã lưu.
+    const marketManager = s.roles.find(r => r.id === 'market_manager');
+    if (marketManager && marketManager.name === 'Trưởng Ban Quản lý chợ') {
+      marketManager.name = 'Tổ trưởng Tổ Quản lý chợ';
+      needSave = true;
+    }
+    // Additive migration for newly introduced empty-permission roles. This deliberately does not
+    // call defaultRolePermissions() and therefore cannot grant/revoke any existing permission.
+    const knownRoleIds = new Set(s.roles.map(r => r.id));
+    defaultRoles().forEach(r => {
+      if (!knownRoleIds.has(r.id)) { s.roles.push(r); needSave = true; }
+    });
     // Tự bổ sung các permission MỚI được thêm ở các phiên bản sau (chưa từng có trong
     // dữ liệu đã lưu của trình duyệt) theo seed mặc định, không đụng vào các quyền
     // người dùng đã tự cấp/thu hồi cho những permission đã tồn tại từ trước. (Đã chạy trong
