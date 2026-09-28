@@ -176,16 +176,48 @@
     (i.history || (i.history = [])).push({ at: incNow(), action, detail: detail || '' });
     (i.log || (i.log = [])).push({ at: U.today(), text: action + (detail ? ': ' + detail : '') });
   }
+  function incAddLeaderReminderNotification(i) {
+    if (!A.db || !A.ACCOUNTS || !i || !i.leaderReminder) return false;
+    A.db.personalNotifications = Array.isArray(A.db.personalNotifications) ? A.db.personalNotifications : [];
+    const accounts = (A.ACCOUNTS.list ? A.ACCOUNTS.list() : []).filter(a =>
+      A.ACCOUNTS.authStatus(a) === 'ACTIVE' &&
+      A.ACCOUNTS.primaryRole(a) === 'market_manager' &&
+      A.allowedMarkets(a).indexOf(i.market) !== -1
+    );
+    let changed = false;
+    accounts.forEach(account => {
+      const id = 'PN-INC-OVERDUE-' + account.id + '-' + i.id;
+      if (A.db.personalNotifications.some(n => n && n.id === id)) return;
+      A.db.personalNotifications.unshift({
+        id,
+        recipientAccountId: account.id,
+        type: 'OVERDUE_INCIDENT',
+        title: 'Phản ánh quá hạn cần xử lý',
+        message: i.id + ' · ' + (i.title || 'Phản ánh quá hạn') + ' tại ' + U.mShort(i.market),
+        createdAt: i.leaderReminder.at || incNow(),
+        readAt: null,
+        targetRoute: 'su-co',
+        targetId: i.id,
+        targetMarket: i.market
+      });
+      changed = true;
+    });
+    return changed;
+  }
   function incEnsureLeaderReminder(i) {
-    if (!late(i) || i.leaderReminder) return false;
-    i.leaderReminder = {
-      at: incNow(),
-      targetRole: 'market_manager',
-      targetLabel: 'Trưởng Ban Quản lý',
-      reason: 'OVERDUE_INCIDENT'
-    };
-    incHistory(i, 'Hệ thống nhắc Trưởng Ban Quản lý', 'Phản ánh quá hạn xử lý');
-    return true;
+    if (!late(i)) return false;
+    let changed = false;
+    if (!i.leaderReminder) {
+      i.leaderReminder = {
+        at: incNow(),
+        targetRole: 'market_manager',
+        targetLabel: 'Trưởng Ban Quản lý',
+        reason: 'OVERDUE_INCIDENT'
+      };
+      incHistory(i, 'Hệ thống nhắc Trưởng Ban Quản lý', 'Phản ánh quá hạn xử lý');
+      changed = true;
+    }
+    return incAddLeaderReminderNotification(i) || changed;
   }
   function ensureIncidentV2() {
     let changed = false;
@@ -443,7 +475,7 @@
     let rows = all.filter(i => incTabMatch(i, tab));
     const useListFilters = tab && tab.id === 'list';
     if (useListFilters) rows = incApplyListFilters(rows);
-    const reminderHtml = !tech && overdue.length ? `<div class="note warn" style="margin-bottom:12px"><b>Nhắc Trưởng Ban Quản lý:</b> ${reminded.length}/${overdue.length} phản ánh quá hạn tại ${U.esc(marketName)} đã được hệ thống đánh dấu nhắc xử lý.</div>` : '';
+    const reminderHtml = '';
     const managerIntro = incManagerIntro(tab, rows);
     const showGlobalCreate = !tech && !incCanManageComplaints() && A.canDo('su-co.tao-phan-anh', ui.market);
     const head = `<div class="page-head"><div><h2>${title}</h2><p class="muted">${desc}</p></div>${showGlobalCreate ? '<button class="btn primary" data-act="inc-new-v2">+ Tạo phản ánh</button>' : ''}</div>
