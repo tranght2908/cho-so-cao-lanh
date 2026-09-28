@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b4a9e">
+  <title>Chợ số Cao Lãnh – Cổng tiểu thương</title>
+  <meta name="description" content="Web app dành cho tiểu thương chợ phường Cao Lãnh: xem khoản phí, thanh toán QR, biên lai, phản ánh (dữ liệu mẫu minh họa).">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="../src/features/trader-web/trader-web.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230b4a9e' stroke-width='2'><path d='M3 10h18M5 10v10h14V10M4 4h16l1 6H3l1-6Z'/></svg>">
+</head>
+<body>
+  <div class="demo-banner"><span><b>PROTOTYPE</b> · Cổng tiểu thương – Hệ thống quản lý chợ số phường Cao Lãnh · Toàn bộ tên, số tiền, số sạp là <b>dữ liệu mẫu minh họa</b></span></div>
+  <div id="tw-root"></div>
+  <div id="modal-root"></div>
+  <div class="toasts" id="toasts"></div>
+
+  <!-- Dùng chung lõi dữ liệu, tiện ích, RBAC và nghiệp vụ của prototype (không sửa các file này). -->
+  <script src="../data.js"></script>
+  <script src="../src/app/state.js"></script>
+  <script src="../src/shared/utils/format.js"></script>
+  <script src="../src/shared/ui/icons.js"></script>
+  <script src="../src/shared/ui/table.js"></script>
+  <script src="../src/shared/ui/overlays.js"></script>
+  <script src="../src/shared/ui/graphics.js"></script>
+  <script src="../src/app/bootstrap.js"></script>
+  <script src="../src/shared/data/store.js"></script>
+  <script src="../src/shared/data/audit.js"></script>
+  <script src="../src/shared/data/repository.js"></script>
+  <script src="../src/shared/authz/permissions.js"></script>
+  <script src="../src/shared/authz/guards.js"></script>
+  <script src="../src/mocks/accounts.seed.js"></script>
+  <script src="../src/features/accounts/store.js"></script>
+  <script src="../src/features/finance/bank-accounts/store.js"></script>
+  <script src="../src/features/fee-config/store.js"></script>
+  <script src="../src/features/markets/store.js"></script>
+  <script src="../src/features/markets/repository.js"></script>
+  <script src="../src/features/markets/service.js"></script>
+  <script src="../src/features/traders/repository.js"></script>
+  <script src="../src/features/traders/service.js"></script>
+  <script src="../src/features/business-points/repository.js"></script>
+  <script src="../src/features/business-points/service.js"></script>
+  <script src="../src/features/business-points/format.js"></script>
+  <script src="../src/features/contracts/repository.js"></script>
+  <script src="../src/features/contracts/service.js"></script>
+  <script src="../src/features/accounts/repository.js"></script>
+  <script src="../src/features/accounts/service.js"></script>
+  <script src="../src/features/finance/repository.js"></script>
+  <script src="../src/features/finance/service.js"></script>
+  <script src="../src/features/complaints/page.js"></script>
+
+  <!-- Web app tiểu thương -->
+  <script src="../src/features/trader-web/demo-seed.js"></script>
+  <script src="../src/features/trader-web/app.js"></script>
+</body>
+</html>
