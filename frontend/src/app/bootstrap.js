@@ -630,6 +630,9 @@
 
   function init() {
     A.load();
+    // Dữ liệu mẫu của cổng tiểu thương (tài khoản tiểu thương gắn hồ sơ thật, có khoản nợ và phản
+    // ánh) — dùng chung với /tieu-thuong/, idempotent nên chạy lại không nhân bản.
+    if (A.traderWebDemoSeed) A.traderWebDemoSeed();
     document.addEventListener('click', e => {
       const el = e.target.closest('[data-act]');
       if (!el) return;
