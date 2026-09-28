@@ -1,4 +1,5 @@
-/* Dữ liệu mẫu cho Cổng tiểu thương (chỉ nạp khi mở frontend/tieu-thuong/).
+/* Dữ liệu mẫu cho Cổng tiểu thương — dùng chung cho web app /tieu-thuong/ và cổng tiểu thương trong
+ * trang quản lý (màn 'mini-app'); cả hai cùng gọi A.traderWebDemoSeed() lúc khởi động.
  * Không sinh khoản phải thu/thanh toán giả: chọn các tiểu thương CÓ SẴN trong A.db với tình huống
  * phí khác nhau (quá hạn, thu một phần, chưa đến hạn) rồi cấp tài khoản tiểu thương cho họ qua
  * A.ACCOUNTS.add — đúng như Quản trị cấp tài khoản trên trang quản lý. Bổ sung 2 phản ánh mẫu
