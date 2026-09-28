@@ -437,6 +437,33 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 .merchant-note-title { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; color: #0f274d; }
 .merchant-note-title .ui-icon { color: #0d6efd; }
 .merchant-note ul { margin: 0; padding-left: 20px; color: #40506a; line-height: 1.75; }
+/* Các màn Trang chủ / Hợp đồng & điểm kinh doanh / Nghĩa vụ tài chính / Thông báo của cổng tiểu thương. */
+.merchant-nav-badge { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: #f04438; color: #fff; font-size: var(--font-size-xs); font-style: normal; line-height: 20px; text-align: center; }
+.merchant-nav button.active .merchant-nav-badge { background: #fff; color: #0d6efd; }
+.merchant-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.merchant-kpi { background: #fff; border: 1px solid #e3ebf5; border-left: 4px solid #0d6efd; border-radius: 8px; padding: 14px 16px; display: grid; gap: 2px; }
+.merchant-kpi span { color: #60728a; font-size: var(--font-size-sm); }
+.merchant-kpi b { font-size: 22px; color: #0f274d; }
+.merchant-kpi small { color: #6b7b90; }
+.merchant-kpi.warn { border-left-color: #f59e0b; }
+.merchant-kpi.danger { border-left-color: #dc2626; }
+.merchant-kpi.green { border-left-color: #16a34a; }
+.merchant-kpi.blue { border-left-color: #0d6efd; }
+.merchant-block { padding: 18px; }
+.merchant-block .merchant-title-row { align-items: center; margin-bottom: 14px; }
+.merchant-block .merchant-title-row h2 { font-size: var(--font-size-lg); }
+.merchant-block .merchant-title-row .btn { margin-left: auto; }
+.merchant-block .tbl-wrap { overflow-x: auto; }
+.merchant-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.merchant-card { border: 1px solid #e3ebf5; border-radius: 8px; padding: 14px; background: #fbfdff; }
+.merchant-card b { color: #0f274d; }
+.merchant-card small { display: block; color: #60728a; margin-bottom: 8px; }
+.merchant-card .kv { margin: 0; }
+.merchant-rows { display: grid; gap: 10px; }
+.merchant-row { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; border: 1px solid #e8eef6; border-radius: 8px; padding: 12px 14px; background: #fbfdff; }
+.merchant-row b { color: #0f274d; }
+.merchant-row p { margin: 4px 0 0; color: #40506a; }
+.merchant-row small { display: block; color: #6b7b90; margin-top: 4px; }
 .merchant-issue-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .merchant-issue-card { border: 1px solid #e3ebf5; background: #fff; border-radius: 8px; min-height: 76px; padding: 12px; display: grid; grid-template-columns: 44px 1fr; grid-template-rows: auto auto; gap: 2px 12px; text-align: left; cursor: pointer; }
 .merchant-issue-card span { grid-row: span 2; width: 44px; height: 44px; border-radius: 8px; display: grid; place-items: center; }
