@@ -483,7 +483,9 @@ window.DATA = (function () {
 
     stalls.filter(s => s.contractId).forEach(st => {
       const c = contracts.find(x => x.id === st.contractId);
-      const debtMonths = st.status === 'no' ? between(1, 4) : 0;
+      // Nghiệp vụ: phí được thu gọn trong tháng, KHÔNG để nợ quá 1 tháng. Điểm kinh doanh "Nợ phí"
+      // chỉ còn nợ kỳ gần nhất (và tối đa kỳ liền trước), tức quá hạn không vượt ~1 tháng.
+      const debtMonths = st.status === 'no' ? between(1, 2) : 0;
       PERIODS.forEach((p, pi) => {
         const pStart = p + '-01';
         if (c.start > pStart && c.start.slice(0, 7) !== p) return;
@@ -500,7 +502,8 @@ window.DATA = (function () {
         let pay = !unpaidBecauseDebt;
         if (p === '2026-09' && pay) pay = chance(0.62);
         if (pay) {
-          const partial = chance(0.03);
+          // Thu một phần chỉ xảy ra ở 2 kỳ gần nhất; kỳ cũ hơn đã thu dứt điểm để không treo nợ quá 1 tháng.
+          const partial = chance(0.03) && pi >= PERIODS.length - 2;
           const amt = partial ? Math.round(amount * 0.5 / 1000) * 1000 : amount;
           const noncash = chance(NONCASH[p]);
           const method = noncash ? (chance(0.72) ? 'qr' : 'ck') : 'tm';
@@ -525,10 +528,12 @@ window.DATA = (function () {
 
     // Ổn định mã tra cứu theo seed
     function seedTtdOverdueDebt() {
+      // Không để nợ quá 1 tháng: các khoản còn nợ của Chợ quê TTĐ chỉ nằm ở kỳ 08 và 09/2026
+      // (quá hạn nhiều nhất 29 ngày so với ngày hiện tại 13/09/2026).
       const profiles = [
-        { period: '2026-06', due: '2026-06-15', amount: 120000, reminders: 2 },
-        { period: '2026-07', due: '2026-07-15', amount: 90000, reminders: 1 },
-        { period: '2026-08', due: '2026-08-15', amount: 70000, reminders: 1 },
+        { period: '2026-08', due: '2026-08-15', amount: 120000, reminders: 2 },
+        { period: '2026-08', due: '2026-08-15', amount: 90000, reminders: 1 },
+        { period: '2026-09', due: '2026-09-10', amount: 70000, reminders: 1 },
         { period: '2026-09', due: '2026-09-10', amount: 40000, reminders: 0 }
       ];
       const used = new Set();

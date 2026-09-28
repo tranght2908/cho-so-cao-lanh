@@ -24,7 +24,7 @@
       const list = eligible(market, used).map(t => ({ t, s: score(t) })).filter(x => x.s > 0).sort((a, b) => b.s - a.s || a.t.id.localeCompare(b.t.id));
       if (list.length) { used.push(list[0].t.id); out.push({ t: list[0].t, label }); }
     };
-    take('Nợ quá hạn nhiều kỳ', 'CL', t => unpaid(t).filter(U.isOver).length);
+    take('Nợ quá hạn kỳ trước', 'CL', t => unpaid(t).filter(U.isOver).length);
     take('Có khoản thu một phần', 'CL', t => unpaid(t).some(i => i.status === 'partial') ? 1 + unpaid(t).length : 0);
     take('Kỳ hiện tại chưa đến hạn', 'CL', t => { const u = unpaid(t); return u.length === 1 && !u.some(U.isOver) ? 1 : 0; });
     take('Nợ quá hạn', 'TTD', t => unpaid(t).filter(U.isOver).length);
