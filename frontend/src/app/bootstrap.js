@@ -328,7 +328,7 @@
       { id: 'cong-no', ico: '⏰', label: 'Công nợ & nhắc nợ' }
     ] },
     { group: 'Vận hành', items: [
-      { id: 'su-co', ico: U.icon('warning'), label: 'Phản ánh & sự cố', badge: () => A.db.incidents.filter(i => U.inM(i) && i.state === 'tiepnhan').length },
+      { id: 'su-co', ico: U.icon('warning'), label: 'Phản ánh & sự cố', badge: () => suCoMenuBadge() },
       { id: 'thong-bao', ico: U.icon('bell'), label: 'Thông báo đa kênh' },
       { id: 'bao-cao', ico: U.icon('chart'), label: 'Báo cáo thống kê' },
       { id: 'tai-khoan', ico: U.icon('users'), label: 'Tài khoản người dùng' },
@@ -339,6 +339,33 @@
     ] }
   ];
   A.menuItem = id => { for (const g of A.MENU) for (const it of g.items) if (it.id === id) return it; return null; };
+  function suCoTechMenuContext() {
+    return A.canDo('su-co.cap-nhat-xu-ly', ui.market) && !A.canDo('su-co.phan-cong', ui.market);
+  }
+  function suCoMenuLabel() {
+    return suCoTechMenuContext() ? 'Công việc kỹ thuật' : 'Phản ánh & sự cố';
+  }
+  function suCoMenuBadge() {
+    if (suCoTechMenuContext()) {
+      const acc = A.currentAccount && A.currentAccount();
+      const code = acc && acc.code;
+      return code ? A.db.incidents.filter(i => U.inM(i) && i.assignee === code && (i.state === 'phancong' || i.state === 'dangxuly')).length : 0;
+    }
+    return A.db.incidents.filter(i => U.inM(i) && i.state === 'tiepnhan').length;
+  }
+  function suCoTechMenuItemsHtml() {
+    const acc = A.currentAccount && A.currentAccount();
+    const code = acc && acc.code;
+    const rows = code ? A.db.incidents.filter(i => U.inM(i) && i.assignee === code) : [];
+    const items = [
+      { tab: 'assigned', icon: 'bell', label: 'Việc mới', count: rows.filter(i => i.state === 'phancong').length },
+      { tab: 'doing', icon: 'settings', label: 'Đang xử lý', count: rows.filter(i => i.state === 'dangxuly').length },
+      { tab: 'done', icon: 'check', label: 'Kết quả đã gửi', count: rows.filter(i => ['hoanthanh', 'dong'].indexOf(i.state) !== -1).length },
+      { tab: 'all', icon: 'file', label: 'Tất cả công việc', count: rows.length }
+    ];
+    const active = ui.incFlowTab || 'assigned';
+    return `<div class="tech-work-nav">${items.map(it => `<a href="#/su-co" class="${A.current === 'su-co' && active === it.tab ? 'active' : ''}" data-act="su-co-tech-menu" data-tab="${it.tab}"><span class="ico">${U.icon(it.icon)}</span><span class="nav-label">${it.label}</span>${it.count ? `<span class="badge">${it.count}</span>` : ''}</a>`).join('')}</div>`;
+  }
 
   // Nhãn rút gọn cho thanh "Tài khoản demo" (mục 14 yêu cầu — biết ngay account thuộc role nào mà
   // không làm thanh quá dài với tới 12 chợ × nhiều role). Role tuỳ biến/không có trong map vẫn hiển
@@ -401,8 +428,9 @@
       if (!items.some(it => !it.sub)) return '';
       return `<div class="nav-group">${g.group}</div>` + items.map(it => {
         if (it.sub) return `<div class="nav-subgroup">${it.sub}</div>`;
+        if (it.id === 'su-co' && suCoTechMenuContext()) return suCoTechMenuItemsHtml();
         const b = it.badge ? it.badge() : 0;
-        const label = it.id === 'mat-bang' && ui.market === 'CL' ? 'Mặt bằng & điểm kinh doanh' : it.label;
+        const label = it.id === 'mat-bang' && ui.market === 'CL' ? 'Mặt bằng & điểm kinh doanh' : (it.id === 'su-co' ? suCoMenuLabel() : it.label);
         return `<a href="#/${it.id}" class="${A.current === it.id ? 'active' : ''}"><span class="ico">${it.ico}</span>${label}${b ? `<span class="badge">${b}</span>` : ''}</a>`;
       }).join('');
     }).join('');
@@ -435,7 +463,7 @@
     // trước) không đổi.
     $('#market-wrap').style.display = (A.current === 'mini-app' || A.current === 'tong-quan') ? 'none' : '';
     const it = A.menuItem(A.current);
-    const pageLabel = it && it.id === 'mat-bang' && ui.market === 'CL' ? 'Mặt bằng & điểm kinh doanh' : (it ? it.label : '');
+    const pageLabel = it && it.id === 'mat-bang' && ui.market === 'CL' ? 'Mặt bằng & điểm kinh doanh' : (it ? (it.id === 'su-co' ? suCoMenuLabel() : it.label) : '');
     $('#page-title').textContent = pageLabel;
     document.title = (pageLabel ? pageLabel + ' · ' : '') + 'Chợ số Cao Lãnh – Prototype';
   }
@@ -564,6 +592,12 @@
       ui.market = id; ui.page = {}; ui.sel = null; A.saveUi(); A.route();
     },
     go: el => A.go(el.dataset.to),
+    'su-co-tech-menu': (el, e) => {
+      if (e && e.preventDefault) e.preventDefault();
+      if (!suCoTechMenuContext()) return;
+      ui.incFlowTab = el.dataset.tab || 'assigned';
+      A.go('su-co');
+    },
     receipt: el => A.showReceipt(A.db.payments.filter(p => p.receipt === el.dataset.id && U.inM(p) && A.receiptBusinessStateOk(p))),
     guide: () => A.guide()
   });

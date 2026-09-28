@@ -225,7 +225,6 @@ window.DATA = (function () {
     { id: 'tiepnhan', label: 'Tiếp nhận' },
     { id: 'phancong', label: 'Phân công' },
     { id: 'dangxuly', label: 'Đang xử lý' },
-    { id: 'chonghiemthu', label: 'Chờ nghiệm thu' },
     { id: 'hoanthanh', label: 'Hoàn thành' },
     { id: 'dong', label: 'Đóng' }
   ];
@@ -618,7 +617,7 @@ window.DATA = (function () {
       ['Điện', 'Ổ cắm quầy bị chập, có mùi khét'],
       ['Khác', 'Đề nghị bố trí thêm chỗ để xe cho khách']
     ];
-    const stateCycle = ['tiepnhan', 'phancong', 'dangxuly', 'dangxuly', 'chonghiemthu', 'hoanthanh', 'dong', 'tiepnhan', 'phancong', 'dangxuly', 'hoanthanh', 'dong', 'tiepnhan', 'chonghiemthu'];
+    const stateCycle = ['tiepnhan', 'phancong', 'dangxuly', 'dangxuly', 'hoanthanh', 'hoanthanh', 'dong', 'tiepnhan', 'phancong', 'dangxuly', 'hoanthanh', 'dong', 'tiepnhan', 'hoanthanh'];
     const rented = stalls.filter(s => s.traderId);
     const incidents = TPL.map((t, i) => {
       const st = i % 5 === 3 ? pick(rented.filter(s => s.market === 'TTD')) : pick(rented.filter(s => s.market === 'CL'));

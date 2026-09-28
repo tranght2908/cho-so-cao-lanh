@@ -17,7 +17,7 @@
     'Nhân viên kỹ thuật (điện, nước)': 'technician'
   };
   // Số demo phục vụ luồng đăng nhập SĐT + OTP của prototype; không phải dữ liệu thật.
-  const STAFF_DEMO_PHONE_BY_ID = { NV01: '0900000001' };
+  const STAFF_DEMO_PHONE_BY_ID = { NV01: '0900000001', NV05: '0900000005' };
 
   function defaultStaffAccounts() {
     return D.STAFF.map(s => {
