@@ -2,3 +2,6 @@
 *.png
 node_modules/
 .idea/
+
+# Local prototype backups
+backups/

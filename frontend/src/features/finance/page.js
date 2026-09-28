@@ -579,7 +579,6 @@
     i.amount = i.amount + delta;
     if (i.paid >= i.amount) i.status = 'paid';
     req.status = 'APPROVED'; req.decidedBy = (A.currentAccount() || {}).fullName || 'Không rõ'; req.decidedAt = nowStamp();
-    A.refreshStall(A.idx.stall.get(i.stallId));
     U.log(`Phê duyệt yêu cầu điều chỉnh khoản ${i.id}: ${U.esc(req.itemName || '')} ${ptMoneySigned(delta)} (${req.reason})`);
     A.save(); A.closeModal(); A.render(); U.toast('Đã phê duyệt và cập nhật khoản phải thu ' + ptMoneySigned(delta));
   };

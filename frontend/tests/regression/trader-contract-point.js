@@ -19,8 +19,9 @@ function setup() {
   const BP = A.features.businessPoints.service, today = A.U.today();
   // Fixture points taken from real CL seed points (they carry real fee policies); contracts are
   // added on top so every case is explicit.
-  const free = A.db.stalls.filter(s => s.market === 'CL' && s.status === 'trong' && !A.db.contracts.some(c => c.stallId === s.id));
-  const occupied = A.db.stalls.find(s => s.market === 'CL' && s.status === 'thue' && s.contractId);
+  // v16: occupancy/debt are derived (A.pointDisplayStatus); stall.status is operational only.
+  const free = A.db.stalls.filter(s => s.market === 'CL' && A.pointDisplayStatus(s) === 'trong' && !A.db.contracts.some(c => c.stallId === s.id));
+  const occupied = A.db.stalls.find(s => s.market === 'CL' && A.pointDisplayStatus(s) === 'thue' && s.contractId);
   const ttd = A.db.stalls.find(s => s.market === 'TTD');
   assert(free.length >= 8 && occupied && ttd, 'seed provides free, occupied and TTD points');
   const add = c => { A.db.contracts.push(Object.assign({ market: 'CL', traderId: 'TT0002', history: [] }, c, { businessPointId: c.stallId })); A.reindex(); };
@@ -51,9 +52,9 @@ function setup() {
     assert.strictEqual(BP.freeSince(p6.id, today), addDays(today, -3));
     assert(BP.isAvailable(p7.id, today) && !BP.isAvailable(p7.id, addDays(today, -20)), 'liquidated contract occupied its full term');
     assert(BP.isAvailable(p8.id, today), 'unknown/draft status never occupies');
-    pNgung.status = 'ngung';
+    pNgung.status = 'suspended';
     assert(!BP.isAvailable(pNgung.id, today), 'Tạm ngừng point is not allocatable');
-    pNgung.status = 'trong';
+    pNgung.status = 'active';
   });
   ok('9 inclusive boundaries never double-book', () => {
     assert(!BP.isAvailable(p3.id, yesterday, today), 'start on previous end date overlaps');
@@ -76,7 +77,7 @@ function setup() {
     const stats = A.mbMarketStats('CL');
     assert.strictEqual(Object.values(stats.byStatus).reduce((a, b) => a + b, 0), stats.total, 'badges partition all points');
     A.ui.mb.filter.status = ''; A.mbSetStatusDate(null);
-    pNgung.status = 'ngung'; assert.strictEqual(A.mbStatusAt(pNgung), 'ngung'); pNgung.status = 'trong';
+    pNgung.status = 'suspended'; assert.strictEqual(A.mbStatusAt(pNgung), 'ngung'); pNgung.status = 'active';
   });
 }
 
@@ -84,72 +85,85 @@ function setup() {
 {
   const { h, A, BP, today, free, occupied, add } = setup();
   // 20 CL traders without contract; one of them currently linked to a point code for search.
+  // v16 seed already has CL profiles without contract (demo case) — count on top of them.
+  const seedPending = A.WORKFLOW.needsContract('CL').length;
   for (let n = 1; n <= 20; n++) A.db.traders.push({ id: `PX-${String(n).padStart(3, '0')}`, name: `Tiểu thương chờ ${n}`, phone: `091${String(n).padStart(7, '0')}`, idNo: `0870000${String(n).padStart(5, '0')}`, market: 'CL', stalls: [] });
   A.idx && A.reindex();
   const pending = A.WORKFLOW.needsContract('CL');
-  assert.strictEqual(pending.length, 20);
+  assert.strictEqual(pending.length, seedPending + 20);
 
   h.go('tieu-thuong');
-  ok('10 trader page shows the pending summary count', () => { assert(/pending-summary/.test(h.view())); assert(/Tiểu thương chưa có hợp đồng/.test(h.view())); assert(/>20</.test(h.view())); });
+  ok('10 trader page shows the pending summary count', () => { assert(/pending-summary/.test(h.view())); assert(/Tiểu thương chưa có hợp đồng/.test(h.view())); assert(h.view().includes('>' + (seedPending + 20) + '<')); });
   ok('11 pending records are not rendered inline', () => assert.strictEqual(rowsIn(h.view()), 0));
   h.act('wf-contract-worklist');
-  ok('12 worklist opens', () => assert(/20 trường hợp/.test(h.modal())));
-  ok('13 search + pagination', () => {
-    assert.strictEqual(rowsIn(h.modal()), 15);
-    h.act('wf-contract-worklist-page', { k: 'pendingContracts', d: '1' });
-    assert.strictEqual(rowsIn(h.modal()), 5);
-    A.IN['wf-contract-search']({ value: 'PX-007' });
-    assert.strictEqual(rowsIn(h.modal()), 1);
-    A.IN['wf-contract-search']({ value: '' });
+  ok('12 Cần xử lý opens the canonical contract-owned worklist', () => {
+    assert.strictEqual(A.current, 'hop-dong');
+    assert(/TIỂU THƯƠNG CHƯA CÓ HỢP ĐỒNG/.test(h.view()));
+    assert(/data-act="trader"/.test(h.view()) && /data-act="wf-contract-open"/.test(h.view()));
+  });
+  ok('13 worklist search composes with the same pending helper', () => {
+    A.IN['wf-contract-pending-search']({ value: 'PX-007' });
+    assert(h.view().includes('PX-007') && !h.view().includes('PX-008'));
+    A.IN['wf-contract-pending-search']({ value: '' });
   });
   ok('14 "Tạo hợp đồng" opens the existing contract form', () => {
     h.act('wf-contract-open', { id: 'PX-001' });
-    assert(/data-act="wf-contract-save"/.test(h.modal()) && /data-act="wf-ct-pick-point"/.test(h.modal()) && /id="wf-ct-trader"/.test(h.modal()));
-    assert(/<option value="PX-001" selected>/.test(h.modal()), 'trader prefilled');
+    assert(/data-act="wf-contract-save"/.test(h.modal()) && /id="wf-ct-building"/.test(h.modal()) && /id="wf-ct-row"/.test(h.modal()) && /id="wf-ct-point"/.test(h.modal()));
+    assert(!/id="wf-ct-trader"/.test(h.modal()), 'trader opened from its dossier is fixed');
+    assert(!/data-act="wf-ct-pick-point"/.test(h.modal()), 'point selection is now hierarchical in the contract form');
+    assert(h.modal().includes('PX-001') && /Chờ bố trí/.test(h.modal()), 'trader prefilled as read-only');
   });
 
+  A.closeModal(); h.act('wf-contract-worklist-close');
   h.go('hop-dong');
-  ok('15 contract page pending work is summary only', () => { assert(/Tiểu thương đủ điều kiện nhưng chưa có hợp đồng/.test(h.view())); assert(/Xem &amp; tạo hợp đồng|Xem & tạo hợp đồng/.test(h.view())); assert.strictEqual(rowsIn(h.view()), 0); });
-  ok('contract screen has no generic create CTA; creation starts from "Cần xử lý"', () => {
-    assert(!/data-act="ct-new"/.test(h.view()) && !/Khởi tạo hợp đồng/.test(h.view()));
-    assert(/data-act="wf-contract-worklist"/.test(h.view()));
+  ok('15 contract page pending work is summary only', () => { assert(/Tiểu thương chưa có hợp đồng/.test(h.view())); assert(/Xem &amp; tạo hợp đồng|Xem & tạo hợp đồng/.test(h.view())); assert.strictEqual(rowsIn(h.view()), 0); });
+  ok('contract screen has a shared menu entry for creating a contract without a fixed trader', () => {
+    assert(/data-act="ct-new"/.test(h.view()) && /\+ Tạo hợp đồng/.test(h.view()));
+    h.act('ct-new');
+    assert(/id="wf-ct-trader"/.test(h.modal()) && /data-act="wf-contract-save"/.test(h.modal()));
   });
-  ok('trader detail offers "Tạo hợp đồng" (same form, trader prefilled) only without active contract', () => {
+  ok('trader detail offers the same fixed-trader form even when the trader already has a contract', () => {
     h.act('trader', { id: 'PX-010' });
     assert(/data-act="wf-contract-open" data-id="PX-010"/.test(h.modal()));
     h.act('wf-contract-open', { id: 'PX-010' });
-    assert(/<option value="PX-010" selected>/.test(h.modal()) && /data-act="wf-contract-save"/.test(h.modal()));
+    assert(h.modal().includes('PX-010') && !/id="wf-ct-trader"/.test(h.modal()) && /data-act="wf-contract-save"/.test(h.modal()));
     const withContract = A.db.contracts.find(c => c.market === 'CL' && c.status === 'hieuluc');
     h.act('trader', { id: withContract.traderId });
-    assert(!/data-act="wf-contract-open"/.test(h.modal()));
+    assert(/data-act="wf-contract-open"/.test(h.modal()));
   });
-  ok('expiring KPI: ≤30 with "trong đó ≤15" (subset, not a separate group)', () => {
+  ok('expiring KPIs: ≤30 and ≤15 are separate cards while retaining the subset logic', () => {
     const cs = A.db.contracts.filter(c => c.market === 'CL' && c.status === 'hieuluc'), left = c => A.U.days(today, c.end);
-    const n30 = cs.filter(c => left(c) <= 30).length, n15 = cs.filter(c => left(c) <= 15).length;
-    assert(h.view().includes('Sắp hết hạn ≤ 30 ngày') && h.view().includes('Trong đó ≤ 15 ngày: ' + n15));
+    const n30 = cs.filter(c => left(c) <= 30).length;
+    assert(h.view().includes('Sắp hết hạn ≤ 30 ngày') && h.view().includes('Sắp hết hạn ≤ 15 ngày'));
     h.act('hd-tab', { id: '30' });
     assert.strictEqual((h.view().match(/data-act="ct-view"/g) || []).length, Math.min(25, n30), 'tab ≤30 lists the ≤15 ones too');
     h.act('hd-tab', { id: 'all' });
   });
 
-  // Flow A: trader → form → dates → pick available point → save.
+  // Flow A: trader → form → dates → choose the available point in the hierarchical selector → save.
   const [pA, pBlocked, pB] = free;
+  // The headless DOM does not parse selected <option>s, so mirror the four v16
+  // selector values after the real form helper has populated its draft.
+  const syncPointFields = p => {
+    const BPx = A.features.businessPoints.service, row = BPx.row(p), floor = BPx.floor(p), building = BPx.building(p);
+    A.features.contracts.form.pickPoint(p.id);
+    h.input('#wf-ct-building', building.id);
+    if (floor) h.input('#wf-ct-floor', floor.id);
+    h.input('#wf-ct-row', row.id);
+    h.input('#wf-ct-point', p.id);
+  };
   const s1 = addDays(today, 10), e1 = addDays(today, 375);
   add({ id: 'T-BLOCK', stallId: pBlocked.id, start: addDays(today, 100), end: addDays(today, 200), status: 'hieuluc' });
   h.act('wf-contract-open', { id: 'PX-001' });
   h.input('#wf-ct-trader', 'PX-001'); h.input('#wf-ct-start', s1); h.input('#wf-ct-end', e1);
-  h.act('wf-ct-pick-point');
-  ok('16 point picker respects the whole contract range', () => {
-    assert(/Chọn điểm khả dụng/.test(h.modal()) && /data-act="avail-pick"/.test(h.modal()));
-    A.IN['avail-search']({ value: pBlocked.code });
-    assert(!new RegExp('data-act="avail-pick" data-id="' + pBlocked.id + '"').test(h.modal()), 'overlapping future contract hides the point');
-    A.IN['avail-search']({ value: pA.code });
-    assert(new RegExp('data-act="avail-pick" data-id="' + pA.id + '"').test(h.modal()));
-    assert(!/data-act="avail-create"/.test(h.modal()), 'selection mode has no create action');
+  ok('16 hierarchical point selector respects the whole contract range', () => {
+    assert(!BP.isAvailable(pBlocked.id, s1, e1), 'overlapping future contract is unavailable');
+    assert(BP.isAvailable(pA.id, s1, e1), 'available point remains selectable');
+    A.features.contracts.form.pickPoint(pA.id);
+    syncPointFields(pA);
+    assert(new RegExp('id="wf-ct-point"[^>]*value="' + pA.id + '"|option value="' + pA.id + '" selected').test(h.modal()));
+    assert(/Ngành hàng/.test(h.modal()) && /Còn trống/.test(h.modal()));
   });
-  h.act('avail-pick', { id: pA.id });
-  ok('picked point returns to the same form', () => { assert(new RegExp('id="wf-ct-stall" value="' + pA.id + '"').test(h.modal())); assert(/data-act="wf-contract-save"/.test(h.modal())); });
-  h.input('#wf-ct-stall', pA.id);
   ok('17 save-time revalidation blocks an overlap created after the search', () => {
     add({ id: 'T-RACE', stallId: pA.id, start: addDays(today, 200), end: addDays(today, 260), status: 'hieuluc' });
     const n = A.db.contracts.length;
@@ -163,7 +177,7 @@ function setup() {
     h.act('wf-contract-save');
     cA = A.db.contracts.at(-1);
     assert.strictEqual(cA.traderId, 'PX-001'); assert.strictEqual(cA.stallId, pA.id); assert.strictEqual(cA.start, s1); assert.strictEqual(cA.end, e1); assert.strictEqual(cA.status, 'hieuluc');
-    assert.strictEqual(A.idx.stall.get(pA.id).status, 'trong', 'a future-start contract does not displace today\'s occupancy fields');
+    assert.strictEqual(A.pointDisplayStatus(A.idx.stall.get(pA.id)), 'trong', 'a future-start contract does not displace today\'s occupancy');
   });
   ok('idempotent: saving again does not create a second contract', () => { const n = A.db.contracts.length; h.act('wf-contract-save'); assert.strictEqual(A.db.contracts.length, n); });
   ok('19 availability reflects the saved contract', () => { assert(!BP.isAvailable(pA.id, s1, e1)); assert(!BP.isAvailable(pA.id, addDays(e1, -1), addDays(e1, 30))); assert(BP.isAvailable(pA.id, today, addDays(s1, -1))); });
@@ -189,19 +203,18 @@ function setup() {
     const s2 = today, e2 = addDays(today, 364);
     h.act('wf-contract-open', { id: 'PX-002' });
     h.input('#wf-ct-trader', 'PX-002'); h.input('#wf-ct-start', s2); h.input('#wf-ct-end', e2);
-    h.act('wf-ct-pick-point'); A.IN['avail-search']({ value: pB.code });
-    h.act('avail-pick', { id: pB.id }); h.input('#wf-ct-stall', pB.id);
+    A.features.contracts.form.pickPoint(pB.id); syncPointFields(pB);
     h.act('wf-contract-save');
     cB = A.db.contracts.at(-1);
     assert.strictEqual(cB.traderId, 'PX-002'); assert.strictEqual(cB.stallId, pB.id);
     const st = A.idx.stall.get(pB.id);
-    assert.strictEqual(st.status, 'thue'); assert.strictEqual(st.contractId, cB.id); assert(A.idx.trader.get('PX-002').stalls.includes(pB.id));
+    assert.strictEqual(A.pointDisplayStatus(st), 'thue'); assert.strictEqual(st.contractId, cB.id); assert(A.idx.trader.get('PX-002').stalls.includes(pB.id));
     assert.strictEqual(A.mbStatusAt(st), 'thue');
   });
   ok('24 both contracts have the same data shape', () => assert.deepStrictEqual(Object.keys(cA).sort(), Object.keys(cB).sort()));
   ok('Flow C: overlapping contract on the same point is blocked', () => {
     h.act('wf-contract-open', { id: 'PX-003' });
-    h.input('#wf-ct-trader', 'PX-003'); h.input('#wf-ct-stall', pB.id); h.input('#wf-ct-start', addDays(today, 30)); h.input('#wf-ct-end', addDays(today, 90));
+    h.input('#wf-ct-trader', 'PX-003'); h.input('#wf-ct-start', addDays(today, 30)); h.input('#wf-ct-end', addDays(today, 90)); A.features.contracts.form.pickPoint(pB.id);
     const n = A.db.contracts.length; h.act('wf-contract-save');
     assert.strictEqual(A.db.contracts.length, n); assert(h.trace.toasts.at(-1).includes(pB.code));
   });
@@ -209,7 +222,56 @@ function setup() {
     const f = A.features.contracts.service;
     f.terminate(cB.id, { date: today, reason: 'test', detail: 'test' }, { at: '', action: 't' });
     const st = A.idx.stall.get(pB.id);
-    assert.strictEqual(st.status, 'trong'); assert(BP.isAvailable(pB.id, today));
+    assert.strictEqual(A.pointDisplayStatus(st), 'trong'); assert(BP.isAvailable(pB.id, today));
+  });
+}
+
+// ---------------- DERIVED TRADER BUSINESS STATUS ----------------
+{
+  const { h, A, today, free, add } = setup();
+  const TS = A.features.traders.service, status = TS.BUSINESS_STATUS;
+  const addTrader = (id, name) => { const t = { id, name, phone: '091' + id.slice(-7), idNo: '087' + id.slice(-9), market: 'CL', stalls: [] }; A.db.traders.push(t); A.reindex(); return t; };
+  const waiting = addTrader('PX-WAIT', 'Chờ bố trí test');
+  const active = addTrader('PX-ACTIVE', 'Đang hoạt động test');
+  const inactive = addTrader('PX-INACTIVE', 'Ngừng hoạt động test');
+  const multiple = addTrader('PX-MULTI', 'Nhiều hợp đồng test');
+  const reactivated = addTrader('PX-RETURN', 'Tái hoạt động test');
+  const future = addTrader('PX-FUTURE', 'Hợp đồng tương lai test');
+  add({ id: 'TS-ACTIVE', traderId: active.id, stallId: free[0].id, start: addDays(today, -5), end: addDays(today, 30), status: 'hieuluc' });
+  add({ id: 'TS-INACTIVE', traderId: inactive.id, stallId: free[1].id, start: addDays(today, -50), end: addDays(today, -2), status: 'hieuluc' });
+  add({ id: 'TS-MULTI-OLD', traderId: multiple.id, stallId: free[2].id, start: addDays(today, -50), end: addDays(today, -2), status: 'hieuluc' });
+  add({ id: 'TS-MULTI-CURRENT', traderId: multiple.id, stallId: free[3].id, start: addDays(today, -5), end: addDays(today, 30), status: 'hieuluc' });
+  add({ id: 'TS-RETURN-OLD', traderId: reactivated.id, stallId: free[4].id, start: addDays(today, -50), end: addDays(today, -2), status: 'chamdut', termination: { date: addDays(today, -2) } });
+  add({ id: 'TS-RETURN-CURRENT', traderId: reactivated.id, stallId: free[5].id, start: addDays(today, -1), end: addDays(today, 30), status: 'hieuluc' });
+  add({ id: 'TS-FUTURE', traderId: future.id, stallId: free[6].id, start: addDays(today, 2), end: addDays(today, 30), status: 'hieuluc' });
+  ok('30 newly created/no-contract trader is Chờ bố trí', () => assert.strictEqual(TS.deriveBusinessStatus(waiting), status.WAITING_ALLOCATION));
+  ok('31 current valid contract makes trader Đang hoạt động', () => assert.strictEqual(TS.deriveBusinessStatus(active), status.ACTIVE));
+  ok('32 ended sole contract makes trader Ngừng hoạt động', () => assert.strictEqual(TS.deriveBusinessStatus(inactive), status.INACTIVE));
+  ok('33 one ended contract cannot override another current contract', () => assert.strictEqual(TS.deriveBusinessStatus(multiple), status.ACTIVE));
+  ok('34 a new current contract reactivates an inactive trader', () => assert.strictEqual(TS.deriveBusinessStatus(reactivated), status.ACTIVE));
+  ok('35 future-only contract remains Chờ bố trí until its effective date', () => assert.strictEqual(TS.deriveBusinessStatus(future), status.WAITING_ALLOCATION));
+  login(A, 'AC-NV01', 'CL'); h.go('tieu-thuong');
+  ok('36 status filter selects only Chờ bố trí traders', () => {
+    A.CH['ttcl-status']({ value: status.WAITING_ALLOCATION });
+    A.IN['ttcl-search']({ value: waiting.name });
+    assert(h.view().includes(waiting.name) && !h.view().includes(active.name) && !h.view().includes(inactive.name));
+  });
+  ok('37 status filter selects only Đang hoạt động traders', () => {
+    A.CH['ttcl-status']({ value: status.ACTIVE });
+    A.IN['ttcl-search']({ value: active.name });
+    assert(h.view().includes(active.name) && !h.view().includes(inactive.name));
+  });
+  ok('38 status filter selects only Ngừng hoạt động traders', () => {
+    A.CH['ttcl-status']({ value: status.INACTIVE });
+    A.IN['ttcl-search']({ value: inactive.name });
+    assert(h.view().includes(inactive.name) && !h.view().includes(active.name));
+  });
+  ok('39 search, floor and status filters compose', () => {
+    const p = free[0];
+    A.CH['ttcl-status']({ value: status.ACTIVE });
+    A.CH['ttcl-floor']({ value: p.floor });
+    A.IN['ttcl-search']({ value: active.name });
+    assert(h.view().includes(active.name) && !h.view().includes(multiple.name));
   });
 }
 
@@ -225,7 +287,7 @@ function setup() {
   });
   ok('29b handler-side checks hold when called directly', () => {
     const n = A.db.contracts.length;
-    h.input('#wf-ct-trader', 'PX-RBAC'); h.input('#wf-ct-stall', free[0].id); h.input('#wf-ct-start', A.U.today()); h.input('#wf-ct-end', addDays(A.U.today(), 30));
+    h.input('#wf-ct-trader', 'PX-RBAC'); h.input('#wf-ct-start', A.U.today()); h.input('#wf-ct-end', addDays(A.U.today(), 30)); A.features.contracts.form.pickPoint(free[0].id);
     h.act('wf-contract-save');
     assert.strictEqual(A.db.contracts.length, n);
   });

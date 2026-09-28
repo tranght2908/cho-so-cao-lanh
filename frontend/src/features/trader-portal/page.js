@@ -155,7 +155,7 @@
   function miniSessionAvailablePoints(s, cat) {
     if (!s) return [];
     const reserved = miniReservedPointIds(s.id);
-    return A.db.stalls.filter(st => st.market === s.marketId && U.rentalKind(st) === 'session' && st.status === 'trong' && !st.traderId && !reserved.has(st.id) && (!cat || st.cat === cat))
+    return A.db.stalls.filter(st => st.market === s.marketId && U.rentalKind(st) === 'session' && st.status === 'active' && !st.traderId && !reserved.has(st.id) && (!cat || st.cat === cat))
       .sort((a, b) => String(a.code || '').localeCompare(String(b.code || ''), 'vi'));
   }
   function miniSessionReceiptsForTrader(t) {
@@ -576,7 +576,7 @@
         <dt>Diện tích</dt><dd>${st.area.toLocaleString('vi-VN')} m²</dd>
         <dt>Ngành hàng</dt><dd>${U.esc(st.cat) || 'Chưa có thông tin'}</dd>
         <dt>Hợp đồng</dt><dd>${c ? c.id : 'Chưa có hợp đồng hiệu lực'}</dd>
-        <dt>Trạng thái</dt><dd>${D.STATUS[st.status] ? D.STATUS[st.status].label : st.status}${st.structuralStatus === 'SPLIT' ? ' · Đã tách' : ''}</dd>
+        <dt>Trạng thái</dt><dd>${U.esc(A.mbStatusLabel(A.pointDisplayStatus(st)))}${st.structuralStatus === 'SPLIT' ? ' · Đã tách' : ''}</dd>
       </dl>
       <div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap">
         <button class="btn sm" data-act="mini-tab" data-id="contract">Xem chi tiết</button>

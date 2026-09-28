@@ -112,7 +112,7 @@
   let authContactQuery = '';
   function authContactHtml() {
     const q = authContactQuery.trim().toLowerCase();
-    const rows = A.D.MARKETS.filter(m => !q || [m.name, m.address].join(' ').toLowerCase().includes(q));
+    const rows = A.effectiveMarkets().filter(m => !q || [m.name, m.address].join(' ').toLowerCase().includes(q));
     return A.mHead('Thông tin liên hệ Ban Quản lý chợ') + `<div class="modal-b auth-contact">
       <input class="input" data-in="auth-contact-search" placeholder="Tìm tên chợ..." value="${U.esc(authContactQuery)}" aria-label="Tìm tên chợ">
       <div class="auth-contact-list">${rows.length ? rows.map(m => `<div class="auth-contact-row"><b>${U.esc(m.name)}</b>${m.address ? `<small>${U.esc(m.address)}</small>` : ''}</div>`).join('') : '<div class="empty small">Không tìm thấy chợ phù hợp.</div>'}</div>

@@ -17,6 +17,8 @@
   repository.get = function (id) { return source().get(id); };
   repository.priceConfig = function (id) { return source().priceConfig(id); };
   repository.codeTaken = function (code, excludeId) { return source().codeTaken(code, excludeId); };
+  repository.nextCode = function () { return source().nextCode(); };
+  repository.effectiveMarkets = function () { return source().effectiveMarkets(); };
   repository.add = function (record, user) { return source().add(record, user); };
   repository.update = function (id, patch, user) { return source().update(id, patch, user); };
   repository.ranks = function () { return source().RANKS; };

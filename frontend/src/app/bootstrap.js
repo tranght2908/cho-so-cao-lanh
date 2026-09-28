@@ -33,10 +33,8 @@
       && U.can('thu-tien') && A.canDo('thu-tien.thu', targetMarket);
   };
 
-  A.refreshStall = function (st) {
-    if (st.status !== 'thue' && st.status !== 'no') return;
-    st.status = A.db.invoices.some(i => i.stallId === st.id && U.isOver(i)) ? 'no' : 'thue';
-  };
+  // v16: A.refreshStall đã bỏ — "Nợ phí" không còn ghi vào stall.status mà suy ra từ khoản phải thu
+  // (features/business-points/service.js: debtStatus/displayStatus).
 
   // ---------- RBAC V1 — Account Demo đang dùng ----------
   // Nguồn xác thực runtime: currentDemoAccountId → account → account.status → account.roleIds.
@@ -58,10 +56,14 @@
   // không được tự ý coi 'ALL' là 1 market cụ thể. RBAC_MARKET_SCOPE_MIGRATION: KHÔNG còn hard-code
   // ['CL','TTD'] — market hợp lệ tra theo D.MARKETS động, để account MARKET scoped tới bất kỳ chợ
   // nào trong 12 chợ đều được nhận diện đúng, không chỉ 2 chợ demo gốc.
+  // Danh sách chợ hợp lệ = A.effectiveMarkets() (D.MARKETS + chợ custom trong Danh mục chợ, xem
+  // features/markets/store.js); trước khi store đó nạp thì chỉ có D.MARKETS. Tạo chợ custom KHÔNG cấp
+  // scope cho ai: 'ALL' tự bao gồm chợ mới, account giới hạn chỉ thấy khi có đúng id trong marketScopes.
   A.allowedMarkets = function (account) {
     const scopes = (account && account.marketScopes) || [];
-    if (scopes.indexOf('ALL') !== -1) return D.MARKETS.map(m => m.id);
-    const validIds = new Set(D.MARKETS.map(m => m.id));
+    const markets = typeof A.effectiveMarkets === 'function' ? A.effectiveMarkets() : D.MARKETS;
+    if (scopes.indexOf('ALL') !== -1) return markets.map(m => m.id);
+    const validIds = new Set(markets.map(m => m.id));
     return scopes.filter(m => validIds.has(m));
   };
   // Market applicability theo RBAC_V1_SPEC.md mục 6 — nguồn cấu hình TẬP TRUNG duy nhất, tránh
@@ -219,7 +221,6 @@
         };
         db.bank.push(bk);
       }
-      A.refreshStall(A.idx.stall.get(inv.stallId));
     });
     A.save();
     return out;

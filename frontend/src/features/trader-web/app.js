@@ -67,7 +67,7 @@
     return (A.db.notifications || []).filter(n => n.traderId === t.id || n.group === 'Toàn bộ tiểu thương' || n.group === mk || n.group === 'Ngành hàng: ' + t.cat || (debt && n.group === 'Danh sách nợ phí'))
       .slice().sort((a, b) => (b.at || '').localeCompare(a.at || ''));
   }
-  const pointStatus = st => `<span class="tag ${st.status === 'no' ? 'danger' : st.status === 'thue' ? 'ok' : ''}">${U.esc(D.STATUS[st.status] ? D.STATUS[st.status].label : st.status)}</span>`;
+  const pointStatus = st => { const k = A.features.businessPoints.service.displayStatus(st); return `<span class="tag ${k === 'no' ? 'danger' : k === 'thue' ? 'ok' : ''}">${U.esc(D.STATUS[k] ? D.STATUS[k].label : k)}</span>`; };
   const MARK = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 12l2-6h18l2 6z" fill="#0089df"/><path d="M5 12h22v3a3.5 3.5 0 0 1-7 0 3.5 3.5 0 0 1-7 0 3.5 3.5 0 0 1-7 0z" fill="#4fb3ff"/><path d="M7 17v10h18V17" fill="#0b4a9e"/><rect x="13" y="20" width="6" height="7" fill="#fff"/></svg>';
 
   // ==================== ĐĂNG NHẬP (dùng khung đăng nhập của hệ thống) ====================

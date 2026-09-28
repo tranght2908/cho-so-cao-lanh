@@ -60,6 +60,12 @@
     ['XB', 'Mai Văn Bèo', 'Trương Thị Xẻo', 'Châu Văn Phát'],
     ['SQ', 'Lâm Văn Quốc', 'Nguyễn Thị Sáu', 'Trần Văn Cường']
   ];
+  // SĐT demo cho luồng đăng nhập SĐT + OTP mock (dữ liệu minh hoạ, không phải số thật). Chỉ Chợ Hòa
+  // An dùng cho E2E; account đã lưu có phone rỗng được mergeSeedAccounts (store.js) backfill.
+  const NEW_MARKET_DEMO_PHONE_BY_ID = {
+    'AC-HA-QL': '0911000001',
+    'AC-HA-TP': '0911000002'
+  };
   function newMarketAccounts() {
     const out = [];
     NEW_MARKET_ROSTER.forEach(row => {
@@ -67,7 +73,7 @@
       const m = D.MARKETS.find(x => x.id === mid);
       const org = 'Ban Quản lý ' + (m ? m.name : mid);
       const mk = (suffix, roleId, fullName, title) => ({
-        id: 'AC-' + mid + '-' + suffix, code: mid + '-' + suffix, fullName, phone: '',
+        id: 'AC-' + mid + '-' + suffix, code: mid + '-' + suffix, fullName, phone: NEW_MARKET_DEMO_PHONE_BY_ID['AC-' + mid + '-' + suffix] || '',
         accountType: roleName(roleId), title, roleIds: [roleId], organization: org,
         marketScopes: [mid], status: 'active'
       });

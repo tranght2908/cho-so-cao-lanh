@@ -6,11 +6,12 @@
 (function (A) {
   'use strict';
   const U = A.U;
-  const active = c => c && c.status === 'hieuluc';
+  const phase = c => A.features.contracts.service.presentationStatus(c);
+  const active = c => phase(c) === 'current';
   const days = c => U.days(U.today(), c.end);
   const point = c => A.features.businessPoints.service.get(c.stallId);
   const trader = c => A.features.traders.service.getProfile(c.traderId);
-  const tag = c => c.status === 'thanhly' ? '<span class="tag">Đã thanh lý</span>' : c.status === 'chamdut' ? '<span class="tag danger">Đã chấm dứt</span>' : active(c) ? '<span class="tag ok">Đang hiệu lực</span>' : '<span class="tag">Đã kết thúc</span>';
+  const tag = c => ({ upcoming: '<span class="tag info">Chưa đến hiệu lực</span>', current: '<span class="tag ok">Đang hiệu lực</span>', expired: '<span class="tag">Đã hết hạn</span>', terminated: '<span class="tag danger">Đã chấm dứt</span>', liquidated: '<span class="tag">Đã thanh lý</span>', ended: '<span class="tag">Đã kết thúc</span>' })[phase(c)];
   const price = c => c.monthly ? U.money(c.monthly) + '/tháng' : 'Theo phiên';
   function section(icon, key, title, body, tone) {
     return `<section class="contract-detail-section ${tone || ''}"><h4><span>${U.icon(icon)}</span>${key}. ${title}</h4>${body}</section>`;
@@ -18,10 +19,10 @@
   function pairs(rows) { return `<dl class="contract-detail-kv">${rows.map(r => `<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('')}</dl>`; }
   function detail(c) {
     const t = trader(c), s = point(c), files = c.signedCopies || [], h = c.history || [];
-    const future = active(c) && c.start > U.today();
+    const future = phase(c) === 'upcoming';
     const warning = future ? `<span class="tag info">Chưa đến ngày hiệu lực</span> · bắt đầu ${U.dmy(c.start)}` : active(c) && days(c) <= 30 ? `<b class="${days(c) <= 15 ? 'contract-danger-text' : 'contract-warn-text'}">${days(c)} ngày · Sắp hết hạn</b>` : active(c) ? days(c) + ' ngày' : '—';
     const traderBlock = section('users', 'A', 'TIỂU THƯƠNG', pairs([['Tiểu thương', t ? '<b>' + U.esc(t.name) + ' · ' + t.id + '</b>' : '—'], ['Điện thoại', t ? '☎ ' + U.maskPhone(t.phone) : '—']]) + (t ? `<div class="contract-section-action"><button class="btn sm" data-act="trader" data-id="${t.id}">${U.icon('eye')}Xem hồ sơ tiểu thương</button></div>` : ''), 'contract-blue');
-    const pointBlock = section('store', 'B', 'ĐIỂM KINH DOANH', pairs([['Mã điểm', '<b>' + (s ? s.code : '—') + '</b>'], ['Khu vực', s ? U.esc(s.sectionName) : '—'], ['Loại diện tích', s ? U.esc(U.areaTypeLabel(s.areaType) || 'Chưa có thông tin') : '—'], ['Diện tích', s ? '<b>' + s.area + ' m²</b>' : '—']]) + (s ? `<div class="contract-section-action"><button class="btn sm" data-act="dk-open" data-id="${s.id}">${U.icon('store')}Xem chi tiết điểm</button></div>` : ''), 'contract-mint');
+    const pointBlock = section('store', 'B', 'ĐIỂM KINH DOANH', pairs([['Mã điểm', '<b>' + (s ? s.code : '—') + '</b>'], ['Vị trí', s ? U.esc(A.features.businessPoints.service.location(s).label) : '—'], ['Loại diện tích', s ? U.esc(U.areaTypeLabel(s.areaType) || 'Chưa có thông tin') : '—'], ['Diện tích', s ? '<b>' + s.area + ' m²</b>' : '—']]) + (s ? `<div class="contract-section-action"><button class="btn sm" data-act="dk-open" data-id="${s.id}">${U.icon('store')}Xem chi tiết điểm</button></div>` : ''), 'contract-mint');
     const contract = section('file', 'C', 'THỜI HẠN', pairs([['Mã hợp đồng', '<b>' + c.id + '</b>'], ['Ngày ký', U.dmy(c.signedDate || c.start)], ['Ngày bắt đầu', U.dmy(c.start)], ['Ngày kết thúc', U.dmy(c.end)], ['Trạng thái', tag(c)], ['Thời hạn còn lại', warning]]), 'contract-amber');
     const policy = c.feePolicy || null, basis = policy && policy.legalBasis || {};
     const service = c.serviceApplicability || null;

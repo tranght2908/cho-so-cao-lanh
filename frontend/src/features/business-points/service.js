@@ -27,9 +27,9 @@
   const MAX = '9999-12-31';
   const dayBefore = d => new Date(Date.parse(d) - 86400000).toISOString().slice(0, 10);
   const dayAfter = d => new Date(Date.parse(d) + 86400000).toISOString().slice(0, 10);
-  // Point states that are not open for allocation (Tạm ngừng / Đang tranh chấp) and retired
-  // structural records (merged/split). Occupancy states (thue/no/trong) are NOT used here.
-  const BLOCKED_STATUS = ['ngung', 'tranhchap'];
+  // Operational point states that are not open for allocation (stall.status v16) and retired
+  // structural records (merged/split). Occupancy/debt are derived, never stored on the point.
+  const BLOCKED_STATUS = ['suspended', 'disputed', 'inactive'];
   service.occupyingInterval = function (c) {
     if (!c || !c.start) return null;
     const end = c.end || MAX;
@@ -83,4 +83,49 @@
     if (!i) return 'ended';
     return i.start > date ? 'future' : i.end < date ? 'ended' : 'current';
   };
+
+  // ---- Helper chuẩn cho graph mặt bằng v16 (Building → Floor? → Row → điểm) ----
+  // Module khác (Hợp đồng/Tiểu thương/Tài chính…) dùng các helper này thay vì tự đọc cấu trúc.
+  const idx = name => (A.idx && A.idx[name]) || null;
+  service.row = function (st) { const m = idx('row'); return st && st.rowId && m ? m.get(st.rowId) || null : null; };
+  service.floor = function (st) { const r = service.row(st), m = idx('floor'); return r && r.floorId && m ? m.get(r.floorId) || null : null; };
+  service.building = function (st) { const r = service.row(st), m = idx('building'); return r && m ? m.get(r.buildingId) || null : null; };
+  // Ngành hàng thuộc Dãy; điểm kế thừa.
+  service.industry = function (st) { const r = service.row(st); return r ? r.industry || '' : ''; };
+  // Vị trí hiển thị: khu = Khối/Nhà chợ, tang = Tầng (— nếu Dãy không thuộc tầng), day = Dãy.
+  service.location = function (st) {
+    const b = service.building(st), f = service.floor(st), r = service.row(st);
+    return { building: b, floor: f, row: r, khu: b ? b.name : '—', tang: f ? f.name : '—', day: r ? r.name : '—',
+      label: [b && b.name, f && f.name, r && r.name].filter(Boolean).join(' → ') || '—' };
+  };
+  service.pointsOfRow = function (rowId) { return repository.list().filter(st => st.rowId === rowId); };
+  // Tình trạng sử dụng: suy từ hợp đồng chiếm dụng tại ngày xem.
+  service.usageStatus = function (st, date) { return st && service.contractOn(st.id, date || A.U.today()) ? 'occupied' : 'vacant'; };
+  // Người đang sử dụng: người thuê theo hợp đồng; quầy theo phiên (không có hợp đồng tháng) lấy khách
+  // quen đã gắn điểm trong hồ sơ tiểu thương (traders[].stalls).
+  service.occupantId = function (st, date) {
+    if (!st) return null;
+    const c = service.contractOn(st.id, date || A.U.today());
+    if (c) return c.traderId;
+    if (A.U.rentalKind && A.U.rentalKind(st) === 'session') {
+      const t = (A.db.traders || []).find(x => (x.stalls || []).indexOf(st.id) !== -1);
+      return t ? t.id : null;
+    }
+    return null;
+  };
+  // Công nợ: suy từ khoản phải thu quá hạn còn nợ (tuỳ chọn giới hạn theo 1 hợp đồng).
+  service.debtStatus = function (st, contractId) {
+    return st && (A.db.invoices || []).some(i => i.stallId === st.id && (!contractId || i.contractId === contractId) && A.U.isOver(i)) ? 'overdue' : 'none';
+  };
+  // Tình trạng hiển thị tổng hợp (khoá chú giải D.STATUS): vận hành → sử dụng → công nợ của hợp đồng hiện hành.
+  service.displayStatus = function (st, date) {
+    if (!st) return 'trong';
+    if (st.status === 'suspended' || st.status === 'inactive') return 'ngung';
+    if (st.status === 'disputed') return 'tranhchap';
+    const c = service.contractOn(st.id, date || A.U.today());
+    if (!c) return 'trong';
+    return service.debtStatus(st, c.id) === 'overdue' ? 'no' : 'thue';
+  };
+  service.activeSeller = function (st) { return st ? (A.db.directSellerAssignments || []).find(x => x.pointId === st.id && x.status === 'ACTIVE') || null : null; };
+  service.POINT_STATUS = A.D.POINT_STATUS;
 })(window.APP);

@@ -1,0 +1,15 @@
+const assert = require('assert');
+const path = require('path');
+const { createApp } = require('./harness');
+const root = path.resolve(__dirname, '../..'); let passed = 0;
+const ok = (n, f) => { try { f(); passed++; } catch (e) { e.message = n + ': ' + e.message; throw e; } };
+const h = createApp(root), A = h.A, BP = A.features.businessPoints.service;
+const manager = A.ACCOUNTS.list().find(a => A.ACCOUNTS.primaryRole(a) === 'market_manager' && A.allowedMarkets(a).includes('CL'));
+const collector = A.ACCOUNTS.list().find(a => A.ACCOUNTS.primaryRole(a) === 'collector' && a.status === 'active' && A.allowedMarkets(a).includes('CL'));
+const row = A.idx.row.get('CL-R-HS-A'), before = row.collectorId;
+A.ui.sessionAccountId = manager.id; A.ui.market = 'CL'; A.syncAccountContext();
+ok('only active in-scope collector accounts are candidates', () => BP.collectorAccounts('CL').forEach(a => { assert.strictEqual(A.ACCOUNTS.primaryRole(a), 'collector'); assert.strictEqual(a.status, 'active'); assert(A.allowedMarkets(a).includes('CL')); }));
+ok('assignment is stored only on row and points derive the collector', () => { const out = BP.assignRowCollector('CL', row.id, collector.id); assert(out.ok); assert.strictEqual(row.collectorId, collector.id); const ps = BP.collectorPoints(collector.id, 'CL'); assert(ps.some(p => p.rowId === row.id)); assert(A.db.stalls.filter(p => p.rowId === row.id).every(p => !Object.prototype.hasOwnProperty.call(p, 'collectorId') && BP.pointCollector(p.id).id === collector.id)); });
+ok('scope follows point for contract, invoice and payment; non-point is unassigned', () => { const p = A.db.stalls.find(x => x.rowId === row.id), c = A.db.contracts.find(x => (x.stallId || x.businessPointId) === p.id), i = A.db.invoices.find(x => x.stallId === p.id), pay = i && A.db.payments.find(x => x.invoiceId === i.id); if (c) assert(BP.collectorCanAccessContract(collector.id, c.id)); if (i) { assert(BP.collectorCanAccessReceivable(collector.id, i.id)); if (pay) assert(BP.collectorCanAccessPayment(collector.id, pay.id)); } assert.strictEqual(BP.receivableScope({ id: 'X' }).kind, 'nonPointScoped'); });
+ok('invalid direct assignment is rejected and unassign is allowed', () => { const bad = A.ACCOUNTS.list().find(a => A.ACCOUNTS.primaryRole(a) !== 'collector'); assert(!BP.assignRowCollector('CL', row.id, bad.id).ok); assert(BP.assignRowCollector('CL', row.id, null).ok); row.collectorId = before; A.reindex(); A.save(); });
+console.log(`collector-row-scope regression PASS (${passed} checks)`);

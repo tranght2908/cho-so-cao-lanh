@@ -12,19 +12,20 @@
   function reports(xmMkt) {
     const db = A.db, stalls = db.stalls.filter(x => U.inScope(x, xmMkt)), inv = db.invoices.filter(x => U.inScope(x, xmMkt)), pays = db.payments.filter(x => U.inScope(x, xmMkt));
     const secs = [];
-    stalls.forEach(s => { if (!secs.find(x => x.key === s.market + s.section)) secs.push({ key: s.market + s.section, name: s.sectionName, m: s.market }); });
+    // Nhóm theo Dãy (graph mặt bằng v16); tình trạng lấy từ trạng thái hiển thị suy ra (hợp đồng/khoản thu).
+    stalls.forEach(s => { if (!secs.find(x => x.key === s.rowId)) secs.push({ key: s.rowId, name: s.sectionName, m: s.market }); });
     const periods = db.issuedPeriods.filter(p => p <= '2026-09');
     return {
-      lapday: { t: 'Tình trạng lấp đầy điểm kinh doanh', cols: ['Chợ', 'Khu vực', 'Tổng', 'Đang thuê', 'Nợ phí', 'Tạm ngừng', 'Tranh chấp', 'Còn trống', 'Lấp đầy %'],
-        rows: secs.map(sc => { const xs = stalls.filter(s => s.market + s.section === sc.key), c = k => xs.filter(s => s.status === k).length; return [U.mShort(sc.m), sc.name, xs.length, c('thue'), c('no'), c('ngung'), c('tranhchap'), c('trong'), U.pct(xs.length - c('trong'), xs.length)]; }) },
+      lapday: { t: 'Tình trạng lấp đầy điểm kinh doanh', cols: ['Chợ', 'Dãy', 'Tổng', 'Đang thuê', 'Nợ phí', 'Tạm ngừng', 'Tranh chấp', 'Còn trống', 'Lấp đầy %'],
+        rows: secs.map(sc => { const xs = stalls.filter(s => s.rowId === sc.key), st = xs.map(s => A.pointDisplayStatus(s)), c = k => st.filter(x => x === k).length; return [U.mShort(sc.m), sc.name, xs.length, c('thue'), c('no'), c('ngung'), c('tranhchap'), c('trong'), U.pct(xs.length - c('trong'), xs.length)]; }) },
       biendong: { t: 'Biến động tiểu thương', cols: ['Tháng', 'Đăng ký mới', 'Chấm dứt', 'Cuối kỳ'],
         rows: (() => { let total = db.traders.filter(x => U.inScope(x, xmMkt)).length; const out = []; for (let k = 0; k < 6; k++) { const nw = 2 + (k * 7) % 5, lv = 1 + (k * 3) % 3; out.unshift(['0' + (9 - k) + '/2026', nw, lv, total]); total = total - nw + lv; } return out; })() },
       hethan: { t: 'Hợp đồng sắp hết hạn (60 ngày)', cols: ['Số hợp đồng', 'Tiểu thương', 'Điểm KD', 'Ngày hết hạn', 'Còn lại (ngày)'],
         rows: db.contracts.filter(c => U.inScope(c, xmMkt) && c.status === 'hieuluc' && U.days(U.today(), c.end) <= 60).sort((a, b) => a.end.localeCompare(b.end)).map(c => [c.id, A.idx.trader.get(c.traderId).name, A.idx.stall.get(c.stallId).code, U.dmy(c.end), U.days(U.today(), c.end)]) },
       doanhthu: { t: 'Doanh thu theo kỳ', cols: ['Kỳ', 'Số khoản', 'Phải thu (đ)', 'Đã thu (đ)', 'Tỷ lệ thu %'],
         rows: periods.map(p => { const xs = inv.filter(i => i.period === p), a = U.sum(xs, i => i.amount), b = U.sum(xs, i => i.paid); return [U.per(p), xs.length, a, b, U.pct(b, a)]; }), chart: 'doanhthu' },
-      congno: { t: 'Công nợ theo khu vực', cols: ['Chợ', 'Khu vực', 'Số tiểu thương nợ', 'Nợ quá hạn (đ)', 'Nợ chưa đến hạn (đ)'],
-        rows: secs.map(sc => { const xs = inv.filter(i => i.status !== 'paid' && (i.market + A.idx.stall.get(i.stallId).section) === sc.key); return [U.mShort(sc.m), sc.name, new Set(xs.filter(U.isOver).map(i => i.traderId)).size, U.sum(xs.filter(U.isOver), U.due), U.sum(xs.filter(i => !U.isOver(i)), U.due)]; }) },
+      congno: { t: 'Công nợ theo dãy', cols: ['Chợ', 'Dãy', 'Số tiểu thương nợ', 'Nợ quá hạn (đ)', 'Nợ chưa đến hạn (đ)'],
+        rows: secs.map(sc => { const xs = inv.filter(i => i.status !== 'paid' && A.idx.stall.get(i.stallId).rowId === sc.key); return [U.mShort(sc.m), sc.name, new Set(xs.filter(U.isOver).map(i => i.traderId)).size, U.sum(xs.filter(U.isOver), U.due), U.sum(xs.filter(i => !U.isOver(i)), U.due)]; }) },
       khongtienmat: { t: 'Tỷ lệ thanh toán không dùng tiền mặt', cols: ['Kỳ', 'Tiền mặt (đ)', 'Quét QR (đ)', 'Chuyển khoản (đ)', 'Không tiền mặt %'],
         // BAO_CAO_THONG_KE_RECOVERY: thanh toán từ Mini App (phiên chợ quê) có invoiceId: null (không
         // gắn kỳ phải thu chính thức) — cùng nguyên nhân đã sửa ở revenueSeries() trong v-dieuhanh.js,

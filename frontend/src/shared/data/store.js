@@ -1,15 +1,22 @@
 /* Shared prototype data store (Phase 15.3, from js/core.js).
  * Single owner of the persisted business state A.db (localStorage 'choso-caolanh-state'),
- * its lookup indexes A.idx, fresh seeding from window.DATA and the stored-state load/migration. */
+ * its lookup indexes A.idx, fresh seeding from window.DATA and the stored-state load/migration.
+ * Mặt bằng (v16): A.db.buildings/floors/rows/stalls là graph mặt bằng DUY NHẤT; điểm kinh doanh được
+ * gắn prototype tương thích (A.data.stallPrototype — features/business-points/repository.js). */
 (function (A) {
   'use strict';
   const D = A.D;
   const KEY = 'choso-caolanh-state';
+  const BACKUP_KEY = 'choso-caolanh-state-backup';
   const data = A.data || (A.data = {});
   // ---------- dữ liệu ----------
   A.reindex = function () {
     const db = A.db;
+    if (data.stallPrototype) db.stalls.forEach(s => { if (Object.getPrototypeOf(s) !== data.stallPrototype) Object.setPrototypeOf(s, data.stallPrototype); });
     A.idx = {
+      building: new Map((db.buildings || []).map(s => [s.id, s])),
+      floor: new Map((db.floors || []).map(s => [s.id, s])),
+      row: new Map((db.rows || []).map(s => [s.id, s])),
       stall: new Map(db.stalls.map(s => [s.id, s])),
       trader: new Map(db.traders.map(s => [s.id, s])),
       contract: new Map(db.contracts.map(s => [s.id, s])),
@@ -22,13 +29,24 @@
   A.fresh = function () {
     A.db = D.build();
     A.reindex();
-    A.db.stalls.forEach(A.refreshStall);
   };
+  // Trước khi bỏ state của version cũ (reseed có chủ đích, vd. 15 → 16), sao lưu MỘT lần nguyên văn vào
+  // 'choso-caolanh-state-backup' ({version, savedAt, state}) — không ghi đè backup đã có; hết dung lượng
+  // thì chỉ cảnh báo, không chặn khởi động.
+  function backupOutdated(raw, version) {
+    try {
+      if (!localStorage.getItem(BACKUP_KEY)) localStorage.setItem(BACKUP_KEY, JSON.stringify({ version, savedAt: new Date().toISOString(), state: raw }));
+    } catch (e) { console.warn('[choso] Không sao lưu được state v' + version + ' trước khi seed lại:', e); }
+  }
   // Load persisted state (same version only) or seed fresh; then additive migrations.
   data.loadDb = function () {
     try {
       const s = localStorage.getItem(KEY);
-      if (s) { const x = JSON.parse(s); if (x && x.version === D.VERSION) A.db = x; }
+      if (s) {
+        const x = JSON.parse(s);
+        if (x && x.version === D.VERSION) A.db = x;
+        else if (x && x.version) backupOutdated(s, x.version);
+      }
     } catch (e) { A.db = null; }
     if (A.db) A.reindex(); else A.fresh();
     // Hồ sơ/tài khoản: collection nghiệp vụ đổi số điện thoại, cùng state prototype A.db.
@@ -46,13 +64,7 @@
       }
     });
     A.db.actorMetadata = actorMetadata;
-    // FE/localStorage migration: preserve existing records and legacy fields, adding only areaType.
-    const areaTypeByLegacyType = { kiot: 'covered', nhalong: 'covered', ngoai: 'self_produced', phien: 'session' };
-    const migratedAreaType = A.db.stalls.some(st => !st.areaType);
-    if (migratedAreaType || migratedActorMetadata) {
-      A.db.stalls.forEach(st => { if (!st.areaType) st.areaType = areaTypeByLegacyType[st.type] || 'covered'; });
-      A.save();
-    }
+    if (migratedActorMetadata) A.save();
   };
   data.clearPersisted = function () {
     try { localStorage.removeItem(KEY); } catch (e) { /* bỏ qua */ }

@@ -1,19 +1,22 @@
 # Business points feature
 
-Business point = Điểm kinh doanh. The legacy runtime stores these records in `A.db.stalls`; this feature hides that collection name.
+Business point = Điểm kinh doanh. The runtime stores these records in `A.db.stalls`; this feature hides that collection name.
+
+Layout data model v16: `A.db.buildings` → `A.db.floors` (optional) → `A.db.rows` (Dãy) → `A.db.stalls` is the single layout graph (see `features/market-layout/store.js`). A point stores only its own fields: `id, code, market, rowId, num, area, areaTypeId, status, hasMeter, type, note, history`.
+
+- `status` is the operational state only: `active | suspended | disputed` (`D.POINT_STATUS`).
+- Industry comes from the row (`row.industry`); location from `rowId`; the fee collector from `row.collectorId`.
+- Occupancy is derived from contracts; debt from overdue invoices. Nothing derived is persisted on the point.
+- `type` (kiot/nhalong/ngoai/phien) is a temporary bridge for legacy pricing and market sessions; it is not the area type.
 
 | Layer | Method | Purpose |
 |---|---|---|
 | repository | `list()`, `getById(id)` | Live records via `APP.data` (`getCollection/findById('stalls')`). |
-| repository | `occupy(id, traderId, contractId)` | `status='thue'`, links set (contract create). |
-| repository | `vacate(id)` | `status='trong'`, links cleared (contract release). |
+| repository | `occupy(id)`, `vacate(id)` | No-ops kept for the contract use cases; occupancy is derived. |
 | repository | `addHistory(id, entry)` | Prepend a point history line. |
-| service | `list`, `get`, `occupy`, `vacate`, `addHistory` | Facade used by display consumers and by the contracts use cases. |
+| repository | `assignCollector(points, collectorId)` | Writes `collectorId` on the rows of those points. |
+| service | `row`, `floor`, `building`, `industry`, `location`, `pointsOfRow` | Hierarchy helpers for other modules. |
+| service | `usageStatus`, `occupantId`, `debtStatus`, `displayStatus`, `activeSeller` | Derived states (display keys match `D.STATUS`). |
+| service | `contractOn`, `isAvailable`, `availablePoints`, … | Availability rule shared by Mặt bằng, traders and contracts. |
 
-The writes are in-memory only. They are called exclusively by the contracts service, which saves once per use case. Structural changes (split, merge, conversion, `pointRequests`), collector assignment and `A.refreshStall` status refresh stay on their legacy paths in `js/v-tieuthuong.js`, `js/v-cautruc.js` and `js/core.js`.
-
-The point table/drawer UI and the split/merge/conversion workflows remain in `js/v-tieuthuong.js`. They share module state with the trader UI; see `docs/frontend/PHASE_11_DOMAIN_UI_EXTRACTION.md`.
-
-The layout tree persisted under `choso-caolanh-layout` (block/floor/zone/planned-area configuration owned by `js/v-cautruc.js`) is a separate representation. It is not wrapped, merged or synchronized here.
-
-No storage key, data copy or schema change.
+Compatibility adapter (temporary): `A.data.stallPrototype` adds read-only, non-enumerable getters (`cat`, `section`, `sectionName`, `floor`, `traderId`, `contractId`, `sellerId`, `collectorId`, `areaType`) so legacy readers keep working. They are never serialized, and writing them throws in strict mode. New code uses the service helpers.

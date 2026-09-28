@@ -9,23 +9,15 @@
   // MAT_BANG_KHU_TANG_DAY_REDESIGN: "Danh mục điểm kinh doanh" (bảng CL) nay là CHẾ ĐỘ "Bảng" của
   // CÙNG workspace Mặt bằng & điểm kinh doanh — dataset LUÔN lấy qua A.mbCurrentPoints('CL')
   // (js/v-cautruc.js: phạm vi cây Khu/Tầng/Dãy đang chọn + bộ lọc DÙNG CHUNG search/trạng thái/ngành
-  // hàng/loại diện tích với chế độ Sơ đồ), KHÔNG còn state filter riêng (mục 11 yêu cầu redesign:
-  // "không tạo dataset riêng cho UI mới"). MAT_BANG_LOAI_DIEN_TICH: "Loại điểm kinh doanh" (pointType/
-  // D.POINT_TYPE — Ki-ốt/Quầy/Sạp/Cửa hàng) KHÔNG được tài liệu nghiệp vụ xác nhận nên KHÔNG còn dùng
-  // trong bảng/filter màn này — thay bằng "Loại diện tích" (st.areaType, dùng chung ui.mb.filter.areaType,
-  // xem js/v-cautruc.js A.mbMatchesFilter). pointType/D.POINT_TYPE vẫn GIỮ NGUYÊN cho nghiệp vụ tách/
-  // gộp/chuyển đổi điểm (dkPointTypeLabel bên dưới) — KHÔNG xóa field toàn cục, chỉ bỏ khỏi UI bảng.
+  // hàng/loại diện tích với chế độ Sơ đồ), KHÔNG còn state filter riêng. v16: "Loại điểm" (pointType)
+  // đã bỏ khỏi model; bảng/filter dùng "Loại diện tích" (stall.areaTypeId).
   function dkSeller(s) {
     const assignment = (A.db.directSellerAssignments || []).find(x => x.pointId === s.id && x.status === 'ACTIVE');
     if (assignment) return assignment.traderId ? A.idx.trader.get(assignment.traderId) : { id: assignment.personId || '', name: assignment.fullName, phone: assignment.phone, idNo: assignment.idNumber };
     if (s.sellerId) return A.idx.trader.get(s.sellerId);
     return s.traderId ? A.idx.trader.get(s.traderId) : null;
   }
-  function dkPointTypeLabel(s) {
-    return s.pointType && D.POINT_TYPE[s.pointType] ? D.POINT_TYPE[s.pointType].label : 'Chưa có thông tin';
-  }
-  // "NV thu phí phụ trách" (PHAN_CONG_NHAN_VIEN_THU_PHI) — đọc TRỰC TIẾP s.collectorId (data.js,
-  // gán theo dãy qua popup "Sửa dãy" ở js/v-cautruc.js: A.CH['qh-zone-collector']) — THAM CHIẾU
+  // "NV thu phí phụ trách" — phân công theo Dãy (row.collectorId, đọc qua s.collectorId); THAM CHIẾU
   // account.id, REUSE A.ACCOUNTS, KHÔNG tạo field/nguồn dữ liệu trùng nghĩa.
   function dkCollectorLabel(s) {
     if (!s.collectorId) return 'Chưa phân công';
@@ -36,61 +28,59 @@
     const flt = ui.mb.filter;
     return !!(flt.areaType || flt.search || flt.status || flt.cat);
   }
-  // Dataset DUY NHẤT — CHÍNH XÁC cùng nguồn A.mbCurrentPoints('CL') mà chế độ Sơ đồ đang dùng để tô
-  // màu/mờ ô (mục 3/11 yêu cầu redesign) — bộ lọc "Loại diện tích" nay áp dụng NGAY trong
-  // A.mbMatchesFilter (ui.mb.filter.areaType, js/v-cautruc.js) nên không cần lọc thêm ở đây nữa.
-  function dkRowsCL() {
-    return A.mbCurrentPoints('CL');
+  // Chế độ "Bảng" của workspace Mặt bằng (mọi chợ): dataset DUY NHẤT = A.mbCurrentPoints(mid) —
+  // phạm vi node đang chọn trên cây + bộ lọc dùng chung (chip trạng thái, tìm kiếm, loại diện tích,
+  // ngành hàng). Vị trí/ngành hàng/NV thu phí đều suy từ Dãy của điểm, không lưu trên điểm.
+  const dkMarket = () => (ui.market === 'ALL' ? (ui.qh && ui.qh.market) || 'CL' : ui.market);
+  function dkRowsOf(mid) {
+    return A.mbCurrentPoints(mid);
   }
-  function dkRowHtmlCL(s, pos) {
-    const t = A.mbOccupantAt(s);
-    const path = A.mbLayoutPathForPoint('CL', s);
-    const collectorLabel = dkCollectorLabel(s);
+  // Table occupant follows the same selected-date rule as status/search:
+  // Point → occupying Contract → Trader. No Trader field is stored on Point.
+  function dkOccupantAt(s) { return A.mbOccupantAt ? A.mbOccupantAt(s) : null; }
+  function dkRowHtml(s, pos) {
+    const occupant = dkOccupantAt(s);
+    const occupantTitle = occupant ? `${occupant.id} · ${occupant.name}` : '';
     return `<tr class="click" data-act="dk-open" data-id="${s.id}">
       <td class="mb-col-code"><b>${s.code}</b>${A.WORKFLOW && A.WORKFLOW.isRecentPoint(s.id) ? '<div><span class="workflow-new">Mới cập nhật</span></div>' : ''}</td>
-      ${pos.zone ? `<td class="mb-col-zone">${U.esc(path.khu)}</td>` : ''}
-      ${pos.floor ? `<td class="mb-col-floor">${U.esc(path.tang)}</td>` : ''}
-      ${pos.row ? `<td class="mb-col-row" title="${U.esc(s.sectionName)}">${U.esc(path.day)}</td>` : ''}
+      ${pos.location ? `<td class="mb-col-location">${U.esc(A.mbPointLocationLabel(s, pos.level))}</td>` : ''}
       <td class="num mb-col-area">${s.area.toLocaleString('vi-VN')}</td>
-      <td class="mb-col-area-type">${U.esc(U.areaTypeLabel(s.areaType) || 'Chưa có thông tin')}</td>
-      <td class="mb-col-category" title="${U.esc(s.cat)}">${U.esc(s.cat)}</td>
-      <td class="mb-col-trader" title="${t ? U.esc(t.name) : ''}">${t ? U.esc(t.name) : '<span class="muted">–</span>'}</td>
-      <td class="small mb-col-collector">${U.esc(collectorLabel)}</td>
+      <td class="mb-col-area-type">${U.esc(U.areaTypeLabel(s.areaTypeId) || 'Chưa có thông tin')}</td>
+      ${pos.industry ? `<td class="mb-col-category" title="${U.esc(s.cat)}">${U.esc(s.cat)}</td>` : ''}
+      <td class="mb-col-trader"${occupant ? ` title="${U.esc(occupantTitle)}"` : ''}>${occupant ? U.esc(occupant.name) : '—'}</td>
+      <td class="small mb-col-collector">${U.esc(dkCollectorLabel(s))}</td>
       <td class="mb-col-status">${A.mbStatusTag(A.mbStatusAt(s))}</td>
-      <td class="nowrap mb-col-actions"><button class="btn sm" data-act="dk-open" data-id="${s.id}">Xem</button></td>
     </tr>`;
   }
-  // Bảng — CHẾ ĐỘ "Bảng" của workspace dùng chung (gọi từ A.dkTableHtml, xem A.VIEWS['mat-bang']/
-  // js/v-cautruc.js mbRightHtml). MAT_BANG_TABLE_TOOLBAR_UNIFY (mục 1/2 yêu cầu): search/ngành hàng
-  // (trước ở card header dùng chung, đã bỏ — xem mbWorkspaceHtml js/v-cautruc.js) nay gộp vào ĐÚNG 1
-  // toolbar này cùng "Loại diện tích"/"Xóa bộ lọc"/"Xuất Excel" — tái dùng NGUYÊN
-  // data-in="mb-filter-search"/data-ch="mb-filter-cat"/"mb-filter-area-type" (dùng chung với
-  // js/v-cautruc.js, không tạo control/state mới).
-  function dkViewCL() {
-    const rows = dkRowsCL(), pg = U.pager('dkcl', rows.length, 25), flt = ui.mb.filter, cats = A.mbCatOptions('CL'), pos = A.mbPositionColumnVisibility();
+  function dkView(mid) {
+    const rows = dkRowsOf(mid), pg = U.pager('dkcl', rows.length, 25), flt = ui.mb.filter, cats = A.mbCatOptions(mid), pos = A.mbPositionColumnVisibility();
     return `<div class="card mb-table-card"><div class="card-h" style="flex-wrap:wrap">
-      <input class="input" data-in="mb-filter-search" placeholder="Tìm mã điểm / tiểu thương" value="${U.esc(flt.search)}">
-      <select class="input" data-ch="mb-filter-area-type"><option value="">Loại diện tích: Tất cả</option>${U.AREA_TYPE_CODES.map(k => `<option value="${k}" ${flt.areaType === k ? 'selected' : ''}>${U.areaTypeLabel(k)}</option>`).join('')}</select>
-      <select class="input" data-ch="mb-filter-cat"><option value="">Ngành hàng: Tất cả</option>${cats.map(cName => `<option value="${U.esc(cName)}" ${flt.cat === cName ? 'selected' : ''}>${U.esc(cName)}</option>`).join('')}</select>
+      <input class="input" data-in="mb-filter-search" placeholder="Tìm mã điểm / tiểu thương" value="${U.esc(flt.search)}" aria-label="Tìm mã điểm hoặc tiểu thương">
+      <select class="input" data-ch="mb-filter-area-type" aria-label="Loại diện tích"><option value="">Loại diện tích: Tất cả</option>${U.AREA_TYPE_CODES.map(k => `<option value="${k}" ${flt.areaType === k ? 'selected' : ''}>${U.areaTypeLabel(k)}</option>`).join('')}</select>
+      ${pos.industry ? `<select class="input" data-ch="mb-filter-cat" aria-label="Ngành hàng"><option value="">Ngành hàng: Tất cả</option>${cats.map(cName => `<option value="${U.esc(cName)}" ${flt.cat === cName ? 'selected' : ''}>${U.esc(cName)}</option>`).join('')}</select>` : ''}
       <button class="btn" data-act="dkcl-clear" ${dkclHasFilter() ? '' : 'disabled'}>↺ Xóa bộ lọc</button>
       <span class="spacer"></span>
+      <span class="small muted">${rows.length.toLocaleString('vi-VN')} điểm</span>
       <button class="btn" data-act="dkcl-csv">⬇ Xuất Excel</button></div>
-      <div class="card-b">${U.table([{ t: '<span class="mb-col-code">Mã điểm</span>' }, pos.zone && { t: '<span class="mb-col-zone">Khu</span>' }, pos.floor && { t: '<span class="mb-col-floor">Tầng</span>' }, pos.row && { t: '<span class="mb-col-row">Dãy</span>' }, { t: '<span class="mb-col-area">Diện tích (m²)</span>', num: true }, { t: '<span class="mb-col-area-type">Loại diện tích</span>' }, { t: '<span class="mb-col-category">Ngành hàng</span>' }, { t: '<span class="mb-col-trader">Tiểu thương</span>' }, { t: '<span class="mb-col-collector">NV thu phí</span>' }, { t: '<span class="mb-col-status">Trạng thái</span>' }, { t: '<span class="mb-col-actions">Thao tác</span>' }].filter(Boolean),
-        rows.slice(pg.start, pg.end).map(s => dkRowHtmlCL(s, pos)), { empty: 'Không có điểm kinh doanh phù hợp bộ lọc.' })}${pg.html}</div></div>`;
+      <div class="card-b">${U.table([{ t: '<span class="mb-col-code">Mã điểm</span>' }, pos.location && { t: '<span class="mb-col-location">Vị trí</span>' }, { t: '<span class="mb-col-area">Diện tích (m²)</span>', num: true }, { t: '<span class="mb-col-area-type">Loại diện tích</span>' }, pos.industry && { t: '<span class="mb-col-category">Ngành hàng</span>' }, { t: '<span class="mb-col-trader">Tiểu thương</span>' }, { t: '<span class="mb-col-collector">NV thu phí phụ trách</span>' }, { t: '<span class="mb-col-status">Tình trạng</span>' }].filter(Boolean),
+        rows.slice(pg.start, pg.end).map(s => dkRowHtml(s, pos)), { empty: 'Không có điểm kinh doanh phù hợp bộ lọc.' })}${pg.html}</div></div>`;
   }
-  A.dkTableHtml = mid => mid === 'CL' ? dkViewCL() : null;
+  A.dkTableHtml = mid => dkView(mid);
   // "Xóa bộ lọc" của bảng: reset TOÀN BỘ bộ lọc dùng chung (search/trạng thái/ngành hàng/loại diện
-  // tích) — KHÔNG đụng ui.mb.sel (phạm vi cây đang chọn, mục 7 yêu cầu: giữ selection).
+  // tích) — KHÔNG đụng ui.mb.sel (phạm vi cây đang chọn).
   A.ACT['dkcl-clear'] = () => {
     ui.mb.filter = { search: '', status: '', cat: '', areaType: '' };
     ui.page.dkcl = 0;
     A.render();
   };
-  A.ACT['dkcl-csv'] = () => U.csv('diem-kinh-doanh-cho-cao-lanh', ['Mã điểm', 'Khu', 'Tầng', 'Dãy', 'Diện tích m2', 'Loại diện tích', 'Ngành hàng', 'Người thuê', 'Người bán thực tế', 'NV thu phí', 'Trạng thái'],
-    dkRowsCL().map(s => {
-      const t = A.mbOccupantAt(s), seller = dkSeller(s), path = A.mbLayoutPathForPoint('CL', s);
-      return [s.code, path.khu, path.tang, path.day, s.area, U.areaTypeLabel(s.areaType) || '', s.cat, t ? t.name : '', seller ? seller.name : '', dkCollectorLabel(s), A.mbStatusLabel(A.mbStatusAt(s))];
-    }));
+  A.ACT['dkcl-csv'] = () => {
+    const mid = dkMarket();
+    U.csv('diem-kinh-doanh-' + mid.toLowerCase(), ['Mã điểm', 'Khối/Nhà chợ', 'Tầng', 'Dãy', 'Diện tích m2', 'Loại diện tích', 'Ngành hàng', 'Người thuê', 'Người bán thực tế', 'NV thu phí', 'Tình trạng'],
+      dkRowsOf(mid).map(s => {
+        const t = A.mbOccupantAt(s), seller = dkSeller(s), path = A.mbLayoutPathForPoint(mid, s);
+        return [s.code, path.khu, path.tang, path.day, s.area, U.areaTypeLabel(s.areaTypeId) || '', s.cat, t ? t.name : '', seller ? seller.name : '', dkCollectorLabel(s), A.mbStatusLabel(A.mbStatusAt(s))];
+      }));
+  };
   // Drawer chi tiết CL — bố cục theo BUSINESS_POINT_CL_DETAIL_DRAWER_REFACTOR (xem
   // BUSINESS_POINT_CL_DETAIL_DRAWER_REFACTOR_REPORT.md): action đặt NGAY tại khối thông tin mà nó
   // tác động, KHÔNG gom xuống footer — không còn `drawer-f`. Người thuê ≠ Người bán thực tế tiếp tục
@@ -179,7 +169,7 @@
     const m = U.market('CL'), dkPos = A.mbLayoutPathForPoint('CL', st);
     const canEdit = A.canDo('cau-truc.edit', st.market), canXemHoSo = A.canDo('so-do.xem-ho-so', st.market);
     const structural = st.structuralStatus === 'MERGED' ? '<span class="tag warn">Đã gộp</span>' : st.structuralStatus === 'SPLIT' ? '<span class="tag purple">Đã tách</span>' : '<span class="tag ok">Hoạt động</span>';
-    const info = dkSection('store', 'A', 'THÔNG TIN ĐIỂM KINH DOANH', dkPairs([['Mã điểm', `<b>${U.esc(st.code)}</b>`], ['Trạng thái', A.mbStatusTag(st.status)], ['Chợ', U.esc(m.name)], ['Khu', U.esc(dkPos.khu)], ['Tầng', U.esc(dkPos.tang)], ['Dãy', U.esc(dkPos.day)], ['Loại điểm', U.esc(dkPointTypeLabel(st))], ['Diện tích', `<b>${st.area.toLocaleString('vi-VN')} m²</b>`], ['Loại diện tích', U.esc(U.areaTypeLabel(st.areaType) || 'Chưa có thông tin')], ['Ngành hàng', U.esc(st.cat) || 'Chưa có thông tin'], ['Đơn giá áp dụng', U.unitLabel(st)], ['Trạng thái cấu trúc', structural]]) + dkStructuralNotes(st), 'contract-blue');
+    const info = dkSection('store', 'A', 'THÔNG TIN ĐIỂM KINH DOANH', dkPairs([['Mã điểm', `<b>${U.esc(st.code)}</b>`], ['Tình trạng', A.mbStatusTag(A.pointDisplayStatus(st))], ['Trạng thái vận hành', U.esc(A.pointOpLabel(st.status))], ['Chợ', U.esc(m.name)], ['Khối/Nhà chợ', U.esc(dkPos.khu)], ['Tầng', U.esc(dkPos.tang)], ['Dãy', U.esc(dkPos.day)], ['Diện tích', `<b>${st.area.toLocaleString('vi-VN')} m²</b>`], ['Loại diện tích', U.esc(U.areaTypeLabel(st.areaTypeId) || 'Chưa có thông tin')], ['Ngành hàng (theo dãy)', U.esc(st.cat) || 'Chưa có thông tin'], ['Đơn giá áp dụng', U.unitLabel(st)], ['Trạng thái cấu trúc', structural]]) + dkStructuralNotes(st), 'contract-blue');
     const usage = dkSection('users', 'B', 'TÌNH TRẠNG SỬ DỤNG', dkUsageHtml(st, canXemHoSo), 'contract-mint');
     const contracts = dkSection('file', 'C', 'HỢP ĐỒNG TẠI ĐIỂM', dkContractsHtml(st), 'contract-amber');
     const history = dkSection('refresh', 'D', 'LỊCH SỬ THAY ĐỔI', dkHistoryHtml(st), 'contract-sky');
@@ -188,44 +178,38 @@
     return `${dkHead(st)}<div class="drawer-b contract-detail-body"><div class="contract-detail-grid">${info}${usage}${contracts}${history}${note}</div></div><div class="drawer-f contract-detail-footer">${footer}</div>`;
   }
   // ---- EDIT MODE: "Chỉnh sửa điểm kinh doanh" — chỉ sửa thông tin DO ĐIỂM KINH DOANH SỞ HỮU:
-  // vị trí (Khu → Tầng → Dãy theo cấu trúc mặt bằng hiện có), diện tích, loại diện tích, ngành hàng,
-  // tình trạng vận hành (Hoạt động/Tạm ngưng/Tranh chấp — cùng quyền với "Đổi trạng thái" sẵn có),
-  // ghi chú. Mã điểm/Chợ chỉ đọc. Tình trạng sử dụng (hợp đồng), Nợ phí (khoản phải thu), NV thu phí
+  // vị trí (Khối → Tầng → Dãy, lưu rowId), diện tích, loại diện tích, trạng thái vận hành
+  // (Hoạt động/Tạm ngừng/Đang tranh chấp — cùng quyền với "Đổi trạng thái" sẵn có), ghi chú. Ngành
+  // hàng thuộc Dãy nên chỉ hiển thị theo dãy đã chọn. Mã điểm/Chợ chỉ đọc. Tình trạng sử dụng (hợp đồng), Nợ phí (khoản phải thu), NV thu phí
   // (phân công theo dãy) chỉ hiển thị. KHÔNG có giá/mức thu, chỉ số điện nước, phương tiện ở đây.
   // Draft là state UI tạm (không lưu) để các select phụ thuộc giữ giá trị giữa các lần vẽ lại.
   let dkEditDraft = null;
-  const DK_OP = { active: 'Hoạt động', ngung: 'Tạm ngưng', tranhchap: 'Tranh chấp' };
+  const DK_OP = D.POINT_STATUS;
   const dkLayout = () => A.features.marketLayout.store;
   const dkBlocks = mid => dkLayout().blocksOf(mid) || [];
-  // Chỉ dãy đã khớp khu vực thật (z.code = section thật) mới gán được cho điểm kinh doanh.
   const dkZoneMatch = (mid, z) => { const r = z ? A.mbResolveZoneContext(mid, z) : null; return r && r.matched ? r : null; };
   function dkZoneOfPoint(st) {
-    for (const b of dkBlocks(st.market)) for (const f of b.floors) for (const z of f.zones) {
-      const r = dkZoneMatch(st.market, z);
-      if (r && r.section.id === st.section && r.floor.id === st.floor) return { b, f, z };
-    }
+    for (const b of dkBlocks(st.market)) for (const f of b.floors) for (const z of f.zones) if (z.key === st.rowId) return { b, f, z };
     return null;
   }
-  const dkOpOf = st => (st.status === 'ngung' || st.status === 'tranhchap') ? st.status : 'active';
+  const dkOpOf = st => DK_OP[st.status] ? st.status : 'active';
   const dkParseArea = v => { const n = Number(String(v == null ? '' : v).trim().replace(/\s|m²/g, '').replace(',', '.')); return Number.isFinite(n) ? n : NaN; };
   const dkFmtArea = n => Number(n || 0).toLocaleString('vi-VN', { maximumFractionDigits: 2 });
   function dkEditStart(st) {
     const loc = dkZoneOfPoint(st);
-    dkEditDraft = { id: st.id, blockKey: loc ? loc.b.key : '', floorKey: loc ? loc.f.key : '', zoneKey: loc ? loc.z.key : '', origZoneKey: loc ? loc.z.key : '', area: dkFmtArea(st.area), areaType: st.areaType || '', cat: st.cat || '', op: dkOpOf(st), note: st.note || '' };
+    dkEditDraft = { id: st.id, blockKey: loc ? loc.b.key : '', floorKey: loc ? loc.f.key : '', zoneKey: loc ? loc.z.key : '', origZoneKey: loc ? loc.z.key : '', area: dkFmtArea(st.area), areaType: st.areaTypeId || '', op: dkOpOf(st), note: st.note || '' };
   }
-  // NV thu phí: một NV/điểm (st.collectorId) được phân công hàng loạt theo dãy (popup "Sửa dãy").
-  // Cùng dãy → giữ nguyên; đổi dãy → xem trước theo phân công của dãy mới.
+  // NV thu phí phân công theo Dãy: đổi dãy → NV của dãy mới.
   function dkCollectorPreview(st, d) {
     const mid = st.market, z = d.zoneKey ? dkLayout().findZone(mid, d.zoneKey) : null;
     const label = id => { const acc = id ? A.ACCOUNTS.get(id) : null; return acc ? acc.fullName : 'Chưa phân công'; };
     if (!z) return { name: 'Chưa xác định', note: 'Chọn dãy để xác định nhân viên phụ trách.' };
     if (d.zoneKey === d.origZoneKey) return { name: label(st.collectorId), note: `Theo phân công dãy ${U.esc(z.code || z.name || '')}`, id: st.collectorId || null };
-    const zid = A.features.businessPoints.service.zoneCollectorId(mid, z);
-    if (zid === 'MIXED') return { name: 'Dãy đang có nhiều NV phụ trách', note: 'Sau khi lưu, điểm sẽ ở trạng thái Chưa phân công cho tới khi phân công lại dãy.', id: null };
+    const zid = z.row.collectorId || null;
     return { name: label(zid), note: `Nhân viên phụ trách sẽ được xác định theo dãy mới ${U.esc(z.code || z.name || '')}.`, id: zid || null };
   }
   function dkEditDirtySignificant(st, d) {
-    return d.zoneKey !== d.origZoneKey || dkParseArea(d.area) !== Number(st.area) || d.areaType !== (st.areaType || '') || d.cat !== (st.cat || '');
+    return d.zoneKey !== d.origZoneKey || dkParseArea(d.area) !== Number(st.area) || d.areaType !== (st.areaTypeId || '');
   }
   function dkEditWarnHtml(st, d) {
     const c = A.features.businessPoints.service.contractOn(st.id, U.today());
@@ -236,27 +220,26 @@
     const d = dkEditDraft, mid = st.market, m = U.market(mid), BP = A.features.businessPoints.service;
     const blocks = dkBlocks(mid), block = blocks.find(b => b.key === d.blockKey) || null;
     const floors = block ? block.floors : [], floor = floors.find(f => f.key === d.floorKey) || null;
-    const zones = floor ? floor.zones.filter(z => dkZoneMatch(mid, z)) : [];
+    const zones = floor ? floor.zones : [], zone = zones.find(z => z.key === d.zoneKey) || null;
     const opt = (list, cur, ph, lbl) => `${cur ? '' : `<option value="">${ph}</option>`}${list.map(x => `<option value="${x.key}" ${x.key === cur ? 'selected' : ''}>${U.esc(lbl(x))}</option>`).join('')}`;
-    const cats = A.mbCatOptions(mid).concat(d.cat && A.mbCatOptions(mid).indexOf(d.cat) === -1 ? [d.cat] : []);
     const c = BP.contractOn(st.id, U.today()), t = c ? A.idx.trader.get(c.traderId) : null;
     const usage = c
       ? `<b>● ${A.mbStatusLabel('thue')}</b><div class="small muted">Theo ${U.esc(c.id)}${t ? ' · ' + U.esc(t.name) + ' · ' + t.id : ''}</div>`
       : `<b>○ ${A.mbStatusLabel('trong')}</b><div class="small muted">Không có hợp đồng hiệu lực hiện tại</div>`;
-    const debt = st.status === 'no' ? '<div class="small" style="margin-top:4px"><span class="tag danger">Nợ phí</span> <span class="muted">theo khoản phải thu quá hạn, không chỉnh tại đây</span></div>' : '';
+    const debt = c && BP.debtStatus(st, c.id) === 'overdue' ? '<div class="small" style="margin-top:4px"><span class="tag danger">Nợ phí</span> <span class="muted">theo khoản phải thu quá hạn, không chỉnh tại đây</span></div>' : '';
     const col = dkCollectorPreview(st, d), canOp = A.canDo('so-do.doi-trang-thai', mid);
     const opField = canOp
       ? `<select class="input" id="dke-op" data-ch="dke-field" data-k="op">${Object.keys(DK_OP).map(k => `<option value="${k}" ${d.op === k ? 'selected' : ''}>${DK_OP[k]}</option>`).join('')}</select>`
       : `<div class="dke-readonly">${DK_OP[d.op]}</div>`;
     const ro = (label, value) => `<div class="field"><label>${label}</label><div class="dke-readonly">${value}</div></div>`;
     const secA = `<div class="form-grid">${ro('Mã điểm', `<b>${U.esc(st.code)}</b>`)}${ro('Chợ', U.esc(m.name))}
-      <div class="field"><label>Khu *</label><select class="input" id="dke-block" data-ch="dke-block">${opt(blocks, d.blockKey, '— Chọn khu —', b => b.name)}</select></div>
+      <div class="field"><label>Khối/Nhà chợ *</label><select class="input" id="dke-block" data-ch="dke-block">${opt(blocks, d.blockKey, '— Chọn khối —', b => b.name)}</select></div>
       <div class="field"><label>Tầng *</label><select class="input" id="dke-floor" data-ch="dke-floor" ${block ? '' : 'disabled'}>${opt(floors, d.floorKey, '— Chọn tầng —', f => f.name)}</select></div>
       <div class="field dke-wide"><label>Dãy *</label><select class="input" id="dke-zone" data-ch="dke-zone" ${floor ? '' : 'disabled'}>${opt(zones, d.zoneKey, '— Chọn dãy —', z => (z.name || z.code) + (z.code ? ' - ' + z.code : ''))}</select></div></div>`;
     const secB = `<div class="form-grid">
       <div class="field"><label>Diện tích (m²) *</label><input class="input" id="dke-area" inputmode="decimal" data-ch="dke-field" data-k="area" value="${U.esc(d.area)}"></div>
       <div class="field"><label>Loại diện tích *</label><select class="input" id="dke-area-type" data-ch="dke-field" data-k="areaType">${d.areaType ? '' : '<option value="">— Chọn loại diện tích —</option>'}${U.AREA_TYPE_CODES.map(k => `<option value="${k}" ${d.areaType === k ? 'selected' : ''}>${U.areaTypeLabel(k)}</option>`).join('')}</select></div>
-      <div class="field"><label>Ngành hàng *</label><select class="input" id="dke-cat" data-ch="dke-field" data-k="cat">${d.cat ? '' : '<option value="">— Chọn ngành hàng —</option>'}${cats.map(x => `<option value="${U.esc(x)}" ${d.cat === x ? 'selected' : ''}>${U.esc(x)}</option>`).join('')}</select></div></div>`;
+      ${ro('Ngành hàng (theo dãy)', zone ? U.esc(zone.catMain || '—') : '—')}</div>`;
     const secC = `<div class="form-grid">${ro('Tình trạng sử dụng', usage + debt)}${ro('Nhân viên thu phí phụ trách', `<b>${U.esc(col.name)}</b><div class="small muted">${col.note}</div>`)}
       <div class="field"><label>Tình trạng vận hành${canOp ? ' *' : ''}</label>${opField}</div></div>`;
     const secD = `<textarea class="input" id="dke-note" rows="3" data-ch="dke-field" data-k="note" placeholder="Nhập ghi chú về điểm kinh doanh...">${U.esc(d.note)}</textarea>`;
@@ -273,7 +256,7 @@
   // cú bấm "Lưu thay đổi" ngay sau khi rời ô nhập).
   A.CH['dke-field'] = el => {
     const st = dkEditPoint(), k = el.dataset.k;
-    if (!st || !['area', 'areaType', 'cat', 'op', 'note'].includes(k)) return;
+    if (!st || !['area', 'areaType', 'op', 'note'].includes(k)) return;
     dkEditDraft[k] = el.value;
     const slot = A.$('#dke-warn-slot'); if (slot) slot.innerHTML = dkEditWarnHtml(st, dkEditDraft);
   };
@@ -315,36 +298,38 @@
     if (!st || !d || d.id !== st.id || !A.canDo('cau-truc.edit', st.market) || !A.allowedMarkets(A.currentAccount()).includes(st.market)) return U.toast('Bạn không có quyền chỉnh sửa điểm kinh doanh này.');
     const mid = st.market, S = dkLayout();
     const block = dkBlocks(mid).find(b => b.key === d.blockKey), floor = block && block.floors.find(f => f.key === d.floorKey), zone = floor && floor.zones.find(z => z.key === d.zoneKey);
-    const match = dkZoneMatch(mid, zone);
-    if (!block || !floor || !zone || !match || S.findZone(mid, d.zoneKey) !== zone) return U.toast('Vui lòng chọn đủ Khu, Tầng và Dãy hợp lệ.');
+    if (!block || !floor || !zone || !dkZoneMatch(mid, zone)) return U.toast('Vui lòng chọn đủ Khối, Tầng và Dãy hợp lệ.');
     const area = dkParseArea(d.area);
     if (!(area > 0)) return U.toast('Diện tích phải là số lớn hơn 0.');
     if (U.AREA_TYPE_CODES.indexOf(d.areaType) === -1) return U.toast('Vui lòng chọn loại diện tích hợp lệ.');
-    if (!d.cat || (A.mbCatOptions(mid).indexOf(d.cat) === -1 && d.cat !== st.cat)) return U.toast('Vui lòng chọn ngành hàng hợp lệ.');
-    if (!DK_OP[d.op]) return U.toast('Tình trạng vận hành không hợp lệ.');
+    if (!DK_OP[d.op]) return U.toast('Trạng thái vận hành không hợp lệ.');
     const opChanged = d.op !== dkOpOf(st);
-    if (opChanged && !A.canDo('so-do.doi-trang-thai', mid)) return U.toast('Bạn không có quyền đổi tình trạng vận hành.');
-    const moved = d.zoneKey !== d.origZoneKey, col = moved ? dkCollectorPreview(st, d) : null;
+    if (opChanged && !A.canDo('so-do.doi-trang-thai', mid)) return U.toast('Bạn không có quyền đổi trạng thái vận hành.');
+    // Diện tích: SUM(điểm trong Dãy) <= diện tích phân bổ của Dãy; chỉ tiêu chợ theo loại diện tích (nếu đã khai báo).
+    const BP = A.features.businessPoints.service, rowUsed = U.sum(BP.pointsOfRow(zone.key).filter(x => x.id !== st.id), x => Number(x.area) || 0);
+    if (rowUsed + area > zone.area + 1e-9) return U.toast(`Dãy ${zone.code} chỉ còn ${Math.max(0, zone.area - rowUsed).toLocaleString('vi-VN')} m² chưa phân bổ cho điểm (phân bổ ${zone.area.toLocaleString('vi-VN')} m²).`);
+    const MS = A.features.markets && A.features.markets.service, mk = MS && MS.get(mid), cap = mk && mk.capacityByAreaType && mk.capacityByAreaType.find(x => x.areaTypeId === d.areaType);
+    if (cap) {
+      const same = A.db.stalls.filter(x => x.market === mid && x.id !== st.id && x.areaTypeId === d.areaType);
+      if (same.length + 1 > cap.maxPointCount) return U.toast(`Vượt chỉ tiêu số điểm loại "${U.areaTypeLabel(d.areaType)}" của chợ (${cap.maxPointCount} điểm).`);
+      if (U.sum(same, x => Number(x.area) || 0) + area > cap.maxArea + 1e-9) return U.toast(`Vượt chỉ tiêu diện tích loại "${U.areaTypeLabel(d.areaType)}" của chợ (${cap.maxArea.toLocaleString('vi-VN')} m²).`);
+    }
+    const moved = d.zoneKey !== d.origZoneKey, before = BP.location(st);
     const changes = [], today = U.dmy(U.today());
-    if (moved) changes.push(`vị trí "${st.sectionName}" → "${match.section.name}"`);
+    if (moved) changes.push(`vị trí "${before.day}" → "${zone.name}"`);
     if (area !== Number(st.area)) changes.push(`diện tích ${st.area} m² → ${area} m²`);
-    if (d.areaType !== (st.areaType || '')) changes.push(`loại diện tích "${U.areaTypeLabel(st.areaType) || '—'}" → "${U.areaTypeLabel(d.areaType)}"`);
-    if (d.cat !== st.cat) changes.push(`ngành hàng "${st.cat}" → "${d.cat}"`);
+    if (d.areaType !== (st.areaTypeId || '')) changes.push(`loại diện tích "${U.areaTypeLabel(st.areaTypeId) || '—'}" → "${U.areaTypeLabel(d.areaType)}"`);
     const note = String(d.note || '').trim();
     if (note !== (st.note || '')) changes.push('ghi chú');
     // Chỉ ghi các field do điểm kinh doanh sở hữu; không đụng hợp đồng/khoản thu/chỉ số/phương tiện.
-    st.floor = match.floor.id; st.section = match.section.id; st.sectionName = match.section.name; st.type = match.section.type;
-    st.area = area; st.areaType = d.areaType; st.cat = d.cat;
+    st.rowId = zone.key; st.area = area; st.areaTypeId = d.areaType;
     if (note !== (st.note || '')) st.note = note;
-    if (moved) { st.collectorId = col.id || null; changes.push('NV thu phí theo dãy mới'); }
+    if (moved) changes.push('NV thu phí theo dãy mới');
     st.history = st.history || [];
     if (changes.length) st.history.unshift(`${today}: Cập nhật thông tin điểm (${changes.join(', ')})`);
     if (opChanged) {
-      const before = A.mbStatusLabel(st.status);
-      // "Hoạt động" trả điểm về tình trạng suy ra từ hợp đồng; Nợ phí do khoản phải thu quyết định.
-      st.status = d.op === 'active' ? (A.features.businessPoints.service.contractOn(st.id, U.today()) ? 'thue' : 'trong') : d.op;
-      A.refreshStall(st);
-      st.history.unshift(`${today}: ${before} → ${A.mbStatusLabel(st.status)}`);
+      st.history.unshift(`${today}: ${A.pointOpLabel(st.status)} → ${A.pointOpLabel(d.op)}`);
+      st.status = d.op;
     }
     A.save();
     dkEditId = null; dkEditDraft = null;
@@ -402,34 +387,34 @@
   function dkRows() {
     const q = (f.dkSearch || '').toLowerCase();
     return A.db.stalls.filter(s => U.inM(s)
-      && (!f.dkSection || s.market + ':' + s.section === f.dkSection)
-      && (!f.dkStatus || s.status === f.dkStatus)
+      && (!f.dkSection || s.rowId === f.dkSection)
+      && (!f.dkStatus || A.pointDisplayStatus(s) === f.dkStatus)
       && (!q || s.code.toLowerCase().includes(q) || (s.traderId && A.idx.trader.get(s.traderId).name.toLowerCase().includes(q))));
   }
   function dkLine(s) {
     const t = s.traderId ? A.idx.trader.get(s.traderId) : null, c = s.contractId ? A.idx.contract.get(s.contractId) : null;
-    return [s.code, U.mShort(s.market), s.sectionName, s.cat, U.typeLabel(s.type), s.area, U.unitLabel(s), c && c.monthly ? c.monthly : '', t ? t.name : '', A.mbStatusLabel(s.status)];
+    return [s.code, U.mShort(s.market), A.features.businessPoints.service.location(s).label, s.cat, U.areaTypeLabel(s.areaTypeId) || '', s.area, U.unitLabel(s), c && c.monthly ? c.monthly : '', t ? t.name : '', A.mbStatusLabel(A.pointDisplayStatus(s))];
   }
   function dkViewGeneric() {
     const rows = dkRows(), pg = U.pager('dk', rows.length, 25);
     const sections = [];
-    D.MARKETS.filter(m => ui.market === 'ALL' || m.id === ui.market).forEach(m => m.floors.forEach(fl => fl.sections.forEach(s => sections.push([m.id + ':' + s.id, (ui.market === 'ALL' ? m.short + ' · ' : '') + s.name]))));
+    (A.db.rows || []).filter(r => ui.market === 'ALL' || r.market === ui.market).forEach(r => sections.push([r.id, (ui.market === 'ALL' ? U.mShort(r.market) + ' · ' : '') + r.name]));
     return `<div class="card"><div class="card-h"><h3>Danh mục điểm kinh doanh</h3>
-      <select class="input" data-ch="dk-section"><option value="">Tất cả khu vực</option>${sections.map(s => `<option value="${s[0]}" ${f.dkSection === s[0] ? 'selected' : ''}>${U.esc(s[1])}</option>`).join('')}</select>
+      <select class="input" data-ch="dk-section"><option value="">Tất cả dãy</option>${sections.map(s => `<option value="${s[0]}" ${f.dkSection === s[0] ? 'selected' : ''}>${U.esc(s[1])}</option>`).join('')}</select>
       <select class="input" data-ch="dk-status"><option value="">Mọi trạng thái</option>${Object.keys(D.STATUS).map(k => `<option value="${k}" ${f.dkStatus === k ? 'selected' : ''}>${A.mbStatusLabel(k)}</option>`).join('')}</select>
       <input class="input" placeholder="Mã điểm / tiểu thương" data-in="dk-search" value="${U.esc(f.dkSearch || '')}">
       <button class="btn" data-act="dk-csv">⬇ Xuất Excel</button></div>
-      <div class="card-b">${U.table([{ t: 'Mã điểm' }, { t: 'Chợ' }, { t: 'Khu vực' }, { t: 'Loại' }, { t: 'DT (m²)', num: true }, { t: 'Đơn giá' }, { t: 'Giá/tháng', num: true }, { t: 'Tiểu thương' }, { t: 'Trạng thái' }],
+      <div class="card-b">${U.table([{ t: 'Mã điểm' }, { t: 'Chợ' }, { t: 'Vị trí' }, { t: 'Loại diện tích' }, { t: 'DT (m²)', num: true }, { t: 'Đơn giá' }, { t: 'Giá/tháng', num: true }, { t: 'Tiểu thương' }, { t: 'Trạng thái' }],
         rows.slice(pg.start, pg.end).map(s => {
           const l = dkLine(s);
-          return `<tr class="click" data-act="dk-open" data-id="${s.id}"><td><b>${l[0]}</b></td><td>${l[1]}</td><td>${U.esc(l[2])}</td><td>${l[4]}</td><td class="num">${l[5].toLocaleString('vi-VN')}</td><td class="nowrap">${l[6]}</td><td class="num">${l[7] ? U.money(l[7]) : '–'}</td><td>${U.esc(l[8]) || '<span class="muted">–</span>'}</td><td>${A.mbStatusTag(s.status)}</td></tr>`;
+          return `<tr class="click" data-act="dk-open" data-id="${s.id}"><td><b>${l[0]}</b></td><td>${l[1]}</td><td>${U.esc(l[2])}</td><td>${l[4]}</td><td class="num">${l[5].toLocaleString('vi-VN')}</td><td class="nowrap">${l[6]}</td><td class="num">${l[7] ? U.money(l[7]) : '–'}</td><td>${U.esc(l[8]) || '<span class="muted">–</span>'}</td><td>${A.mbStatusTag(A.pointDisplayStatus(s))}</td></tr>`;
         }))}${pg.html}
         <div class="small muted" style="margin-top:8px">Lịch sử tách, gộp, chuyển đổi điểm kinh doanh (nếu có) được lưu vết đầy đủ trong hồ sơ từng điểm.</div></div></div>`;
   }
   A.CH['dk-section'] = el => { f.dkSection = el.value; ui.page.dk = 0; A.render(); };
   A.CH['dk-status'] = el => { f.dkStatus = el.value; ui.page.dk = 0; A.render(); };
   A.IN['dk-search'] = el => { f.dkSearch = el.value; ui.page.dk = 0; A.render(); };
-  A.ACT['dk-csv'] = () => U.csv('diem-kinh-doanh', ['Mã điểm', 'Chợ', 'Khu vực', 'Ngành hàng', 'Loại', 'Diện tích m2', 'Đơn giá', 'Giá dịch vụ/tháng', 'Tiểu thương', 'Trạng thái'], dkRows().map(dkLine));
+  A.ACT['dk-csv'] = () => U.csv('diem-kinh-doanh', ['Mã điểm', 'Chợ', 'Vị trí', 'Ngành hàng', 'Loại diện tích', 'Diện tích m2', 'Đơn giá', 'Giá dịch vụ/tháng', 'Tiểu thương', 'Trạng thái'], dkRows().map(dkLine));
 
   A.VIEWS['diem-kd'] = () => ui.market === 'CL' ? A.mbWorkspaceHtml() : dkViewGeneric();
   // Click "Xem" trên bảng danh mục = mở drawer GỐC (không phải drill-down) — reset navigation

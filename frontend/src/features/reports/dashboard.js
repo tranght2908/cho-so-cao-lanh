@@ -6,7 +6,7 @@
   function marketStats(mid) {
     const db = A.db, f = x => mid === 'ALL' || x.market === mid;
     const stalls = db.stalls.filter(f);
-    const occ = stalls.filter(s => s.status !== 'trong').length;
+    const occ = stalls.filter(s => A.pointDisplayStatus(s) !== 'trong').length;
     const traders = db.traders.filter(f);
     const inv = db.invoices.filter(i => f(i) && i.period === '2026-09');
     const pays = db.payments.filter(p => f(p) && p.date.startsWith('2026-09'));

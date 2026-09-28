@@ -22,7 +22,30 @@
   service.listByTrader = function (traderId) { return repository.list().filter(c => c.traderId === traderId); };
   service.activeForTrader = function (traderId) { return repository.list().find(c => isActive(c) && c.traderId === traderId); };
   service.hasActiveForTrader = function (traderId) { return repository.list().some(c => isActive(c) && c.traderId === traderId); };
-  service.hasActiveForPoint = function (pointId) { return repository.list().some(c => isActive(c) && c.stallId === pointId); };
+  service.hasActiveForPoint = function (pointId) { return repository.list().some(c => isActive(c) && (c.businessPointId || c.stallId) === pointId); };
+  // Contract creation is not restricted to traders without an existing contract:
+  // one trader may rent multiple business points through separate contracts. Point
+  // availability over the selected interval remains the conflict boundary.
+  service.tradersForCreate = function (market) { return traders().list().filter(t => t.market === market); };
+  // Onboarding worklist only: the trader's derived business status determines
+  // whether their next step is initial point allocation / contract creation.
+  // This intentionally does not restrict later, additional contracts.
+  service.pendingContractTraders = function (market) {
+    const scope = market === 'ALL' ? new Set(A.allowedMarkets(A.currentAccount())) : null;
+    return traders().list().filter(t => (!scope ? t.market === market : scope.has(t.market)) && traders().deriveBusinessStatus(t) === traders().BUSINESS_STATUS.WAITING_ALLOCATION);
+  };
+  // Lifecycle data stays compatible (`hieuluc`, `chamdut`, `thanhly`). This helper
+  // only normalizes the *display* phase; it never writes an "expired" status.
+  service.presentationStatus = function (contract, date) {
+    if (!contract) return 'ended';
+    if (contract.status === 'chamdut') return 'terminated';
+    if (contract.status === 'thanhly') return 'liquidated';
+    if (contract.status !== 'hieuluc') return 'ended';
+    const day = date || A.U.today();
+    if (contract.start && contract.start > day) return 'upcoming';
+    if (contract.end && contract.end < day) return 'expired';
+    return 'current';
+  };
   // Points free for [from, to] — delegates to the ONE availability rule owned by business points
   // (point eligibility + overlapping occupying contracts). No date = today.
   service.availablePoints = function (market, from, to) {

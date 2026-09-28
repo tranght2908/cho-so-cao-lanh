@@ -637,7 +637,7 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
    liệu trong sơ đồ dùng chung .card-h h3 (md)/.small (sm)/.cell (xs) đã chuẩn hóa ở nơi khác. */
 .mb-summary { flex-wrap: wrap; gap: 10px 14px; font-size: var(--font-size-base); }
 .mb-summary b { font-variant-numeric: tabular-nums; font-weight: 700; }
-.mb-workspace { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px; align-items: start; }
+.mb-workspace { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; align-items: start; }
 
 /* Bảng Mặt bằng & điểm kinh doanh: chỉ scope trong workspace này để bảng ở các màn khác giữ nguyên. */
 .mb-table-card .tbl-wrap { width: 100%; overflow-x: auto; }
@@ -670,21 +670,36 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 /* Danh mục chợ, Tiểu thương và Hợp đồng dùng cùng nhịp đọc bảng, nhưng chỉ trong ba màn này. */
 .catalog-table-card .tbl-wrap, .trader-table-card .tbl-wrap, .contract-table-card .tbl-wrap { width: 100%; overflow-x: auto; }
 .catalog-table-card .tbl, .trader-table-card .tbl, .contract-table-card .tbl { width: 100%; min-width: 1040px; table-layout: fixed; border-collapse: collapse; }
-.catalog-table-card .tbl { min-width: 1200px; }
-.catalog-table-card .tbl th, .trader-table-card .tbl th, .contract-table-card .tbl th { padding: 10px 12px; vertical-align: middle; background: #f8fafc; color: var(--muted); font-weight: 600; line-height: 1.3; border-bottom-color: #e7ecf2; }
-.catalog-table-card .tbl td, .trader-table-card .tbl td, .contract-table-card .tbl td { padding: 10px 12px; vertical-align: middle; line-height: 1.35; border-bottom-color: #edf1f5; overflow-wrap: anywhere; }
-.catalog-table-card .tbl th + th, .catalog-table-card .tbl td + td, .trader-table-card .tbl th + th, .trader-table-card .tbl td + td, .contract-table-card .tbl th + th, .contract-table-card .tbl td + td { border-left: 1px solid #f0f3f7; }
-.catalog-table-card .tbl tbody tr:nth-child(even) td, .trader-table-card .tbl tbody tr:nth-child(even) td, .contract-table-card .tbl tbody tr:nth-child(even) td { background: #fbfcfe; }
-.catalog-table-card .tbl tbody tr:hover td, .trader-table-card .tbl tbody tr:hover td, .contract-table-card .tbl tbody tr:hover td { background: #f4f8fc; }
-.catalog-table-card .tbl th:nth-child(1), .catalog-table-card .tbl td:nth-child(1) { width: 55px; text-align: center; }
+.catalog-table-card .tbl { min-width: 1240px; }
+.catalog-table-card .tbl th:nth-child(1), .catalog-table-card .tbl td:nth-child(1) { width: 50px; text-align: center; }
 .catalog-table-card .tbl th:nth-child(2), .catalog-table-card .tbl td:nth-child(2) { width: 180px; }
-.catalog-table-card .tbl th:nth-child(3), .catalog-table-card .tbl td:nth-child(3) { width: 240px; }
-.catalog-table-card .tbl th:nth-child(4), .catalog-table-card .tbl td:nth-child(4) { width: 105px; }
-.catalog-table-card .tbl th:nth-child(5), .catalog-table-card .tbl td:nth-child(5) { width: 175px; }
-.catalog-table-card .tbl th:nth-child(6), .catalog-table-card .tbl td:nth-child(6) { width: 125px; }
-.catalog-table-card .tbl th:nth-child(7), .catalog-table-card .tbl td:nth-child(7) { width: 145px; }
-.catalog-table-card .tbl th:nth-child(8), .catalog-table-card .tbl td:nth-child(8) { width: 120px; text-align: center; }
-.catalog-table-card .tbl th:nth-child(9), .catalog-table-card .tbl td:nth-child(9) { width: 160px; text-align: center; }
+.catalog-table-card .tbl th:nth-child(4), .catalog-table-card .tbl td:nth-child(4) { width: 90px; }
+.catalog-table-card .tbl th:nth-child(5), .catalog-table-card .tbl td:nth-child(5) { width: 140px; }
+.catalog-table-card .tbl th:nth-child(6), .catalog-table-card .tbl td:nth-child(6) { width: 145px; }
+.catalog-table-card .tbl th:nth-child(7), .catalog-table-card .tbl td:nth-child(7) { width: 110px; }
+.catalog-table-card .tbl th:nth-child(8), .catalog-table-card .tbl td:nth-child(8) { width: 150px; }
+.catalog-table-card .tbl th:nth-child(9), .catalog-table-card .tbl td:nth-child(9) { width: 205px; text-align: center; }
+/* Danh mục chợ: KPI gọn, form/chi tiết quy mô & chỉ tiêu điểm kinh doanh. */
+.dmc-kpis { margin-bottom: 14px; }
+.dmc-kpis .kpi { padding: 12px 16px; }
+.dmc-kpis .kpi .k-value { font-size: var(--font-size-lg); }
+.dmc-section + .dmc-section { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.dmc-section h4 { margin: 0 0 10px; font-size: var(--font-size-sm); color: #193453; letter-spacing: .02em; }
+.dmc-form .field label { color: #34414f; }
+.dmc-num { position: relative; display: flex; align-items: center; }
+.dmc-num .input { width: 100%; padding-right: 52px; text-align: right; font-variant-numeric: tabular-nums; }
+.dmc-suffix { position: absolute; right: 10px; font-size: var(--font-size-sm); color: #4a5563; pointer-events: none; }
+.dmc-derived { display: flex; justify-content: space-between; align-items: center; margin: 12px 0 4px; padding: 9px 12px; background: #f5f8fb; border: 1px solid #e1e8f0; border-radius: 8px; font-size: var(--font-size-sm); color: #34414f; }
+.dmc-derived b { font-variant-numeric: tabular-nums; color: #0f1e32; }
+.dmc-err { color: #b01c1e; font-size: var(--font-size-sm); }
+.dmc-err:empty, .dmc-err-summary:empty { display: none; }
+.dmc-err-summary { margin-bottom: 12px; }
+.dmc-cap-tbl td, .dmc-cap-tbl th { vertical-align: middle; }
+.dmc-cap-tbl tfoot th { background: #f8fafc; color: #0f1e32; font-variant-numeric: tabular-nums; }
+.dmc-cap-tbl .dmc-num { min-width: 130px; }
+.dmc-cap-tbl tr.dmc-err-row td { padding-top: 0; padding-bottom: 0; border-bottom: 0; }
+.dmc-cap-tbl tr.dmc-err-row:has(.dmc-err:empty) { display: none; }
+.dmc-detail .kv { grid-template-columns: 200px minmax(0, 1fr); }
 .catalog-table-card .tbl td:nth-child(2), .trader-table-card .tbl td:nth-child(2), .contract-table-card .tbl td:nth-child(1) { font-weight: 700; }
 .trader-table-card .tbl th:nth-child(1), .trader-table-card .tbl td:nth-child(1) { width: 95px; }
 .trader-table-card .tbl th:nth-child(2), .trader-table-card .tbl td:nth-child(2) { width: 155px; }
@@ -1394,3 +1409,101 @@ button.mb-chip.on { outline: 2px solid currentColor; outline-offset: -2px; }
 @media(max-width:800px){.perm-action-body .perm-check-grid,.perm-screen-body .perm-check-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:700px){.perm-editor-filter{align-items:stretch;flex-direction:column;gap:9px}.perm-editor-filter .input{max-width:none}.perm-toolbar{grid-template-columns:minmax(0,1fr);gap:16px;margin-bottom:20px}.perm-role-field,.perm-search-field{width:100%}.perm-action-head{align-items:flex-start;gap:10px;flex-wrap:wrap;padding:6px 0}.perm-action-toggle{min-height:32px}.perm-action-meta{width:100%;padding-left:21px;justify-content:flex-start}.perm-action-body{padding-left:21px}.perm-action-body .perm-check-grid{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:24px;row-gap:14px}.perm-screen-head{align-items:flex-start;flex-wrap:wrap;padding:7px 0;gap:6px}.perm-screen-head-left{flex:1 1 calc(100% - 34px);min-height:34px}.perm-screen-meta{width:100%;justify-content:flex-start;padding:0 0 6px 34px;gap:12px}.perm-screen-no-actions{width:100%;padding:0 0 6px 34px}.perm-screen-body{padding-left:20px}}
 @media(max-width:520px){.perm-action-meta{gap:10px;align-items:flex-start;flex-wrap:wrap}.perm-action-body{padding-left:0}.perm-action-body .perm-check-grid,.perm-screen-body .perm-check-grid{grid-template-columns:1fr}.perm-screen-meta{align-items:flex-start;flex-wrap:wrap}.perm-screen-body{padding-left:0}}
+
+/* ---------- Mặt bằng & điểm kinh doanh (v16): cây điều hướng, menu ⋮, workspace theo node ---------- */
+.mb-tree-h { gap: 6px; }
+.mb-tree { gap: 2px; }
+.mb-tree-empty { font-size: var(--font-size-sm); color: var(--muted); padding: 8px 6px; }
+.mb-tnode { position: relative; display: flex; align-items: center; gap: 2px; padding: 2px 4px 2px calc(4px + var(--d, 0) * 16px); border-radius: 7px; }
+.mb-tnode:hover, .mb-tnode:focus-within { background: var(--surface-2); }
+.mb-tnode.on { background: var(--brand-soft); }
+.mb-tnode.on .mb-tname { color: var(--brand); }
+.mb-caret, .mb-caret-sp { width: 18px; flex: none; }
+.mb-caret { border: 0; background: transparent; cursor: pointer; color: var(--muted); font-size: var(--font-size-xs); padding: 4px 0; border-radius: 4px; }
+.mb-caret:hover { color: var(--ink); }
+.mb-tlabel { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; border: 0; background: transparent; cursor: pointer; text-align: left; padding: 5px 2px; font: inherit; color: var(--ink-2); }
+.mb-tname { font-size: var(--font-size-base); line-height: 1.3; overflow-wrap: anywhere; }
+.mb-tnode-building .mb-tname { font-weight: 700; color: var(--ink); }
+.mb-tnode-floor .mb-tname { font-weight: 600; }
+.mb-tnode-overview .mb-tname { font-weight: 600; }
+.mb-tsub { font-size: var(--font-size-xs); color: var(--muted); line-height: 1.25; }
+.mb-tlabel:focus-visible, .mb-kebab:focus-visible, .mb-caret:focus-visible, .mb-menu-item:focus-visible { outline: 2px solid var(--brand-2); outline-offset: 1px; }
+.mb-kebab-wrap { position: relative; flex: none; }
+.mb-kebab { border: 0; background: transparent; cursor: pointer; width: 26px; height: 26px; border-radius: 6px; color: var(--muted); font-size: 16px; line-height: 1; opacity: .35; transition: opacity .12s, background .12s; }
+.mb-tnode:hover .mb-kebab, .mb-tnode:focus-within .mb-kebab, .mb-tnode.on .mb-kebab, .mb-kebab.on, .mb-ws-actions .mb-kebab { opacity: 1; }
+.mb-kebab:hover, .mb-kebab.on { background: #e6ecf3; color: var(--ink); }
+.mb-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; min-width: 200px; background: #fff; border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 8px 24px rgba(15, 30, 50, .14); padding: 4px; display: flex; flex-direction: column; }
+.mb-menu-item { border: 0; background: transparent; text-align: left; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: var(--font-size-sm); color: var(--ink-2); white-space: nowrap; }
+.mb-menu-item:hover { background: var(--surface-2); color: var(--ink); }
+.mb-menu-item.danger { color: var(--danger); }
+.mb-menu-item.danger:hover { background: var(--danger-soft); }
+.mb-ws { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.mb-ws > .card { margin: 0; }
+.mb-ws-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: space-between; }
+.mb-ws-bar .mb-crumb { margin: 0; }
+.mb-ws-head { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.mb-ws-head > div:first-child { flex: 1; min-width: 200px; }
+.mb-ws-head h3 { margin: 0; font-size: var(--font-size-md); font-weight: 700; color: var(--ink); }
+.mb-ws-sub { margin-top: 3px; font-size: var(--font-size-sm); color: var(--muted); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.mb-ws-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.mb-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+/* Popup "Thêm điểm kinh doanh" (renderPointAdd) only: wider than the 620px default modal, and a fixed
+   table layout with width:100% inputs so each group fits its row instead of forcing horizontal scroll. */
+.modal:has(> .modal-b.mb-point-add) { width: min(920px, calc(100vw - 48px)); }
+.modal:has(> .modal-b.mb-point-add) > .modal-f { position: sticky; bottom: 0; background: #fff; }
+.mb-point-add .mb-point-table { table-layout: fixed; }
+.mb-point-add .mb-point-table th:nth-child(1) { width: 34%; }
+.mb-point-add .mb-point-table th:nth-child(2) { width: 17%; }
+.mb-point-add .mb-point-table th:nth-child(3) { width: 19%; }
+.mb-point-add .mb-point-table th:nth-child(4) { width: 16%; }
+.mb-point-add .mb-point-table th:nth-child(5) { width: 76px; }
+.mb-point-add .mb-point-table .input { width: 100%; min-width: 0; }
+.mb-point-add .mb-point-preview td { white-space: normal; overflow-wrap: anywhere; }
+.mb-point-add .note { overflow-wrap: anywhere; }
+.mb-point-add > [data-act="mb-point-group-add"] { margin-top: 10px; }
+@media (max-width: 640px) {
+  .mb-point-add .mb-point-table thead { display: none; }
+  .mb-point-add .mb-point-table, .mb-point-add .mb-point-table tbody, .mb-point-add .mb-point-table tr, .mb-point-add .mb-point-table td { display: block; width: 100%; }
+  .mb-point-add .mb-point-table td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 4px; font-size: var(--font-size-sm); font-weight: 600; color: var(--muted); }
+  .mb-point-add .mb-point-table tr.mb-point-group td { border-bottom: 0; padding: 6px 0; }
+  .mb-point-add .mb-point-table td.mb-point-remove { text-align: right; }
+  .mb-point-add .mb-point-table tr.mb-point-preview td { padding: 4px 0 12px; }
+}
+.mb-stat { border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px; background: #fbfcfe; min-width: 0; }
+.mb-stat-l { font-size: var(--font-size-xs); color: var(--muted); }
+.mb-stat-v { font-size: var(--font-size-md); font-weight: 700; color: var(--ink); margin-top: 2px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.mb-stat-s { font-size: var(--font-size-xs); color: var(--muted); margin-top: 1px; }
+.mb-stat-text { font-size: var(--font-size-sm); font-weight: 600; }
+.mb-stat.over { border-color: #f3c2c2; background: var(--danger-soft); }
+.mb-stat.over .mb-stat-v, .mb-over { color: var(--danger); font-weight: 600; }
+.mb-sbs { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 2px 0 8px; }
+.mb-sb { display: inline-flex; align-items: center; gap: 5px; font-size: var(--font-size-xs); color: var(--ink-2); }
+.mb-sb i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.mb-rowcards { display: flex; flex-direction: column; gap: 10px; }
+.mb-rowcard { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); }
+.mb-rowcard-h { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; border: 0; background: transparent; padding: 0; cursor: pointer; text-align: left; font: inherit; }
+.mb-rowcard-name { font-size: var(--font-size-base); font-weight: 700; color: var(--ink); }
+.mb-rowcard-h:hover .mb-rowcard-name { color: var(--brand); text-decoration: underline; }
+.mb-rowcard-sub { font-size: var(--font-size-sm); color: var(--muted); }
+.mb-rowcard-meta { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 8px 0 6px; font-size: var(--font-size-sm); color: var(--ink-2); }
+.mb-rowcard .plan-row { margin-top: 6px; }
+.mb-list { display: flex; flex-direction: column; gap: 6px; }
+.mb-listitem { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; border: 1px solid var(--line); border-radius: 9px; background: #fff; padding: 10px 34px 10px 12px; cursor: pointer; text-align: left; font: inherit; }
+.mb-listitem:hover { border-color: #bcd6f5; background: #f8fbff; }
+.mb-listitem-name { font-weight: 700; color: var(--ink); }
+.mb-listitem-sub { font-size: var(--font-size-sm); color: var(--muted); }
+.mb-listitem-go { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 18px; }
+.mb-cap-tbl td, .mb-cap-tbl th { vertical-align: middle; }
+.mb-empty { text-align: left; }
+.mb-empty h3 { margin: 0 0 4px; font-size: var(--font-size-md); }
+.mb-empty-cap { margin: 12px 0; }
+.mb-empty-cap h4 { margin: 0 0 8px; font-size: var(--font-size-sm); color: var(--ink-2); }
+.mb-empty-actions { margin-top: 14px; display: flex; gap: 8px; }
+.mb-table-card .mb-col-location { white-space: nowrap; }
+/* Initial market-layout setup wizard: lightweight, uses the existing modal/card/form tokens. */
+.mb-setup-stepper{display:flex;gap:14px;flex-wrap:wrap;padding:0 0 14px;margin:0 0 16px;border-bottom:1px solid var(--line,#e5e7eb);font-size:13px;color:var(--muted,#64748b)}
+.mb-setup-stepper span{white-space:nowrap}
+.mb-setup-stepper .active{font-weight:700;color:var(--text,#1e293b)}
+.mb-setup-stepper .done{color:var(--primary,#2563eb)}
+.modal-sub{margin:-10px 0 8px;padding:0 20px;color:var(--muted,#64748b);font-size:13px}
+@media(max-width:720px){.mb-setup-stepper{gap:8px}.mb-setup-stepper span{font-size:12px}}
