@@ -5,6 +5,8 @@
   // Bộ icon SVG inline dùng chung: không phụ thuộc emoji/font của thiết bị. `title` chỉ dùng khi icon
   // đứng một mình; icon đi kèm text là decorative để screen reader không đọc lặp lại.
   const ICON_PATHS = {
+    eye: '<path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/>',
+    'eye-off': '<path d="m3 3 18 18M10.6 6.2A10.6 10.6 0 0 1 12 6c6 0 9.5 6 9.5 6a17.8 17.8 0 0 1-3 3.8M6.2 6.2C3.9 8 2.5 12 2.5 12s3.5 6 9.5 6c1.4 0 2.7-.3 3.8-.8M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
     dashboard: '<path d="M4 13h6V4H4v9Zm0 7h6v-4H4v4Zm10 0h6v-9h-6v9Zm0-16v4h6V4h-6Z"/>',
     vehicle: '<path d="M3 16v-3l2-5h14l2 5v3M5 16v3m14-3v3M3 13h18M7 16h.01M17 16h.01"/>',
     map: '<path d="m9 18-6 3V6l6-3 6 3 6-3v15l-6 3-6-3Zm0-12v12m6-9v12"/>',

@@ -53,5 +53,11 @@
   };
   A.ACT['wf-send-activation'] = el => { const t = trader(el.dataset.id); if (!t || !accountFor(t.id)) return; A.closeModal(); U.toast('Đã gửi thông báo kích hoạt: dùng số điện thoại đã đăng ký để đăng nhập OTP.'); };
   accounts.tradersNeedingAccount = needsAccount;
+  // Read-only selector for the account-management work queue. The page owns rendering;
+  // this module remains the sole owner of the trader/contract eligibility rule.
+  accounts.traderAccountRows = () => needsAccount().map(t => {
+    const c = A.db.contracts.find(x => active(x) && x.traderId === t.id), s = c && stall(c.stallId);
+    return { t, c, s };
+  });
   A.features.accounts.traderAccountTaskHtml = accountTaskHtml;
 })(window.APP);
