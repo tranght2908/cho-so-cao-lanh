@@ -492,20 +492,33 @@
       <div class="row" style="justify-content:flex-end"><button class="btn primary" data-act="mini-rate-submit" data-id="${i.id}">${i.rating ? 'Cập nhật đánh giá' : 'Gửi đánh giá'}</button></div>
     </section>`;
   }
-  function merchantPortalSidebar(tab) {
-    const item = (id, icon, label, active, extra) => `<button class="${active ? 'active' : ''}" data-act="merchant-nav" data-id="${id}">${U.icon(icon)}<span>${label}</span>${extra || ''}</button>`;
+  // Điều hướng của cổng tiểu thương trong trang quản lý. Mặc định 'home' (trước đây vào thẳng màn
+  // gửi phản ánh). Lưu trong ui.mini nên giữ nguyên qua các lần render/đổi màn.
+  const PORTAL_NAV = ['home', 'complaints', 'contracts', 'finance', 'notice', 'help'];
+  const portalNav = () => (PORTAL_NAV.indexOf(mini().portalNav) === -1 ? 'home' : mini().portalNav);
+  const PORTAL_CRUMB = {
+    home: ['Tổng quan', 'Trang chủ'],
+    complaints: ['Phản ánh & xử lý', ''],
+    contracts: ['Tổng quan', 'Hợp đồng & điểm kinh doanh'],
+    finance: ['Tổng quan', 'Nghĩa vụ tài chính'],
+    notice: ['Tổng quan', 'Thông báo'],
+    help: ['Tiện ích', 'Hướng dẫn']
+  };
+  function merchantPortalSidebar(nav, badges) {
+    const b = badges || {};
+    const item = (id, icon, label, count) => `<button class="${nav === id ? 'active' : ''}" data-act="merchant-nav" data-id="${id}">${U.icon(icon)}<span>${label}</span>${count ? `<i class="merchant-nav-badge">${count}</i>` : ''}</button>`;
     return `<aside class="merchant-sidebar">
       <div class="merchant-brand"><div class="merchant-brand-logo"><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true"><path d="M5 12l2-6h18l2 6z" fill="#0089df"/><path d="M5 12h22v3a3.5 3.5 0 0 1-7 0 3.5 3.5 0 0 1-7 0 3.5 3.5 0 0 1-7 0z" fill="#4fb3ff"/><path d="M7 17v10h18V17" fill="#0b4a9e"/><rect x="13" y="20" width="6" height="7" fill="#fff"/></svg></div><div><b>Chợ số Cao Lãnh</b><small>UBND Phường Cao Lãnh</small></div></div>
       <nav class="merchant-nav">
         <div class="merchant-nav-group">Tổng quan</div>
-        ${item('home', 'dashboard', 'Trang chủ', false)}
-        ${item('complaints', 'warning', 'Phản ánh & xử lý', true)}
-        ${item('contracts', 'file', 'Hợp đồng & điểm kinh doanh', false)}
-        ${item('finance', 'receipt', 'Nghĩa vụ tài chính', false)}
-        ${item('notice', 'bell', 'Thông báo', false)}
+        ${item('home', 'dashboard', 'Trang chủ')}
+        ${item('complaints', 'warning', 'Phản ánh & xử lý', b.complaints)}
+        ${item('contracts', 'file', 'Hợp đồng & điểm kinh doanh')}
+        ${item('finance', 'receipt', 'Nghĩa vụ tài chính', b.finance)}
+        ${item('notice', 'bell', 'Thông báo')}
         <div class="merchant-nav-group">Tiện ích</div>
-        ${item('help', 'warning', 'Hướng dẫn', false)}
-        ${item('logout', 'close', 'Đăng xuất', false)}
+        ${item('help', 'warning', 'Hướng dẫn')}
+        ${item('logout', 'close', 'Đăng xuất')}
       </nav>
     </aside>`;
   }
@@ -887,6 +900,99 @@
     return `<div class="phone"><div class="screen"><div class="notch"><span>9:41</span><span>□□□ 4G 🔋</span></div>${body}</div></div>`;
   }
 
+  // ==================== CỔNG TIỂU THƯƠNG (khung sidebar trong trang quản lý) ====================
+  // Các màn Trang chủ / Hợp đồng & điểm kinh doanh / Nghĩa vụ tài chính / Thông báo dùng ĐÚNG dữ liệu
+  // nghiệp vụ đang có (A.db.invoices, contracts, stalls, incidents, notifications) như trang quản lý
+  // và cổng /tieu-thuong/ — không tạo nguồn dữ liệu riêng, không tự sinh số liệu.
+  const portalStalls = t => t.stalls.map(id => A.idx.stall.get(id)).filter(Boolean);
+  const portalContracts = t => A.db.contracts.filter(c => c.traderId === t.id);
+  const portalInvoices = t => A.db.invoices.filter(i => i.traderId === t.id).sort((a, b) => b.period.localeCompare(a.period));
+  const portalPayments = t => {
+    const ids = A.db.invoices.filter(i => i.traderId === t.id).map(i => i.id);
+    return A.db.payments.filter(p => ids.indexOf(p.invoiceId) !== -1).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  };
+  const portalIncidents = t => A.db.incidents.filter(i => i.traderId === t.id && inMiniScopeMarket(i.market)).slice().reverse();
+  const portalBadges = (t, stats) => ({ complaints: stats ? stats.open : 0, finance: unpaid(t).length });
+  const portalEmpty = msg => `<div class="empty">${U.esc(msg)}</div>`;
+  const portalPanel = (icon, title, desc, body, foot) => `<section class="merchant-panel merchant-block">
+    <div class="merchant-title-row">${U.icon(icon)}<div><h2>${U.esc(title)}</h2>${desc ? `<p>${U.esc(desc)}</p>` : ''}</div>${foot || ''}</div>${body}</section>`;
+  const portalKpi = (label, value, note, tone) => `<div class="merchant-kpi ${tone || ''}"><span>${U.esc(label)}</span><b>${value}</b>${note ? `<small>${note}</small>` : ''}</div>`;
+  const portalLink = (nav, label) => `<button class="btn sm" data-act="merchant-nav" data-id="${nav}">${U.esc(label)}</button>`;
+  const stallLabel = st => (st ? `${U.esc(st.code)}${st.sectionName ? ' · ' + U.esc(st.sectionName) : ''}` : 'Chưa xác định');
+  function portalHome(t) {
+    const list = unpaid(t), total = U.sum(list, U.due), over = list.filter(U.isOver);
+    const incidents = portalIncidents(t), open = incidents.filter(i => i.state !== 'hoanthanh' && i.state !== 'dong');
+    const notices = notisFor(t).slice(0, 3), stalls = portalStalls(t);
+    const cons = portalContracts(t).filter(c => c.status === 'hieuluc');
+    return `<div class="merchant-kpis">
+        ${portalKpi('Còn phải nộp', U.money(total), list.length ? list.length + ' khoản chưa nộp' : 'Đã nộp đủ', total ? 'warn' : 'green')}
+        ${portalKpi('Quá hạn', U.money(U.sum(over, U.due)), over.length ? over.length + ' khoản quá hạn' : 'Không có khoản quá hạn', over.length ? 'danger' : 'green')}
+        ${portalKpi('Điểm kinh doanh', String(stalls.length), cons.length + ' hợp đồng đang hiệu lực', 'blue')}
+        ${portalKpi('Phản ánh đang xử lý', String(open.length), incidents.length + ' phản ánh đã gửi', open.length ? 'warn' : 'green')}
+      </div>
+      ${portalPanel('receipt', 'Khoản phí cần nộp', total ? 'Thanh toán trước hạn để tránh phát sinh nhắc nợ.' : 'Bạn đã nộp đủ các khoản phí.', list.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Kỳ thu</th><th>Điểm kinh doanh</th><th>Số tiền</th><th>Hạn nộp</th><th>Trạng thái</th></tr></thead><tbody>${list.slice(0, 4).map(i => `<tr><td>${U.per(i.period)}</td><td>${stallLabel(A.idx.stall.get(i.stallId))}</td><td><b>${U.money(U.due(i))}</b></td><td>${U.dmy(i.due)}</td><td>${U.invTag(i)}</td></tr>`).join('')}</tbody></table></div>` : portalEmpty('Không có khoản phí nào cần nộp.'), portalLink('finance', 'Xem tất cả'))}
+      ${portalPanel('file', 'Điểm kinh doanh của tôi', '', stalls.length ? `<div class="merchant-cards">${stalls.map(st => {
+        const c = st.contractId ? A.idx.contract.get(st.contractId) : null;
+        return `<div class="merchant-card"><b>${U.esc(st.code)}</b><small>${U.esc(st.sectionName || '')}</small>
+          <dl class="kv"><dt>Ngành hàng</dt><dd>${U.esc(st.cat) || 'Chưa có thông tin'}</dd>
+            <dt>Diện tích</dt><dd>${st.area.toLocaleString('vi-VN')} m²</dd>
+            <dt>Hợp đồng</dt><dd>${c ? U.esc(c.id) : 'Chưa có hợp đồng hiệu lực'}</dd>
+            <dt>Trạng thái</dt><dd>${D.STATUS[st.status] ? U.esc(D.STATUS[st.status].label) : U.esc(st.status)}</dd></dl></div>`;
+      }).join('')}</div>` : portalEmpty('Chưa có điểm kinh doanh nào được giao.'), portalLink('contracts', 'Xem hợp đồng'))}
+      ${portalPanel('bell', 'Thông báo mới', '', notices.length ? `<div class="merchant-rows">${notices.map(n => `<div class="merchant-row"><div><b>${U.esc(n.title)}</b><small>${U.dmy(n.at)} · ${U.esc(n.group || 'Ban Quản lý chợ')}</small></div></div>`).join('')}</div>` : portalEmpty('Chưa có thông báo.'), portalLink('notice', 'Tất cả'))}
+      ${portalPanel('warning', 'Phản ánh gần đây', '', incidents.length ? `<div class="merchant-rows">${incidents.slice(0, 3).map(i => `<div class="merchant-row"><div><b>${U.esc(i.title)}</b><small>${U.esc(i.id)} · ${U.dmy(i.created)}</small></div><span class="tag ${miniComplaintStatusClass(i)}">${U.esc(incidentStateLabel(i.state))}</span></div>`).join('')}</div>` : portalEmpty('Bạn chưa gửi phản ánh nào.'), portalLink('complaints', 'Gửi phản ánh'))}`;
+  }
+  function portalContractsScreen(t) {
+    const cons = portalContracts(t), stalls = portalStalls(t);
+    return `${portalPanel('file', 'Hợp đồng thuê điểm kinh doanh', 'Hợp đồng do Ban Quản lý chợ lập; mọi điều chỉnh liên hệ Ban Quản lý chợ.', cons.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Số hợp đồng</th><th>Loại</th><th>Điểm kinh doanh</th><th>Thời hạn</th><th>Giá dịch vụ/tháng</th><th>Trạng thái</th></tr></thead><tbody>${cons.map(c => {
+      const st = A.idx.stall.get(c.stallId);
+      return `<tr><td><b>${U.esc(c.id)}</b></td><td>${U.esc(c.kind || '')}</td><td>${stallLabel(st)}</td><td>${U.dmy(c.start)} – ${U.dmy(c.end)}</td><td>${c.monthly ? U.money(c.monthly) : '—'}</td><td><span class="tag ${c.status === 'hieuluc' ? 'ok' : ''}">${c.status === 'hieuluc' ? 'Đang hiệu lực' : 'Đã thanh lý'}</span></td></tr>`;
+    }).join('')}</tbody></table></div>` : portalEmpty('Chưa có hợp đồng nào.'))}
+      ${portalPanel('dashboard', 'Chi tiết điểm kinh doanh', '', stalls.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Mã điểm</th><th>Khu vực</th><th>Ngành hàng</th><th>Diện tích</th><th>Đơn giá</th><th>Trạng thái</th></tr></thead><tbody>${stalls.map(st => `<tr><td><b>${U.esc(st.code)}</b></td><td>${U.esc(st.sectionName || '')}</td><td>${U.esc(st.cat) || '—'}</td><td>${st.area.toLocaleString('vi-VN')} m²</td><td>${U.esc(U.unitLabel(st) || '')}</td><td>${D.STATUS[st.status] ? U.esc(D.STATUS[st.status].label) : U.esc(st.status)}</td></tr>`).join('')}</tbody></table></div>` : portalEmpty('Chưa có điểm kinh doanh nào được giao.'))}`;
+  }
+  // Cột "Khoản mục": bỏ phần công thức trong ngoặc (8.9 m² × 1.200 đ × 30 ngày…) cho gọn bảng; chi
+  // tiết đầy đủ vẫn nằm ở khoản phải thu bên trang quản lý.
+  function portalItemsLabel(i) {
+    const names = (i.items || []).map(x => String(x.name || '').replace(/\s*\(.*\)\s*$/, '').trim()).filter(Boolean);
+    if (!names.length) return '—';
+    return U.esc(names.slice(0, 2).join(', ')) + (names.length > 2 ? ` <span class="muted">+${names.length - 2} khoản</span>` : '');
+  }
+  function portalFinance(t) {
+    const invs = portalInvoices(t), pays = portalPayments(t);
+    const debt = U.traderDebt(t.id), over = U.traderOverdue(t.id), paid = U.sum(invs, i => i.paid || 0);
+    return `<div class="merchant-kpis">
+        ${portalKpi('Tổng còn phải nộp', U.money(debt), invs.filter(i => i.status !== 'paid').length + ' khoản', debt ? 'warn' : 'green')}
+        ${portalKpi('Trong đó quá hạn', U.money(over), over ? 'Cần nộp ngay' : 'Không có khoản quá hạn', over ? 'danger' : 'green')}
+        ${portalKpi('Đã nộp', U.money(paid), invs.length + ' kỳ có phát sinh', 'blue')}
+      </div>
+      ${portalPanel('receipt', 'Khoản phải nộp theo kỳ', 'Số liệu lấy từ khoản phải thu do Ban Quản lý chợ phát hành.', invs.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Kỳ thu</th><th>Điểm kinh doanh</th><th>Khoản mục</th><th>Phải nộp</th><th>Còn lại</th><th>Hạn nộp</th><th>Trạng thái</th></tr></thead><tbody>${invs.map(i => `<tr><td>${U.per(i.period)}</td><td>${stallLabel(A.idx.stall.get(i.stallId))}</td><td>${portalItemsLabel(i)}</td><td>${U.money(i.amount)}</td><td><b>${U.money(U.due(i))}</b></td><td>${U.dmy(i.due)}</td><td>${U.invTag(i)}</td></tr>`).join('')}</tbody></table></div>` : portalEmpty('Chưa phát sinh khoản phải nộp.'))}
+      ${portalPanel('file', 'Biên lai đã nộp', '', pays.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Số biên lai</th><th>Ngày nộp</th><th>Hình thức</th><th>Số tiền</th></tr></thead><tbody>${pays.map(p => `<tr><td><b>${U.esc(p.receipt || '')}</b></td><td>${U.dmy(p.date)}</td><td>${U.esc((D.METHOD && D.METHOD[p.method]) || p.method || '')}</td><td>${U.money(p.amount)}</td></tr>`).join('')}</tbody></table></div>` : portalEmpty('Chưa có biên lai nào.'))}`;
+  }
+  function portalNotices(t) {
+    const list = notisFor(t);
+    return portalPanel('bell', 'Thông báo từ Ban Quản lý chợ', '', list.length ? `<div class="merchant-rows">${list.map(n => `<div class="merchant-row"><div><b>${U.esc(n.title)}</b>${n.body ? `<p>${U.esc(n.body)}</p>` : ''}<small>${U.dmy(n.at)} · ${U.esc(n.group || 'Ban Quản lý chợ')}${n.channels && n.channels.length ? ' · ' + U.esc(n.channels.join(', ')) : ''}</small></div></div>`).join('')}</div>` : portalEmpty('Chưa có thông báo nào.'));
+  }
+  function portalHelp() {
+    return portalPanel('warning', 'Hướng dẫn sử dụng', 'Các việc tiểu thương thường làm trên hệ thống.', `<ol class="script">
+      <li><div><b>Xem khoản phí</b><div class="small muted">Vào mục Nghĩa vụ tài chính để xem khoản phải nộp theo kỳ, hạn nộp và biên lai đã nộp.</div></div></li>
+      <li><div><b>Nộp phí</b><div class="small muted">Nộp tiền mặt cho nhân viên thu phí hoặc chuyển khoản theo hướng dẫn của Ban Quản lý chợ; biên lai sẽ hiện trong mục Nghĩa vụ tài chính.</div></div></li>
+      <li><div><b>Gửi phản ánh</b><div class="small muted">Vào mục Phản ánh & xử lý, chọn nhóm vấn đề, mô tả và đính kèm ảnh; theo dõi tiến độ tại tab Xem phản ánh.</div></div></li>
+      <li><div><b>Tra cứu hợp đồng</b><div class="small muted">Mục Hợp đồng & điểm kinh doanh hiển thị số hợp đồng, thời hạn, giá dịch vụ và thông tin điểm kinh doanh.</div></div></li>
+      <li><div><b>Cần hỗ trợ thêm</b><div class="small muted">Liên hệ trực tiếp Ban Quản lý chợ nơi bạn kinh doanh để được hướng dẫn.</div></div></li>
+    </ol>`);
+  }
+  const PORTAL_SCREENS = { home: portalHome, contracts: portalContractsScreen, finance: portalFinance, notice: portalNotices, help: portalHelp };
+  function merchantShellHtml(t, nav, stats, inner) {
+    const crumb = PORTAL_CRUMB[nav] || PORTAL_CRUMB.home;
+    return `<div class="merchant-shell">${merchantPortalSidebar(nav, portalBadges(t, stats))}<main class="merchant-main"><div class="merchant-portal">
+      <div class="merchant-topline">
+        <div class="merchant-breadcrumb"><button class="btn sm">${U.icon('menu')}</button><span>${U.esc(crumb[0])}</span>${crumb[1] ? `<span>›</span><b>${U.esc(crumb[1])}</b>` : ''}</div>
+        <div class="merchant-user"><span class="merchant-bell">${U.icon('bell')}<i>${stats.open}</i></span><span class="merchant-avatar">${U.esc((t.name || '?').slice(0, 1))}</span><span><b>${U.esc(t.name)}</b><small>Tiểu thương</small></span></div>
+      </div>
+      ${inner}
+    </div></main></div>`;
+  }
+
   A.VIEWS['mini-app'] = function () {
     if (isCollectorMini() && !isTraderMini()) {
       return `<div class="mini-wrap"><div>${collectorPhone()}</div>
@@ -928,7 +1034,11 @@
       const haystack = [i.id, i.title, i.desc, i.cat, U.mShort(i.market), st && st.code, st && st.location, st && st.sectionName].join(' ').toLowerCase();
       return statusOk && (!q || haystack.indexOf(q) !== -1);
     });
-    return `<div class="merchant-shell">${merchantPortalSidebar(tab)}<main class="merchant-main"><div class="merchant-portal ${tab === 'list' ? 'list-mode' : 'send-mode'}">
+    // Các màn còn lại của cổng (Trang chủ, Hợp đồng & điểm kinh doanh, Nghĩa vụ tài chính, Thông báo,
+    // Hướng dẫn) dùng chung khung sidebar; chỉ màn Phản ánh giữ nguyên bố cục gửi/xem sẵn có bên dưới.
+    const nav = portalNav();
+    if (nav !== 'complaints') return merchantShellHtml(t, nav, stats, PORTAL_SCREENS[nav](t));
+    return `<div class="merchant-shell">${merchantPortalSidebar(nav, portalBadges(t, stats))}<main class="merchant-main"><div class="merchant-portal ${tab === 'list' ? 'list-mode' : 'send-mode'}">
       <div class="merchant-topline">
         <div class="merchant-breadcrumb"><button class="btn sm">${U.icon('menu')}</button><span>Phản ánh & xử lý</span><span>›</span><b>${tab === 'list' ? 'Danh sách phản ánh' : 'Gửi phản ánh'}</b></div>
         <div class="merchant-user"><span class="merchant-bell">${U.icon('bell')}<i>${stats.open}</i></span><span class="merchant-avatar">${U.esc((t.name || '?').slice(0, 1))}</span><span><b>${U.esc(t.name)}</b><small>Tiểu thương</small></span></div>
@@ -1064,8 +1174,10 @@
     'merchant-nav': el => {
       const id = el.dataset.id;
       if (id === 'logout' && A.ACT['auth-logout']) { A.ACT['auth-logout'](); return; }
-      if (id === 'complaints') { mini().complaintTab = 'send'; A.render(); return; }
-      U.toast('Chức năng đang được hoàn thiện trong prototype.');
+      if (PORTAL_NAV.indexOf(id) === -1) return;
+      if (id === 'complaints' && portalNav() !== 'complaints') mini().complaintTab = 'send';
+      mini().portalNav = id;
+      A.render();
     },
     'mini-complaint-tab': el => { mini().complaintTab = el.dataset.id === 'list' ? 'list' : 'send'; A.render(); },
     'mini-complaint-status': el => { mini().complaintStatus = el.dataset.id || 'all'; A.render(); },
