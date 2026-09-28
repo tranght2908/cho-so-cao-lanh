@@ -147,6 +147,9 @@
     { key: 'action:cau-hinh-gia.them-phi', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Thêm phí mới ở trạng thái chưa áp dụng' },
     { key: 'action:cau-hinh-gia.ap-dung-phi', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Áp dụng phí mới sau khi phí cũ đã khóa' },
     { key: 'action:cau-hinh-gia.khoa-mo-phi', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Khóa / mở khóa phí' },
+    { key: 'action:cau-hinh-gia.chinh-sach-chung.them-muc', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Thêm mức giá chính sách chung' },
+    { key: 'action:cau-hinh-gia.chinh-sach-chung.ap-dung', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Áp dụng mức giá chính sách chung' },
+    { key: 'action:cau-hinh-gia.chinh-sach-chung.khoa-mo', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Khóa / mở khóa mức giá chính sách chung' },
     { key: 'action:tai-khoan-ngan-hang.quan-ly', kind: 'action', group: 'Tài chính', screenId: 'tai-khoan-ngan-hang', label: 'Thêm/sửa/xoá/đổi trạng thái tài khoản ngân hàng' },
     { key: 'action:cai-dat.ky-thu', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Cấu hình kỳ thu' },
     { key: 'action:cai-dat.quy-tac-thu-phi', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Cấu hình quy tắc thu phí' },
@@ -354,6 +357,11 @@
       'cau-hinh-gia.them-phi': ['market_manager'],
       'cau-hinh-gia.ap-dung-phi': ['market_manager'],
       'cau-hinh-gia.khoa-mo-phi': ['market_manager'],
+      // Chính sách chung về đơn giá sử dụng mặt bằng thuộc Quản trị hệ thống;
+      // các quyền này cố ý không gắn selectedMarket hay marketScopes.
+      'cau-hinh-gia.chinh-sach-chung.them-muc': ['system_admin'],
+      'cau-hinh-gia.chinh-sach-chung.ap-dung': ['system_admin'],
+      'cau-hinh-gia.chinh-sach-chung.khoa-mo': ['system_admin'],
       // Thêm/sửa/xoá/đổi trạng thái tài khoản ngân hàng: chỉ Quản trị hệ thống (yêu cầu gốc, không
       // có sắc thái khác nhau giữa 4 hành động nên dùng 1 action key duy nhất).
       'tai-khoan-ngan-hang.quan-ly': ['system_admin'],
@@ -448,7 +456,7 @@
   //        lệch khiến loadState() đi thẳng nhánh RESEED TOÀN BỘ (freshState(), không qua
   //        mergeIntoCurrentSeed()), nên seedVersion v15 ở đây chỉ còn ý nghĩa tài liệu/đánh dấu, không
   //        phải cơ chế migrate chính cho lần đổi này (xem RBAC_MARKET_SCOPE_MIGRATION_REPORT.md).
-  const PERM_SEED_VERSION = 15;
+  const PERM_SEED_VERSION = 16;
   const RATE_POLICY_PERM_VERSION = 1;
   const BANK_ACCOUNT_PERM_VERSION = 1;
   const PC3A_SESSION_PERM_VERSION = 1;

@@ -16,12 +16,14 @@
     'Nhân viên thu phí phiên': 'collector',
     'Nhân viên kỹ thuật (điện, nước)': 'technician'
   };
+  // Số demo phục vụ luồng đăng nhập SĐT + OTP của prototype; không phải dữ liệu thật.
+  const STAFF_DEMO_PHONE_BY_ID = { NV01: '0900000001' };
 
   function defaultStaffAccounts() {
     return D.STAFF.map(s => {
       const roleId = STAFF_ROLE_MAP[s.role] || 'collector';
       return {
-        id: 'AC-' + s.id, code: s.id, fullName: s.name, phone: '',
+        id: 'AC-' + s.id, code: s.id, fullName: s.name, phone: STAFF_DEMO_PHONE_BY_ID[s.id] || '',
         accountType: roleName(roleId),
         title: s.role, roleIds: [roleId],
         // Trưởng Ban Quản lý chợ quản lý cả 02 chợ có dữ liệu nghiệp vụ (demo "1 account, nhiều

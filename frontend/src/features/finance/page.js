@@ -432,6 +432,10 @@
   A.VIEWS['phai-thu'] = function () {
     const fp = financePeriod(), p = fp.id;
     const periods = A.db.issuedPeriods;
+    const billing = A.features.finance.billing;
+    const draftRows = billing ? billing.drafts(ui.market, p) : [];
+    const billingWarnings = billing ? billing.warnings(ui.market, p) : [];
+    const blockingWarnings = billingWarnings.filter(x => x.severity === 'BLOCKING');
     const q = (f.ptSearch || '').toLowerCase();
     const inv = A.db.invoices.filter(i => U.inM(i) && i.period === p);
     const sessionReceivables = sessionCashReceivables(true);
@@ -442,11 +446,11 @@
     const spg = U.pager('ptSession' + p, sessionRows.length, 12);
     const amt = U.sum(inv, i => i.amount), paid = U.sum(inv, i => i.paid);
     const allAmt = amt + U.sum(sessionReceivables, x => x.amount), allPaid = paid + U.sum(sessionReceivables, x => x.paid);
-    const next = periods.includes('2026-10') ? null : '2026-10';
     const canIssue = A.canDo('phai-thu.phat-hanh', ui.market);
     return `<div class="card"><div class="card-b" style="padding-top:14px">${financeTimeBarRow('Kỳ thu')}
       <div class="row small" style="margin-top:8px;flex-wrap:wrap"><span class="muted">Hạn nộp: <b>${U.dmy(fp.dueDate)}</b></span><span class="spacer"></span>
-      ${next && canIssue ? `<button class="btn primary" data-act="pt-issue">${U.icon('settings')}Phát hành tự động kỳ 10/2026</button>` : (next ? '' : '<span class="tag ok">Đã phát hành kỳ 10/2026</span>')}</div></div></div>
+      ${canIssue ? `${A.db.issuedPeriods.includes(p) ? '<button class="btn" data-act="pt-open-next">Mở kỳ thu tiếp theo</button>' : `<button class="btn" data-act="pt-calc">${U.icon('settings')}Tính khoản thu kỳ này</button>`}${draftRows.length ? `<button class="btn primary" data-act="pt-issue" ${blockingWarnings.length ? 'disabled title="Cần xử lý cảnh báo chặn"' : ''}>Phát hành khoản thu</button>` : ''}` : ''}</div>
+      ${draftRows.length || billingWarnings.length ? `<div class="note" style="margin-top:10px"><b>Dự thảo kỳ ${fp.label}:</b> ${draftRows.length} khoản · ${U.money(U.sum(draftRows, x => x.amount))}${billingWarnings.length ? ` · <span class="${blockingWarnings.length ? 'danger' : 'warn'}">${billingWarnings.length} cảnh báo${blockingWarnings.length ? ' chặn phát hành' : ''}</span>` : ''}${draftRows.length ? ` · <button class="link-btn" data-act="pt-draft-open">Xem kiểm tra</button>` : ''}</div>` : ''}</div></div>
     <div class="kpis">
       <div class="card kpi"><div class="k-label">Số khoản phải thu</div><div class="k-value">${inv.length + sessionReceivables.length}</div><div class="k-sub">Gồm khoản cố định và khoản đăng ký phiên</div></div>
       <div class="card kpi"><div class="k-label">Tổng phải thu</div><div class="k-value">${U.moneyShort(allAmt)}</div><div class="k-sub">${U.money(allAmt)}</div></div>
@@ -470,28 +474,41 @@
   };
   A.CH['pt-status'] = el => { f.ptStatus = el.value; A.render(); };
   A.IN['pt-search'] = el => { f.ptSearch = el.value; A.render(); };
+  A.ACT['pt-calc'] = () => {
+    if (!A.canDo('phai-thu.phat-hanh', ui.market)) return;
+    const billing = A.features.finance.billing, fp = financePeriod();
+    if (!billing) return U.toast('Chưa tải được chức năng tính khoản thu');
+    const out = billing.calculatePeriod(ui.market, fp.id);
+    A.render();
+    U.toast(out.warnings.some(x => x.severity === 'BLOCKING') ? 'Đã tạo dự thảo, cần xử lý cảnh báo trước khi phát hành' : 'Đã tính ' + out.drafts.length + ' khoản thu dự thảo');
+  };
+  A.ACT['pt-open-next'] = () => {
+    if (!A.canDo('phai-thu.phat-hanh', ui.market)) return;
+    const billing = A.features.finance.billing;
+    if (!billing) return;
+    const bp = billing.openNextPeriod();
+    if (!bp) return U.toast('Không thể mở kỳ thu tiếp theo');
+    ui.period = bp.id; A.render(); U.toast('Đã mở kỳ thu ' + bp.label + '. Hãy ghi chỉ số điện, nước trước khi tính khoản thu.');
+  };
   A.ACT['pt-issue'] = () => {
     if (!A.canDo('phai-thu.phat-hanh', ui.market)) return;
-    const db = A.db;
-    if (db.issuedPeriods.includes('2026-10')) { U.toast('Kỳ 10/2026 đã được phát hành'); A.render(); return; }
-    const out = [];
-    const latestPeriod = db.meterPeriods[db.meterPeriods.length - 1].id;
-    db.contracts.filter(c => c.status === 'hieuluc' && U.inM(c)).forEach(c => {
-      const st = A.idx.stall.get(c.stallId);
-      if (st.status === 'ngung' || st.status === 'trong') return;
-      if (U.rentalKind(st) !== 'fixed') return;
-      const items = receivableItemsForContract(st, c, latestPeriod);
-      const inv = { id: 'PT-202610-' + U.pad(db.invoices.length + 1, 5), period: '2026-10', market: c.market, stallId: st.id, traderId: c.traderId, contractId: c.id, items, amount: U.sum(items, x => x.amount), paid: 0, issued: '2026-10-01', due: '2026-10-15', status: 'unpaid', adjust: null, reminders: 0 };
-      db.invoices.push(inv); A.idx.invoice.set(inv.id, inv); out.push(inv);
-    });
-    db.issuedPeriods.push('2026-10');
-    const prevBp = db.billingPeriods.find(x => x.id === '2026-09');
-    if (prevBp) prevBp.status = 'PAST';
-    db.billingPeriods.push({ id: '2026-10', label: '10/2026', startDate: '2026-10-01', endDate: '2026-10-31', dueDate: '2026-10-15', status: 'COLLECTING' });
-    db.notifications.unshift({ id: 'TB-' + U.pad(32 + db.notifications.length, 3), at: U.today(), title: 'Phát hành khoản phải thu kỳ 10/2026', group: 'Toàn bộ tiểu thương', channels: ['Mini app', 'Zalo OA'], sent: out.length, delivered: 0.97, read: 0, auto: true });
-    U.log('Phát hành tự động ' + out.length + ' khoản phải thu kỳ 10/2026');
-    ui.period = '2026-10'; A.save(); A.render();
-    U.toast(`Đã phát hành ${out.length} khoản phải thu kỳ 10/2026 (${U.moneyShort(U.sum(out, x => x.amount))}) và gửi thông báo cho tiểu thương`);
+    const billing = A.features.finance.billing, fp = financePeriod();
+    if (!billing) return;
+    const out = billing.issue(ui.market, fp.id, (A.currentAccount() || {}).fullName || '');
+    if (out.blocking.length) return U.toast('Không thể phát hành: còn cảnh báo cần xử lý');
+    if (!out.issued.length) return U.toast('Không có khoản dự thảo hợp lệ để phát hành');
+    U.log('Phát hành ' + out.issued.length + ' khoản phải thu kỳ ' + fp.id);
+    A.render(); U.toast('Đã phát hành ' + out.issued.length + ' khoản phải thu (' + U.moneyShort(U.sum(out.issued, x => x.amount)) + ')');
+  };
+  A.ACT['pt-draft-open'] = () => {
+    const billing = A.features.finance.billing, fp = financePeriod();
+    if (!billing) return;
+    const rows = billing.drafts(ui.market, fp.id), ws = billing.warnings(ui.market, fp.id);
+    A.modal(A.mHead('Kiểm tra dự thảo khoản thu ' + fp.label) + `<div class="modal-b">
+      <div class="kpis"><div class="card kpi"><div class="k-label">Khoản dự thảo</div><div class="k-value">${rows.length}</div></div><div class="card kpi"><div class="k-label">Tổng dự kiến</div><div class="k-value">${U.moneyShort(U.sum(rows, x => x.amount))}</div></div><div class="card kpi"><div class="k-label">Cảnh báo</div><div class="k-value">${ws.length}</div></div></div>
+      ${ws.length ? `<div class="note" style="margin:12px 0"><b>Cảnh báo</b>${ws.map(w => `<div class="${w.severity === 'BLOCKING' ? 'danger' : 'warn'}">${w.severity === 'BLOCKING' ? 'Không thể phát hành' : 'Cần kiểm tra'}: ${U.esc(w.message)}</div>`).join('')}</div>` : ''}
+      ${U.table([{ t: 'Tiểu thương' }, { t: 'Điểm KD' }, { t: 'Khoản thu' }, { t: 'Căn cứ tính' }, { t: 'Số tiền', num: true }], rows.map(d => { const i = d.items[0], t = A.idx.trader.get(d.traderId), st = A.idx.stall.get(d.stallId); return `<tr><td>${U.esc((t || {}).name || d.traderId)}<div class="small muted">${d.traderId}</div></td><td>${U.esc((st || {}).code || '—')}</td><td>${U.esc(i.name || 'Khoản thu')}</td><td class="small">${U.esc(i.explanation || '')}${i.policyReference ? `<div class="muted">${U.esc(i.policyReference)}</div>` : ''}</td><td class="num">${U.money(d.amount)}</td></tr>`; }), { empty: 'Chưa có khoản dự thảo' })}
+      </div><div class="modal-f"><button class="btn" data-act="close">Đóng</button></div>`, true);
   };
   A.ACT['inv-open'] = el => {
     const i = A.idx.invoice.get(el.dataset.id), t = A.idx.trader.get(i.traderId);

@@ -89,6 +89,18 @@
     accounts = accounts.filter(a => RETIRED_SEED_ACCOUNT_IDS.indexOf(a.id) === -1);
     const existingIds = new Set(accounts.map(a => a.id));
     let changed = accounts.length !== before;
+    // Seed may add a missing demo login phone after an account has already been
+    // persisted. Backfill only a blank persisted value: never overwrite a phone
+    // that a prototype user/admin has explicitly configured.
+    const seedById = new Map(defaultAccounts().map(a => [a.id, a]));
+    accounts.forEach(a => {
+      const seed = seedById.get(a.id);
+      const existingPhone = String(a.phone || '').replace(/\D/g, '');
+      if (!seed || existingPhone || !seed.phone) return;
+      const phone = String(seed.phone).replace(/\D/g, '');
+      const taken = accounts.some(other => other.id !== a.id && String(other.phone || '').replace(/\D/g, '') === phone);
+      if (!taken) { a.phone = seed.phone; changed = true; }
+    });
     const ttdManager = defaultAccounts().find(a => a.id === 'AC-NV06');
     const oldTtdStaff = accounts.find(a => a.id === 'AC-NV06');
     const chiQuyetSeed = defaultAccounts().find(a => a.id === 'AC-CHI-QUYET');

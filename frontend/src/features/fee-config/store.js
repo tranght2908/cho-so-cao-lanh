@@ -155,8 +155,16 @@
     if (!stallType) return null;
     const prices = A.SERVICE_CFG ? A.SERVICE_CFG.list('stallPrices') : ((D.RATE_POLICY_SEED || {}).stallPrices || []);
     const today = U.today ? U.today() : '';
-    return prices.find(r => r.marketId === st.market && r.stallType === stallType && r.status === 'active'
-      && (!r.effectiveFrom || r.effectiveFrom <= today) && (!r.effectiveTo || r.effectiveTo >= today)) || null;
+    // Ưu tiên chính sách chung marketId:'ALL'; các bản ghi theo chợ cũ vẫn là
+    // dữ liệu chuyển tiếp để không làm mất khả năng hiển thị của prototype cũ.
+    const matches = prices.filter(r => (r.marketId === 'ALL' || r.marketId === st.market)
+      && (r.stallType === stallType || r.stallType === st.cat) && r.status === 'active'
+      && (!r.effectiveFrom || r.effectiveFrom <= today) && (!r.effectiveTo || r.effectiveTo >= today));
+    return matches.sort((a, b) => {
+      const commonFirst = Number(b.marketId === 'ALL') - Number(a.marketId === 'ALL');
+      if (commonFirst) return commonFirst;
+      return String(b.effectiveFrom || '').localeCompare(String(a.effectiveFrom || ''));
+    })[0] || null;
   };
   U.unitLabel = st => {
     const price = U.appliedStallPrice(st);
