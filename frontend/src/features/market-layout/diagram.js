@@ -33,8 +33,8 @@
     return matched ? A.db.stalls.filter(st => st.market === mid && st.floor === matched.floor.id && st.section === matched.section.id) : [];
   }
   function mbStatusLine(stalls) {
-    const c = k => stalls.filter(st => st.status === k).length;
-    const parts = Object.keys(D.STATUS).filter(k => c(k)).map(k => `${c(k)} ${D.STATUS[k].label.toLowerCase()}`);
+    const c = k => stalls.filter(st => A.mbStatusAt(st) === k).length;
+    const parts = Object.keys(D.STATUS).filter(k => c(k)).map(k => `${c(k)} ${A.mbStatusLabel(k).toLowerCase()}`);
     return parts.length ? parts.join(' · ') : 'Chưa có điểm kinh doanh';
   }
   // Phân loại mô hình thuê chỉ thuộc Chợ quê Tân Thuận Đông.  Các summary,
@@ -58,7 +58,7 @@
     return rent ? rent + ' · ' + status : status;
   }
   function mbPointTitle(st, trader, structural) {
-    return [st.code, mbRentalLabel(st), D.STATUS[st.status].label, trader ? U.esc(trader.name) : '', structural ? 'Đã tách' : ''].filter(Boolean).join(' · ');
+    return [st.code, mbRentalLabel(st), A.mbStatusLabel(A.mbStatusAt(st)), trader ? U.esc(trader.name) : '', structural ? 'Đã tách' : ''].filter(Boolean).join(' · ');
   }
   A.mbResolveZoneContext = function (mid, zone) {
     const market = U.market(mid);
@@ -68,6 +68,23 @@
     const matched = mbMatchRealSection(mid, zone.code);
     if (!matched) return { market: mid, floor: null, section: null, matched: false, reason: 'section-not-found' };
     return { market: mid, floor: matched.floor, section: matched.section, matched: true, reason: 'matched-zone-code' };
+  };
+  // Tình trạng điểm TẠI NGÀY đang xem trên Mặt bằng — suy ra từ hợp đồng (quy tắc chung ở
+  // business-points/service.js), không ghi đè st.status. Tạm ngừng/Đang tranh chấp là trạng thái vận
+  // hành của điểm nên giữ nguyên; có hợp đồng hiệu lực tại ngày → Đang thuê (Nợ phí nếu chính hợp đồng
+  // hiện tại đang được đánh dấu nợ); không có → Còn trống. Ngày xem là state UI, không lưu.
+  let mbDate = null;
+  A.mbStatusDate = () => mbDate || U.today();
+  A.mbSetStatusDate = d => { mbDate = d && d !== U.today() ? d : null; };
+  A.mbStatusAt = function (st, date) {
+    if (st.status === 'ngung' || st.status === 'tranhchap') return st.status;
+    const c = A.features.businessPoints.service.contractOn(st.id, date || A.mbStatusDate());
+    if (!c) return 'trong';
+    return st.status === 'no' && c.id === st.contractId ? 'no' : 'thue';
+  };
+  A.mbOccupantAt = function (st, date) {
+    const c = A.features.businessPoints.service.contractOn(st.id, date || A.mbStatusDate());
+    return c ? A.idx.trader.get(c.traderId) || null : null;
   };
   A.mbBusinessPointsForZone = function (mid, zone) {
     return mbZoneStalls(mid, zone);
@@ -83,13 +100,15 @@
   A.mbMarketStats = function (mid) {
     const points = A.mbBusinessPointsForMarket(mid);
     const byStatus = {};
-    Object.keys(D.STATUS).forEach(k => { byStatus[k] = points.filter(st => st.status === k).length; });
+    const at = points.map(st => A.mbStatusAt(st));
+    Object.keys(D.STATUS).forEach(k => { byStatus[k] = at.filter(s => s === k).length; });
     return { total: points.length, byStatus: byStatus, points: points };
   };
   A.mbZoneStats = function (mid, zone) {
     const points = A.mbBusinessPointsForZone(mid, zone);
     const byStatus = {};
-    Object.keys(D.STATUS).forEach(k => { byStatus[k] = points.filter(st => st.status === k).length; });
+    const at = points.map(st => A.mbStatusAt(st));
+    Object.keys(D.STATUS).forEach(k => { byStatus[k] = at.filter(s => s === k).length; });
     return { total: points.length, byStatus: byStatus, points: points };
   };
   // Danh sách khu của 1 tầng, MỖI khu render bằng ĐÚNG 1 renderer dùng chung (mbZoneSectionHtml —
@@ -165,7 +184,7 @@
         // Bộ lọc dùng chung Sơ đồ/Bảng (js/v-cautruc.js A.mbMatchesFilter) — điểm không khớp mờ đi,
         // cùng cách xử lý đã có cho điểm cấu trúc "Đã tách" (mục 7 yêu cầu redesign).
         const dim = structural || !A.mbMatchesFilter(st);
-        return `<button class="cell s-${st.status} ${sec.type === 'kiot' ? 'kiot' : ''} ${dim ? 'dim' : ''}" data-act="stall" data-id="${st.id}" title="${mbPointTitle(st, t, structural)}">${st.code}${A.WORKFLOW && A.WORKFLOW.isRecentPoint(st.id) ? '<small class="workflow-grid-new">Mới</small>' : ''}</button>`;
+        return `<button class="cell s-${A.mbStatusAt(st)} ${sec.type === 'kiot' ? 'kiot' : ''} ${dim ? 'dim' : ''}" data-act="stall" data-id="${st.id}" title="${mbPointTitle(st, t, structural)}">${st.code}${A.WORKFLOW && A.WORKFLOW.isRecentPoint(st.id) ? '<small class="workflow-grid-new">Mới</small>' : ''}</button>`;
       }).join('')}</div></div>`;
     }).join('<div class="aisle"></div>');
     // PHAN_CONG_NHAN_VIEN_THU_PHI (mục 6 yêu cầu): thêm ĐÚNG 1 dòng nhỏ, không làm nặng giao diện —
@@ -186,7 +205,7 @@
     }
     const f = resolved.floor, sec = resolved.section;
     const stalls = A.mbBusinessPointsForZone(mid, z);
-    const legend = Object.keys(D.STATUS).map(k => `<button class="${ui.hidden[k] ? 'off' : ''}" data-act="legend" data-s="${k}"><span class="sw" style="background:${D.STATUS[k].color}"></span>${D.STATUS[k].label} <b>${stalls.filter(st => st.status === k).length}</b></button>`).join('');
+    const legend = Object.keys(D.STATUS).map(k => `<button class="${ui.hidden[k] ? 'off' : ''}" data-act="legend" data-s="${k}"><span class="sw" style="background:${D.STATUS[k].color}"></span>${A.mbStatusLabel(k)} <b>${stalls.filter(st => st.status === k).length}</b></button>`).join('');
     const rentalLegend = mid === 'TTD'
       ? `<span class="tag">${stalls.filter(st => U.rentalKind(st) === 'fixed').length} quầy cố định tháng/quý</span> <span class="tag">${stalls.filter(st => U.rentalKind(st) === 'session').length} quầy theo phiên/vãng lai</span>`
       : '';
@@ -198,7 +217,7 @@
         // chung Sơ đồ/Bảng (A.mbMatchesFilter) cộng thêm — mờ nếu KHÔNG khớp legend/search tại khu
         // NÀY hoặc KHÔNG khớp bộ lọc chung ở thanh trên (mục 7 yêu cầu redesign).
         const dim = st.structuralStatus === 'SPLIT' || !stallMatch(st) || !A.mbMatchesFilter(st);
-        return `<button class="cell s-${st.status} ${sec.type === 'kiot' ? 'kiot' : ''} ${dim ? 'dim' : ''} ${ui.sel === st.id ? 'sel' : ''}" data-act="stall" data-id="${st.id}" title="${mbPointTitle(st, t, st.structuralStatus === 'SPLIT')}">${st.code}${A.WORKFLOW && A.WORKFLOW.isRecentPoint(st.id) ? '<small class="workflow-grid-new">Mới</small>' : ''}</button>`;
+        return `<button class="cell s-${A.mbStatusAt(st)} ${sec.type === 'kiot' ? 'kiot' : ''} ${dim ? 'dim' : ''} ${ui.sel === st.id ? 'sel' : ''}" data-act="stall" data-id="${st.id}" title="${mbPointTitle(st, t, st.structuralStatus === 'SPLIT')}">${st.code}${A.WORKFLOW && A.WORKFLOW.isRecentPoint(st.id) ? '<small class="workflow-grid-new">Mới</small>' : ''}</button>`;
       }).join('')}</div></div>`;
     }).join('<div class="aisle"></div>');
     // PHAN_CONG_NHAN_VIEN_THU_PHI (mục 6 yêu cầu): nối thêm vào ĐÚNG dòng meta nhỏ sẵn có, không tạo
@@ -211,7 +230,7 @@
   };
   function stallMatch(st) {
     const q = ui.planSearch.trim().toLowerCase();
-    if (ui.hidden[st.status]) return false;
+    if (ui.hidden[A.mbStatusAt(st)]) return false;
     if (!q) return true;
     const t = st.traderId ? A.idx.trader.get(st.traderId) : null;
     return st.code.toLowerCase().includes(q) || (t && t.name.toLowerCase().includes(q));

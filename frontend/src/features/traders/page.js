@@ -149,10 +149,12 @@
     const area = ttSectionNamesOf(t).join(', ') || '–';
     const points = t.stalls.map(id => BP.get(id)).filter(Boolean);
     const pointLabel = points.length > 1 ? points.length + ' điểm' : (points[0] ? points[0].code : '–');
-    const updated = (t.updatedAt || t.since || '').split('-').reverse().join('/');
+    const status = ttProfileStatusTag(t);
+    const phone = ui.ttclShowPhone ? U.esc(t.phone || '–') : U.maskPhone(t.phone);
+    const idNo = ui.ttclShowIdNo ? U.esc(t.idNo || '–') : U.maskId(t.idNo);
     return `<tr class="click" data-act="trader" data-id="${t.id}">
-      <td>${t.id}</td><td><b>${U.esc(t.name)}</b></td><td>${U.maskPhone(t.phone)}</td><td>${U.maskId(t.idNo)}</td>
-      <td title="${U.esc(area)}">${U.esc(pointLabel)}</td><td>${U.esc(ttCatsOf(t).join(', '))}</td><td>${updated || '–'}</td>
+      <td>${t.id}</td><td><b>${U.esc(t.name)}</b></td><td>${phone}</td><td>${idNo}</td>
+      <td title="${U.esc(area)}">${U.esc(pointLabel)}</td><td>${U.esc(ttCatsOf(t).join(', '))}</td><td>${status}</td>
       <td class="nowrap"><button class="btn sm" data-act="trader" data-id="${t.id}">Xem</button></td></tr>`;
   }
   function ttViewCL() {
@@ -161,9 +163,15 @@
     const m = U.market('CL');
     const sections = [], cats = [];
     m.floors.forEach(fl => fl.sections.forEach(s => { sections.push([s.id, s.name]); if (!cats.includes(s.cat)) cats.push(s.cat); }));
-    const body = U.table([{ t: 'Mã TT' }, { t: 'Họ tên' }, { t: 'Số điện thoại' }, { t: 'Số giấy tờ' }, { t: 'Điểm KD' }, { t: 'Ngành hàng' }, { t: 'Ngày cập nhật' }, { t: 'Thao tác' }],
+    const privacyHead = (label, key, visible) => {
+      const eye = visible
+        ? '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 3 18 18M10.6 6.2A10.6 10.6 0 0 1 12 6c6 0 9.5 6 9.5 6a17.8 17.8 0 0 1-3 3.8M6.2 6.2C3.9 8 2.5 12 2.5 12s3.5 6 9.5 6c1.4 0 2.7-.3 3.8-.8M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>'
+        : '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>';
+      return `<span class="tt-private-heading">${label}<button class="btn sm" data-act="ttcl-toggle-private" data-key="${key}" aria-label="${visible ? 'Ẩn' : 'Hiện'} ${label}" title="${visible ? 'Ẩn' : 'Hiện'} ${label}">${eye}</button></span>`;
+    };
+    const body = U.table([{ t: 'Mã TT' }, { t: 'Họ tên' }, { t: privacyHead('Số điện thoại', 'phone', !!ui.ttclShowPhone) }, { t: privacyHead('Số giấy tờ', 'idNo', !!ui.ttclShowIdNo) }, { t: 'Điểm KD' }, { t: 'Ngành hàng' }, { t: 'Trạng thái' }, { t: 'Thao tác' }],
       rows.slice(pg.start, pg.end).map(ttRowHtmlCL), { empty: 'Không có tiểu thương phù hợp.' });
-    return `<div class="card trader-table-card"><div class="card-h" style="flex-direction:column;align-items:stretch;gap:10px">
+    return `${ttPendingSummaryHtml()}<div class="card trader-table-card"><div class="card-h" style="flex-direction:column;align-items:stretch;gap:10px">
       <div class="row" style="justify-content:space-between;flex-wrap:wrap"><h3 style="margin:0">Hồ sơ tiểu thương</h3>
         ${A.canDo('tieu-thuong.them-moi', ui.market) ? '<button class="btn primary" data-act="tt-new">+ Thêm hồ sơ tiểu thương</button>' : ''}</div>
       <div class="row" style="flex-wrap:wrap;gap:8px">
@@ -188,7 +196,18 @@
     ui.page.ttcl = 0;
     A.render();
   };
+  A.ACT['ttcl-toggle-private'] = el => {
+    if (el.dataset.key === 'phone') ui.ttclShowPhone = !ui.ttclShowPhone;
+    if (el.dataset.key === 'idNo') ui.ttclShowIdNo = !ui.ttclShowIdNo;
+    A.render();
+  };
 
+  // "Cần xử lý" of the trader page: summary only; the records open in the contract-owned worklist
+  // (same qualification rule and the same "Tạo hợp đồng" form as the Hợp đồng page).
+  function ttPendingSummaryHtml() {
+    const task = A.features.contracts && A.features.contracts.contractTaskHtml;
+    return task ? task({ title: 'Tiểu thương chưa có hợp đồng', actionLabel: 'Xem & xử lý' }) : '';
+  }
   // ---- Chợ quê TTĐ / fallback: danh sách tổng quát cũ, KHÔNG đổi (ngoài phạm vi task CL) ----
   function ttRows() {
     const q = (f.ttSearch || '').toLowerCase();
@@ -198,7 +217,7 @@
   }
   function ttViewGeneric() {
     const rows = ttRows(), pg = U.pager('tt', rows.length, 25);
-    return `<div class="card trader-table-card"><div class="card-h"><h3>${ui.role === 'ward_leader' ? 'Tra cứu tiểu thương' : 'Hồ sơ tiểu thương'}</h3>
+    return `${ttPendingSummaryHtml()}<div class="card trader-table-card"><div class="card-h"><h3>${ui.role === 'ward_leader' ? 'Tra cứu tiểu thương' : 'Hồ sơ tiểu thương'}</h3>
       <select class="input" data-ch="tt-app"><option value="">Mini app: tất cả</option><option value="yes" ${f.ttApp === 'yes' ? 'selected' : ''}>Đã cài mini app</option><option value="no" ${f.ttApp === 'no' ? 'selected' : ''}>Chưa cài</option></select>
       <input class="input" placeholder="Tên, SĐT, mã điểm KD" data-in="tt-search" value="${U.esc(f.ttSearch || '')}">
       ${A.canDo('tieu-thuong.them-moi', ui.market) ? '<button class="btn primary" data-act="tt-new">+ Thêm tiểu thương</button>' : ''}</div>
@@ -229,10 +248,10 @@
   function ttDetailDocRowsHtml(t) {
     const files = t.docFiles || {};
     const keys = Object.keys(files).filter(key => key !== 'avatar');
-    if (!keys.length) return '<div class="tt-empty-inline">Chưa có giấy tờ cá nhân hoặc hồ sơ khác.</div>';
-    return `<div class="tt-doc-list">${keys.map(key => {
-      const file = files[key], label = ttDocLabel(key);
-      return `<div class="tt-doc-tile"><span class="tt-doc-tile-icon">${U.icon('file')}</span><span class="tt-doc-label"><b>${U.esc(label)}</b><small>${ttFileMetaLabel(file)}${file && file.name ? ` · ${U.esc(file.name)}` : ''}</small></span></div>`;
+    if (!keys.length) return `<div class="contract-empty-copy"><span>${U.icon('file')}</span><div><b>Chưa có giấy tờ cá nhân hoặc hồ sơ khác.</b><small>Giấy tờ được bổ sung qua "Chỉnh sửa thông tin".</small></div></div>`;
+    return `<div class="contract-copy-list">${keys.map(key => {
+      const file = files[key];
+      return `<div class="contract-copy"><span class="contract-copy-icon">${U.icon('file')}</span><span><b>${U.esc(ttDocLabel(key))}</b><small>${ttFileMetaLabel(file)}${file && file.name ? ` · ${U.esc(file.name)}` : ''}</small></span><span class="tag ok">Đã lưu</span>${ttFileCanPreview(file) ? `<button class="btn sm" data-act="tt-doc-view" data-id="${t.id}" data-key="${key}">Xem</button>` : ''}</div>`;
     }).join('')}</div>`;
   }
   // EDIT MODE của Hồ sơ số hóa (mục 9-11 yêu cầu hotfix): thêm nút "Thay thế" cạnh "Xem". Giấy tờ
@@ -240,17 +259,10 @@
   // đúng giấy tờ có file mới trong ttPendingDocs, chưa ghi gì vào dữ liệu thật cho tới khi Lưu.
   function ttDocRowEdit(doc) {
     const pending = ttPendingDocs[doc.key];
-    const current = (TS.getProfile(ttEditId) || {}).docFiles || {};
-    const file = pending || current[doc.key];
-    return `<div style="padding:7px 0;border-bottom:1px solid #eef2f7">
-      <div class="row" style="justify-content:space-between">
-        <span class="tt-doc-label">${doc.label}</span>
-        <span class="row" style="gap:6px">
-          <button class="btn sm" data-act="tt-doc-replace" data-key="${doc.key}">Thay thế</button>
-        </span>
-      </div>
-      ${pending ? `<div class="small" style="color:var(--brand);margin-top:4px">Đang chờ thay thế bằng "${U.esc(pending.name)}" — áp dụng khi bấm "Lưu thay đổi"</div>` : ''}
-    </div>`;
+    const current = ((TS.getProfile(ttEditId) || {}).docFiles || {})[doc.key];
+    const file = pending || current;
+    const note = pending ? `<small class="tt-doc-pending">Chờ thay thế bằng "${U.esc(pending.name)}" — áp dụng khi bấm "Lưu thay đổi"</small>` : `<small>${ttFileMetaLabel(file)}${file && file.name ? ` · ${U.esc(file.name)}` : ''}</small>`;
+    return `<div class="contract-copy"><span class="contract-copy-icon">${U.icon('file')}</span><span><b>${U.esc(doc.label)}</b>${note}</span><button class="btn sm" data-act="tt-doc-replace" data-key="${doc.key}">${file ? 'Thay thế' : 'Chọn tệp'}</button></div>`;
   }
   // Section C — mỗi điểm kinh doanh 1 card riêng (mục 7 yêu cầu), người trực tiếp kinh doanh của
   // ĐÚNG điểm đó nằm ngay trong card (mục 8 yêu cầu) — không còn section D riêng cho người bán.
@@ -271,28 +283,10 @@
     const st = BP.get(stallId);
     if (!st) return '';
     const usage = ttUsageFor(t, st.id);
-    const seller = dkSeller(st);
-    const sameSellerRenter = !!(seller && seller.id === t.id);
-    const sellerCell = !seller
-      ? '<span class="small muted">Chưa ghi nhận</span>'
-      : sameSellerRenter
-        ? U.esc(seller.name)
-      : U.esc(seller.name);
     const placement = usage && Array.isArray(usage.placementFiles) ? usage.placementFiles : [];
-    return `<div class="plan-section tt-point-tile">
-      <div class="row tt-point-title"><h4>${st.code}</h4>${U.statusTag(st.status)}</div>
-      <div class="tt-point-location">${U.esc(ttPointPath(st))}</div>
-      <dl class="kv">
-        <dt>Ngành hàng</dt><dd>${U.esc(usage ? usage.category : st.cat)}</dd>
-        <dt>Diện tích</dt><dd>${st.area.toLocaleString('vi-VN')} m²</dd>
-        <dt>Ngày bắt đầu</dt><dd>${U.dmy(ttUsageStart(t, st))}</dd>
-        <dt>Loại diện tích</dt><dd>${U.esc(U.areaTypeLabel(st.areaType) || 'Chưa có thông tin')}</dd>
-      </dl>
-      <div class="divider"></div>
-      <div class="tt-point-subhead">NGƯỜI BÁN TRỰC TIẾP</div><div class="tt-seller-block">${seller ? `${sellerCell}<div class="tt-meta">${seller.phone ? U.maskPhone(seller.phone) + ' · ' : ''}${sameSellerRenter ? 'Chính tiểu thương trực tiếp bán' : 'Người trực tiếp bán'}</div>` : 'Chưa ghi nhận'}</div>
-      <div class="divider"></div>
-      <div class="tt-point-subhead">HỒ SƠ BỐ TRÍ</div>${placement.length ? `<div class="tt-placement-list">${placement.map(x => `<div class="tt-placement-row"><span>${U.icon('file')}</span><div><b>${U.esc(x.name)}</b><small>${ttFileMetaLabel(x)}</small></div></div>`).join('')}</div>` : '<div class="tt-empty-inline">Chưa có tệp</div>'}
-    </div>`;
+    const files = placement.length ? `<div class="contract-copy-list">${placement.map(x => `<div class="contract-copy"><span class="contract-copy-icon">${U.icon('file')}</span><span><b>${U.esc(x.name)}</b><small>${ttFileMetaLabel(x)}</small></span></div>`).join('')}</div>` : '<div class="small muted">Chưa có tệp</div>';
+    const view = U.can('mat-bang') ? `<button class="btn sm" data-act="tt-open-point" data-trader="${t.id}" data-id="${st.id}">Xem điểm</button>` : '';
+    return `<div class="tt-dossier-point"><div class="contract-policy-subhead">${st.code} ${U.statusTag(st.status)}<span class="spacer"></span>${view}</div>${ttPairs([['Vị trí', U.esc(ttPointPath(st))], ['Ngành hàng', U.esc(usage ? usage.category : st.cat)], ['Diện tích', '<b>' + st.area.toLocaleString('vi-VN') + ' m²</b>'], ['Loại diện tích', U.esc(U.areaTypeLabel(st.areaType) || 'Chưa có thông tin')], ['Ngày bắt đầu', U.dmy(ttUsageStart(t, st))]])}<div class="contract-policy-subhead">Hồ sơ bố trí</div>${files}</div>`;
   }
   // Section A — VIEW MODE (mặc định khi mở drawer).
   function ttSectionAViewHtml(t) {
@@ -300,17 +294,12 @@
     const portraitHtml = ttFileCanPreview(portrait)
       ? `<img src="${U.esc(portrait.dataUrl)}" alt="Ảnh chân dung ${U.esc(t.name)}">`
       : `<span>${U.icon('users')}</span><small>${portrait ? 'Đã tải ảnh, chưa có dữ liệu xem trước' : 'Chưa có ảnh chân dung'}</small>`;
-    return `<div class="tt-profile-layout"><div class="tt-portrait ${ttFileCanPreview(portrait) ? 'has-image' : ''}">${portraitHtml}</div><dl class="kv"><dt>Mã tiểu thương</dt><dd>${t.id}</dd><dt>Họ và tên</dt><dd>${U.esc(t.name)}</dd><dt>Số điện thoại</dt><dd>${U.maskPhone(t.phone)}</dd><dt>Loại giấy tờ</dt><dd>${U.esc(t.idType || 'CCCD')}</dd><dt>Số giấy tờ</dt><dd>${U.maskId(t.idNo)}</dd></dl></div>`;
+    return `<div class="tt-profile-layout"><div class="tt-portrait ${ttFileCanPreview(portrait) ? 'has-image' : ''}">${portraitHtml}</div>${ttPairs([['Mã tiểu thương', '<b>' + t.id + '</b>'], ['Họ và tên', '<b>' + U.esc(t.name) + '</b>'], ['Số điện thoại', '☎ ' + U.maskPhone(t.phone)], ['Loại giấy tờ', U.esc(t.idType || 'CCCD')], ['Số giấy tờ', U.maskId(t.idNo)], ['Trạng thái hồ sơ', ttProfileStatusTag(t)]])}</div>`;
   }
-  // Section A — EDIT MODE (mục 2 yêu cầu hotfix): chỉnh ngay trong drawer, KHÔNG mở modal/drawer thứ
-  // hai. Mã tiểu thương là identifier — KHÔNG đưa vào form (mục 2). Mini app không thuộc form chỉnh
-  // sửa này (chưa có nghiệp vụ bật/tắt mini app từ phía BQL — giữ nguyên, ngoài phạm vi hotfix).
+  // Section A — EDIT MODE (mục 2 yêu cầu hotfix): chỉnh ngay trong popup, KHÔNG mở modal/drawer thứ
+  // hai. Mã tiểu thương là identifier — KHÔNG đưa vào form (mục 2). Nút Hủy/Lưu nằm ở footer popup.
   function ttSectionAEditHtml(t) {
-    return `<div class="form-grid"><div class="field"><label>Họ tên *</label><input class="input" id="tte-name" value="${U.esc(t.name)}"></div><div class="field"><label>Số điện thoại *</label><input class="input" id="tte-phone" value="${U.esc(t.phone)}"></div><div class="field"><label>Loại giấy tờ *</label><select class="input" id="tte-idtype"><option value="CCCD" ${(!t.idType||t.idType==='CCCD')?'selected':''}>CCCD</option><option value="CMND" ${t.idType==='CMND'?'selected':''}>CMND</option><option value="Hộ chiếu" ${t.idType==='Hộ chiếu'?'selected':''}>Hộ chiếu</option></select></div><div class="field"><label>Số giấy tờ *</label><input class="input" id="tte-idno" value="${U.esc(t.idNo)}"></div></div>
-    <div class="row" style="justify-content:flex-end;margin-top:14px">
-      <button class="btn" data-act="tt-edit-cancel" data-id="${t.id}">← Quay lại xem chi tiết</button>
-      <button class="btn primary" data-act="tt-edit-save" data-id="${t.id}">Lưu thay đổi</button>
-    </div>`;
+    return `<div class="form-grid"><div class="field"><label>Họ tên *</label><input class="input" id="tte-name" value="${U.esc(t.name)}"></div><div class="field"><label>Số điện thoại *</label><input class="input" id="tte-phone" value="${U.esc(t.phone)}"></div><div class="field"><label>Loại giấy tờ *</label><select class="input" id="tte-idtype"><option value="CCCD" ${(!t.idType||t.idType==='CCCD')?'selected':''}>CCCD</option><option value="CMND" ${t.idType==='CMND'?'selected':''}>CMND</option><option value="Hộ chiếu" ${t.idType==='Hộ chiếu'?'selected':''}>Hộ chiếu</option></select></div><div class="field"><label>Số giấy tờ *</label><input class="input" id="tte-idno" value="${U.esc(t.idNo)}"></div></div>`;
   }
   // Section E — Tài khoản Mini App (CORRECTION mục 17): CHỈ READ quan hệ Account.traderId — KHÔNG
   // còn nhánh "yêu cầu liên kết đang chờ" (PENDING_LINK đã bỏ khỏi runtime, xem ghi chú đầu file).
@@ -397,10 +386,41 @@
       </div><div class="drawer-f detail-form-footer"><button class="btn" data-act="close">Đóng</button></div>`;
   }
   // Chi tiết hồ sơ theo mô hình mới: dữ liệu kinh doanh nằm theo từng điểm,
-  // không còn đưa Contract hoặc Mini App vào popup hồ sơ.
+  // không còn đưa Contract hoặc Mini App vào popup hồ sơ. Bố cục/cỡ chữ/màu dùng CHUNG class của
+  // popup Chi tiết hợp đồng (contract-detail-* trong styles.css, xem contracts/detail.js).
+  function ttSection(icon, key, title, body, tone) {
+    return `<section class="contract-detail-section ${tone || ''}"><h4><span>${U.icon(icon)}</span>${key}. ${title}</h4>${body}</section>`;
+  }
+  function ttPairs(rows) { return `<dl class="contract-detail-kv">${rows.map(r => `<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('')}</dl>`; }
+  // Trader → contracts (date-aware: current / future / ended), each resolving its point. Derived from
+  // Contract records; nothing is copied into the trader profile.
+  const TT_PHASE = { current: '<span class="tag ok">Đang hiệu lực</span>', future: '<span class="tag info">Sắp hiệu lực</span>' };
+  function ttContractPhaseTag(c) {
+    const phase = BP.contractPhase(c, U.today());
+    if (TT_PHASE[phase]) return TT_PHASE[phase];
+    return `<span class="tag">${c.status === 'chamdut' ? 'Đã chấm dứt' : c.status === 'thanhly' ? 'Đã thanh lý' : 'Đã kết thúc'}</span>`;
+  }
+  function ttContractsHtml(t) {
+    const order = { current: 0, future: 1, ended: 2 }, today = U.today();
+    const list = CS.listByTrader(t.id).slice().sort((a, b) => (order[BP.contractPhase(a, today)] - order[BP.contractPhase(b, today)]) || String(b.start).localeCompare(String(a.start)));
+    if (!list.length) return '<div class="small muted">Chưa có hợp đồng.</div>';
+    const canPoint = U.can('mat-bang'), canContract = U.can('hop-dong');
+    return `<div class="contract-copy-list">${list.map(c => { const st = BP.get(c.businessPointId || c.stallId); return `<div class="contract-copy tt-contract-row"><span class="contract-copy-icon">${U.icon('file')}</span><span><b>${U.esc(c.id)} · ${st ? U.esc(st.code) : '—'}</b><small>${U.dmy(c.start)} → ${c.end ? U.dmy(c.end) : 'không thời hạn'}</small></span>${ttContractPhaseTag(c)}${st && canPoint ? `<button class="btn sm" data-act="tt-open-point" data-trader="${t.id}" data-id="${st.id}">Xem điểm</button>` : ''}${canContract ? `<button class="btn sm" data-act="ct-view" data-id="${c.id}">Xem hợp đồng</button>` : ''}</div>`; }).join('')}</div>`;
+  }
   function ttDrawerHtmlCL(t) {
-    const canEdit=A.canDo('tieu-thuong.them-moi',t.market), editing=canEdit&&ttEditId===t.id, debt=U.traderDebt(t.id), unpaid=A.features.finance.service.unpaidInvoicesForTrader(t.id).length;
-    return `<div class="drawer-h detail-form-head"><div><div class="row" style="gap:9px"><h3>${U.esc(t.name)}</h3>${ttProfileStatusTag(t)}</div><div class="small muted">${t.id} · ${U.esc(U.mShort(t.market))}</div></div><span class="spacer"></span>${canEdit&&!editing?`<button class="btn sm" data-act="tt-edit-open" data-id="${t.id}">${U.icon('edit')}Chỉnh sửa thông tin</button>`:''}<button class="x" data-act="close" aria-label="Đóng">×</button></div><div class="drawer-b tt-detail-body"><section class="tt-detail-card"><div class="tt-detail-card-h"><span>${U.icon('users')}</span><div><b>A. Thông tin tiểu thương</b><div class="small muted">Thông tin nhận dạng và liên hệ</div></div></div>${editing?ttSectionAEditHtml(t):ttSectionAViewHtml(t)}</section><section class="tt-detail-card"><div class="tt-detail-card-h"><span>${U.icon('file')}</span><div><b>B. Giấy tờ & hồ sơ đính kèm</b><div class="small muted">Giấy tờ cá nhân và tài liệu liên quan</div></div></div>${editing?`<div class="tt-doc-grid">${TT_DOCS.map(x=>ttDocRowEdit(x)).join('')}</div>`:ttDetailDocRowsHtml(t)}</section><section class="tt-detail-card tt-points-card"><div class="tt-detail-card-h"><span>${U.icon('store')}</span><div><b>C. Điểm kinh doanh đang sử dụng</b><div class="small muted">Thông tin kinh doanh tại từng điểm</div></div></div><div class="plan">${t.stalls.length?t.stalls.map(id=>ttPointCardHtml(t,id)).join(''):'<div class="empty small">Tiểu thương chưa có điểm kinh doanh đang sử dụng.</div>'}</div></section>${A.VEHICLES?A.VEHICLES.traderSection(t):''}<section class="tt-detail-card"><div class="tt-detail-card-h"><span>${U.icon('money')}</span><div><b>E. Tình trạng công nợ</b><div class="small muted">Tóm tắt các khoản cần theo dõi</div></div></div><dl class="kv"><dt>Công nợ hiện tại</dt><dd>${debt?`<b class="tt-debt-value">${U.money(debt)}</b>`:'<span class="tag ok">Không nợ</span>'}</dd><dt>Khoản chưa thanh toán</dt><dd>${unpaid}</dd></dl></section></div>`;
+    const canEdit = A.canDo('tieu-thuong.them-moi', t.market), editing = canEdit && ttEditId === t.id;
+    // Tạo hợp đồng từ hồ sơ: cùng form tạo hợp đồng (wf-contract-open, điền sẵn tiểu thương), chỉ khi
+    // tiểu thương chưa có hợp đồng hiệu lực — đúng điều kiện của danh sách "Cần xử lý".
+    const canCreateContract = !CS.hasActiveForTrader(t.id) && (A.canDo('hop-dong.tao', t.market) || A.canDo('so-do.tao-hop-dong', t.market));
+    const debt = U.traderDebt(t.id), unpaid = A.features.finance.service.unpaidInvoicesForTrader(t.id).length;
+    const info = ttSection('users', 'A', editing ? 'THÔNG TIN TIỂU THƯƠNG · CHỈNH SỬA' : 'THÔNG TIN TIỂU THƯƠNG', editing ? ttSectionAEditHtml(t) : ttSectionAViewHtml(t), 'contract-blue');
+    const docs = ttSection('attachment', 'B', 'GIẤY TỜ & HỒ SƠ ĐÍNH KÈM', editing ? `<div class="contract-copy-list">${TT_DOCS.map(ttDocRowEdit).join('')}</div>` : ttDetailDocRowsHtml(t), 'contract-purple');
+    const points = ttSection('store', 'C', 'ĐIỂM KINH DOANH & HỢP ĐỒNG', `<div class="contract-policy-subhead">1. Điểm kinh doanh đang sử dụng</div>${t.stalls.length ? t.stalls.map(id => ttPointCardHtml(t, id)).join('') : '<div class="small muted">Tiểu thương chưa có điểm kinh doanh đang sử dụng.</div>'}<div class="contract-policy-subhead">2. Hợp đồng</div>${ttContractsHtml(t)}`, 'contract-mint');
+    const debtBlock = ttSection('money', 'E', 'TÌNH TRẠNG CÔNG NỢ', ttPairs([['Công nợ hiện tại', debt ? `<b class="contract-danger-text">${U.money(debt)}</b>` : '<span class="tag ok">Không nợ</span>'], ['Khoản chưa thanh toán', unpaid]]), 'contract-sky');
+    const footer = editing
+      ? `<button class="btn" data-act="tt-edit-cancel" data-id="${t.id}">Hủy</button><button class="btn primary" data-act="tt-edit-save" data-id="${t.id}">Lưu thay đổi</button>`
+      : `${canEdit ? `<button class="btn primary" data-act="tt-edit-open" data-id="${t.id}">${U.icon('edit')}Chỉnh sửa thông tin</button>` : ''}${canCreateContract ? `<button class="btn" data-act="wf-contract-open" data-id="${t.id}">${U.icon('file')}Tạo hợp đồng</button>` : ''}<button class="btn" data-act="close">Đóng</button>`;
+    return `<div class="drawer-h tt-dossier-head"><h3>${U.icon('users')}Hồ sơ tiểu thương ${t.id}</h3><button class="x" data-act="close" aria-label="Đóng">×</button></div><div class="drawer-b contract-detail-body"><div class="contract-detail-grid">${info}${docs}${points}${A.VEHICLES ? A.VEHICLES.traderSection(t) : ''}${debtBlock}</div></div><div class="drawer-f contract-detail-footer">${footer}</div>`;
   }
   A.ACT['tt-placement-view'] = el => {
     const st = A.idx.stall.get(el.dataset.point);
@@ -467,7 +487,7 @@
   A.ACT['tt-open-congno'] = () => { if (U.can('cong-no')) A.go('cong-no'); };
   A.ACT['tt-open-point'] = el => {
     const t=A.idx.trader.get(el.dataset.trader), st=A.idx.stall.get(el.dataset.id);
-    if(!t||!st)return;
+    if(!t||!st||!U.can('mat-bang'))return;
     A.drawerPush(t.id, () => ttRerenderDrawer(t));
     A.openDkDrawer(st);
   };

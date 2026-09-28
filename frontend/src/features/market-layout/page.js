@@ -107,7 +107,7 @@
   // dụng lại được (mục 7 yêu cầu: không rewrite state management chỉ để reset filter).
   A.mbMatchesFilter = function (st) {
     const flt = ui.mb.filter;
-    if (flt.status && st.status !== flt.status) return false;
+    if (flt.status && A.mbStatusAt(st) !== flt.status) return false;
     if (ui.mb.view !== 'table') return true;
     if (flt.cat && st.cat !== flt.cat) return false;
     if (flt.areaType && st.areaType !== flt.areaType) return false;
@@ -344,10 +344,10 @@
     return `<div class="card mb-table-card">${toolbar}<div class="card-b">${U.table(
       [{ t: '<span class="mb-col-code">Mã điểm</span>' }, pos.zone && { t: '<span class="mb-col-zone">Khu</span>' }, pos.floor && { t: '<span class="mb-col-floor">Tầng</span>' }, pos.row && { t: '<span class="mb-col-row">Dãy</span>' }, { t: '<span class="mb-col-area">Diện tích (m²)</span>', num: true }, { t: '<span class="mb-col-area-type">Loại diện tích</span>' }, { t: '<span class="mb-col-category">Ngành hàng</span>' }, { t: '<span class="mb-col-trader">Tiểu thương</span>' }, { t: '<span class="mb-col-status">Trạng thái</span>' }, { t: '<span class="mb-col-actions">Thao tác</span>' }].filter(Boolean),
       rows.map(st => {
-        const path = A.mbLayoutPathForPoint(mid, st), t = st.traderId ? A.idx.trader.get(st.traderId) : null;
+        const path = A.mbLayoutPathForPoint(mid, st), t = A.mbOccupantAt(st);
         return `<tr><td class="mb-col-code"><b>${U.esc(st.code)}</b></td>${pos.zone ? `<td class="mb-col-zone">${U.esc(path.khu)}</td>` : ''}${pos.floor ? `<td class="mb-col-floor">${U.esc(path.tang)}</td>` : ''}${pos.row ? `<td class="mb-col-row">${U.esc(path.day)}</td>` : ''}
           <td class="num mb-col-area">${st.area.toLocaleString('vi-VN')}</td><td class="mb-col-area-type">${U.esc(U.areaTypeLabel(st.areaType) || 'Chưa có thông tin')}</td><td class="mb-col-category">${U.esc(st.cat || '')}</td>
-          <td class="mb-col-trader">${t ? U.esc(t.name) : '<span class="muted">–</span>'}</td><td class="mb-col-status">${U.statusTag(st.status)}</td>
+          <td class="mb-col-trader">${t ? U.esc(t.name) : '<span class="muted">–</span>'}</td><td class="mb-col-status">${A.mbStatusTag(A.mbStatusAt(st))}</td>
           <td class="nowrap mb-col-actions"><button class="btn sm" data-act="stall" data-id="${st.id}">Xem</button></td></tr>`;
       }), { empty: 'Không có điểm kinh doanh phù hợp bộ lọc.' }
     )}</div></div>`;
@@ -372,8 +372,8 @@
       ? rentChip('quầy cố định tháng/quý', stats.points.filter(st => U.rentalKind(st) === 'fixed').length)
         + rentChip('quầy theo phiên/vãng lai', stats.points.filter(st => U.rentalKind(st) === 'session').length)
       : '';
-    const statusChips = ['thue', 'trong', 'no', 'ngung', 'tranhchap'].map(k => chip(k, D.STATUS[k].label)).join('');
-    const summary = rentalSummary + chip(null, 'điểm kinh doanh', stats.total) + statusChips;
+    const statusChips = ['thue', 'trong', 'no', 'ngung', 'tranhchap'].map(k => chip(k, A.mbStatusLabel(k))).join('');
+    const summary = rentalSummary + chip(null, 'Tổng điểm', stats.total) + statusChips;
     // MAT_BANG_TABLE_TOOLBAR_UNIFY (mục 1 yêu cầu): card header giờ CHỈ còn tên màn/tên chợ/mô tả/
     // badge thống kê — search + ngành hàng đã chuyển xuống toolbar ngay trên bảng (chỉ render ở chế
     // độ Bảng), xem dkViewCL()/js/v-tieuthuong.js (CL) và mbGenericTableHtml() bên trên (market khác)
@@ -381,8 +381,11 @@
     // mới, không đổi ý nghĩa ui.mb.filter. Badge trạng thái (chip) KHÔNG đổi — vẫn ở đây, vẫn áp dụng
     // cho cả Sơ đồ lẫn Bảng như trước.
     return `<div class="card mb-head"><div class="card-b mb-head-b">
-      <div class="mb-head-info"><h3>${isTtd ? 'Mặt bằng chợ' : 'Mặt bằng & điểm kinh doanh'}</h3><div class="mb-head-sub"><b>${U.esc(m.name)}</b> · ${U.esc(m.hang)}${m.address ? ' · ' + U.esc(m.address) : ''}</div>${m.note ? `<div class="small muted">${U.esc(m.note)}</div>` : ''}</div>
-        <div class="mb-summary">${summary}</div></div></div>
+      <div class="mb-head-info"><h3>${isTtd ? 'Mặt bằng chợ' : 'Mặt bằng & điểm kinh doanh'}</h3><div class="mb-head-sub"><b>${U.esc(m.name)}</b></div></div>
+        <div class="mb-status-context">
+          <div class="mb-status-date"><label>Tình trạng tại ngày <input class="input" type="date" data-ch="mb-status-date" value="${A.mbStatusDate()}"></label>${A.mbStatusDate() !== U.today() ? '<button class="btn sm" data-act="mb-status-today">Hôm nay</button>' : ''}</div>
+          <div class="mb-summary">${summary}</div>
+        </div></div></div>
     <button class="btn sm mb-tree-toggle" data-act="mb-toggle-tree">${open ? '✕ Đóng cấu trúc' : '☰ Cấu trúc mặt bằng'}</button>
     <div class="mb-workspace">
       <div class="card mb-tree-card ${open ? 'open' : ''}"><div class="card-h" style="padding-bottom:6px">
@@ -655,6 +658,9 @@
   // market khác) — CÙNG 1 handler, tái dùng ui.mb.filter/A.mbMatchesFilter đã có, không tạo state
   // riêng cho từng market như f.dkclType cũ (đã bỏ, xem js/v-tieuthuong.js).
   A.CH['mb-filter-area-type'] = el => { ui.mb.filter.areaType = el.value; A.render(); };
+  // "Tình trạng tại ngày": chỉ đổi ngày xem (UI, không lưu); chip/bảng/sơ đồ tính lại theo hợp đồng.
+  A.CH['mb-status-date'] = el => { A.mbSetStatusDate(el.value); ui.page.dkcl = 0; A.render(); };
+  A.ACT['mb-status-today'] = () => { A.mbSetStatusDate(null); ui.page.dkcl = 0; A.render(); };
 
   // Phase 7: #/mat-bang (screen permission 'mat-bang' DUY NHẤT) render workspace này — không còn
   // 2 registration 'so-do'/'cau-truc' riêng, không còn khái niệm "màn edit riêng" (xem ghi chú đầu

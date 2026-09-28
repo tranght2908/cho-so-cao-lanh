@@ -28,7 +28,7 @@
   function priceBadge(r) {
     const cfg = MC.priceConfig(r.priceConfigId);
     if (!cfg) return '<span class="small muted">Chưa cấu hình</span>';
-    return `<span class="tag info">${U.esc(cfg.shortLabel)}</span><button class="btn sm" data-act="dmc-price" data-id="${U.esc(r.id)}">Xem bảng giá</button>`;
+    return `<span class="tag info">${U.esc(cfg.shortLabel)}</span>`;
   }
   function canCreate() { return A.canDo('danh-muc-cho.tao'); }
   function canEdit() { return A.canDo('danh-muc-cho.sua'); }
@@ -38,9 +38,6 @@
     return `<div class="small muted" style="margin-bottom:10px">Căn cứ: ${U.esc(cfg.legalBasis)}</div>
       <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Hạng mục</th><th class="num">Đơn giá</th></tr></thead>
       <tbody>${cfg.rows.map(x => `<tr><td>${U.esc(x.label)}</td><td class="num">${U.money(x.amount)}/${U.esc(String(x.unit).replace(/^đ\//, ''))}</td></tr>`).join('')}</tbody></table></div>`;
-  }
-  function openPriceModal(r) {
-    A.modal(A.mHead('Bảng giá áp dụng — ' + r.name) + `<div class="modal-b">${priceConfigHtml(MC.priceConfig(r.priceConfigId))}</div><div class="modal-f"><button class="btn" data-act="close">Đóng</button></div>`);
   }
 
   function detailDrawer(r) {
@@ -100,13 +97,14 @@
       <button class="btn" data-act="dmc-csv">⬇ Xuất Excel</button>
     </div></div></div>
     <div class="card catalog-table-card"><div class="card-b">${U.table(
-      [{ t: 'STT' }, { t: 'Tên chợ' }, { t: 'Địa điểm' }, { t: 'Hạng chợ' }, { t: 'Ban Quản lý / Người phụ trách' }, { t: 'Bảng giá áp dụng' }, { t: 'Trạng thái' }, { t: 'Thao tác' }],
+      [{ t: 'STT' }, { t: 'Tên chợ' }, { t: 'Địa điểm' }, { t: 'Hạng chợ' }, { t: 'Trưởng Ban Quản lý' }, { t: 'Số điện thoại' }, { t: 'Bảng giá áp dụng' }, { t: 'Trạng thái' }, { t: 'Thao tác' }],
       rows.map((r, i) => `<tr>
         <td>${i + 1}</td>
         <td><b>${U.esc(r.name)}</b><div class="small muted">${U.esc(r.code)}</div></td>
         <td>${U.esc(r.address || '—')}</td>
         <td>${rankTag(r.rank)}</td>
-        <td>${U.esc(r.unit || '—')}${r.manager ? `<div class="small muted">${U.esc(r.manager)}</div>` : '<div class="small muted">Chưa phân công</div>'}</td>
+        <td>${r.manager ? U.esc(r.manager) : '<span class="small muted">Chưa phân công</span>'}</td>
+        <td class="nowrap">${r.phone ? U.esc(r.phone) : '<span class="small muted">Chưa cập nhật</span>'}</td>
         <td>${priceBadge(r)}</td>
         <td>${statusTag(r.status)}</td>
         <td class="nowrap">
@@ -125,7 +123,6 @@
       filteredRows().map(r => [r.name, r.code, r.address || '', MC.RANKS[r.rank] || '', r.unit || '', r.manager || 'Chưa phân công', (MC.priceConfig(r.priceConfigId) || {}).label || '', MC.STATUS[r.status] ? MC.STATUS[r.status][0] : '']));
   };
   A.ACT['dmc-open'] = el => openDetail(MC.get(el.dataset.id));
-  A.ACT['dmc-price'] = el => { const r = MC.get(el.dataset.id); if (r) openPriceModal(r); };
   A.ACT['dmc-new'] = () => { if (canCreate()) A.modal(marketForm(null)); };
   A.ACT['dmc-edit'] = el => { const r = MC.get(el.dataset.id); if (r && canEdit()) A.modal(marketForm(r)); };
   A.ACT['dmc-save'] = el => {

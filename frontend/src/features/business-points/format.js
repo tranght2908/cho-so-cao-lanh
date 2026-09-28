@@ -9,5 +9,10 @@
   U.AREA_TYPE_CODES = ['covered', 'uncovered', 'self_produced', 'session'];
   U.rentalKind = st => st && st.type === 'phien' ? 'session' : 'fixed';
   U.rentalLabel = st => U.rentalKind(st) === 'session' ? 'Quầy thuê theo phiên / khách vãng lai' : 'Quầy thuê cố định tháng/quý';
+  // Màn Mặt bằng & điểm kinh doanh dùng nhãn gọn: Đang thuê / Tạm ngưng / Tranh chấp (yêu cầu người dùng); các màn
+  // khác vẫn dùng nhãn gốc D.STATUS. Chỉ đổi nhãn hiển thị, không đổi mã trạng thái/dữ liệu.
+  const MB_STATUS_LABEL = { thue: 'Đang thuê', ngung: 'Tạm ngưng', tranhchap: 'Tranh chấp' };
+  A.mbStatusLabel = s => MB_STATUS_LABEL[s] || (D.STATUS[s] ? D.STATUS[s].label : s);
+  A.mbStatusTag = s => `<span class="tag"><span class="dot" style="background:${D.STATUS[s].color}"></span>${A.mbStatusLabel(s)}</span>`;
   U.statusTag = s => `<span class="tag"><span class="dot" style="background:${D.STATUS[s].color}"></span>${D.STATUS[s].label}</span>`;
 })(window.APP);

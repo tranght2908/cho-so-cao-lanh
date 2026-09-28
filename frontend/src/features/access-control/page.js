@@ -28,6 +28,12 @@
     const cb = p => `<label class="small" style="display:flex;gap:6px;align-items:center;padding:3px 0">
         <input type="checkbox" data-ch="perm-toggle" data-role="${role.id}" data-key="${p.key}" ${granted.has(p.key) ? 'checked' : ''} ${canManage ? '' : 'disabled'}>
         ${U.esc(p.label)}</label>`;
+    // "Chọn tất cả" theo từng nhóm màn hình: cấp/thu hồi đúng các quyền thao tác của nhóm đó, qua
+    // cùng A.PERM.grant/revoke như ô từng quyền (không tạo cơ chế phân quyền thứ hai).
+    const groupAll = items => {
+      const n = items.filter(p => granted.has(p.key)).length, all = n === items.length;
+      return `<label class="small perm-group-all"><input type="checkbox" data-ch="perm-group-toggle" data-role="${role.id}" data-keys="${items.map(p => p.key).join(',')}" ${all ? 'checked' : ''} ${canManage ? '' : 'disabled'}> Chọn tất cả <span class="muted">(${n}/${items.length})</span></label>`;
+    };
     const grid = items => `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:4px 14px">${items.map(cb).join('')}</div>`;
     const screens = A.PERM.catalog().filter(p => p.kind === 'screen');
     const actions = A.PERM.catalog().filter(p => p.kind === 'action');
@@ -48,7 +54,7 @@
       <div class="divider" style="margin:0 0 16px"></div>
       <div>
         <div class="small" style="font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Quyền thao tác</div>
-        ${actionGroups.map(g => `<div style="margin-bottom:14px"><div class="small" style="font-weight:600;margin-bottom:6px">${U.esc(g.name)}</div>${grid(g.items)}</div>`).join('')}
+        ${actionGroups.map(g => `<div style="margin-bottom:14px"><div class="row perm-group-head"><div class="small" style="font-weight:600">${U.esc(g.name)}</div>${groupAll(g.items)}</div>${grid(g.items)}</div>`).join('')}
       </div>`;
   }
   // Phase 5B: bỏ dropdown "Phạm vi dữ liệu" (all/market/self) + field "Chợ" của Role khỏi form —
@@ -107,6 +113,19 @@
       A.PERM.revoke(el.dataset.role, el.dataset.key);
       U.log('Thu hồi quyền "' + permLabel + '" của vai trò "' + roleName + '"');
     }
+    A.render();
+  };
+  A.CH['perm-group-toggle'] = el => {
+    if (!A.canDo('cai-dat.phan-quyen')) { A.render(); return; }
+    const role = A.PERM.role(el.dataset.role);
+    if (!role) return;
+    const catalog = new Set(A.PERM.catalog().map(p => p.key));
+    const keys = String(el.dataset.keys || '').split(',').filter(k => catalog.has(k));
+    const granted = new Set(A.PERM.rolePermKeys(role.id));
+    const currentAcc = A.currentAccount(), actor = currentAcc ? currentAcc.fullName : 'Không rõ';
+    const changed = keys.filter(k => el.checked ? !granted.has(k) : granted.has(k));
+    changed.forEach(k => { if (el.checked) A.PERM.grant(role.id, k, actor); else A.PERM.revoke(role.id, k); });
+    if (changed.length) U.log((el.checked ? 'Cấp ' : 'Thu hồi ') + changed.length + ' quyền thao tác (' + changed.map(k => { const p = A.PERM.permission(k); return p ? p.label : k; }).join(', ') + ') ' + (el.checked ? 'cho' : 'của') + ' vai trò "' + role.name + '"');
     A.render();
   };
   A.ACT['role-new'] = () => { if (!A.canDo('cai-dat.vai-tro.tao')) return; ui.roleForm = { id: null, name: '', desc: '', selfService: false }; renderRoleForm(); };

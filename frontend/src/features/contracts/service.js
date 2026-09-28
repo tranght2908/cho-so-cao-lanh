@@ -23,9 +23,11 @@
   service.activeForTrader = function (traderId) { return repository.list().find(c => isActive(c) && c.traderId === traderId); };
   service.hasActiveForTrader = function (traderId) { return repository.list().some(c => isActive(c) && c.traderId === traderId); };
   service.hasActiveForPoint = function (pointId) { return repository.list().some(c => isActive(c) && c.stallId === pointId); };
-  // Workflow contract form: point in the market, vacant ('trong'), without an active contract.
-  service.availablePoints = function (market) {
-    return points().list().filter(s => s.market === market && s.status === 'trong' && !service.hasActiveForPoint(s.id));
+  // Points free for [from, to] — delegates to the ONE availability rule owned by business points
+  // (point eligibility + overlapping occupying contracts). No date = today.
+  service.availablePoints = function (market, from, to) {
+    const day = from || A.U.today();
+    return points().availablePoints(market, day, to || day);
   };
   // Workflow contract form: traders of the market without an active contract.
   service.tradersWithoutActive = function (market) {
@@ -44,8 +46,13 @@
   service.createWithPointAllocation = function (input) {
     const contract = input.contract, traderId = input.traderId, pointId = input.pointId;
     repository.add(contract);                                  // contracts.push + reindex
-    points().occupy(pointId, traderId, contract.id);           // status 'thue', traderId, contractId
-    traders().linkPoint(traderId, pointId);                    // trader.stalls (no duplicates)
+    // Current occupancy fields (point status/traderId/contractId, trader.stalls) describe TODAY. A
+    // contract that starts later does not displace today's occupant; its interval still blocks
+    // availability through the shared rule.
+    if (points().contractPhase(contract, A.U.today()) === 'current') {
+      points().occupy(pointId, traderId, contract.id);         // status 'thue', traderId, contractId
+      traders().linkPoint(traderId, pointId);                  // trader.stalls (no duplicates)
+    }
     points().addHistory(pointId, input.pointHistoryEntry);     // point history (newest first)
     // Caller-owned side effect that the legacy command ran right before saving
     // (workflow recent-point marker); the service does not know what it does.
@@ -61,7 +68,8 @@
   // no finance record is touched.
   function releasePoint(c) {
     const s = points().get(c.stallId), t = traders().getProfile(c.traderId);
-    if (s && !repository.list().some(x => x.id !== c.id && isActive(x) && x.stallId === s.id)) points().vacate(s.id);
+    const other = s && points().contractOn(s.id, A.U.today());
+    if (s && (!other || other.id === c.id) && s.contractId === c.id) points().vacate(s.id);
     if (t) traders().unlinkPoint(t.id, s ? s.id : null);
   }
   // Frontend orchestration only (no rollback); backend MUST be @Transactional.

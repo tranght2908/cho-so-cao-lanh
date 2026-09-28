@@ -12,7 +12,7 @@
     const canTaoHopDong = A.canDo('so-do.tao-hop-dong', st.market) || A.canDo('hop-dong.tao', st.market);
     const canDoiTrangThai = A.canDo('so-do.doi-trang-thai', st.market);
     const left = c ? U.days(U.today(), c.end) : null;
-    return `<div class="row"><h3>${st.code}</h3>${U.statusTag(st.status)}</div>
+    return `<div class="row"><h3>${st.code}</h3>${A.mbStatusTag(st.status)}</div>
       <div class="muted small" style="margin:2px 0 12px">${U.esc(st.sectionName)} · ${U.market(st.market).floors.find(f => f.id === st.floor).name} · ${U.mShort(st.market)}</div>
       <dl class="kv"><dt>Ngành hàng</dt><dd>${U.esc(st.cat)}</dd><dt>Loại quầy</dt><dd>${U.rentalLabel(st)}</dd><dt>Loại mặt bằng</dt><dd>${U.typeLabel(st.type)}</dd>
         <dt>Diện tích</dt><dd>${st.area.toLocaleString('vi-VN')} m²</dd><dt>Đơn giá</dt><dd>${U.unitLabel(st)}</dd>
@@ -25,7 +25,7 @@
         : '<div class="note info">Điểm kinh doanh đang trống, có thể cho thuê.</div>'}
       ${(canThuTien || canXemHoSo || canTaoHopDong || canDoiTrangThai) ? `<div class="row" style="margin-top:14px">
         ${canThuTien && t && unpaid.length ? `<button class="btn primary" data-act="pay-open" data-id="${t.id}">${U.icon('card')}Thu tiền</button>` : ''}
-        ${t ? (canXemHoSo ? `<button class="btn" data-act="trader" data-id="${t.id}">Hồ sơ</button>` : '') : (canTaoHopDong ? `<button class="btn primary" data-act="ct-new" data-id="${st.id}">Tạo hợp đồng</button>` : '')}
+        ${t ? (canXemHoSo ? `<button class="btn" data-act="trader" data-id="${t.id}">Hồ sơ</button>` : '') : (canTaoHopDong ? `<button class="btn primary" data-act="ct-new" data-point="${st.id}">Tạo hợp đồng</button>` : '')}
         ${canDoiTrangThai ? `<button class="btn" data-act="stall-status" data-id="${st.id}">Đổi trạng thái</button>` : ''}</div>` : ''}
       ${st.history && st.history.length ? `<div class="divider"></div><div class="small"><b>Lịch sử thay đổi</b>${st.history.map(h => `<div class="muted">${h}</div>`).join('')}</div>` : ''}`;
   };
@@ -102,7 +102,7 @@
     }
     ui.sel = st.id;
     A.$('#modal-root').innerHTML = `<div class="drawer-overlay" data-act="close"></div><div class="drawer">${A.drawerBackHtml()}
-        <div class="drawer-h"><div><h3>${st.code}</h3><div class="small muted" style="margin-top:2px">${U.statusTag(st.status)}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
+        <div class="drawer-h"><div><h3>${st.code}</h3><div class="small muted" style="margin-top:2px">${A.mbStatusTag(st.status)}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
         <div class="drawer-b">${st.market === 'CL' ? mbStallPanelCL(st) : A.stallPanel(st)}</div></div>`;
     A.render();
   }
@@ -113,7 +113,7 @@
       if (!A.canDo('so-do.doi-trang-thai', st.market)) return;
       const opts = ['thue', 'ngung', 'tranhchap'].concat(st.traderId ? [] : ['trong']);
       A.modal(A.mHead('Đổi trạng thái điểm ' + st.code) + `<div class="modal-b"><div class="form-grid">
-        <div class="field"><label>Trạng thái mới</label><select class="input" id="ss-status">${opts.map(k => `<option value="${k}" ${st.status === k ? 'selected' : ''}>${D.STATUS[k].label}</option>`).join('')}</select></div>
+        <div class="field"><label>Trạng thái mới</label><select class="input" id="ss-status">${opts.map(k => `<option value="${k}" ${st.status === k ? 'selected' : ''}>${A.mbStatusLabel(k)}</option>`).join('')}</select></div>
         <div class="field"><label>Lý do</label><input class="input" id="ss-reason" placeholder="VD: tiểu thương xin tạm nghỉ 1 tháng"></div></div>
         <div class="small muted" style="margin-top:10px">Trạng thái "Nợ phí" do hệ thống tự xác định theo công nợ quá hạn.</div></div>
         <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="stall-status-save" data-id="${st.id}">Lưu</button></div>`);
@@ -124,9 +124,9 @@
       if (!A.canDo('so-do.doi-trang-thai', st.market)) return;
       const ns = A.$('#ss-status').value, reason = A.$('#ss-reason').value.trim();
       st.history = st.history || [];
-      st.history.unshift(`${U.dmy(U.today())}: ${D.STATUS[st.status].label} → ${D.STATUS[ns].label}${reason ? ' (' + reason + ')' : ''}`);
+      st.history.unshift(`${U.dmy(U.today())}: ${A.mbStatusLabel(st.status)} → ${A.mbStatusLabel(ns)}${reason ? ' (' + reason + ')' : ''}`);
       st.status = ns; A.refreshStall(st);
-      U.log(`Đổi trạng thái điểm ${st.code} sang ${D.STATUS[st.status].label}`);
+      U.log(`Đổi trạng thái điểm ${st.code} sang ${A.mbStatusLabel(st.status)}`);
       A.save(); A.closeModal(); A.render(); U.toast('Đã cập nhật trạng thái ' + st.code);
     }
   });
