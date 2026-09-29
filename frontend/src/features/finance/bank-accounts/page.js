@@ -45,7 +45,8 @@
   function renderBankAcctForm() {
     const d = ui.baForm, isNew = !d.id;
     const banks = A.BANK_ACCOUNTS.BANKS;
-    A.modal(A.mHead(isNew ? 'Thêm tài khoản ngân hàng' : 'Sửa tài khoản ngân hàng') + `<div class="modal-b"><div class="form-grid">
+    const fmid = d.id ? (A.BANK_ACCOUNTS.get(d.id) || {}).marketId : ui.market;
+    A.modal(A.mHead((isNew ? 'Thêm tài khoản ngân hàng' : 'Sửa tài khoản ngân hàng') + ' — ' + U.mShort(fmid)) + `<div class="modal-b"><div class="form-grid">
       <div class="field"><label>Ngân hàng *</label><select class="input" data-ch="baf-bank">
         <option value="">— Chọn ngân hàng —</option>
         ${banks.map(b => `<option value="${b.code}" ${d.bankCode === b.code ? 'selected' : ''}>${U.esc(b.name)}</option>`).join('')}
@@ -70,6 +71,23 @@
   function baLogReplaced(newNo) {
     (A.BANK_ACCOUNTS.lastReplaced || []).forEach(o => U.log('Đổi tài khoản thu tiền: ' + o.accountNumber + ' → ' + newNo));
   }
+  // BA_CHO_PHU_TRACH (P 29/09/2026): Kế toán Trung tâm có thể phụ trách nhiều chợ → hàng nút "Chợ phụ trách" ngay trên
+  // danh sách, mỗi nút là 1 chợ trong A.allowedMarkets(account) (tức marketScopes), kèm số TK và TK thu tiền của chợ đó.
+  // Bấm nút = đổi SelectedMarket qua đúng handler A.ACT.market dùng chung với dropdown "Chợ" trên topbar (handler tự
+  // kiểm tra chợ thuộc phạm vi account) — KHÔNG phải bộ lọc chợ riêng của màn, không thêm permission mới.
+  function baMarketBar() {
+    const ids = A.allowedMarkets(A.currentAccount());
+    if (!ids.length) return '';
+    const chip = id => {
+      const n = A.BANK_ACCOUNTS.listByMarket(id).length, coll = A.BANK_ACCOUNTS.collectionAccount(id), on = id === ui.market;
+      const sub = coll ? 'Thu tiền: ' + U.esc(A.BANK_ACCOUNTS.bankName(coll.bankCode)) + ' ·' + U.esc(String(coll.accountNumber).slice(-4))
+        : '<span style="color:#c53030">Chưa có TK thu tiền</span>';
+      return `<button class="btn ${on ? 'primary' : ''}" data-act="market" data-id="${id}" style="display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:170px;text-align:left">
+        <b>${U.esc(U.mShort(id))}</b><span class="small" style="opacity:.85">${n} tài khoản · ${sub}</span></button>`;
+    };
+    return `<div class="card"><div class="card-b" style="padding-top:12px"><div class="small muted" style="margin-bottom:8px">Chợ phụ trách (${ids.length}) — bấm để xem tài khoản ngân hàng của chợ đó</div>
+      <div class="row" style="flex-wrap:wrap;gap:8px">${ids.map(chip).join('')}</div></div></div>`;
+  }
   A.VIEWS['tai-khoan-ngan-hang'] = function () {
     const canManage = baCan();
     const rows = baRows(), f = ui.bankAcc;
@@ -85,6 +103,7 @@
       <button class="btn" data-act="ba-csv">⬇ Xuất excel</button>
       ${canManage ? '<button class="btn primary" data-act="ba-new">+ Thêm mới</button>' : ''}
     </div></div>
+    ${baMarketBar()}
     ${collBar}
     <div class="card"><div class="card-b row" style="padding-top:14px;flex-wrap:wrap">
       <input class="input" style="min-width:220px;flex:1" placeholder="Tìm theo tên chủ tài khoản..." data-in="ba-search" value="${U.esc(f.search || '')}">
