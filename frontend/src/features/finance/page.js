@@ -2053,7 +2053,7 @@
   // Quyền: action:cong-no.thu-no (collector) + phần nợ thuộc chính tài khoản — kiểm tra lại trong handler.
   function cnDebtCtx(debtId) {
     const d = (A.db.debts || []).find(x => x.id === debtId), acc = A.currentAccount();
-    if (!d || d.market !== ui.market || d.status !== 'OPEN') return { err: 'Khoản nợ không còn hợp lệ' };
+    if (!d || d.market !== ui.market || (d.status !== 'OPEN' && d.status !== 'UNRECOVERABLE')) return { err: 'Khoản nợ không còn hợp lệ' }; // TAT_TOAN_SAU_CAT_DIEN
     if (!acc || !U.can('cong-no') || !A.canDo('cong-no.thu-no', d.market)) return { err: 'Bạn không có quyền thu hồi nợ' };
     const inv = A.idx.invoice.get(d.invoiceId); if (!inv) return { err: 'Không tìm thấy khoản thu gốc' };
     const cov = A.invCoveredStalls(inv), part = d.parts.find(p => p.collectorId === acc.id);
@@ -2075,25 +2075,28 @@
     const tot = U.sum(open, x => x.remain), maxDays = Math.max.apply(null, open.map(x => U.days(x.d.dueDate, U.today())).concat([0]));
     const canCollect = !scopeAll && A.canDo('cong-no.thu-no', ui.market);
     const pg = U.pager('cnDebt', list.length, 20);
+    const collectBox = x => { const mine = x.d.parts.find(p => p.collectorId === me), cov = x.i ? A.invCoveredStalls(x.i) : new Set(), minePaid = mine && mine.stallIds.every(id => cov.has(id));
+      return canCollect && mine && !minePaid ? `<div class="row" style="gap:6px;margin-top:6px;flex-wrap:nowrap"><label class="btn sm primary" style="gap:6px;cursor:pointer"><input type="checkbox" data-ch="cn-collect" data-id="${x.d.id}"> Đã thu nợ</label></div>` : ''; };
     const statusCell = x => {
-      if (x.d.status === 'UNRECOVERABLE') return `<span class="tag danger">⚡ Không thu hồi · danh sách cắt điện</span><div class="small muted">Đã gửi thông báo cắt điện ${U.esc(x.d.powerCut.noticeSentAt)} · luồng kết thúc</div>`;
+      // TAT_TOAN_SAU_CAT_DIEN: trong danh sách cắt điện vẫn nhận thanh toán đủ để tất toán.
+      if (x.d.status === 'UNRECOVERABLE') return `<span class="tag danger">⚡ Danh sách cắt điện</span><div class="small muted">Đã gửi thông báo cắt điện ${U.esc(x.d.powerCut.noticeSentAt)} · vẫn nhận trả đủ để tất toán</div>${collectBox(x)}`;
       if (x.d.status !== 'OPEN') {
         // Luồng kết thúc khi: QR (tiền vào tài khoản) hoặc tiền mặt đã chốt buổi và Kế toán xác nhận nộp đủ.
         const hoOf = p => (A.db.cashHandovers || []).find(h => h.paymentIds.indexOf(p.id) !== -1);
         const st2 = p => { if (p.method !== 'tm') return '<span class="tag ok">QR · hoàn tất</span>'; const h = hoOf(p); return !h ? '<span class="tag warn">Tiền mặt · chưa chốt buổi</span>' : h.status !== 'RECONCILED' ? `<span class="tag warn">Đã chốt ${h.id} · chờ Kế toán</span>` : h.diff ? `<span class="tag danger">Kế toán: nộp lệch ${U.money(h.diff)}</span>` : '<span class="tag ok">Kế toán xác nhận nộp đủ · hoàn tất</span>'; };
         const done = x.pays.length && x.pays.every(p => p.method !== 'tm' || ((hoOf(p) || {}).status === 'RECONCILED'));
-        return `<span class="tag ${done ? 'ok' : 'warn'}">${done ? '✓ Đã thu hồi · hoàn tất' : '✓ Đã thu nợ · chờ nộp Kế toán Trung tâm'}</span>${x.pays.map(p => `<div class="small"><button class="link-btn" data-act="receipt" data-id="${p.receipt}">${p.receipt}</button> <span class="muted">${U.esc(D.METHOD[p.method] || p.method)} · ${U.dmy(p.date)} ${p.time || ''}</span><div>${st2(p)}</div></div>`).join('')}`;
+        const cutNote = x.d.powerCut && x.d.powerCut.settledAt ? `<div class="small" style="margin-top:4px"><span class="tag warn">⚡ Tất toán sau cắt điện</span> <span class="muted">Đã báo Trưởng Ban xem xét cấp điện lại · ${U.esc(x.d.powerCut.restoreNoticeAt)}</span></div>` : '';
+        return `<span class="tag ${done ? 'ok' : 'warn'}">${done ? '✓ Đã thu hồi · hoàn tất' : '✓ Đã thu nợ · chờ nộp Kế toán Trung tâm'}</span>${cutNote}${x.pays.map(p => `<div class="small"><button class="link-btn" data-act="receipt" data-id="${p.receipt}">${p.receipt}</button> <span class="muted">${U.esc(D.METHOD[p.method] || p.method)} · ${U.dmy(p.date)} ${p.time || ''}</span><div>${st2(p)}</div></div>`).join('')}`;
       }
-      const mine = x.d.parts.find(p => p.collectorId === me), cov = x.i ? A.invCoveredStalls(x.i) : new Set(), minePaid = mine && mine.stallIds.every(id => cov.has(id));
-      return `<span class="tag danger">Còn nợ</span>${canCollect && mine && !minePaid ? `<div class="row" style="gap:6px;margin-top:6px;flex-wrap:nowrap"><label class="btn sm primary" style="gap:6px;cursor:pointer"><input type="checkbox" data-ch="cn-collect" data-id="${x.d.id}"> Đã thu nợ</label></div>` : ''}`;
+      return `<span class="tag danger">Còn nợ</span>${collectBox(x)}`;
     };
     return `<div class="kpis">
       <div class="card kpi"><div class="k-label">Khoản còn nợ</div><div class="k-value" style="color:#df2225">${open.length}</div><div class="k-sub">${new Set(open.map(x => x.d.traderId)).size} tiểu thương</div></div>
       <div class="card kpi"><div class="k-label">Tổng nợ còn lại</div><div class="k-value" style="color:#df2225">${U.moneyShort(tot)}</div><div class="k-sub">${U.money(tot)}</div></div>
       <div class="card kpi"><div class="k-label">Đã thu hồi</div><div class="k-value" style="color:#20a04e">${closed.length}</div><div class="k-sub">${U.money(U.sum(closed, x => U.sum(x.pays, p => p.amount)))}</div></div>
-      <div class="card kpi"><div class="k-label">Danh sách cắt điện</div><div class="k-value" style="color:#df2225">${cut.length}</div><div class="k-sub">${U.money(U.sum(cut, x => x.remain))} không thu hồi</div></div></div>
+      <div class="card kpi"><div class="k-label">Danh sách cắt điện</div><div class="k-value" style="color:#df2225">${cut.length}</div><div class="k-sub">${U.money(U.sum(cut, x => x.remain))} còn nợ</div></div></div>
     <div class="card"><div class="card-b" style="padding-top:12px"><div class="seg">${[['open', 'Còn nợ', open.length], ['cut', 'Danh sách cắt điện', cut.length], ['closed', 'Đã thu hồi', closed.length], ['all', 'Tất cả', scoped.length]].map(x => `<button class="${st === x[0] ? 'on' : ''}" data-act="cn-debt-status" data-id="${x[0]}">${x[1]} (${x[2]})</button>`).join('')}</div>${scopeAll ? ' <span class="tag">Chỉ xem — NV thu phí phụ trách gian đi thu nợ</span>' : ''}</div></div>
-    <div class="card"><div class="card-h"><div><h3>Khoản nợ chuyển từ Khoản phải thu</h3><div class="small muted">Quá hạn nộp → hệ thống tự chuyển sang đây. Thu nợ: đúng số còn thiếu, không thu một phần. Tiền ghi vào mã khoản thu gốc; biên lai gắn mã nợ. Tiểu thương có thể quét QR thu nợ (nội dung mã nợ, tự khớp về mã khoản thu). Hệ thống tự nhắc lần 1 sau ${cnCyc().r1} ngày, lần 2 sau ${cnCyc().r2} ngày quá hạn; quá ${cnCyc().r2} ngày → không thu hồi, vào danh sách cắt điện và gửi thông báo cắt điện.</div></div></div>
+    <div class="card"><div class="card-h"><div><h3>Khoản nợ chuyển từ Khoản phải thu</h3><div class="small muted">Quá hạn nộp → hệ thống tự chuyển sang đây. Thu nợ: đúng số còn thiếu, không thu một phần. Tiền ghi vào mã khoản thu gốc; biên lai gắn mã nợ. Tiểu thương có thể quét QR thu nợ (nội dung mã nợ, tự khớp về mã khoản thu). Hệ thống tự nhắc lần 1 sau ${cnCyc().r1} ngày, lần 2 sau ${cnCyc().r2} ngày quá hạn; quá ${cnCyc().r2} ngày → vào danh sách cắt điện và gửi thông báo cắt điện; vẫn nhận trả đủ để tất toán (tất toán → rút khỏi danh sách, báo Trưởng Ban xem xét cấp điện lại).</div></div></div>
       <div class="card-b">${U.table([{ t: 'Mã nợ' }, { t: 'Mã khoản thu gốc' }, { t: 'Tiểu thương' }, { t: 'Gian' }, { t: 'NV phụ trách' }, { t: 'Số tiền nợ', num: true }, { t: 'Quá hạn', num: true }, { t: 'Trạng thái' }, { t: 'Nhắc nợ' }],
         list.slice(pg.start, pg.end).map(x => `<tr style="${x.d.status !== 'OPEN' ? 'opacity:.6' : ''}"><td><b>${x.d.id}</b><div class="small muted">${U.esc(x.d.createdBy)} · ${U.esc(x.d.createdAt)}</div></td><td><button class="link-btn" data-act="inv-open" data-id="${x.d.invoiceId}">${x.d.invoiceId}</button><div class="small muted">Kỳ ${U.per(x.d.period)} · hạn ${U.dmy(x.d.dueDate)}</div></td>
           <td><b>${U.esc(x.t ? x.t.name : '')}</b><div class="small muted">${x.t ? x.t.id + ' · ' + U.maskPhone(x.t.phone) : ''}</div></td><td>${x.d.stallIds.map(id => (A.idx.stall.get(id) || {}).code || id).join(', ')}</td>

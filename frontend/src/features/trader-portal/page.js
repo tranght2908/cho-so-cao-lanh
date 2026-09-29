@@ -587,13 +587,15 @@
         <div class="row" style="gap:8px;flex-wrap:wrap"><b>${d.id}</b><span class="small muted">khoản ${d.invoiceId} · kỳ ${U.per(d.period)} · hạn ${U.dmy(d.dueDate)}</span><span class="spacer"></span>${tag}</div>
         <div style="margin:6px 0">Số nợ: <b>${U.money(d.status === 'CLOSED' ? d.amount : remain)}</b> · Gian ${d.stallIds.map(id => (A.idx.stall.get(id) || {}).code || id).join(', ')}</div>
         ${notes.length ? `<div class="small" style="margin:6px 0"><b>Thông báo đã nhận</b>${notes.map(n => `<div style="padding:3px 0;border-bottom:1px dashed #e3e7ef">${U.dmy(n.at)} · ${U.esc(n.title)}<div class="muted">${U.esc(n.body || '')}</div></div>`).join('')}</div>` : ''}
-        ${d.status === 'OPEN' ? `<div class="row" style="gap:12px;align-items:center;flex-wrap:wrap;margin-top:8px"><div style="font-size:44px;line-height:1;border:1px solid #d9dfeb;border-radius:8px;padding:6px 10px">▦</div>
+        ${d.status === 'UNRECOVERABLE' ? '<div class="small" style="color:#c53030;margin:4px 0">Gian đã vào danh sách cắt điện. Trả đủ số nợ còn lại để tất toán — Ban Quản lý sẽ xem xét cấp điện lại.</div>' : ''}
+        ${d.status === 'CLOSED' && d.powerCut && d.powerCut.settledAt ? '<div class="small muted" style="margin:4px 0">Đã tất toán sau cắt điện · đã báo Ban Quản lý xem xét cấp điện lại.</div>' : ''}
+        ${d.status === 'OPEN' || d.status === 'UNRECOVERABLE' ? `<div class="row" style="gap:12px;align-items:center;flex-wrap:wrap;margin-top:8px"><div style="font-size:44px;line-height:1;border:1px solid #d9dfeb;border-radius:8px;padding:6px 10px">▦</div>
           <div class="small">QR thu nợ · số tiền cố định <b>${U.money(remain)}</b><br>Nội dung: <b>CHOSO ${d.id} ${d.invoiceId}</b></div><span class="spacer"></span>
           ${canPay ? `<button class="btn primary" data-act="mini-debt-pay" data-id="${d.id}">Quét QR & thanh toán (mô phỏng)</button>` : ''}</div>` : ''}
         ${pays.length ? `<div class="small" style="margin-top:6px">${pays.map(p => `✓ <button class="link-btn" data-act="receipt" data-id="${p.receipt}">${p.receipt}</button> · ${U.esc(D.METHOD[p.method] || p.method)} · ${U.money(p.amount)} · ${U.dmy(p.date)} ${p.time || ''}`).join('<br>')}</div>` : ''}
       </div>`;
     };
-    return `<div class="card" style="margin-bottom:14px"><div class="card-h"><div><h3>Công nợ quá hạn của tôi</h3><div class="small muted">Trả đủ số nợ còn lại bằng QR thu nợ hoặc tiền mặt cho NV thu phí. Quá 7 ngày chưa trả: đưa vào danh sách cắt điện.</div></div></div>
+    return `<div class="card" style="margin-bottom:14px"><div class="card-h"><div><h3>Công nợ quá hạn của tôi</h3><div class="small muted">Trả đủ số nợ còn lại bằng QR thu nợ hoặc tiền mặt cho NV thu phí. Quá 7 ngày chưa trả: đưa vào danh sách cắt điện (vẫn trả đủ được để tất toán).</div></div></div>
       <div class="card-b">${debts.sort((a, b) => a.dueDate.localeCompare(b.dueDate)).map(row).join('')}</div></div>`;
   }
 
@@ -1238,7 +1240,8 @@
     'mini-debt-pay': el => {
       const t = trader(), acc = A.currentAccount() || {}, d = (A.db.debts || []).find(x => x.id === el.dataset.id);
       if (!U.can('mini-app') || !isTraderMini() || !t || !d || d.traderId !== t.id || (acc.traderId || acc.linkedTraderId) !== t.id || !inMiniScopeMarket(d.market) || !A.canDo('mini-app.tra-no-qr', d.market)) { U.toast('Không có quyền thanh toán khoản nợ này'); return; }
-      if (d.status !== 'OPEN') { U.toast(d.status === 'UNRECOVERABLE' ? 'Khoản nợ đã vào danh sách cắt điện — không nhận thanh toán' : 'Khoản nợ đã được thanh toán'); A.render(); return; }
+      // TAT_TOAN_SAU_CAT_DIEN: nợ trong danh sách cắt điện vẫn trả QR để tất toán.
+      if (d.status !== 'OPEN' && d.status !== 'UNRECOVERABLE') { U.toast('Khoản nợ đã được thanh toán'); A.render(); return; }
       const pays = A.payDebtByQr(d.id, 'Mini app');
       if (!pays.length) { U.toast('Không ghi nhận được thanh toán'); return; }
       A.render(); A.showReceipt(pays, { autoPrint: false });

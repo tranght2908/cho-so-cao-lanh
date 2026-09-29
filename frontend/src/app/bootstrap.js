@@ -83,7 +83,7 @@
     });
     // NHAC_NO_TU_DONG (P chốt 29/09/2026): theo Cài đặt › Kỳ thu — nhắc lần 1 sau reminder1Days (3) ngày quá hạn,
     // lần 2 sau reminder2Days (7) ngày (khi bật "Tự động nhắc nợ"). Quá reminder2Days ngày → thôi nhắc, khoản nợ
-    // thành KHÔNG THU HỒI, vào DANH SÁCH CẮT ĐIỆN và hệ thống gửi thông báo cắt điện → luồng kết thúc (không thu nữa).
+    // thành KHÔNG THU HỒI, vào DANH SÁCH CẮT ĐIỆN và hệ thống gửi thông báo cắt điện → thôi nhắc; vẫn nhận trả đủ để tất toán (TAT_TOAN_SAU_CAT_DIEN).
     // Mọi bước tự động ghi Nhật ký kiểm toán + lưu trên bản ghi nợ để các vai trò liên quan xem lại được.
     const cyc = (A.SERVICE_CFG && A.SERVICE_CFG.cycle && A.SERVICE_CFG.cycle()) || {};
     const r1 = Number(cyc.reminder1Days) || 3, r2 = Math.max(r1, Number(cyc.reminder2Days) || 7), autoRemind = cyc.autoRemind !== false;
@@ -118,13 +118,30 @@
   // Tiền của các gian (theo dòng chi tiết) trong 1 khoản.
   A.stallsAmount = (i, ids) => { const all = U.invStallIds(i); return U.sum(i.items.filter(x => ids.indexOf(x.stallId || all[0]) !== -1), x => x.amount); };
   // THU_HOI_NO: thu nợ = ghi vào KHOẢN THU GỐC (gian còn nợ), gắn debtId; đủ → tất toán nợ. Không thu một phần.
+  // TAT_TOAN_SAU_CAT_DIEN (P chốt 29/09/2026): nợ đã vào danh sách cắt điện (UNRECOVERABLE) VẪN nhận thanh toán đủ để
+  // tất toán. Tất toán xong → rút khỏi danh sách cắt điện; hệ thống CHỈ gửi thông báo (tiểu thương + Trưởng Ban xem xét
+  // cấp điện lại) — chưa có action/người xác nhận cấp điện lại (NEED_CONFIRMATION → chưa cấp quyền cho ai).
   A.payDebt = function (d, method, by, stallIds) {
     const inv = d && A.idx.invoice.get(d.invoiceId);
-    if (!inv || d.status !== 'OPEN') return [];
+    if (!inv || (d.status !== 'OPEN' && d.status !== 'UNRECOVERABLE')) return [];
+    const wasCut = d.status === 'UNRECOVERABLE';
     const cov = A.invCoveredStalls(inv), ids = (stallIds || U.invStallIds(inv)).filter(id => !cov.has(id));
     if (!ids.length) return [];
     const pays = A.applyPayment([inv.id], A.stallsAmount(inv, ids), method, by, { stallIds: ids, debtId: d.id });
     if (inv.status === 'paid') Object.assign(d, { status: 'CLOSED', closedAt: U.dmy(U.today()) + ' ' + U.nowTime(), closedBy: by });
+    if (wasCut && d.status === 'CLOSED') {
+      const at = d.closedAt, t = A.idx.trader.get(d.traderId), gian = d.stallIds.map(id => (A.idx.stall.get(id) || {}).code || id).join(', ');
+      d.powerCut = Object.assign({}, d.powerCut, { settledAt: at, restoreNoticeAt: at, restoreStatus: 'NOTIFIED' });
+      A.db.notifications = A.db.notifications || [];
+      A.db.notifications.unshift({ id: 'TB-' + U.pad(32 + A.db.notifications.length, 3), at: U.today(), kind: 'POWER_RESTORE_NOTICE', market: d.market, debtId: d.id, invoiceId: d.invoiceId,
+        title: 'Đã tất toán nợ ' + d.id + ' · xem xét cấp điện lại gian ' + gian, group: 'Danh sách cắt điện · tất toán', channels: ['Hệ thống'], sent: 1, delivered: 1, read: 0, auto: true,
+        body: (t ? t.name : d.traderId) + ' đã trả đủ nợ ' + d.id + ' (khoản ' + d.invoiceId + ') — rút khỏi danh sách cắt điện. Đề nghị Trưởng Ban Quản lý xem xét cấp điện lại gian ' + gian + '.' });
+      A.db.notifications.unshift({ id: 'TB-' + U.pad(32 + A.db.notifications.length, 3), at: U.today(), kind: 'DEBT_SETTLED_AFTER_CUT', market: d.market, traderId: d.traderId, debtId: d.id, invoiceId: d.invoiceId,
+        title: 'Đã tất toán nợ ' + d.id, group: 'Công nợ · ' + (t ? t.name : d.traderId), channels: ['Mini app', 'Zalo OA'], sent: 1, delivered: 1, read: 0, auto: true,
+        body: 'Khoản nợ đã được thanh toán đủ và rút khỏi danh sách cắt điện. Ban Quản lý chợ sẽ xem xét cấp điện lại gian ' + gian + '.' });
+      A.db.extraLog = A.db.extraLog || [];
+      A.db.extraLog.unshift({ at, who: by, what: 'Tất toán nợ ' + d.id + ' sau khi đã vào danh sách cắt điện → rút khỏi danh sách, gửi thông báo xem xét cấp điện lại gian ' + gian });
+    }
     // Tiểu thương nhận biên lai (cùng số BL-…) qua Mini app / Zalo.
     A.db.notifications = A.db.notifications || [];
     pays.forEach(p => A.db.notifications.unshift({ id: 'TB-' + U.pad(32 + A.db.notifications.length, 3), at: U.today(), kind: 'DEBT_RECEIPT', market: d.market, traderId: d.traderId, debtId: d.id, invoiceId: d.invoiceId,
