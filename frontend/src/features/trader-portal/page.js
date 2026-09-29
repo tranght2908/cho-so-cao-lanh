@@ -974,6 +974,21 @@
     const t = trader(), i = A.idx.invoice.get(id);
     return t && i && U.can('mini-app') && i.traderId === t.id && inMiniScopeMarket(i.market) ? i : null;
   }
+  function portalInvoiceQrHtml(i) {
+    if (!i || i.status === 'paid' || U.due(i) <= 0 || (A.debtOf && A.debtOf(i))) return '';
+    if (!A.canDo('mini-app.thanh-toan', i.market)) return '';
+    const bank = A.BANK_ACCOUNTS && A.BANK_ACCOUNTS.collectionAccount ? A.BANK_ACCOUNTS.collectionAccount(i.market) : null;
+    if (!bank) return `<div class="note" style="margin-top:12px">Chợ chưa khai báo tài khoản thu tiền nên chưa tạo được mã QR. Vui lòng nộp tiền mặt cho nhân viên thu phí.</div>`;
+    const due = U.due(i), content = 'CHOSO ' + i.id, bankLabel = A.BANK_ACCOUNTS.bankName(bank.bankCode), sp = qrStallSplit(i);
+    return `<div class="divider"></div><div class="receipt"><h4>HÓA ĐƠN / KHOẢN PHẢI NỘP</h4><div class="sub">${U.esc(i.id)} · Kỳ ${U.per(i.period)} · Ban Quản lý ${U.esc(U.market(i.market).name)}</div>
+      <div class="row" style="align-items:center;gap:20px;flex-wrap:wrap;margin-top:12px">
+        <div style="width:170px;flex:0 0 170px">${U.qr(bank.bankCode + '|' + bank.accountNumber + '|' + due + '|' + content, 170)}</div>
+        <dl class="kv" style="flex:1;min-width:280px;margin:0"><dt>Số tiền</dt><dd><b style="font-size:1.15em">${U.money(due)}</b></dd><dt>Ngân hàng</dt><dd>${U.esc(bankLabel)}</dd>
+          <dt>Số tài khoản</dt><dd><b>${U.esc(bank.accountNumber)}</b></dd><dt>Chủ tài khoản</dt><dd>${U.esc(bank.accountHolderName)}</dd><dt>Nội dung</dt><dd><b>${U.esc(content)}</b></dd>
+          <dt>Điểm còn phải nộp</dt><dd>${U.esc(sp.remain.join(', '))}</dd>${sp.done.length ? `<dt>Đã thu trước đó</dt><dd>${U.esc(sp.done.join(', '))} · ${U.money(i.paid || 0)}</dd>` : ''}</dl>
+      </div><div class="note info" style="margin-top:12px">Prototype: nút dưới đây giả lập ngân hàng báo có thành công. Hệ thống chỉ phát hành biên lai sau khi ghi nhận trạng thái thành công.</div>
+      <div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn primary" data-act="mini-paid" data-id="${i.id}">Giả lập thanh toán QR thành công</button></div></div>`;
+  }
   function portalInvoiceDetail(i) {
     const cov = A.invCoveredStalls ? A.invCoveredStalls(i) : new Set(), pays = A.db.payments.filter(p => p.invoiceId === i.id);
     const payOf = id => pays.find(p => (p.stallIds || []).indexOf(id) !== -1) || (i.status === 'paid' && !(pays[0] || {}).stallIds ? pays[0] : null);
@@ -991,7 +1006,8 @@
       <dl class="kv"><dt>Kỳ thu</dt><dd>${U.per(i.period)}</dd><dt>Hạn nộp</dt><dd>${U.dmy(i.due)}</dd><dt>Trạng thái</dt><dd>${U.invTag(i)}</dd>
         <dt>Tổng phải nộp</dt><dd><b>${U.money(i.amount)}</b></dd><dt>Đã nộp</dt><dd>${U.money(i.paid || 0)}</dd><dt>Còn phải nộp</dt><dd><b>${U.money(U.due(i))}</b></dd></dl>
       <div class="tbl-wrap" style="margin-top:12px"><table class="tbl"><thead><tr><th>Điểm KD / nội dung</th><th class="num">Số tiền</th><th>Tình trạng</th></tr></thead><tbody>${blocks}</tbody></table></div>
-      ${pays.length ? `<div style="margin-top:12px"><b>Biên lai đã nhận</b>${pays.map(p => `<div class="small" style="padding:3px 0"><button class="link-btn" data-act="portal-receipt" data-id="${p.id}">${U.esc(p.receipt || '')}</button> · ${U.esc((D.METHOD && D.METHOD[p.method]) || p.method || '')} · ${U.money(p.amount)} · ${U.dmy(p.date)} ${U.esc(p.time || '')} · ${U.esc(portalPayer(p))}</div>`).join('')}</div>` : ''}
+      ${portalInvoiceQrHtml(i)}
+      ${pays.length ? `<div style="margin-top:12px"><b>Biên lai đã nhận</b>${pays.map(p => `<div class="small" style="padding:3px 0"><button class="link-btn" data-act="portal-receipt" data-id="${p.id}">${U.esc(p.receipt || '')}</button> · ${U.esc((D.METHOD && D.METHOD[p.method]) || p.method || '')} · <span class="tag ok">Thành công</span> · ${U.money(p.amount)} · ${U.dmy(p.date)} ${U.esc(p.time || '')} · ${U.esc(portalPayer(p))}</div>`).join('')}</div>` : ''}
       </div><div class="modal-f"><button class="btn primary" data-act="close">Đóng</button></div>`);
   }
   // GOM_KHOAN_THU_THEO_TIEU_THUONG: 1 khoản (1 mã PT-…) có thể gồm nhiều điểm KD → liệt kê đủ các điểm.
@@ -1002,22 +1018,6 @@
   // tiền mặt không nằm trong QR → tách "còn phải nộp" / "đã thu" theo điểm (A.invCoveredStalls).
   const qrStallSplit = i => { const cov = A.invCoveredStalls ? A.invCoveredStalls(i) : new Set(), code = id => (A.idx.stall.get(id) || {}).code || id, all = U.invStallIds(i);
     return { remain: all.filter(id => !cov.has(id)).map(code), done: all.filter(id => cov.has(id)).map(code) }; };
-  function portalQrPanel(t) {
-    const list = unpaid(t);
-    if (!list.length || !A.canDo('mini-app.thanh-toan', t.market)) return '';
-    const bank = A.BANK_ACCOUNTS && A.BANK_ACCOUNTS.collectionAccount ? A.BANK_ACCOUNTS.collectionAccount(t.market) : null;
-    if (!bank) return portalPanel('receipt', 'Mã QR thanh toán', '', '<div class="note">Chợ chưa khai báo tài khoản thu tiền nên chưa tạo được mã QR. Vui lòng nộp tiền mặt cho nhân viên thu phí.</div>');
-    const bankLabel = A.BANK_ACCOUNTS.bankName(bank.bankCode);
-    return portalPanel('receipt', 'Mã QR thanh toán', 'Quét mã bằng ứng dụng ngân hàng bất kỳ. Mỗi mã khoản là 1 mã QR; số tiền là tổng các phần CÒN LẠI (phần nhân viên đã thu tiền mặt không tính lại).', `<div class="merchant-cards">${list.map(i => {
-      const due = U.due(i), content = 'CHOSO ' + i.id, sp = qrStallSplit(i);
-      return `<div class="merchant-card" style="text-align:center"><b>${U.esc(i.id)}</b><small>Kỳ ${U.per(i.period)} · hạn ${U.dmy(i.due)} · <button class="link-btn" data-act="portal-inv-detail" data-id="${i.id}">Xem chi tiết khoản</button></small>
-        <div style="margin:10px auto;width:170px">${U.qr(bank.bankCode + '|' + bank.accountNumber + '|' + due + '|' + content, 170)}</div>
-        <div style="font-size:20px;font-weight:800">${U.money(due)}</div>
-        <dl class="kv" style="text-align:left;margin-top:8px"><dt>Ngân hàng</dt><dd>${U.esc(bankLabel)}</dd><dt>Số tài khoản</dt><dd><b>${U.esc(bank.accountNumber)}</b></dd>
-          <dt>Chủ tài khoản</dt><dd>${U.esc(bank.accountHolderName)}</dd><dt>Nội dung</dt><dd><b>${U.esc(content)}</b></dd>
-          <dt>Điểm còn phải nộp</dt><dd><b>${U.esc(sp.remain.join(', '))}</b></dd>${sp.done.length ? `<dt>Đã thu (tiền mặt)</dt><dd class="muted">${U.esc(sp.done.join(', '))} · ${U.money(i.paid || 0)}</dd>` : ''}</dl></div>`;
-    }).join('')}</div>`);
-  }
   function portalHome(t) {
     const list = unpaid(t), total = U.sum(list, U.due), over = list.filter(U.isOver);
     const incidents = portalIncidents(t), open = incidents.filter(i => i.state !== 'hoanthanh' && i.state !== 'dong');
@@ -1029,7 +1029,7 @@
         ${portalKpi('Điểm kinh doanh', String(stalls.length), cons.length + ' hợp đồng đang hiệu lực', 'blue')}
         ${portalKpi('Phản ánh đang xử lý', String(open.length), incidents.length + ' phản ánh đã gửi', open.length ? 'warn' : 'green')}
       </div>
-      ${portalPanel('receipt', 'Khoản phí cần nộp', total ? 'Thanh toán trước hạn để tránh phát sinh nhắc nợ.' : 'Bạn đã nộp đủ các khoản phí.', list.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Kỳ thu</th><th>Điểm kinh doanh</th><th>Số tiền</th><th>Hạn nộp</th><th>Trạng thái</th></tr></thead><tbody>${list.slice(0, 4).map(i => `<tr><td>${U.per(i.period)}</td><td>${invStallsLabel(i)}</td><td><b>${U.money(U.due(i))}</b></td><td>${U.dmy(i.due)}</td><td>${U.invTag(i)}</td></tr>`).join('')}</tbody></table></div>` : portalEmpty('Không có khoản phí nào cần nộp.'), portalLink('finance', total && A.canDo('mini-app.thanh-toan', t.market) ? 'Xem mã QR thanh toán' : 'Xem tất cả'))}
+      ${portalPanel('receipt', 'Khoản phí cần nộp', total ? 'Thanh toán trước hạn để tránh phát sinh nhắc nợ.' : 'Bạn đã nộp đủ các khoản phí.', list.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Kỳ thu</th><th>Điểm kinh doanh</th><th>Số tiền</th><th>Hạn nộp</th><th>Trạng thái</th></tr></thead><tbody>${list.slice(0, 4).map(i => `<tr><td>${U.per(i.period)}</td><td>${invStallsLabel(i)}</td><td><b>${U.money(U.due(i))}</b></td><td>${U.dmy(i.due)}</td><td>${U.invTag(i)}</td></tr>`).join('')}</tbody></table></div>` : portalEmpty('Không có khoản phí nào cần nộp.'), portalLink('finance', 'Xem tất cả'))}
       ${portalPanel('file', 'Điểm kinh doanh của tôi', '', stalls.length ? `<div class="merchant-cards">${stalls.map(st => {
         const c = st.contractId ? A.idx.contract.get(st.contractId) : null;
         return `<div class="merchant-card"><b>${U.esc(st.code)}</b><small>${U.esc(st.sectionName || '')}</small>
@@ -1060,7 +1060,7 @@
     const invs = portalInvoices(t), pays = portalPayments(t);
     const debt = U.traderDebt(t.id), over = U.traderOverdue(t.id), paid = U.sum(invs, i => i.paid || 0);
     // THU_HOI_NO: khoản nợ quá hạn (CN-…) + nút quét QR trả nợ (action:mini-app.tra-no-qr) ở đầu Nghĩa vụ tài chính.
-    return `${miniDebtCard(t)}${portalQrPanel(t)}<div class="merchant-kpis">
+    return `${miniDebtCard(t)}<div class="merchant-kpis">
         ${portalKpi('Tổng còn phải nộp', U.money(debt), invs.filter(i => i.status !== 'paid').length + ' khoản', debt ? 'warn' : 'green')}
         ${portalKpi('Trong đó quá hạn', U.money(over), over ? 'Cần nộp ngay' : 'Không có khoản quá hạn', over ? 'danger' : 'green')}
         ${portalKpi('Đã nộp', U.money(paid), invs.length + ' kỳ có phát sinh', 'blue')}
@@ -1213,15 +1213,21 @@
     'mini-tab': el => { mini().tab = el.dataset.id; mini().bill = null; A.render(); },
     'mini-home': () => { mini().pay = null; mini().tab = 'home'; A.render(); },
     'mini-pay': () => { const t = trader(); if (!t || !A.canDo('mini-app.thanh-toan', t.market)) { U.toast('Không có quyền thanh toán trực tuyến'); return; } mini().pay = 'qr'; A.render(); },
-    'mini-paid': () => {
-      const t = trader(), list = unpaid(t);
-      if (!isTraderMini() || !t || !inMiniScopeMarket(t.market) || !A.canDo('mini-app.thanh-toan', t.market)) { U.toast('Không có quyền thanh toán cho tiểu thương này'); return; }
-      if (!(A.BANK_ACCOUNTS && A.BANK_ACCOUNTS.collectionAccount && A.BANK_ACCOUNTS.collectionAccount(t.market))) { U.toast('Chợ chưa có tài khoản thu tiền — chưa thanh toán QR được'); return; }
-      const pays = list.length ? A.applyPayment(list.map(i => i.id), U.sum(list, U.due), 'qr', 'Mini app') : [];
+    'mini-paid': el => {
+      const t = trader(), acc = A.currentAccount() || {}, requestedId = el && el.dataset ? el.dataset.id : null;
+      const ownAccount = t && (acc.traderId || acc.linkedTraderId) === t.id;
+      let list = t ? unpaid(t).filter(i => !requestedId || i.id === requestedId) : [];
+      // Mutation guard: screen + action + đúng tài khoản tiểu thương + marketScopes + SelectedMarket + trạng thái khoản.
+      if (!t || !ownAccount || !U.can('mini-app') || !inMiniScopeMarket(t.market) || ui.market !== t.market || !A.canDo('mini-app.thanh-toan', t.market)) { U.toast('Không có quyền thanh toán cho tiểu thương này'); return; }
+      if (requestedId && (!list.length || list[0].traderId !== t.id || list[0].market !== ui.market || list[0].status === 'paid' || U.due(list[0]) <= 0 || (A.debtOf && A.debtOf(list[0])))) { U.toast('Khoản phải nộp không còn ở trạng thái được thanh toán QR'); return; }
+      const bank = A.BANK_ACCOUNTS && A.BANK_ACCOUNTS.collectionAccount ? A.BANK_ACCOUNTS.collectionAccount(t.market) : null;
+      if (!bank) { U.toast('Chợ chưa có tài khoản thu tiền — chưa thanh toán QR được'); return; }
+      const pays = list.length ? A.applyPayment(list.map(i => i.id), U.sum(list, U.due), 'qr', 'Mini app', { bankAccountId: bank.id }) : [];
       // THU_HOI_NO: nợ quá hạn trả qua QR thu nợ (nội dung mã nợ) → map về khoản thu gốc.
-      (A.db.debts || []).filter(d => d.traderId === t.id && d.status === 'OPEN').forEach(d => { pays.push.apply(pays, A.payDebtByQr(d.id, 'Mini app')); });
-      mini().lastPays = pays; mini().pay = 'done'; A.render();
-      U.toast('Ngân hàng báo có · hệ thống tự ghi nhận ' + U.money(U.sum(pays, p => p.amount)));
+      if (!requestedId) (A.db.debts || []).filter(d => d.traderId === t.id && d.status === 'OPEN').forEach(d => { pays.push.apply(pays, A.payDebtByQr(d.id, 'Mini app')); });
+      if (!pays.length) { U.toast('Không ghi nhận được thanh toán QR'); return; }
+      mini().lastPays = pays; mini().pay = 'done'; A.render(); A.showReceipt(pays, { autoPrint: false });
+      U.toast('Ngân hàng báo có (mô phỏng) · thanh toán QR thành công ' + U.money(U.sum(pays, p => p.amount)) + ' · đã phát hành biên lai');
     },
     'mini-collect-open': el => {
       const t = A.idx.trader.get(el.dataset.id);

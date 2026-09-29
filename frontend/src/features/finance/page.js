@@ -759,7 +759,7 @@
       ${A.invPartMode(i) ? ptPartTable(i, onlyPart ? onlyPart.stallIds : null, stallView ? 'Cộng tiền điểm ' + U.esc(stallView.st.code || stallView.id) : '') : ''}${A.invPartMode(i) ? '' : U.table([{ t: 'Nội dung' }, { t: 'Số tiền', num: true }], ptItemRows(i, onlyPart)
         .concat(i.adjust ? [`<tr><td>${U.esc(i.adjust.itemName || 'Điều chỉnh khoản phải thu')} (${U.esc(i.adjust.reason)}) – đã phê duyệt</td><td class="num">${ptMoneySigned(i.adjust.delta != null ? i.adjust.delta : -(i.adjust.value || 0))}</td></tr>`] : [])
         .concat([`<tr><td><b>${onlyPart ? 'Cộng phần của bạn' : 'Tổng cộng'}</b></td><td class="num"><b>${U.money(onlyPart ? onlyPart.amount : i.amount)}</b></td></tr>`]))}
-      ${pays.length ? '<div class="divider"></div><b>Thanh toán</b>' + U.table([{ t: 'Biên lai' }, { t: 'Ngày' }, { t: 'Hình thức' }, { t: 'Số tiền', num: true }], pays.map(p => `<tr class="click" data-act="receipt" data-id="${p.receipt}"><td>${p.receipt}</td><td>${U.dmy(p.date)} ${p.time}</td><td>${D.METHOD[p.method]}</td><td class="num">${U.money(p.amount)}</td></tr>`)) : ''}
+      ${pays.length ? '<div class="divider"></div><b>Thanh toán</b>' + U.table([{ t: 'Biên lai' }, { t: 'Ngày' }, { t: 'Hình thức' }, { t: 'Trạng thái' }, { t: 'Số tiền', num: true }], pays.map(p => `<tr class="click" data-act="receipt" data-id="${p.receipt}"><td>${p.receipt}</td><td>${U.dmy(p.date)} ${p.time}</td><td>${D.METHOD[p.method]}${p.method !== 'tm' && p.bankName ? `<div class="small muted">${U.esc(p.bankName)} · ${U.esc(p.bankAccountNumber || '')}</div>` : ''}</td><td><span class="tag ok">Thành công</span></td><td class="num">${U.money(p.amount)}</td></tr>`)) : ''}
       ${reqRows.length ? '<div class="divider"></div><b>Yêu cầu điều chỉnh</b>' + U.table([{ t: 'Mã yêu cầu' }, { t: 'Khoản' }, { t: 'Dòng điều chỉnh' }, { t: 'Hiện tại', num: true }, { t: 'Đề nghị', num: true }, { t: 'Chênh lệch', num: true }, { t: 'Lý do' }, { t: 'Trạng thái' }, { t: '' }], reqRows) : ''}
       </div><div class="modal-f">
       ${ptCanRequestAdjust(i) ? `<button class="btn" data-act="inv-adjust" data-id="${i.id}">Gửi yêu cầu miễn giảm / điều chỉnh</button>` : ''}
@@ -1168,8 +1168,9 @@
       const rowsOf = r.sts.map(st => st.section).filter((v, n, a) => v && a.indexOf(v) === n);
       const pos = r.sts.map(st => `<b>${U.esc(st.code || '')}</b>`).join(', ') + `<div class="small muted">Dãy ${U.esc(rowsOf.join(', ') || '—')}</div>`;
       const byQr = paid && r.pay && r.pay.method !== 'tm';
+      const paidMethod = r.pay && r.pay.method === 'qr' ? 'QR thành công' : r.pay && r.pay.method === 'ck' ? 'Chuyển khoản thành công' : 'Tiền mặt';
       const status = paid
-        ? `<span class="tag ok">✓ Đã thu · ${byQr ? 'QR/chuyển khoản' : 'Tiền mặt'}</span>${r.pay ? `<div class="small"><button class="link-btn" data-act="receipt" data-id="${r.pay.receipt}">${r.pay.receipt}</button> <span class="muted">${U.dmy(r.pay.date)} ${r.pay.time || ''}</span></div>` : ''}`
+        ? `<span class="tag ok">✓ Đã thu · ${byQr ? paidMethod : 'Tiền mặt'}</span>${r.pay ? `<div class="small"><button class="link-btn" data-act="receipt" data-id="${r.pay.receipt}">${r.pay.receipt}</button> <span class="muted">${U.dmy(r.pay.date)} ${r.pay.time || ''}</span></div>` : ''}`
         : r.debt ? `<span class="tag danger">Quá hạn · đã chuyển công nợ</span><div class="small muted">${r.debt.id} · hạn ${U.dmy(r.inv.due)} — không thu theo luồng thường</div>`
         : !scopeAll && canCollect
           // P chốt 29/09: 1 nút trạng thái duy nhất — bấm "Chưa thu" → popup hỏi đổi sang "Đã thu".
@@ -1178,7 +1179,7 @@
       // Đã thu (đã có biên lai) → hiện rõ nét bình thường, chỉ phân biệt bằng tag xanh "Đã thu".
       body.push(`<tr style="${r.debt ? 'background:#fff5f5' : ''}"><td>${pos}</td>
         <td><b>${U.esc(r.t ? r.t.name : '')}</b><div class="small muted">${r.t ? r.t.id + ' · ' + U.maskPhone(r.t.phone) : ''}</div></td>
-        <td>${r.inv.id}<div class="small muted">Kỳ ${U.per(r.inv.period)}${r.old ? ' · <span style="color:#d6453b">nợ kỳ trước</span>' : ''}${r.nParts > 1 ? ' · ' + r.part.stallIds.length + '/' + U.invStallIds(r.inv).length + ' gian' : ''}</div></td>
+        <td><button class="link-btn" data-act="inv-open" data-id="${r.inv.id}">${r.inv.id}</button><div class="small muted">Kỳ ${U.per(r.inv.period)}${r.old ? ' · <span style="color:#d6453b">nợ kỳ trước</span>' : ''}${r.nParts > 1 ? ' · ' + r.part.stallIds.length + '/' + U.invStallIds(r.inv).length + ' gian' : ''}</div></td>
         <td class="num"><b>${U.money(r.part.amount)}</b>${curStatus === 'all' ? `<div class="small" style="color:${paid ? '#167a3c' : r.debt ? '#d6453b' : '#6b7280'}">${paid ? 'đã thu' : r.debt ? 'nợ' : 'cần thu'}</div>` : ''}</td><td>${status}</td>
         ${scopeAll ? `<td>${U.esc(ptCollectorName(r.first))}</td>` : ''}
         <td class="small">${!paid && !r.debt && !scopeAll && canCollect

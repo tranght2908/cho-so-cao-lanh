@@ -356,6 +356,13 @@
         receiptDelivery: { miniApp: true, sentAt: db.today + ' ' + time, status: 'SENT_MOCK' },
         printStatus: 'PENDING'
       };
+      const bankAccount = method !== 'tm' && A.BANK_ACCOUNTS && A.BANK_ACCOUNTS.get
+        ? (opts && opts.bankAccountId ? A.BANK_ACCOUNTS.get(opts.bankAccountId) : A.BANK_ACCOUNTS.collectionAccount(inv.market)) : null;
+      if (bankAccount) {
+        p.bankAccountId = bankAccount.id;
+        p.bankName = A.BANK_ACCOUNTS.bankName(bankAccount.bankCode);
+        p.bankAccountNumber = bankAccount.accountNumber;
+      }
       if (stallIds) p.stallIds = stallIds.slice();
       if (opts && opts.debtId) p.debtId = opts.debtId; // THU_HOI_NO: giao dịch thu nợ vẫn ghi vào khoản thu gốc
       db.payments.push(p);
@@ -363,7 +370,8 @@
       if (method !== 'tm') {
         const bk = {
           id: 'SK' + U.pad(db.bank.length + 1, 4), date: db.today, time, amount: take, ref: 'CHOSO ' + (opts && opts.debtId ? opts.debtId + ' ' : '') + inv.id,
-          market: inv.market, bankName: (D.BANK_BY_MARKET && D.BANK_BY_MARKET[inv.market]) || 'Vietcombank',
+          market: inv.market, bankName: p.bankName || ((D.BANK_BY_MARKET && D.BANK_BY_MARKET[inv.market]) || 'Vietcombank'),
+          bankAccountId: p.bankAccountId || null, recipientAccountNumber: p.bankAccountNumber || '',
           paymentId: p.id, receivableId: inv.id, receiptId: p.receipt,
           status: 'MATCHED_AUTO', matched: true, matchedBy: null, matchedAt: null, matchMethod: 'AUTO',
           log: [{ at: time, actor: 'Hệ thống', text: 'Nhận sao kê tương ứng thanh toán ' + p.id }, { at: time, actor: 'Hệ thống', text: 'Khớp tự động với khoản phải thu ' + inv.id }]
@@ -417,6 +425,8 @@
       <div class="row" style="align-items:flex-start;gap:16px"><dl class="kv" style="flex:1">
         <dt>Người nộp</dt><dd>${U.esc(t.name)} (${t.id})</dd>
         <dt>Hình thức</dt><dd>${D.METHOD[p0.method]}</dd>
+        <dt>Trạng thái</dt><dd><span class="tag ok">Thanh toán thành công</span></dd>
+        ${p0.method !== 'tm' && p0.bankName ? `<dt>Tài khoản nhận</dt><dd>${U.esc(p0.bankName)} · ${U.esc(p0.bankAccountNumber || '')}</dd>` : ''}
         <dt>Thời gian</dt><dd>${U.dmy(p0.date)} ${p0.time}</dd>
         <dt>Người thu</dt><dd>${U.esc(p0.by === 'Hệ thống' || p0.by === 'Mini app' ? p0.by + ' (tự động)' : U.staffName(p0.by))}</dd>
         <dt>Mã tra cứu</dt><dd><b>${p0.lookup}</b></dd>
