@@ -350,6 +350,9 @@
       'phien-cho.xem-bao-cao': ['ward_leader', 'market_manager', 'collector'],
       'mini-app.stall-registration.create': ['trader'],
       'mini-app.tra-no-qr': ['trader'],
+      // QR_TK_THU_TIEN (P 29/09/2026; thuyết minh mục 4 + tracking dòng 26): tiểu thương nhận mã QR và thanh toán
+      // QR/chuyển khoản khoản phải nộp của chính mình. Trước đây action có trong CATALOG nhưng chưa cấp ai (DENY).
+      'mini-app.thanh-toan': ['trader'],
       // Hồ sơ tiểu thương/hợp đồng: đúng mục 3.D "Cập nhật hồ sơ tiểu thương theo permission. Lập/
       // cập nhật hợp đồng...".
       'tieu-thuong.them-moi': ['market_manager', 'collector'],
@@ -524,7 +527,7 @@
   //        lệch khiến loadState() đi thẳng nhánh RESEED TOÀN BỘ (freshState(), không qua
   //        mergeIntoCurrentSeed()), nên seedVersion v15 ở đây chỉ còn ý nghĩa tài liệu/đánh dấu, không
   //        phải cơ chế migrate chính cho lần đổi này (xem RBAC_MARKET_SCOPE_MIGRATION_REPORT.md).
-  const PERM_SEED_VERSION = 25; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: action:phai-thu.ban-do-thu; 19: hình thức điện nước → market_manager; 20: quản lý TK ngân hàng → market_manager; 21: quản lý TK ngân hàng → central_accountant; 22: KT Trung tâm xem biên lai (thu-tien); 23: nhắc nợ chỉ còn collector; 24: KT Trung tâm duyệt phiếu nộp tiền; 25: điều chỉnh chỉ số chỉ còn collector
+  const PERM_SEED_VERSION = 26; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: action:phai-thu.ban-do-thu; 19: hình thức điện nước → market_manager; 20: quản lý TK ngân hàng → market_manager; 21: quản lý TK ngân hàng → central_accountant; 22: KT Trung tâm xem biên lai (thu-tien); 23: nhắc nợ chỉ còn collector; 24: KT Trung tâm duyệt phiếu nộp tiền; 25: điều chỉnh chỉ số chỉ còn collector; 26: mini-app.thanh-toan → trader
   const RATE_POLICY_PERM_VERSION = 1;
   const BANK_ACCOUNT_PERM_VERSION = 3;
   const PC3A_SESSION_PERM_VERSION = 1;
@@ -544,6 +547,7 @@
   const DEBT_REMIND_PERM_VERSION = 1;
   const HANDOVER_KTTT_PERM_VERSION = 1;
   const METER_ADJUST_PERM_VERSION = 1;
+  const MINI_PAY_PERM_VERSION = 1;
   const HANDOVER_KTTT_KEYS = ['screen:doi-soat', 'action:doi-soat.xem-tien-mat', 'action:doi-soat.xac-nhan-phieu-nop'];
   const DEBT_REMIND_KEYS = ['action:cong-no.nhac-no', 'action:cong-no.nhac-no-hang-loat'];
   const RECEIPT_VIEW_KEYS = new Set(['action:thu-tien.xem-bien-lai']);
@@ -567,6 +571,7 @@
       debtRemindPermVersion: DEBT_REMIND_PERM_VERSION,
       handoverKtttPermVersion: HANDOVER_KTTT_PERM_VERSION,
       meterAdjustPermVersion: METER_ADJUST_PERM_VERSION,
+      miniPayPermVersion: MINI_PAY_PERM_VERSION,
       roles: defaultRoles(),
       rolePerms: defaultRolePermissions()
     };
@@ -676,6 +681,13 @@
     if (stored.meterAdjustPermVersion >= METER_ADJUST_PERM_VERSION) return false;
     stored.rolePerms = stored.rolePerms.filter(r => !(r.roleId === 'market_manager' && r.permKey === 'action:dien-nuoc.yeu-cau-dieu-chinh'));
     stored.meterAdjustPermVersion = METER_ADJUST_PERM_VERSION;
+    return true;
+  }
+  // QR_TK_THU_TIEN v1 (một lần, marker miniPayPermVersion): cấp action:mini-app.thanh-toan cho trader.
+  function migrateMiniPayPerms(stored) {
+    if (stored.miniPayPermVersion >= MINI_PAY_PERM_VERSION) return false;
+    if (!stored.rolePerms.some(r => r.roleId === 'trader' && r.permKey === 'action:mini-app.thanh-toan')) stored.rolePerms.push({ roleId: 'trader', permKey: 'action:mini-app.thanh-toan', grantedAt: 'migrate-mini-pay', grantedBy: 'Hệ thống' });
+    stored.miniPayPermVersion = MINI_PAY_PERM_VERSION;
     return true;
   }
   function migrateRatePolicyPerms(stored) {
@@ -790,6 +802,7 @@
     migrateDebtRemindPerms(stored);
     migrateHandoverKtttPerms(stored);
     migrateMeterAdjustPerms(stored);
+    migrateMiniPayPerms(stored);
     stored.seedVersion = PERM_SEED_VERSION;
     return stored;
   }
@@ -863,6 +876,7 @@
     if (migrateDebtRemindPerms(s)) needSave = true;
     if (migrateHandoverKtttPerms(s)) needSave = true;
     if (migrateMeterAdjustPerms(s)) needSave = true;
+    if (migrateMiniPayPerms(s)) needSave = true;
     {
       const validKeys = new Set(CATALOG.map(p => p.key));
       const before = s.rolePerms.length;
