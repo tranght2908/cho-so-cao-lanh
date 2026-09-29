@@ -963,6 +963,37 @@
   const portalKpi = (label, value, note, tone) => `<div class="merchant-kpi ${tone || ''}"><span>${U.esc(label)}</span><b>${value}</b>${note ? `<small>${note}</small>` : ''}</div>`;
   const portalLink = (nav, label) => `<button class="btn sm" data-act="merchant-nav" data-id="${nav}">${U.esc(label)}</button>`;
   const stallLabel = st => (st ? `${U.esc(st.code)}${st.sectionName ? ' · ' + U.esc(st.sectionName) : ''}` : 'Chưa xác định');
+  // HOA_DON_BIEN_LAI_TIEU_THUONG (P 29/09/2026): tiểu thương xem chi tiết khoản phải nộp và biên lai đã nhận — CHỈ XEM,
+  // chỉ dữ liệu của CHÍNH MÌNH (invoice/payment.traderId === tiểu thương đang đăng nhập) trong chợ thuộc phạm vi tài khoản.
+  // Số biên lai là đúng số NV thu phí / hệ thống đã phát (payment.receipt). Không thêm permission (screen mini-app, chỉ đọc).
+  const portalPayStalls = p => { const inv = A.idx.invoice.get(p.invoiceId); const ids = Array.isArray(p.stallIds) && p.stallIds.length ? p.stallIds : (inv ? U.invStallIds(inv) : []);
+    return ids.map(id => (A.idx.stall.get(id) || {}).code || id).join(', '); };
+  const portalPayer = p => { if (!p.by) return ''; if (p.by === 'Mini app' || p.by === 'Hệ thống') return 'Tự nộp QR (hệ thống ghi nhận)';
+    const a = A.ACCOUNTS && A.ACCOUNTS.list().find(x => (x.code || x.id) === p.by); return a ? a.fullName : U.staffName(p.by); };
+  function portalOwnInvoice(id) {
+    const t = trader(), i = A.idx.invoice.get(id);
+    return t && i && U.can('mini-app') && i.traderId === t.id && inMiniScopeMarket(i.market) ? i : null;
+  }
+  function portalInvoiceDetail(i) {
+    const cov = A.invCoveredStalls ? A.invCoveredStalls(i) : new Set(), pays = A.db.payments.filter(p => p.invoiceId === i.id);
+    const payOf = id => pays.find(p => (p.stallIds || []).indexOf(id) !== -1) || (i.status === 'paid' && !(pays[0] || {}).stallIds ? pays[0] : null);
+    const blocks = U.invStallIds(i).map(id => {
+      const st = A.idx.stall.get(id) || {}, items = (i.items || []).filter(x => (x.stallId || U.invStallIds(i)[0]) === id);
+      const r = (A.db.readings || []).find(x => x.stallId === id && x.period === i.period), p = payOf(id);
+      const meter = it => { if (!r) return ''; if (/^Tiền điện/.test(it.name) && r.elecCur != null) return `<div class="small muted">Chỉ số điện ${r.elecPrev} → ${r.elecCur}</div>`; if (/^Tiền nước/.test(it.name) && r.waterCur != null) return `<div class="small muted">Chỉ số nước ${r.waterPrev} → ${r.waterCur}</div>`; return ''; };
+      const sub = U.sum(items, x => x.amount);
+      const stTag = cov.has(id) || (p && i.status === 'paid') ? `<span class="tag ok">Đã nộp</span>${p ? ` <button class="link-btn" data-act="portal-receipt" data-id="${p.id}">${U.esc(p.receipt || '')}</button>` : ''}` : '<span class="tag warn">Chưa nộp</span>';
+      return `<tr style="background:#f6f8fb"><td colspan="2"><b>${U.esc(st.code || id)}</b> <span class="small muted">${U.esc(st.sectionName || '')}</span></td><td>${stTag}</td></tr>`
+        + items.map(it => `<tr><td style="padding-left:18px">${U.esc(it.name)}${meter(it)}</td><td class="num">${U.money(it.amount)}</td><td></td></tr>`).join('')
+        + `<tr><td style="padding-left:18px" class="small muted">Cộng ${U.esc(st.code || id)}</td><td class="num"><b>${U.money(sub)}</b></td><td></td></tr>`;
+    }).join('');
+    A.modal(A.mHead('Khoản phải nộp ' + i.id) + `<div class="modal-b">
+      <dl class="kv"><dt>Kỳ thu</dt><dd>${U.per(i.period)}</dd><dt>Hạn nộp</dt><dd>${U.dmy(i.due)}</dd><dt>Trạng thái</dt><dd>${U.invTag(i)}</dd>
+        <dt>Tổng phải nộp</dt><dd><b>${U.money(i.amount)}</b></dd><dt>Đã nộp</dt><dd>${U.money(i.paid || 0)}</dd><dt>Còn phải nộp</dt><dd><b>${U.money(U.due(i))}</b></dd></dl>
+      <div class="tbl-wrap" style="margin-top:12px"><table class="tbl"><thead><tr><th>Điểm KD / nội dung</th><th class="num">Số tiền</th><th>Tình trạng</th></tr></thead><tbody>${blocks}</tbody></table></div>
+      ${pays.length ? `<div style="margin-top:12px"><b>Biên lai đã nhận</b>${pays.map(p => `<div class="small" style="padding:3px 0"><button class="link-btn" data-act="portal-receipt" data-id="${p.id}">${U.esc(p.receipt || '')}</button> · ${U.esc((D.METHOD && D.METHOD[p.method]) || p.method || '')} · ${U.money(p.amount)} · ${U.dmy(p.date)} ${U.esc(p.time || '')} · ${U.esc(portalPayer(p))}</div>`).join('')}</div>` : ''}
+      </div><div class="modal-f"><button class="btn primary" data-act="close">Đóng</button></div>`);
+  }
   // GOM_KHOAN_THU_THEO_TIEU_THUONG: 1 khoản (1 mã PT-…) có thể gồm nhiều điểm KD → liệt kê đủ các điểm.
   const invStallsLabel = i => U.invStallIds(i).map(id => stallLabel(A.idx.stall.get(id))).join('<br>') || 'Chưa xác định';
   // QR_TK_THU_TIEN: mã QR thanh toán cho khoản chưa nộp (không gồm khoản đã chuyển công nợ — trả qua QR thu nợ). QR sinh từ
@@ -979,7 +1010,7 @@
     const bankLabel = A.BANK_ACCOUNTS.bankName(bank.bankCode);
     return portalPanel('receipt', 'Mã QR thanh toán', 'Quét mã bằng ứng dụng ngân hàng bất kỳ. Mỗi mã khoản là 1 mã QR; số tiền là tổng các phần CÒN LẠI (phần nhân viên đã thu tiền mặt không tính lại).', `<div class="merchant-cards">${list.map(i => {
       const due = U.due(i), content = 'CHOSO ' + i.id, sp = qrStallSplit(i);
-      return `<div class="merchant-card" style="text-align:center"><b>${U.esc(i.id)}</b><small>Kỳ ${U.per(i.period)} · hạn ${U.dmy(i.due)}</small>
+      return `<div class="merchant-card" style="text-align:center"><b>${U.esc(i.id)}</b><small>Kỳ ${U.per(i.period)} · hạn ${U.dmy(i.due)} · <button class="link-btn" data-act="portal-inv-detail" data-id="${i.id}">Xem chi tiết khoản</button></small>
         <div style="margin:10px auto;width:170px">${U.qr(bank.bankCode + '|' + bank.accountNumber + '|' + due + '|' + content, 170)}</div>
         <div style="font-size:20px;font-weight:800">${U.money(due)}</div>
         <dl class="kv" style="text-align:left;margin-top:8px"><dt>Ngân hàng</dt><dd>${U.esc(bankLabel)}</dd><dt>Số tài khoản</dt><dd><b>${U.esc(bank.accountNumber)}</b></dd>
@@ -1034,8 +1065,8 @@
         ${portalKpi('Trong đó quá hạn', U.money(over), over ? 'Cần nộp ngay' : 'Không có khoản quá hạn', over ? 'danger' : 'green')}
         ${portalKpi('Đã nộp', U.money(paid), invs.length + ' kỳ có phát sinh', 'blue')}
       </div>
-      ${portalPanel('receipt', 'Khoản phải nộp theo kỳ', 'Số liệu lấy từ khoản phải thu do Ban Quản lý chợ phát hành.', invs.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Kỳ thu</th><th>Điểm kinh doanh</th><th>Khoản mục</th><th>Phải nộp</th><th>Còn lại</th><th>Hạn nộp</th><th>Trạng thái</th></tr></thead><tbody>${invs.map(i => `<tr><td>${U.per(i.period)}</td><td>${invStallsLabel(i)}</td><td>${portalItemsLabel(i)}</td><td>${U.money(i.amount)}</td><td><b>${U.money(U.due(i))}</b></td><td>${U.dmy(i.due)}</td><td>${U.invTag(i)}</td></tr>`).join('')}</tbody></table></div>` : portalEmpty('Chưa phát sinh khoản phải nộp.'))}
-      ${portalPanel('file', 'Biên lai đã nộp', '', pays.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Số biên lai</th><th>Ngày nộp</th><th>Hình thức</th><th>Số tiền</th></tr></thead><tbody>${pays.map(p => `<tr><td><b>${U.esc(p.receipt || '')}</b></td><td>${U.dmy(p.date)}</td><td>${U.esc((D.METHOD && D.METHOD[p.method]) || p.method || '')}</td><td>${U.money(p.amount)}</td></tr>`).join('')}</tbody></table></div>` : portalEmpty('Chưa có biên lai nào.'))}`;
+      ${portalPanel('receipt', 'Khoản phải nộp theo kỳ', 'Số liệu lấy từ khoản phải thu do Ban Quản lý chợ phát hành.', invs.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Mã khoản</th><th>Kỳ thu</th><th>Điểm kinh doanh</th><th>Khoản mục</th><th>Phải nộp</th><th>Còn lại</th><th>Hạn nộp</th><th>Trạng thái</th></tr></thead><tbody>${invs.map(i => `<tr><td><button class="link-btn" data-act="portal-inv-detail" data-id="${i.id}"><b>${U.esc(i.id)}</b></button><div class="small muted">Xem chi tiết</div></td><td>${U.per(i.period)}</td><td>${invStallsLabel(i)}</td><td>${portalItemsLabel(i)}</td><td>${U.money(i.amount)}</td><td><b>${U.money(U.due(i))}</b></td><td>${U.dmy(i.due)}</td><td>${U.invTag(i)}</td></tr>`).join('')}</tbody></table></div>` : portalEmpty('Chưa phát sinh khoản phải nộp.'))}
+      ${portalPanel('file', 'Biên lai đã nộp', '', pays.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Số biên lai</th><th>Mã khoản</th><th>Điểm KD</th><th>Ngày nộp</th><th>Hình thức</th><th>Người thu</th><th>Số tiền</th></tr></thead><tbody>${pays.map(p => `<tr><td><button class="link-btn" data-act="portal-receipt" data-id="${p.id}"><b>${U.esc(p.receipt || '')}</b></button><div class="small muted">Mã tra cứu ${U.esc(p.lookup || '')}</div></td><td>${U.esc(p.invoiceId || '')}${p.debtId ? `<div class="small muted">Thu nợ ${U.esc(p.debtId)}</div>` : ''}</td><td>${U.esc(portalPayStalls(p))}</td><td>${U.dmy(p.date)} ${U.esc(p.time || '')}</td><td>${U.esc((D.METHOD && D.METHOD[p.method]) || p.method || '')}</td><td>${U.esc(portalPayer(p))}</td><td>${U.money(p.amount)}</td></tr>`).join('')}</tbody></table></div>` : portalEmpty('Chưa có biên lai nào.'))}`;
   }
   function portalNotices(t) {
     const list = notisFor(t);
@@ -1242,6 +1273,16 @@
       miniCaptureComplaintDraft();
       mini().attachments = miniComplaintAttachments().filter(x => x.id !== el.dataset.id);
       A.render();
+    },
+    'portal-inv-detail': el => {
+      const i = portalOwnInvoice(el.dataset.id);
+      if (!i) { U.toast('Không xem được khoản này'); return; }
+      portalInvoiceDetail(i);
+    },
+    'portal-receipt': el => {
+      const p = A.db.payments.find(x => x.id === el.dataset.id), t = trader();
+      if (!p || !t || !U.can('mini-app') || p.traderId !== t.id || !inMiniScopeMarket(p.market)) { U.toast('Không xem được biên lai này'); return; }
+      A.showReceipt([p]);
     },
     'merchant-nav': el => {
       const id = el.dataset.id;
