@@ -733,7 +733,7 @@
         <div class="it"><span class="muted">Số tài khoản</span><b>${U.esc(bank.accountNumber)}</b></div>
         <div class="it"><span class="muted">Chủ tài khoản</span><span>${U.esc(bank.accountHolderName)}</span></div>
         <div class="it"><span class="muted">Nội dung</span><b>${U.esc(content)}</b></div></div></div>
-      <div class="m-card small">${list.map(i => `<div class="row" style="padding:3px 0"><span style="flex:1"><b>${i.id}</b> · kỳ ${U.per(i.period)}<br><span class="muted">Điểm KD: ${U.invStallIds(i).map(id => (A.idx.stall.get(id) || {}).code || id).join(', ')}</span></span><b>${U.money(U.due(i))}</b></div>`).join('')}</div>
+      <div class="m-card small">${list.map(i => `<div class="row" style="padding:3px 0"><span style="flex:1"><b>${i.id}</b> · kỳ ${U.per(i.period)}<br><span class="muted">Điểm còn phải nộp: ${U.esc(qrStallSplit(i).remain.join(', '))}</span></span><b>${U.money(U.due(i))}</b></div>`).join('')}</div>
       <button class="m-btn solid" data-act="mini-paid">Giả lập: đã chuyển khoản thành công</button></div>`;
   }
   function screenSessionPay(t) {
@@ -967,20 +967,24 @@
   const invStallsLabel = i => U.invStallIds(i).map(id => stallLabel(A.idx.stall.get(id))).join('<br>') || 'Chưa xác định';
   // QR_TK_THU_TIEN: mã QR thanh toán cho khoản chưa nộp (không gồm khoản đã chuyển công nợ — trả qua QR thu nợ). QR sinh từ
   // tài khoản thu tiền của chợ + số tiền còn phải nộp + nội dung "CHOSO <mã khoản>". Quyền: action:mini-app.thanh-toan theo chợ.
+  // THU_THEO_PHAN_NHAN_VIEN quy tắc 5: QR tiểu thương tự nộp = TỔNG CÁC PHẦN CÒN LẠI (số cố định, U.due). Phần NV đã thu
+  // tiền mặt không nằm trong QR → tách "còn phải nộp" / "đã thu" theo điểm (A.invCoveredStalls).
+  const qrStallSplit = i => { const cov = A.invCoveredStalls ? A.invCoveredStalls(i) : new Set(), code = id => (A.idx.stall.get(id) || {}).code || id, all = U.invStallIds(i);
+    return { remain: all.filter(id => !cov.has(id)).map(code), done: all.filter(id => cov.has(id)).map(code) }; };
   function portalQrPanel(t) {
     const list = unpaid(t);
     if (!list.length || !A.canDo('mini-app.thanh-toan', t.market)) return '';
     const bank = A.BANK_ACCOUNTS && A.BANK_ACCOUNTS.collectionAccount ? A.BANK_ACCOUNTS.collectionAccount(t.market) : null;
     if (!bank) return portalPanel('receipt', 'Mã QR thanh toán', '', '<div class="note">Chợ chưa khai báo tài khoản thu tiền nên chưa tạo được mã QR. Vui lòng nộp tiền mặt cho nhân viên thu phí.</div>');
     const bankLabel = A.BANK_ACCOUNTS.bankName(bank.bankCode);
-    return portalPanel('receipt', 'Mã QR thanh toán', 'Quét mã bằng ứng dụng ngân hàng bất kỳ. Mỗi mã khoản là 1 mã QR, gồm mọi điểm kinh doanh của bạn trong kỳ.', `<div class="merchant-cards">${list.map(i => {
-      const due = U.due(i), content = 'CHOSO ' + i.id;
+    return portalPanel('receipt', 'Mã QR thanh toán', 'Quét mã bằng ứng dụng ngân hàng bất kỳ. Mỗi mã khoản là 1 mã QR; số tiền là tổng các phần CÒN LẠI (phần nhân viên đã thu tiền mặt không tính lại).', `<div class="merchant-cards">${list.map(i => {
+      const due = U.due(i), content = 'CHOSO ' + i.id, sp = qrStallSplit(i);
       return `<div class="merchant-card" style="text-align:center"><b>${U.esc(i.id)}</b><small>Kỳ ${U.per(i.period)} · hạn ${U.dmy(i.due)}</small>
         <div style="margin:10px auto;width:170px">${U.qr(bank.bankCode + '|' + bank.accountNumber + '|' + due + '|' + content, 170)}</div>
         <div style="font-size:20px;font-weight:800">${U.money(due)}</div>
         <dl class="kv" style="text-align:left;margin-top:8px"><dt>Ngân hàng</dt><dd>${U.esc(bankLabel)}</dd><dt>Số tài khoản</dt><dd><b>${U.esc(bank.accountNumber)}</b></dd>
           <dt>Chủ tài khoản</dt><dd>${U.esc(bank.accountHolderName)}</dd><dt>Nội dung</dt><dd><b>${U.esc(content)}</b></dd>
-          <dt>Điểm kinh doanh</dt><dd>${U.invStallIds(i).map(id => U.esc((A.idx.stall.get(id) || {}).code || id)).join(', ')}</dd></dl></div>`;
+          <dt>Điểm còn phải nộp</dt><dd><b>${U.esc(sp.remain.join(', '))}</b></dd>${sp.done.length ? `<dt>Đã thu (tiền mặt)</dt><dd class="muted">${U.esc(sp.done.join(', '))} · ${U.money(i.paid || 0)}</dd>` : ''}</dl></div>`;
     }).join('')}</div>`);
   }
   function portalHome(t) {
