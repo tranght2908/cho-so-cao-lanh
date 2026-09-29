@@ -30,7 +30,17 @@
       const s = localStorage.getItem(KEY);
       if (s) { const x = JSON.parse(s); if (x && x.version === D.VERSION) A.db = x; }
     } catch (e) { A.db = null; }
+    // GOM_KHOAN_THU_THEO_TIEU_THUONG — bất biến dữ liệu: chợ receivableGrouping 'TRADER' chỉ có 1 khoản
+    // phải thu / tiểu thương / kỳ. Dữ liệu đã lưu (seed cũ, cache) vi phạm → dựng lại seed hiện tại.
+    if (A.db && Array.isArray(A.db.invoices)) {
+      const grouped = new Set((D.MARKETS || []).filter(m => m.receivableGrouping === 'TRADER').map(m => m.id));
+      const seen = new Set();
+      const broken = A.db.invoices.some(i => { if (!grouped.has(i.market) || !i.stallId) return false; const k = i.traderId + '|' + i.period; if (seen.has(k)) return true; seen.add(k); return false; });
+      if (broken) { A.db = null; try { localStorage.removeItem(KEY); } catch (e) { /* bỏ qua */ } }
+    }
     if (A.db) A.reindex(); else A.fresh();
+    // QUA_HAN_CHUYEN_CONG_NO: khoản quá hạn chưa thu → hệ thống tự chuyển công nợ (idempotent).
+    if (A.syncDebts) A.syncDebts({ save: false });
     // FE/localStorage migration: preserve existing records and legacy fields, adding only areaType.
     const areaTypeByLegacyType = { kiot: 'covered', nhalong: 'covered', ngoai: 'self_produced', phien: 'session' };
     const migratedAreaType = A.db.stalls.some(st => !st.areaType);

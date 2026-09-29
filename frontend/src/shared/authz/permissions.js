@@ -104,6 +104,8 @@
     { key: 'action:phien-cho.hoan-phien', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Tạm hoãn phiên chợ quê' },
     { key: 'action:phien-cho.huy-phien', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Hủy phiên chợ quê' },
     { key: 'action:phien-cho.xem-bao-cao', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Xem báo cáo phiên chợ quê' },
+    // THU_HOI_NO (P chốt 29/09/2026): tiểu thương tự trả nợ quá hạn bằng QR thu nợ trong mini app (nợ của chính mình).
+    { key: 'action:mini-app.tra-no-qr', kind: 'action', group: 'Dành cho tiểu thương', screenId: 'mini-app', label: 'Tiểu thương trả nợ quá hạn bằng QR thu nợ (nợ của chính mình)' },
     { key: 'action:mini-app.stall-registration.create', kind: 'action', group: 'Dành cho tiểu thương', screenId: 'mini-app', label: 'Tiểu thương tự đăng ký quầy chợ quê trong mini app' },
     { key: 'action:tieu-thuong.them-moi', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'tieu-thuong', label: 'Thêm hồ sơ tiểu thương' },
     // TRADER_PROFILE_AND_MINIAPP_WORKFLOW — permKey "quản lý truy cập Mini App của tiểu thương".
@@ -122,6 +124,11 @@
     { key: 'action:dien-nuoc.ghi-chi-so', kind: 'action', group: 'Tài chính', screenId: 'dien-nuoc', label: 'Nhập / lưu nháp chỉ số điện, nước' },
     { key: 'action:dien-nuoc.chot-ky', kind: 'action', group: 'Tài chính', screenId: 'dien-nuoc', label: 'Chốt kỳ ghi chỉ số điện, nước' },
     { key: 'action:dien-nuoc.yeu-cau-dieu-chinh', kind: 'action', group: 'Tài chính', screenId: 'dien-nuoc', label: 'Yêu cầu điều chỉnh chỉ số kỳ đã chốt' },
+    // PHAI_THU_PHAM_VI_XEM: quyền XEM (không thao tác) khoản phải thu của TOÀN chợ đang chọn. Không có
+    // quyền này (vd Nhân viên thu phí) thì màn Khoản phải thu chỉ hiện khoản của điểm KD được phân công
+    // cho chính tài khoản (stall.collectorId === account.id). Vẫn luôn giới hạn trong marketScopes/ui.market.
+    { key: 'action:phai-thu.xem-toan-cho', kind: 'action', group: 'Tài chính', screenId: 'phai-thu', label: 'Xem khoản phải thu toàn chợ (không giới hạn điểm được phân công)' },
+    { key: 'action:phai-thu.ban-do-thu', kind: 'action', group: 'Tài chính', screenId: 'phai-thu', label: 'Xem Bản đồ thu (phạm vi theo quyền xem toàn chợ / điểm được phân công)' },
     { key: 'action:phai-thu.phat-hanh', kind: 'action', group: 'Tài chính', screenId: 'phai-thu', label: 'Phát hành khoản phải thu tự động' },
     { key: 'action:phai-thu.yeu-cau-dieu-chinh', kind: 'action', group: 'Tài chính', screenId: 'phai-thu', label: 'Gửi yêu cầu miễn giảm / điều chỉnh khoản phải thu' },
     { key: 'action:phai-thu.mien-giam', kind: 'action', group: 'Tài chính', screenId: 'phai-thu', label: 'Miễn giảm / điều chỉnh khoản phải thu' },
@@ -130,9 +137,16 @@
     { key: 'action:doi-soat.gan-thu-cong', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Gắn khoản thu thủ công cho giao dịch ngân hàng' },
     { key: 'action:doi-soat.xem-tien-mat', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Xem đối soát tiền mặt' },
     { key: 'action:doi-soat.xac-nhan-nop-quy', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Xác nhận đối soát nộp quỹ tiền mặt' },
+    // DOI_SOAT_CUOI_NGAY (P chốt 29/09/2026): NV thu phí chốt buổi thu → phiếu nộp tiền; Kế toán BQL nhận tiền
+    // và bấm "Đã đối soát" từng phiếu (chợ thu theo phần). Tách action riêng, không đổi action nộp quỹ cũ
+    // (đang dùng cho đối soát tiền mặt phiên chợ quê TTĐ).
+    { key: 'action:thu-tien.chot-buoi', kind: 'action', group: 'Tài chính', screenId: 'thu-tien', label: 'Chốt buổi thu — lập phiếu nộp tiền mặt của chính mình' },
+    { key: 'action:doi-soat.xac-nhan-phieu-nop', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Đối soát phiếu nộp tiền mặt theo buổi của NV thu phí' },
     { key: 'action:doi-soat.xem-truy-vet', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Xem lịch sử truy vết đối soát' },
     { key: 'action:cong-no.nhac-no', kind: 'action', group: 'Tài chính', screenId: 'cong-no', label: 'Nhắc nợ 1 tiểu thương' },
     { key: 'action:cong-no.nhac-no-hang-loat', kind: 'action', group: 'Tài chính', screenId: 'cong-no', label: 'Nhắc nợ hàng loạt' },
+    // THU_HOI_NO (P chốt 29/09/2026): NV thu phí phụ trách gian thu nợ (không thu một phần).
+    { key: 'action:cong-no.thu-no', kind: 'action', group: 'Tài chính', screenId: 'cong-no', label: 'Thu hồi nợ quá hạn (phần gian mình phụ trách)' },
     { key: 'action:su-co.tao-phan-anh', kind: 'action', group: 'Vận hành', screenId: 'su-co', label: 'Tạo phản ánh / sự cố thủ công' },
     { key: 'action:su-co.phan-cong', kind: 'action', group: 'Vận hành', screenId: 'su-co', label: 'Phân công người xử lý' },
     { key: 'action:su-co.cap-nhat-xu-ly', kind: 'action', group: 'Vận hành', screenId: 'su-co', label: 'Kiểm tra và cập nhật xử lý sự cố' },
@@ -147,6 +161,8 @@
     { key: 'action:cau-hinh-gia.them-phi', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Thêm phí mới ở trạng thái chưa áp dụng' },
     { key: 'action:cau-hinh-gia.ap-dung-phi', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Áp dụng phí mới sau khi phí cũ đã khóa' },
     { key: 'action:cau-hinh-gia.khoa-mo-phi', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Khóa / mở khóa phí' },
+    // HINH_THUC_THU_DIEN_NUOC: chọn hình thức thu điện, nước của 1 chợ (theo công tơ / chia đều như dịch vụ).
+    { key: 'action:cau-hinh-gia.hinh-thuc-dien-nuoc', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Cấu hình hình thức thu điện, nước của chợ (theo công tơ / chia đều như dịch vụ)' },
     { key: 'action:cau-hinh-gia.chinh-sach-chung.them-muc', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Thêm mức giá chính sách chung' },
     { key: 'action:cau-hinh-gia.chinh-sach-chung.ap-dung', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Áp dụng mức giá chính sách chung' },
     { key: 'action:cau-hinh-gia.chinh-sach-chung.khoa-mo', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Khóa / mở khóa mức giá chính sách chung' },
@@ -222,6 +238,9 @@
       { id: 'ward_leader', name: 'Lãnh đạo UBND phường', desc: 'Xem Tổng quan liên chợ, dữ liệu tổng hợp 12 chợ, báo cáo, giám sát phản ánh quá hạn — phạm vi TOÀN HỆ THỐNG (GLOBAL), không mặc định có quyền chỉnh sửa nghiệp vụ', scope: 'all', market: null, selfService: false, builtin: true, active: true },
       { id: 'market_manager', name: 'Trưởng Ban Quản lý chợ', desc: 'Quản lý mặt bằng, điểm kinh doanh, hợp đồng, mở/chốt kỳ thu, duyệt nghiệp vụ, xác nhận tiền nhân viên thu phí nộp về, tiếp nhận/phân công phản ánh — trong (các) chợ được giao qua account.marketScopes', scope: 'all', market: null, selfService: false, builtin: true, active: true },
       { id: 'collector', name: 'Nhân viên thu phí', desc: 'Cập nhật hồ sơ tiểu thương, lập/cập nhật hợp đồng theo permission, ghi nhận thu, nộp tiền về Ban Quản lý, nhắc nợ — trong (các) chợ được giao qua account.marketScopes', scope: 'all', market: null, selfService: false, builtin: true, active: true },
+      // DOI_SOAT_CUOI_NGAY (P chốt 29/09/2026): role thứ 7 — lệch thuyết minh (06 vai trò), P sẽ báo lại. Id mới
+      // 'market_accountant' (KHÔNG dùng lại 'accountant' đã nghỉ hưu). Phạm vi chợ qua account.marketScopes.
+      { id: 'market_accountant', name: 'Kế toán Ban Quản lý chợ', desc: 'Nhận tiền mặt NV thu phí nộp cuối buổi, đối soát từng phiếu nộp tiền với biên lai tiền mặt, ghi chênh lệch — trong (các) chợ được giao qua account.marketScopes', scope: 'all', market: null, selfService: false, builtin: true, active: true },
       { id: 'technician', name: 'Nhân viên kỹ thuật', desc: 'Nhận, cập nhật tiến độ và kết quả xử lý phản ánh/sự cố được giao — trong (các) chợ được giao qua account.marketScopes', scope: 'all', market: null, selfService: false, builtin: true, active: true },
       { id: 'trader', name: 'Tiểu thương', desc: 'Tự phục vụ qua mini app: xem hồ sơ/điểm kinh doanh/hợp đồng của chính mình, thanh toán, gửi phản ánh — chỉ dữ liệu thuộc merchantId/traderId của chính tài khoản (ownership)', scope: 'self', market: null, selfService: true, builtin: true, active: true }
     ];
@@ -266,7 +285,7 @@
       'dien-nuoc': ['market_manager', 'collector'],
       'phai-thu': ['ward_leader', 'market_manager', 'collector'],
       'thu-tien': ['market_manager', 'collector'],
-      'doi-soat': ['ward_leader', 'market_manager'],
+      'doi-soat': ['ward_leader', 'market_manager', 'market_accountant'],
       'cong-no': ['ward_leader', 'market_manager', 'collector'],
       'su-co': ['ward_leader', 'market_manager', 'technician'],
       'thong-bao': ['market_manager'],
@@ -309,6 +328,7 @@
       'phien-cho.huy-phien': ['market_manager'],
       'phien-cho.xem-bao-cao': ['ward_leader', 'market_manager', 'collector'],
       'mini-app.stall-registration.create': ['trader'],
+      'mini-app.tra-no-qr': ['trader'],
       // Hồ sơ tiểu thương/hợp đồng: đúng mục 3.D "Cập nhật hồ sơ tiểu thương theo permission. Lập/
       // cập nhật hợp đồng...".
       'tieu-thuong.them-moi': ['market_manager', 'collector'],
@@ -319,18 +339,28 @@
       'hop-dong.in': ['market_manager', 'collector'],
       'hop-dong.cap-nhat-ban-ky': ['market_manager', 'collector'],
       'hop-dong.cham-dut': ['market_manager'],
-      'dien-nuoc.ghi-chi-so': ['market_manager', 'collector'],
+      // Người dùng chốt 29/09/2026: chỉ NV thu phí được phân công khu ghi chỉ số khu đó (kiểm tra thêm
+      // stall.collectorId ở handler). Trưởng Ban xem/chốt kỳ, không ghi thay.
+      'dien-nuoc.ghi-chi-so': ['collector'],
       'dien-nuoc.chot-ky': ['market_manager'],
       'dien-nuoc.yeu-cau-dieu-chinh': ['market_manager', 'collector'],
       // accountant cũ không có role kế thừa 1:1 — "phát hành khoản phải thu tự động" thuộc "mở/chốt
       // kỳ thu" (mục 3.C) nên gộp về market_manager, KHÔNG tái lập accountant dưới tên khác.
       'phai-thu.phat-hanh': ['market_manager'],
+      // Người dùng xác nhận 28/09/2026: NV thu phí chỉ xem khoản của điểm được phân công; Trưởng Ban xem
+      // toàn chợ; Lãnh đạo phường giữ quyền xem như trước (chỉ xem, không thao tác).
+      'phai-thu.xem-toan-cho': ['ward_leader', 'market_manager'],
+      // PHAI_THU_BAN_DO (P xác nhận 29/09/2026): Trưởng Ban + NV thu phí; Lãnh đạo phường KHÔNG cần bản đồ;
+      // market_accountant: NEED_CONFIRMATION → mặc định DENY (P "tính sau").
+      'phai-thu.ban-do-thu': ['market_manager', 'collector'],
       'phai-thu.yeu-cau-dieu-chinh': ['collector'],
       'phai-thu.mien-giam': ['market_manager'],
       'thu-tien.thu': ['market_manager', 'collector'],
       'doi-soat.xem-ngan-hang': ['ward_leader', 'market_manager'],
       'doi-soat.gan-thu-cong': ['market_manager'],
-      'doi-soat.xem-tien-mat': ['ward_leader', 'market_manager'],
+      'doi-soat.xem-tien-mat': ['ward_leader', 'market_manager', 'market_accountant'],
+      'thu-tien.chot-buoi': ['collector'],
+      'doi-soat.xac-nhan-phieu-nop': ['market_accountant'],
       // "Xác nhận tiền nhân viên thu phí nộp về" — đúng mục 3.C, chỉ market_manager.
       'doi-soat.xac-nhan-nop-quy': ['market_manager'],
       'doi-soat.xem-truy-vet': ['market_manager'],
@@ -338,6 +368,7 @@
       // không phải quyền mới.
       'cong-no.nhac-no': ['market_manager', 'collector'],
       'cong-no.nhac-no-hang-loat': ['market_manager', 'collector'],
+      'cong-no.thu-no': ['collector'],
       'su-co.tao-phan-anh': ['market_manager'],
       'su-co.phan-cong': ['market_manager'],
       'su-co.cap-nhat-xu-ly': ['market_manager', 'technician'],
@@ -360,6 +391,8 @@
       // Chính sách chung về đơn giá sử dụng mặt bằng thuộc Quản trị hệ thống;
       // các quyền này cố ý không gắn selectedMarket hay marketScopes.
       'cau-hinh-gia.chinh-sach-chung.them-muc': ['system_admin'],
+      // Người dùng xác nhận 28/09/2026: cấu hình hình thức thu điện, nước do Quản trị hệ thống thực hiện.
+      'cau-hinh-gia.hinh-thuc-dien-nuoc': ['system_admin'],
       'cau-hinh-gia.chinh-sach-chung.ap-dung': ['system_admin'],
       'cau-hinh-gia.chinh-sach-chung.khoa-mo': ['system_admin'],
       // Thêm/sửa/xoá/đổi trạng thái tài khoản ngân hàng: chỉ Quản trị hệ thống (yêu cầu gốc, không
@@ -456,7 +489,7 @@
   //        lệch khiến loadState() đi thẳng nhánh RESEED TOÀN BỘ (freshState(), không qua
   //        mergeIntoCurrentSeed()), nên seedVersion v15 ở đây chỉ còn ý nghĩa tài liệu/đánh dấu, không
   //        phải cơ chế migrate chính cho lần đổi này (xem RBAC_MARKET_SCOPE_MIGRATION_REPORT.md).
-  const PERM_SEED_VERSION = 16;
+  const PERM_SEED_VERSION = 18; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: action:phai-thu.ban-do-thu
   const RATE_POLICY_PERM_VERSION = 1;
   const BANK_ACCOUNT_PERM_VERSION = 1;
   const PC3A_SESSION_PERM_VERSION = 1;
@@ -464,6 +497,14 @@
   const PC3C_ATTENDANCE_PERM_VERSION = 1;
   const PC3C_REPLACEMENT_PERM_VERSION = 1;
   const FEE_LIFECYCLE_PERM_VERSION = 1;
+  const PHAI_THU_SCOPE_PERM_VERSION = 1;
+  const PHAI_THU_SCOPE_KEY = 'action:phai-thu.xem-toan-cho';
+  const UTILITY_MODE_PERM_VERSION = 1;
+  const UTILITY_MODE_KEY = 'action:cau-hinh-gia.hinh-thuc-dien-nuoc';
+  const METER_RECORD_PERM_VERSION = 1;
+  const CASH_HANDOVER_PERM_VERSION = 1;
+  const PHAI_THU_MAP_PERM_VERSION = 1;
+  const PHAI_THU_MAP_KEY = 'action:phai-thu.ban-do-thu';
   function freshState() {
     return {
       schemaVersion: A.RBAC_SCHEMA,
@@ -475,6 +516,11 @@
       pc3cAttendancePermVersion: PC3C_ATTENDANCE_PERM_VERSION,
       pc3cReplacementPermVersion: PC3C_REPLACEMENT_PERM_VERSION,
       feeLifecyclePermVersion: FEE_LIFECYCLE_PERM_VERSION,
+      phaiThuScopePermVersion: PHAI_THU_SCOPE_PERM_VERSION,
+      utilityModePermVersion: UTILITY_MODE_PERM_VERSION,
+      meterRecordPermVersion: METER_RECORD_PERM_VERSION,
+      cashHandoverPermVersion: CASH_HANDOVER_PERM_VERSION,
+      phaiThuMapPermVersion: PHAI_THU_MAP_PERM_VERSION,
       roles: defaultRoles(),
       rolePerms: defaultRolePermissions()
     };
@@ -496,6 +542,55 @@
       stored.rolePerms.push({ roleId: 'market_manager', permKey: permKey, grantedAt: 'migrate-fee-lifecycle', grantedBy: 'Hệ thống' });
     });
     stored.feeLifecyclePermVersion = FEE_LIFECYCLE_PERM_VERSION;
+    return true;
+  }
+  // v1 (PHAI_THU_PHAM_VI_XEM): cấp action:phai-thu.xem-toan-cho theo default seed cho state đã lưu,
+  // đúng 1 lần (marker) — sau đó Quản trị hệ thống tự cấp/thu hồi thì không bị ghi đè lại.
+  function migratePhaiThuScopePerms(stored) {
+    if (stored.phaiThuScopePermVersion >= PHAI_THU_SCOPE_PERM_VERSION) return false;
+    if (!stored.rolePerms.some(r => r.permKey === PHAI_THU_SCOPE_KEY)) {
+      defaultRolePermissions().filter(r => r.permKey === PHAI_THU_SCOPE_KEY).forEach(r => stored.rolePerms.push(r));
+    }
+    stored.phaiThuScopePermVersion = PHAI_THU_SCOPE_PERM_VERSION;
+    return true;
+  }
+  // v1 (HINH_THUC_THU_DIEN_NUOC): cấp action:cau-hinh-gia.hinh-thuc-dien-nuoc theo default seed cho state
+  // đã lưu, đúng 1 lần (marker) — sau đó cấp/thu hồi ở màn Phân quyền không bị ghi đè.
+  function migrateUtilityModePerms(stored) {
+    if (stored.utilityModePermVersion >= UTILITY_MODE_PERM_VERSION) return false;
+    if (!stored.rolePerms.some(r => r.permKey === UTILITY_MODE_KEY)) {
+      defaultRolePermissions().filter(r => r.permKey === UTILITY_MODE_KEY).forEach(r => stored.rolePerms.push(r));
+    }
+    stored.utilityModePermVersion = UTILITY_MODE_PERM_VERSION;
+    return true;
+  }
+  // v1 (GHI_CHI_SO_THEO_KHU_PHAN_CONG): thu hồi action:dien-nuoc.ghi-chi-so khỏi market_manager trong state
+  // đã lưu, đúng 1 lần (marker) — sau đó Quản trị hệ thống cấp lại ở màn Phân quyền thì không bị ghi đè.
+  function migrateMeterRecordPerms(stored) {
+    if (stored.meterRecordPermVersion >= METER_RECORD_PERM_VERSION) return false;
+    stored.rolePerms = stored.rolePerms.filter(r => !(r.roleId === 'market_manager' && r.permKey === 'action:dien-nuoc.ghi-chi-so'));
+    stored.meterRecordPermVersion = METER_RECORD_PERM_VERSION;
+    return true;
+  }
+  // v1 (DOI_SOAT_CUOI_NGAY): state đã lưu — cấp cho role mới market_accountant screen:doi-soat +
+  // action:doi-soat.xem-tien-mat (key đã tồn tại nên vòng bổ sung mặc định không tự thêm), đúng 1 lần.
+  // 2 action mới (thu-tien.chot-buoi, doi-soat.xac-nhan-phieu-nop) do vòng bổ sung key mới tự thêm.
+  function migrateCashHandoverPerms(stored) {
+    if (stored.cashHandoverPermVersion >= CASH_HANDOVER_PERM_VERSION) return false;
+    ['screen:doi-soat', 'action:doi-soat.xem-tien-mat'].forEach(permKey => {
+      if (!stored.rolePerms.some(r => r.roleId === 'market_accountant' && r.permKey === permKey)) stored.rolePerms.push({ roleId: 'market_accountant', permKey, grantedAt: 'migrate-cash-handover', grantedBy: 'Hệ thống' });
+    });
+    stored.cashHandoverPermVersion = CASH_HANDOVER_PERM_VERSION;
+    return true;
+  }
+  // PHAI_THU_BAN_DO v1: cấp action:phai-thu.ban-do-thu theo default seed MỘT LẦN cho state đã lưu (marker
+  // phaiThuMapPermVersion) — sau đó quản trị viên gỡ/cấp thế nào thì giữ nguyên, không bị cấp lại.
+  function migratePhaiThuMapPerms(stored) {
+    if (stored.phaiThuMapPermVersion >= PHAI_THU_MAP_PERM_VERSION) return false;
+    defaultRolePermissions().filter(r => r.permKey === PHAI_THU_MAP_KEY).forEach(r => {
+      if (!stored.rolePerms.some(x => x.roleId === r.roleId && x.permKey === r.permKey)) stored.rolePerms.push(Object.assign({}, r, { grantedAt: 'migrate-phai-thu-map', grantedBy: 'Hệ thống' }));
+    });
+    stored.phaiThuMapPermVersion = PHAI_THU_MAP_PERM_VERSION;
     return true;
   }
   function migrateRatePolicyPerms(stored) {
@@ -587,12 +682,20 @@
     defaultRolePermissions().forEach(d => {
       if (stored.matBangMigratedV5 && d.permKey === 'screen:mat-bang') return;
       if (stored.pc3aSessionPermVersion >= PC3A_SESSION_PERM_VERSION && d.permKey.indexOf('action:phien-cho.') === 0) return;
+      if (stored.phaiThuScopePermVersion >= PHAI_THU_SCOPE_PERM_VERSION && d.permKey === PHAI_THU_SCOPE_KEY) return;
+      if (stored.utilityModePermVersion >= UTILITY_MODE_PERM_VERSION && d.permKey === UTILITY_MODE_KEY) return;
+      if (d.permKey === PHAI_THU_MAP_KEY) return; // cấp qua migratePhaiThuMapPerms (một lần)
       if (!knownKeys.has(d.permKey)) stored.rolePerms.push(d);
     });
     migratePc3aSessionPerms(stored);
     migratePc3bRegistrationPerms(stored);
     migratePc3cAttendancePerms(stored);
     migratePc3cReplacementPerms(stored);
+    migratePhaiThuScopePerms(stored);
+    migrateUtilityModePerms(stored);
+    migrateMeterRecordPerms(stored);
+    migrateCashHandoverPerms(stored);
+    migratePhaiThuMapPerms(stored);
     stored.seedVersion = PERM_SEED_VERSION;
     return stored;
   }
@@ -634,6 +737,8 @@
     defaultRolePermissions().forEach(d => {
       if (s.matBangMigratedV5 && d.permKey === 'screen:mat-bang') return;
       if (s.pc3aSessionPermVersion >= PC3A_SESSION_PERM_VERSION && d.permKey.indexOf('action:phien-cho.') === 0) return;
+      if (s.phaiThuScopePermVersion >= PHAI_THU_SCOPE_PERM_VERSION && d.permKey === PHAI_THU_SCOPE_KEY) return;
+      if (s.utilityModePermVersion >= UTILITY_MODE_PERM_VERSION && d.permKey === UTILITY_MODE_KEY) return;
       if (!known.has(d.permKey)) s.rolePerms.push(d);
     });
     if (migratePc3aSessionPerms(s)) needSave = true;
@@ -643,6 +748,10 @@
     if (migrateRatePolicyPerms(s)) needSave = true;
     if (migrateBankAccountPerms(s)) needSave = true;
     if (migrateFeeLifecyclePerms(s)) needSave = true;
+    if (migratePhaiThuScopePerms(s)) needSave = true;
+    if (migrateUtilityModePerms(s)) needSave = true;
+    if (migrateMeterRecordPerms(s)) needSave = true;
+    if (migrateCashHandoverPerms(s)) needSave = true;
     {
       const validKeys = new Set(CATALOG.map(p => p.key));
       const before = s.rolePerms.length;

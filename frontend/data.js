@@ -54,7 +54,23 @@ window.DATA = (function () {
   // stall của market mới — vốn không có gì để sinh — và còn giữ role text cũ) tự rebuild.
   // 14 → 15 (PHAN_CONG_NHAN_VIEN_THU_PHI): thêm field collectorId (null mặc định) trên mỗi điểm kinh
   // doanh — cache A.db cũ chưa có field này cần rebuild để field tồn tại nhất quán trên mọi điểm.
-  const VERSION = 15;
+  // 15 → 16 (DEMO_TIEU_THUONG_NHIEU_DIEM): TT0003 thuê 4 điểm ở 3 khu khác nhau, 4 điểm được phân công
+  // cho NV thu phí AC-NV04 — cache A.db cũ cần rebuild để thấy dữ liệu mẫu mới.
+  // 16 → 17 (DONG_BO_TIEN_DIEN_NUOC): tiền điện, nước trên khoản phải thu tính từ chỉ số cùng kỳ; bổ sung
+  // bảng chỉ số kỳ 05, 06/2026 (đã chốt) để mọi khoản phải thu có tiền điện/nước đều truy được chỉ số.
+  // 17 → 18: kỳ 09/2026 của TT0003 đủ chỉ số điện nước 4 điểm, khoản phải thu kỳ 09 chưa thu.
+  // 18 → 19 (GOM_KHOAN_THU_THEO_TIEU_THUONG): Chợ Cao Lãnh 1 khoản phải thu / tiểu thương / kỳ.
+  // 19 → 20 (THU_THEO_PHAN_NHAN_VIEN): phân công NV thu phí theo khu ở Chợ Cao Lãnh, khoản chưa thu đủ
+  // về CHƯA THU, giao dịch ghi điểm đã thu (stallIds).
+  // 20 → 21 (GHI_CHI_SO_THEO_KHU_PHAN_CONG): phân công NV thu phí cho Chợ quê TTĐ; người ghi chỉ số = NV phụ trách.
+  // 21 → 22 (KY_09_PHAT_HANH_DU): chỉ số điện, nước kỳ 09 ghi đủ mọi điểm có công tơ + chốt kỳ ghi số 09;
+  // Chợ Cao Lãnh: toàn bộ khoản phải thu kỳ 09 đã phát hành, CHƯA THU.
+  // 22 → 23 (PHAT_HANH_KHOAN_THU): thông báo phát hành kỳ 09 gửi từng tiểu thương + danh sách thu cho NV thu phí.
+  // 23 → 24 (BIEN_LAI_THEO_MA_KHOAN): số biên lai Chợ Cao Lãnh gắn mã khoản.
+  // 24 → 25 (QUA_HAN_CHUYEN_CONG_NO): Chợ Cao Lãnh chỉ còn 10 khoản quá hạn (kỳ 08/2026) để demo chuyển công nợ.
+  // 25 → 26 (QUA_HAN_KY_09): kỳ 09 hạn nộp 30/09; 10 khoản CL hạn 28/09 đã quá hạn; ngày dữ liệu 29/09/2026.
+  // 26 → 27 (THU_HOI_NO demo): hạn 10 khoản nợ kỳ 09 trải 28/25/22/20 tháng 9.
+  const VERSION = 27;
   const TODAY = new Date(2026, 8, 13); // 13/09/2026
 
   // Giá dịch vụ sử dụng diện tích bán hàng – QĐ 480/QĐ-UBND ngày 14/02/2026 (đ/m²/ngày, đã gồm VAT)
@@ -130,6 +146,10 @@ window.DATA = (function () {
   const MARKETS = [
     {
       id: 'CL', name: 'Chợ Cao Lãnh', short: 'Chợ Cao Lãnh', hang: 'Chợ hạng 1', kind: 'daily',
+      // GOM_KHOAN_THU_THEO_TIEU_THUONG (v19): cấu hình cấp chợ — mỗi tiểu thương 1 khoản phải thu (1 mã
+      // PT-…) / kỳ, gồm mọi điểm KD họ thuê; chi tiết khoản mới tách theo từng điểm. Chợ không khai báo
+      // field này giữ mặc định 1 khoản / hợp đồng (điểm KD). Người dùng chốt 28/09/2026: chỉ Chợ Cao Lãnh.
+      receivableGrouping: 'TRADER',
       address: 'Khóm 7, phường Cao Lãnh, tỉnh Đồng Tháp',
       note: 'Tòa nhà chợ mới: 1 hầm, 1 trệt, 1 lầu, khoảng 20.435 m² sàn',
       priceNote: 'Giá dịch vụ theo QĐ 480/QĐ-UBND ngày 14/02/2026: ki-ốt và trong nhà lồng 2.000 đ/m²/ngày; ngoài nhà lồng 800 đ/m²/ngày',
@@ -381,6 +401,24 @@ window.DATA = (function () {
       cqStall.status = 'thue';
     }
 
+    // ---- DEMO_TIEU_THUONG_NHIEU_DIEM: TT0003 thuê thêm 2 điểm ở 2 khu khác (tổng 4 điểm, 3 khu) ----
+    // Chạy TRƯỚC hợp đồng/khoản phải thu để mọi bản ghi sinh ra đã đúng chủ thể. Không dùng RNG và không
+    // đổi độ dài mảng traders ở bước này (người thuê cũ chỉ bị rút hết điểm, được xoá ở cuối build() nếu
+    // không còn bị tham chiếu) → chuỗi RNG của dữ liệu mẫu khác giữ nguyên.
+    const multiMovedOwners = [];
+    (function assignMultiPointTrader() {
+      const multi = traders.find(t => t.id === 'TT0003');
+      if (!multi) return;
+      const usedSections = new Set(multi.stalls.map(id => (stalls.find(x => x.id === id) || {}).section));
+      stalls.forEach(st => {
+        if (multiMovedOwners.length >= 2 || st.market !== 'CL' || st.status !== 'thue' || !st.hasMeter || st.type === 'phien' || usedSections.has(st.section)) return;
+        const owner = traders.find(t => t.id === st.traderId);
+        if (!owner || owner.id === multi.id || owner.stalls.length !== 1) return;
+        st.traderId = multi.id; multi.stalls.push(st.id); owner.stalls = [];
+        multiMovedOwners.push(owner.id); usedSections.add(st.section);
+      });
+    })();
+
     // ---- Người bán thực tế (sellerId, CHỈ Chợ Cao Lãnh — xem ghi chú ở stalls.push()) ----
     // Mặc định người bán = người thuê (đúng thực tế đa số điểm KD). Sau đó đổi sellerId khác
     // traderId ở MỘT SỐ ÍT điểm để minh hoạ đúng 2 trường hợp bắt buộc: (a) người thuê nhượng lại
@@ -440,7 +478,7 @@ window.DATA = (function () {
       const lastDay = new Date(y, mo, 0).getDate();
       return {
         id: p, label: pad(mo) + '/' + y,
-        startDate: p + '-01', endDate: p + '-' + pad(lastDay), dueDate: p + '-15',
+        startDate: p + '-01', endDate: p + '-' + pad(lastDay), dueDate: p === '2026-09' ? '2026-09-30' : p + '-15', // QUA_HAN_KY_09: kỳ 09 hạn 30/09
         status: idx === PERIODS.length - 1 ? 'COLLECTING' : 'PAST'
       };
     });
@@ -554,7 +592,9 @@ window.DATA = (function () {
     const METER_PERIODS = [
       { id: '2026-07', month: 7, year: 2026, status: 'CLOSED', closeDate: '2026-08-10', closedBy: 'Trần Minh Khoa', closedAt: '10/08/2026 17:05' },
       { id: '2026-08', month: 8, year: 2026, status: 'CLOSED', closeDate: '2026-09-10', closedBy: 'Trần Minh Khoa', closedAt: '10/09/2026 17:20' },
-      { id: '2026-09', month: 9, year: 2026, status: 'RECORDING', closeDate: '2026-10-10' }
+      // KY_09_PHAT_HANH_DU (v22): theo swimlane, ghi chỉ số xong → chốt kỳ ghi số → phát hành khoản thu.
+      // Kỳ 09 đã phát hành toàn bộ nên kỳ ghi số 09 đã chốt (trước hạn nộp 15/09).
+      { id: '2026-09', month: 9, year: 2026, status: 'CLOSED', closeDate: '2026-09-12', closedBy: 'Trần Minh Khoa', closedAt: '12/09/2026 17:00' }
     ];
     const recAt = (mo, y, dMin, dMax) => pad(between(dMin, dMax)) + '/' + pad(mo) + '/' + y + ' ' + pad(between(7, 17)) + ':' + pad(between(0, 59));
     const mockPhoto = (code, kind, period) => ({ name: code + '-' + kind + '-' + period.slice(5) + '-' + period.slice(0, 4) + '.jpg', type: 'image/jpeg', size: between(180, 420) * 1000, mock: true });
@@ -600,6 +640,152 @@ window.DATA = (function () {
       mk('2026-08', 8, 2026, elecPrev08, elecCur08, waterPrev08, waterCur08, true);
       mk('2026-09', 9, 2026, base09, elecCur09, wBase09, waterCur09, false);
     });
+
+    // ---- DONG_BO_TIEN_DIEN_NUOC (v17): tiền điện, nước trên khoản phải thu = chỉ số thật ----
+    // Trước v17 makeItems() random kWh/m³ độc lập với bảng chỉ số → số tiền không khớp chỉ số. Quy tắc
+    // khớp với billing.js (phát hành thật): khoản phải thu kỳ P dùng chỉ số kỳ P, sản lượng = mới − cũ,
+    // thiếu chỉ số mới thì KHÔNG tính tiền điện/nước kỳ đó. Không dùng RNG (không làm lệch dữ liệu sau).
+    //   - Kỳ đã có chỉ số (07, 08, 09 đã ghi): viết lại dòng tiền điện/nước theo chỉ số.
+    //   - Kỳ 09 chưa ghi chỉ số: bỏ dòng tiền điện/nước khỏi khoản phải thu kỳ 09.
+    //   - Kỳ chưa có bảng chỉ số (05, 06, hoặc điểm đã tạm ngừng): lập chỉ số lùi (chỉ số mới kỳ trước
+    //     = chỉ số cũ kỳ sau) theo đúng sản lượng đã tính trên khoản phải thu → số tiền giữ nguyên.
+    // Sau cùng tính lại tổng khoản phải thu và số tiền của giao dịch đã thu tương ứng.
+    (function syncUtilityChargesWithReadings() {
+      const isElec = it => /^Tiền điện \(/.test(it.name), isWater = it => /^Tiền nước \(/.test(it.name);
+      const qtyOf = it => it ? Number((it.name.match(/\(([\d.]+) (?:kWh|m³)/) || [])[1] || 0) : 0;
+      const elecItem = kwh => ({ name: 'Tiền điện (' + kwh + ' kWh × ' + ELEC.toLocaleString('vi-VN') + ' đ)', amount: kwh * ELEC });
+      const waterItem = m3 => ({ name: 'Tiền nước (' + m3 + ' m³ × ' + WATER.toLocaleString('vi-VN') + ' đ)', amount: m3 * WATER });
+      const closedAt = p => { const [y, mo] = p.split('-').map(Number); return '08/' + pad(mo === 12 ? 1 : mo + 1) + '/' + (mo === 12 ? y + 1 : y) + ' 09:00'; };
+      const touched = new Set();
+      // TT0003: kỳ 09/2026 đủ chỉ số cả 4 điểm (Nguyễn Thị Diễm ghi 12/09) → khoản kỳ 09 có đủ điện, nước.
+      const multiT = traders.find(t => t.id === 'TT0003');
+      (multiT ? multiT.stalls : []).forEach(id => {
+        const st = stalls.find(x => x.id === id), r = readings.find(x => x.stallId === id && x.period === '2026-09');
+        if (!st || !r || r.status === 'RECORDED') return;
+        if (r.elecCur == null) r.elecCur = r.elecPrev + r.elecAvg;
+        if (r.waterCur == null) r.waterCur = r.waterPrev + r.waterAvg;
+        Object.assign(r, { status: 'RECORDED', recordedBy: 'NV04', recordedAt: '12/09/2026 08:15',
+          elecPhoto: { name: st.code + '-dien-09-2026.jpg', type: 'image/jpeg', size: 300000, mock: true },
+          waterPhoto: { name: st.code + '-nuoc-09-2026.jpg', type: 'image/jpeg', size: 300000, mock: true } });
+      });
+      // KY_09_PHAT_HANH_DU (v22): mọi điểm có công tơ đều đã ghi đủ chỉ số kỳ 09 (05–11/09), sản lượng = mức
+      // trung bình của điểm → khoản phải thu kỳ 09 có đủ tiền điện, nước. Không dùng RNG.
+      readings.filter(r => r.period === '2026-09' && r.status !== 'RECORDED').forEach(r => {
+        const st = stalls.find(x => x.id === r.stallId);
+        if (!st) return;
+        if (r.elecCur == null) r.elecCur = r.elecPrev + r.elecAvg;
+        if (r.waterCur == null) r.waterCur = r.waterPrev + r.waterAvg;
+        Object.assign(r, { status: 'RECORDED', recordedBy: meterRecorders[st.market] || 'NV05', recordedAt: pad(5 + (st.num || 0) % 7) + '/09/2026 ' + pad(7 + (st.num || 0) % 9) + ':' + pad((st.num || 0) * 7 % 60),
+          elecPhoto: r.elecPhoto || { name: st.code + '-dien-09-2026.jpg', type: 'image/jpeg', size: 300000, mock: true },
+          waterPhoto: r.waterPhoto || { name: st.code + '-nuoc-09-2026.jpg', type: 'image/jpeg', size: 300000, mock: true } });
+      });
+      stalls.filter(st => st.hasMeter).forEach(st => {
+        const invs = invoices.filter(i => i.stallId === st.id && i.items.some(it => isElec(it) || isWater(it)));
+        if (!invs.length) return;
+        const own = readings.filter(r => r.stallId === st.id);
+        const byP = {}; own.forEach(r => { byP[r.period] = r; });
+        // Lập chỉ số lùi cho các kỳ có khoản phải thu nhưng chưa có bảng chỉ số.
+        const first = own.slice().sort((a, b) => a.period.localeCompare(b.period))[0];
+        let elecAnchor = first ? first.elecPrev : 1000 + st.num * 137, waterAnchor = first ? first.waterPrev : 100 + st.num * 11;
+        const elecAvg = first ? first.elecAvg : null, waterAvg = first ? first.waterAvg : null;
+        PERIODS.slice().reverse().forEach(p => {
+          if (byP[p] || (first && p > first.period)) return;
+          const inv = invs.find(i => i.period === p);
+          if (!inv) return;
+          const kwh = qtyOf(inv.items.find(isElec)), m3 = qtyOf(inv.items.find(isWater));
+          const r = {
+            stallId: st.id, period: p,
+            elecPrev: elecAnchor - kwh, elecCur: elecAnchor, elecAvg: elecAvg || kwh,
+            waterPrev: waterAnchor - m3, waterCur: waterAnchor, waterAvg: waterAvg || m3,
+            status: 'RECORDED', recordedBy: meterRecorders[st.market] || 'NV05', recordedAt: closedAt(p),
+            elecPhoto: { name: st.code + '-dien-' + p.slice(5) + '-' + p.slice(0, 4) + '.jpg', type: 'image/jpeg', size: 300000, mock: true },
+            waterPhoto: { name: st.code + '-nuoc-' + p.slice(5) + '-' + p.slice(0, 4) + '.jpg', type: 'image/jpeg', size: 300000, mock: true }
+          };
+          readings.push(r); byP[p] = r;
+          elecAnchor = r.elecPrev; waterAnchor = r.waterPrev;
+        });
+        // Viết lại dòng tiền điện/nước của từng khoản phải thu theo chỉ số cùng kỳ.
+        invs.forEach(inv => {
+          const r = byP[inv.period], rent = inv.items.filter(it => !isElec(it) && !isWater(it));
+          const extra = [];
+          if (r && r.elecCur != null) extra.push(elecItem(r.elecCur - r.elecPrev));
+          if (r && r.waterCur != null) extra.push(waterItem(r.waterCur - r.waterPrev));
+          inv.items = rent.slice(0, 1).concat(extra, rent.slice(1));
+          inv.amount = inv.items.reduce((a, b) => a + b.amount, 0);
+          touched.add(inv.id);
+        });
+      });
+      // Giao dịch đã thu theo số mới (thu đủ = tổng mới; thu một phần giữ tỉ lệ 50% như seed gốc).
+      payments.filter(pm => touched.has(pm.invoiceId)).forEach(pm => {
+        const inv = invoices.find(i => i.id === pm.invoiceId);
+        pm.amount = inv.status === 'partial' ? Math.round(inv.amount * 0.5 / 1000) * 1000 : inv.amount;
+        inv.paid = pm.amount;
+      });
+      // ---- GOM_KHOAN_THU_THEO_TIEU_THUONG (v19) — chợ có receivableGrouping === 'TRADER' ----
+      // Gộp các khoản cùng tiểu thương + kỳ thành 1 khoản (giữ mã nhỏ nhất). Mỗi dòng chi tiết mang stallId/
+      // contractId của điểm tạo ra nó. Không nộp một phần: nếu mọi khoản thành phần đã thu đủ thì gộp thành
+      // 1 giao dịch/1 biên lai (ngày = lần thu cuối); nếu có khoản chưa thu đủ thì cả khoản gộp là CHƯA THU.
+      // Chạy trước phần sao kê/nộp quỹ nên các số liệu đó tự khớp.
+      const groupMarkets = new Set(MARKETS.filter(m => m.receivableGrouping === 'TRADER').map(m => m.id));
+      const byKey = new Map();
+      invoices.filter(i => groupMarkets.has(i.market) && i.stallId).forEach(i => {
+        const k = i.traderId + '|' + i.period;
+        if (!byKey.has(k)) byKey.set(k, []);
+        byKey.get(k).push(i);
+      });
+      const dropInv = new Set(), dropPay = new Set();
+      byKey.forEach(list => {
+        list.sort((a, b) => a.id.localeCompare(b.id));
+        const head = list[0], ids = new Set(list.map(i => i.id));
+        const pays = payments.filter(pm => ids.has(pm.invoiceId)).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+        const allPaid = list.every(i => i.status === 'paid');
+        const items = [];
+        list.forEach(i => i.items.forEach(it => items.push(Object.assign({}, it, { stallId: i.stallId, contractId: i.contractId }))));
+        Object.assign(head, {
+          stallIds: list.map(i => i.stallId), contractIds: list.map(i => i.contractId), items,
+          amount: items.reduce((a, b) => a + b.amount, 0), reminders: Math.max.apply(null, list.map(i => i.reminders || 0))
+        });
+        list.slice(1).forEach(i => dropInv.add(i.id));
+        if (list.length === 1) return;
+        if (allPaid && pays.length) {
+          const keep = pays[0], last = pays[pays.length - 1];
+          Object.assign(keep, { invoiceId: head.id, amount: head.amount, date: last.date, time: last.time });
+          pays.slice(1).forEach(pm => dropPay.add(pm.id));
+          head.paid = head.amount; head.status = 'paid';
+        } else {
+          pays.forEach(pm => dropPay.add(pm.id));
+          head.paid = 0; head.status = 'unpaid';
+        }
+      });
+      // THU_THEO_PHAN_NHAN_VIEN (v20): chợ gộp không có "thu một phần tiền" — khoản chưa thu đủ ở seed cũ
+      // (partial) chuyển về CHƯA THU; khoản đã thu đủ ghi rõ các điểm đã thu trên giao dịch (stallIds).
+      invoices.filter(i => groupMarkets.has(i.market) && !dropInv.has(i.id)).forEach(i => {
+        const ids = Array.isArray(i.stallIds) && i.stallIds.length ? i.stallIds : [i.stallId];
+        const pays = payments.filter(pm => pm.invoiceId === i.id);
+        if (i.status === 'paid') { pays.forEach(pm => { pm.stallIds = ids.slice(); }); return; }
+        pays.forEach(pm => dropPay.add(pm.id));
+        i.paid = 0; i.status = 'unpaid';
+      });
+      // KY_09_PHAT_HANH_DU (v22): chợ gộp theo tiểu thương (Chợ Cao Lãnh) — Trưởng Ban đã phát hành TOÀN BỘ
+      // khoản kỳ 09 (đã có mã PT-…), tất cả CHƯA THU (bỏ giao dịch/biên lai kỳ 09 cũ của các khoản này).
+      invoices.filter(i => groupMarkets.has(i.market) && i.period === '2026-09' && !dropInv.has(i.id)).forEach(i => {
+        payments.filter(pm => pm.invoiceId === i.id).forEach(pm => dropPay.add(pm.id));
+        i.paid = 0; i.status = 'unpaid';
+      });
+      for (let n = invoices.length - 1; n >= 0; n--) if (dropInv.has(invoices[n].id)) invoices.splice(n, 1);
+      for (let n = payments.length - 1; n >= 0; n--) if (dropPay.has(payments[n].id)) payments.splice(n, 1);
+      // BIEN_LAI_THEO_MA_KHOAN (v24): chợ gộp theo tiểu thương — số biên lai gắn mã khoản, đánh số theo lần thu
+      // của khoản đó (BL-202608-00014-01…). Chạy trước sao kê nên receiptId trên sao kê tự khớp.
+      invoices.filter(i => groupMarkets.has(i.market)).forEach(i => {
+        payments.filter(pm => pm.invoiceId === i.id).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))
+          .forEach((pm, k) => { pm.receipt = 'BL-' + i.id.replace(/^PT-/, '') + '-' + pad(k + 1, 2); });
+      });
+      ['2026-06', '2026-05'].forEach(p => {
+        if (METER_PERIODS.some(x => x.id === p) || !readings.some(r => r.period === p)) return;
+        const [y, mo] = p.split('-').map(Number);
+        METER_PERIODS.unshift({ id: p, month: mo, year: y, status: 'CLOSED', closeDate: y + '-' + pad(mo + 1) + '-10', closedBy: 'Trần Minh Khoa', closedAt: '10/' + pad(mo + 1) + '/' + y + ' 17:00' });
+      });
+    })();
 
     // ---- Phản ánh, sự cố ----
     const TPL = [
@@ -679,7 +865,6 @@ window.DATA = (function () {
 
     // ---- Thông báo đã gửi ----
     const notifications = [
-      { id: 'TB-031', at: '2026-09-01', title: 'Phát hành khoản phải thu kỳ 09/2026', group: 'Toàn bộ tiểu thương', channels: ['Mini app', 'Zalo OA'], sent: 0, delivered: 0.97, read: 0.81, auto: true },
       { id: 'TB-030', at: '2026-08-28', title: 'Lịch phun khử khuẩn toàn chợ ngày 30/8', group: 'Chợ Cao Lãnh', channels: ['Mini app', 'Zalo OA'], sent: 0, delivered: 0.96, read: 0.74, auto: false },
       { id: 'TB-029', at: '2026-08-20', title: 'Nhắc nộp phí quá hạn kỳ 08/2026', group: 'Danh sách nợ phí', channels: ['Mini app', 'Zalo OA', 'SMS'], sent: 0, delivered: 0.95, read: 0.69, auto: true },
       { id: 'TB-028', at: '2026-08-15', title: 'Hướng dẫn thanh toán bằng mã QR', group: 'Toàn bộ tiểu thương', channels: ['Mini app', 'Zalo OA'], sent: 0, delivered: 0.97, read: 0.77, auto: false },
@@ -772,7 +957,7 @@ window.DATA = (function () {
     if (cashDone) {
       const receiptNo = 'BL-PC-260913-00001';
       const p = {
-        id: 'GD' + pad(payments.length + 1, 6), invoiceId: null, market: 'TTD', traderId: cashDone.reg.traderId,
+        id: 'GD' + pad(payments.reduce((mx, x) => Math.max(mx, Number(String(x.id).replace(/\D/g, '')) || 0), 0) + 1, 6), invoiceId: null, market: 'TTD', traderId: cashDone.reg.traderId,
         amount: cashDone.amount, method: 'tm', date: todayIso, time: '10:20', by: 'NV07', receipt: receiptNo,
         lookup: 'TTD001', reconciled: null, sourceType: 'SESSION_REGISTRATION',
         sessionId: cashDone.reg.sessionId, registrationId: cashDone.reg.id, sessionPaymentId: cashDone.pay.id,
@@ -849,7 +1034,7 @@ window.DATA = (function () {
     const cashDeposits = [
       { id: 'NQ-00030', employeeId: 'NV03', market: 'CL', date: todayIso, amount: nv03Cash, depositedAt: '13/09/2026 17:10', receivedBy: 'NV02', attachment: { name: 'phieu_nop_quy_00030.pdf', type: 'application/pdf' } },
       { id: 'NQ-00031', employeeId: 'NV04', market: 'CL', date: todayIso, amount: Math.max(0, nv04Cash - 93600), depositedAt: '13/09/2026 17:30', receivedBy: 'NV02', attachment: { name: 'phieu_nop_quy_00031.pdf', type: 'application/pdf' } }
-    ];
+    ].filter(d => d.amount > 0); // v22: kỳ 09 Chợ Cao Lãnh chưa thu → không có phiếu nộp quỹ 0 đ
     const cashConfirms = [];
 
     // ---- Chuỗi 12 tháng (mô phỏng) cho biểu đồ ----
@@ -982,6 +1167,91 @@ window.DATA = (function () {
 
     // Migrate dữ liệu mẫu người bán cũ thành assignment ACTIVE có lịch sử. Không sửa/xoá sellerId:
     // các UI ngoài phạm vi vẫn đọc được quan hệ cũ trong khi V1 mới dùng collection này.
+    // ---- DEMO_TIEU_THUONG_NHIEU_DIEM (hoàn tất) ----
+    // Người thuê cũ của 2 điểm đã chuyển cho TT0003 (xem assignMultiPointTrader) được xoá nếu không còn bị
+    // tham chiếu ở dữ liệu nào; 4 điểm của TT0003 phân công NV thu phí Nguyễn Thị Diễm (AC-NV04).
+    (function finishMultiPointTrader() {
+      const multi = traders.find(t => t.id === 'TT0003');
+      if (!multi) return;
+      const refs = JSON.stringify([contracts, invoices, payments, incidents, notifications, pointRequests, miniLinkRequests, cashDeposits, audit, marketAssets, sessionRegistrations, sessionPayments, stalls.map(x => [x.traderId, x.sellerId])]);
+      multiMovedOwners.forEach(id => {
+        if (refs.indexOf('"' + id + '"') !== -1) return;
+        const n = traders.findIndex(t => t.id === id);
+        if (n >= 0) traders.splice(n, 1);
+      });
+      // v20 — PHÂN CÔNG THU PHÍ THEO KHU (Chợ Cao Lãnh): mỗi khu giao 1 NV thu phí. Khu ki-ốt mặt tiền
+      // (KA) → Nguyễn Thị Diễm, thủy hải sản (HS) → Lê Thị Ngọc Hân, thịt gia cầm (TG) → Phạm Văn Lợi, các khu
+      // còn lại chia vòng 3 NV. Nhờ đó khoản của TT0003 có 3 phần của 3 NV khác nhau (minh hoạ thu theo phần).
+      const ZONE = { KA: 'AC-NV04', HS: 'AC-NV02', TG: 'AC-NV03' }, ring = ['AC-NV02', 'AC-NV03', 'AC-NV04'];
+      const sections = Array.from(new Set(stalls.filter(x => x.market === 'CL').map(x => x.section)));
+      let k = 0;
+      sections.forEach(sec => { if (!ZONE[sec]) ZONE[sec] = ring[k++ % ring.length]; });
+      stalls.filter(x => x.market === 'CL').forEach(x => { x.collectorId = ZONE[x.section] || null; });
+      // v21 — Chợ quê TTĐ: chia khu vòng cho 2 NV thu phí của chợ (AC-NV07, AC-NV08) để mọi điểm có người ghi chỉ số.
+      const ttdRing = ['AC-NV07', 'AC-NV08'], ttdZone = {};
+      Array.from(new Set(stalls.filter(x => x.market === 'TTD').map(x => x.section))).forEach((sec, n) => { ttdZone[sec] = ttdRing[n % ttdRing.length]; });
+      stalls.filter(x => x.market === 'TTD').forEach(x => { x.collectorId = ttdZone[x.section] || null; });
+      // Người ghi chỉ số = NV thu phí phụ trách điểm (mã NV, bỏ tiền tố 'AC-').
+      readings.forEach(r => { if (!r.recordedBy) return; const st = stalls.find(x => x.id === r.stallId); if (st && st.collectorId) r.recordedBy = st.collectorId.replace(/^AC-/, ''); });
+    })();
+
+    // ---- QUA_HAN_CHUYEN_CONG_NO (v25): demo ĐÚNG 10 khoản quá hạn ở Chợ Cao Lãnh ----
+    // Giữ 10 khoản kỳ 08/2026 chưa thu (quá hạn 15/08 → hệ thống tự chuyển công nợ lúc chạy), chia đều các NV thu
+    // phí; mọi khoản chưa thu khác của kỳ 05–08 coi như đã thu tiền mặt đúng kỳ (1 biên lai / khoản, người thu =
+    // NV phụ trách gian). Không dùng RNG; không đụng ngày hôm nay nên sao kê / nộp quỹ không đổi.
+    (function seedDemoDebts() {
+      const grouped = new Set(MARKETS.filter(m => m.receivableGrouping === 'TRADER').map(m => m.id));
+      const old = invoices.filter(i => grouped.has(i.market) && i.period < '2026-09' && i.status !== 'paid').sort((a, b) => a.id.localeCompare(b.id));
+      const collectorOf = i => { const st = stalls.find(x => x.id === ((i.stallIds && i.stallIds[0]) || i.stallId)); return (st && st.collectorId) || ''; };
+      const byC = {};
+      // QUA_HAN_KY_09 (v26, P chốt 29/09): demo nợ lấy từ KỲ 09 (không còn nợ kỳ 05–08). Mọi khoản kỳ 09 hạn nộp
+      // 30/09; riêng 10 khoản CL (chia đều NV, 1 gian/khoản, bỏ TT0003) hạn 28/09 → quá hạn vào ngày dữ liệu 29/09
+      // → hệ thống tự chuyển công nợ khi chạy (A.syncDebts).
+      invoices.filter(i => i.period === '2026-09').forEach(i => { i.due = '2026-09-30'; });
+      const sep = invoices.filter(i => grouped.has(i.market) && i.period === '2026-09' && i.status !== 'paid' && i.traderId !== 'TT0003' && (!i.stallIds || i.stallIds.length === 1)).sort((a, b) => a.id.localeCompare(b.id));
+      sep.forEach(i => { const c = collectorOf(i); (byC[c] = byC[c] || []).push(i); });
+      const keep = new Set(), cs = Object.keys(byC).sort();
+      const step = c => Math.max(1, Math.floor(byC[c].length / 4));
+      for (let k = 0; keep.size < 10 && cs.some(c => byC[c].length); k++) { const c = cs[k % cs.length]; const i = byC[c].splice(Math.min(byC[c].length - 1, step(c)), 1)[0]; if (i) keep.add(i.id); }
+      // THU_HOI_NO demo (v27): 10 khoản nợ kỳ 09 trải đủ các bước của luồng (ngày dữ liệu 29/09): hạn 28/09 (mới
+      // chuyển nợ), 25/09 (đã nhắc lần 1), 22/09 (đã nhắc lần 2), 20/09 (quá 7 ngày → danh sách cắt điện).
+      cs.forEach((c, ci) => invoices.filter(i => keep.has(i.id) && collectorOf(i) === c).sort((a, b) => a.id.localeCompare(b.id)).forEach((i, j) => {
+        i.due = '2026-09-' + [28, 25, ci === 1 ? 20 : 22, 20][Math.min(j, 3)];
+      }));
+      let n = payments.reduce((m, x) => Math.max(m, Number(String(x.id).replace(/\D/g, '')) || 0), 0);
+      old.forEach((i, k) => {
+        const code = collectorOf(i).replace(/^AC-/, '') || 'NV05', date = i.period + '-' + pad(8 + k % 6), time = pad(8 + k % 9) + ':' + pad(k * 7 % 60);
+        const ids = Array.isArray(i.stallIds) && i.stallIds.length ? i.stallIds : [i.stallId];
+        n++;
+        payments.push({ id: 'GD' + pad(n, 6), invoiceId: i.id, market: i.market, traderId: i.traderId, amount: i.amount - (i.paid || 0), method: 'tm', date, time, by: code,
+          receipt: 'BL-' + i.id.replace(/^PT-/, '') + '-' + pad(payments.filter(x => x.invoiceId === i.id).length + 1, 2), lookup: ('R' + i.id.replace(/\D/g, '')).slice(-6),
+          paymentStatus: 'SUCCESS', paidAt: date + ' ' + time, receiptIssuedAt: date + ' ' + time, reconciled: null,
+          receiptDelivery: { miniApp: true, sentAt: date + ' ' + time, status: 'SENT_MOCK' }, printStatus: 'PRINTED_MOCK', stallIds: ids.slice() });
+        i.paid = i.amount; i.status = 'paid';
+      });
+    })();
+
+    // ---- PHAT_HANH_KHOAN_THU (v23): phát hành kỳ 09/2026 đã gửi thông báo + chuyển danh sách thu ----
+    // Trưởng Ban phát hành ngày 01/09 → (1) mỗi tiểu thương nhận thông báo mã khoản + số tiền (traderLines),
+    // (2) danh sách thu chuyển cho NV thu phí được phân công theo khu (collectorCounts: số điểm / NV).
+    (function seedIssueNotifications() {
+      const P = '2026-09', label = '09/2026', MANAGER = { CL: 'Trần Minh Khoa' };
+      let seq = 31;
+      MARKETS.forEach(m => {
+        const inv = invoices.filter(i => i.market === m.id && i.period === P);
+        if (!inv.length) return;
+        const traderLines = {}, collectorCounts = {};
+        inv.forEach(i => {
+          traderLines[i.traderId] = 'Mã khoản ' + i.id + ' · ' + i.amount.toLocaleString('vi-VN') + ' đ · hạn nộp ' + i.due.split('-').reverse().join('/') + '. Nộp tiền mặt cho NV thu phí hoặc quét QR trên Mini app.';
+          (Array.isArray(i.stallIds) && i.stallIds.length ? i.stallIds : [i.stallId]).forEach(id => { const st = stalls.find(x => x.id === id); const c = (st && st.collectorId) || 'Chưa phân công'; collectorCounts[c] = (collectorCounts[c] || 0) + 1; });
+        });
+        const by = MANAGER[m.id] || '';
+        notifications.unshift({ id: 'TB-' + pad(seq++, 3), at: P + '-01', kind: 'RECEIVABLE_LIST_TO_COLLECTORS', market: m.id, period: P, title: 'Chuyển danh sách thu kỳ ' + label + ' cho nhân viên thu phí', group: 'Nhân viên thu phí · ' + m.short, channels: ['Ứng dụng nhân viên'], sent: Object.keys(collectorCounts).filter(k => k !== 'Chưa phân công').length, delivered: 1, read: 1, auto: true, by, collectorCounts });
+        notifications.unshift({ id: 'TB-' + pad(seq++, 3), at: P + '-01', kind: 'RECEIVABLE_ISSUED', market: m.id, period: P, title: 'Thông báo khoản phải nộp kỳ ' + label, group: 'Tiểu thương có khoản phải thu · ' + m.short, channels: ['Mini app', 'Zalo OA'], sent: Object.keys(traderLines).length, delivered: 0.97, read: 0.81, auto: true, by, traderLines });
+      });
+      BILLING_PERIODS.filter(b => b.id === P).forEach(b => { b.calculationStatus = 'ISSUED'; b.issuedAt = '01/09/2026 08:00'; b.issuedBy = 'Trần Minh Khoa'; });
+    })();
+
     const directSellerAssignments = stalls.filter(s => s.market === 'CL' && s.sellerId).map((s, i) => {
       const person = traders.find(t => t.id === s.sellerId);
       return {
@@ -994,7 +1264,8 @@ window.DATA = (function () {
       };
     });
     return {
-      version: VERSION, today: iso(TODAY), stalls, traders, contracts, invoices, payments, readings, incidents, marketAssets,
+      // QUA_HAN_KY_09: "hôm nay" của prototype = 29/09/2026 (dữ liệu mẫu vẫn sinh theo mốc TODAY 13/09 để không đổi chuỗi RNG).
+      version: VERSION, today: '2026-09-29', stalls, traders, contracts, invoices, payments, readings, incidents, marketAssets,
       notifications, sessions, marketSessions, sessionRegistrations, sessionPayments, sessionReceipts, sessionNotifications, sessionAttendances, sessionReplacements, bank, months, audit, issuedPeriods: PERIODS.slice(), extraLog: [],
       meterPeriods: METER_PERIODS, meterAdjustRequests: [], receivableAdjustRequests: [],
       cashDeposits, cashConfirms, billingPeriods: BILLING_PERIODS,

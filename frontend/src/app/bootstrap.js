@@ -20,9 +20,124 @@
   U.due = i => i.amount - i.paid;
   U.isOver = i => i.status !== 'paid' && i.due < U.today();
   U.overDays = i => Math.max(0, U.days(i.due, U.today()));
-  U.invTag = i => i.status === 'paid' ? '<span class="tag ok">Đã thu</span>'
+  // GOM_KHOAN_THU_THEO_TIEU_THUONG: 1 khoản phải thu có thể gồm nhiều điểm KD (stallIds). Mọi nơi cần điểm
+  // của khoản phải thu đi qua 2 helper này thay vì đọc thẳng i.stallId (chỉ còn là điểm đầu tiên).
+  U.invStallIds = i => !i ? [] : Array.isArray(i.stallIds) && i.stallIds.length ? i.stallIds : (i.stallId ? [i.stallId] : []);
+  U.invPoints = i => U.invStallIds(i).map(id => (A.idx.stall.get(id) || {}).code || id).join(', ');
+  U.invStall = i => Object.assign({}, A.idx.stall.get(U.invStallIds(i)[0]) || {}, { code: U.invPoints(i) });
+  // ---------- THU_THEO_PHAN_NHAN_VIEN (chợ receivableGrouping 'TRADER') ----------
+  // 1 mã khoản / tiểu thương / kỳ; tiền mặt thu theo PHẦN = các điểm cùng 1 NV thu phí phụ trách
+  // (stall.collectorId, đọc theo phân công HIỆN TẠI → đổi người thì phần chưa thu chuyển sang người mới).
+  // Điểm đã thu được ghi trên giao dịch (payment.stallIds) nên lịch sử của người cũ giữ nguyên.
+  // Quy tắc người dùng chốt 28/09/2026: mỗi phần thu đủ hoặc không; QR tiểu thương tự nộp = TẤT CẢ phần
+  // còn lại (số cố định); QR do NV đưa tại sạp = đúng phần của NV đó; tiểu thương không tự nhập/chọn phần;
+  // Trưởng Ban không thu hộ (chỉ NV được phân công điểm mới thu được phần đó).
+  A.invPartMode = i => !!(i && i.stallId && (U.market(i.market) || {}).receivableGrouping === 'TRADER');
+  A.invCoveredStalls = function (i) {
+    const all = U.invStallIds(i);
+    if (i.status === 'paid') return new Set(all);
+    const s = new Set();
+    A.db.payments.filter(p => p.invoiceId === i.id).forEach(p => (Array.isArray(p.stallIds) ? p.stallIds : []).forEach(id => s.add(id)));
+    return s;
+  };
+  A.invParts = function (i) {
+    const covered = A.invCoveredStalls(i), ids = U.invStallIds(i), map = new Map();
+    ids.forEach(id => {
+      const st = A.idx.stall.get(id) || {}, key = st.collectorId || '';
+      if (!map.has(key)) map.set(key, { collectorId: key || null, stallIds: [], amount: 0, paidStalls: 0 });
+      const part = map.get(key), its = i.items.filter(x => (x.stallId || ids[0]) === id);
+      part.stallIds.push(id); part.amount += U.sum(its, x => x.amount);
+      if (covered.has(id)) part.paidStalls++;
+    });
+    return Array.from(map.values()).map(x => Object.assign(x, { paid: x.paidStalls === x.stallIds.length, due: x.paidStalls === x.stallIds.length ? 0 : x.amount }));
+  };
+  A.invMyPart = function (i, accId) {
+    if (!accId) return null;
+    return A.invParts(i).find(x => x.collectorId === accId) || null;
+  };
+  A.invPartLabel = function (i) {
+    const parts = A.invParts(i), done = parts.filter(x => x.paid).length;
+    return parts.length > 1 && done && done < parts.length ? `<span class="tag warn">Đã thu ${done}/${parts.length} phần</span>` : null;
+  };
+  // ---------- QUA_HAN_CHUYEN_CONG_NO (chợ receivableGrouping 'TRADER') ----------
+  // P chốt 29/09/2026: quá hạn nộp mà chưa thu đủ → HỆ THỐNG tự chuyển phần còn lại của mã khoản sang Công nợ
+  // (1 dòng nợ / mã khoản, mã CN-<kỳ>-<số khoản>). Từ đó KHÔNG thu theo luồng thường nữa (NV không còn nút Đã
+  // thu / Thu sau; QR thường của tiểu thương cũng không nhận) — chỉ thu theo luồng thu hồi nợ (thiết kế sau).
+  // Hành động tự động được ghi Nhật ký kiểm toán (người thực hiện = Hệ thống) và lưu trên bản ghi nợ.
+  A.debtOf = i => (i && (A.db.debts || []).find(d => d.invoiceId === i.id && d.status !== 'CLOSED')) || null;
+  A.syncDebts = function (opts) {
+    const db = A.db;
+    if (!db || !Array.isArray(db.invoices)) return 0;
+    db.debts = Array.isArray(db.debts) ? db.debts : [];
+    db.extraLog = Array.isArray(db.extraLog) ? db.extraLog : [];
+    let n = 0;
+    db.invoices.filter(i => A.invPartMode(i) && i.status !== 'paid' && i.due < U.today()).sort((a, b) => a.due.localeCompare(b.due) || a.id.localeCompare(b.id)).forEach(i => {
+      if (db.debts.some(d => d.invoiceId === i.id)) return;
+      const next = new Date(i.due + 'T00:00:00'); next.setDate(next.getDate() + 1);
+      const at = U.dmy(next.getFullYear() + '-' + U.pad(next.getMonth() + 1) + '-' + U.pad(next.getDate())) + ' 00:05';
+      const parts = A.invParts(i).filter(p => !p.paid).map(p => ({ collectorId: p.collectorId, stallIds: p.stallIds.slice(), amount: p.due }));
+      const d = { id: 'CN-' + String(i.id).replace(/^PT-/, ''), invoiceId: i.id, market: i.market, traderId: i.traderId, period: i.period, dueDate: i.due,
+        amount: U.due(i), parts, stallIds: [].concat.apply([], parts.map(p => p.stallIds)), status: 'OPEN', createdAt: at, createdBy: 'Hệ thống (tự động)' };
+      db.debts.push(d); n++;
+      db.extraLog.unshift({ at, who: 'Hệ thống (tự động)', what: 'Khoản ' + i.id + ' quá hạn nộp ' + U.dmy(i.due) + ' → chuyển công nợ ' + d.id + ' (' + U.money(d.amount) + ')' });
+    });
+    // NHAC_NO_TU_DONG (P chốt 29/09/2026): theo Cài đặt › Kỳ thu — nhắc lần 1 sau reminder1Days (3) ngày quá hạn,
+    // lần 2 sau reminder2Days (7) ngày (khi bật "Tự động nhắc nợ"). Quá reminder2Days ngày → thôi nhắc, khoản nợ
+    // thành KHÔNG THU HỒI, vào DANH SÁCH CẮT ĐIỆN và hệ thống gửi thông báo cắt điện → luồng kết thúc (không thu nữa).
+    // Mọi bước tự động ghi Nhật ký kiểm toán + lưu trên bản ghi nợ để các vai trò liên quan xem lại được.
+    const cyc = (A.SERVICE_CFG && A.SERVICE_CFG.cycle && A.SERVICE_CFG.cycle()) || {};
+    const r1 = Number(cyc.reminder1Days) || 3, r2 = Math.max(r1, Number(cyc.reminder2Days) || 7), autoRemind = cyc.autoRemind !== false;
+    const plus = (iso, k) => { const x = new Date(iso + 'T00:00:00'); x.setDate(x.getDate() + k); return x.getFullYear() + '-' + U.pad(x.getMonth() + 1) + '-' + U.pad(x.getDate()); };
+    db.notifications = Array.isArray(db.notifications) ? db.notifications : [];
+    const notify = (d, o) => db.notifications.unshift(Object.assign({ id: 'TB-' + U.pad(32 + db.notifications.length, 3), market: d.market, traderId: d.traderId, debtId: d.id, invoiceId: d.invoiceId, channels: ['Mini app', 'Zalo OA', 'SMS'], sent: 1, delivered: 1, read: 0, auto: true }, o));
+    db.debts.filter(d => d.status === 'OPEN').forEach(d => {
+      const days = U.days(d.dueDate, U.today()), inv = db.invoices.find(x => x.id === d.invoiceId), t = (db.traders || []).find(x => x.id === d.traderId);
+      d.autoReminders = Array.isArray(d.autoReminders) ? d.autoReminders : [];
+      [[1, r1], [2, r2]].forEach(([lv, k]) => {
+        if (!autoRemind || days < k || d.autoReminders.some(x => x.level === lv)) return;
+        const on = plus(d.dueDate, k), at = U.dmy(on) + ' 08:00';
+        d.autoReminders.push({ level: lv, at, by: 'Hệ thống (tự động)' });
+        if (inv) inv.reminders = (inv.reminders || 0) + 1;
+        notify(d, { at: on, kind: 'DEBT_REMINDER', level: lv, title: 'Nhắc nợ lần ' + lv + ': ' + d.id + ' (khoản ' + d.invoiceId + ')', group: 'Nhắc nợ tự động · ' + (t ? t.name : d.traderId),
+          body: 'Khoản ' + d.invoiceId + ' quá hạn ' + U.dmy(d.dueDate) + ', còn nợ ' + U.money(inv ? U.due(inv) : d.amount) + '. Trả tiền mặt cho NV thu phí hoặc quét QR nội dung "CHOSO ' + d.id + ' ' + d.invoiceId + '".' + (lv === 2 ? ' Quá ' + r2 + ' ngày chưa nộp sẽ bị đưa vào danh sách cắt điện.' : '') });
+        db.extraLog.unshift({ at, who: 'Hệ thống (tự động)', what: 'Nhắc nợ lần ' + lv + ' ' + d.id + ' tới ' + (t ? t.name : d.traderId) });
+        n++;
+      });
+      if (days > r2) {
+        const on = plus(d.dueDate, r2 + 1), at = U.dmy(on) + ' 08:00';
+        Object.assign(d, { status: 'UNRECOVERABLE', unrecoverableAt: at, powerCut: { listedAt: at, noticeSentAt: at, by: 'Hệ thống (tự động)' } });
+        notify(d, { at: on, kind: 'POWER_CUT_NOTICE', title: 'Thông báo cắt điện · ' + (t ? t.name : d.traderId) + ' (nợ ' + d.id + ')', group: 'Danh sách cắt điện · ' + (t ? t.name : d.traderId),
+          body: 'Khoản ' + d.invoiceId + ' quá hạn ' + days + ' ngày, còn nợ ' + U.money(inv ? U.due(inv) : d.amount) + ' — không thu hồi. Gian ' + d.stallIds.map(id => ((db.stalls || []).find(s => s.id === id) || {}).code || id).join(', ') + ' được đưa vào danh sách cắt điện.' });
+        db.extraLog.unshift({ at, who: 'Hệ thống (tự động)', what: 'Nợ ' + d.id + ' quá ' + r2 + ' ngày → không thu hồi, đưa vào danh sách cắt điện, gửi thông báo cắt điện' });
+        n++;
+      }
+    });
+    if (n && A.save && !(opts && opts.save === false)) A.save(); // lúc nạp dữ liệu: không ghi (tính lại được, idempotent)
+    return n;
+  };
+  // Tiền của các gian (theo dòng chi tiết) trong 1 khoản.
+  A.stallsAmount = (i, ids) => { const all = U.invStallIds(i); return U.sum(i.items.filter(x => ids.indexOf(x.stallId || all[0]) !== -1), x => x.amount); };
+  // THU_HOI_NO: thu nợ = ghi vào KHOẢN THU GỐC (gian còn nợ), gắn debtId; đủ → tất toán nợ. Không thu một phần.
+  A.payDebt = function (d, method, by, stallIds) {
+    const inv = d && A.idx.invoice.get(d.invoiceId);
+    if (!inv || d.status !== 'OPEN') return [];
+    const cov = A.invCoveredStalls(inv), ids = (stallIds || U.invStallIds(inv)).filter(id => !cov.has(id));
+    if (!ids.length) return [];
+    const pays = A.applyPayment([inv.id], A.stallsAmount(inv, ids), method, by, { stallIds: ids, debtId: d.id });
+    if (inv.status === 'paid') Object.assign(d, { status: 'CLOSED', closedAt: U.dmy(U.today()) + ' ' + U.nowTime(), closedBy: by });
+    // Tiểu thương nhận biên lai (cùng số BL-…) qua Mini app / Zalo.
+    A.db.notifications = A.db.notifications || [];
+    pays.forEach(p => A.db.notifications.unshift({ id: 'TB-' + U.pad(32 + A.db.notifications.length, 3), at: U.today(), kind: 'DEBT_RECEIPT', market: d.market, traderId: d.traderId, debtId: d.id, invoiceId: d.invoiceId,
+      title: 'Biên lai ' + p.receipt + ' · thanh toán nợ ' + d.id, group: 'Biên lai thu hồi nợ', channels: ['Mini app', 'Zalo OA'], sent: 1, delivered: 1, read: 0, auto: true,
+      body: U.money(p.amount) + ' · ' + (D.METHOD[p.method] || p.method) + ' · khoản ' + d.invoiceId + (d.status === 'CLOSED' ? ' · đã tất toán nợ' : '') }));
+    A.save();
+    return pays;
+  };
+  // QR thu nợ: nội dung chứa mã nợ CN-… → tự khớp về khoản thu gốc, thu TOÀN BỘ nợ còn lại (số cố định).
+  A.payDebtByQr = function (debtId, by) { const d = (A.db.debts || []).find(x => x.id === debtId); return A.payDebt(d, 'qr', by || 'Mini app'); };
+  U.invTag = i => (i && A.debtOf && A.debtOf(i) && `<span class="tag danger">Quá hạn · đã chuyển công nợ</span>`) || (i && i.status === 'paid' && (A.db.debts || []).some(d => d.invoiceId === i.id) && '<span class="tag ok">Đã thu hồi nợ</span>') || (i && i.status === 'partial' && A.invPartMode && A.invPartMode(i) && A.invPartLabel(i)) || (i.status === 'paid' ? '<span class="tag ok">Đã thu</span>'
     : i.status === 'partial' ? '<span class="tag warn">Thu một phần</span>'
-      : U.isOver(i) ? `<span class="tag danger">Quá hạn ${U.overDays(i)} ngày</span>` : '<span class="tag">Chưa đến hạn</span>';
+      : U.isOver(i) ? `<span class="tag danger">Quá hạn ${U.overDays(i)} ngày</span>` : '<span class="tag">Chưa đến hạn</span>');
   U.traderDebt = id => U.sum(A.db.invoices.filter(i => i.traderId === id && i.status !== 'paid'), U.due);
   U.traderOverdue = id => U.sum(A.db.invoices.filter(i => i.traderId === id && U.isOver(i)), U.due);
   A.canDirectCollect = function (targetMarket) {
@@ -35,7 +150,7 @@
 
   A.refreshStall = function (st) {
     if (st.status !== 'thue' && st.status !== 'no') return;
-    st.status = A.db.invoices.some(i => i.stallId === st.id && U.isOver(i)) ? 'no' : 'thue';
+    st.status = A.db.invoices.some(i => U.invStallIds(i).indexOf(st.id) !== -1 && U.isOver(i)) ? 'no' : 'thue';
   };
 
   // ---------- RBAC V1 — Account Demo đang dùng ----------
@@ -187,7 +302,9 @@
   };
 
   // Ghi nhận thanh toán cho danh sách khoản phải thu (trả khoản cũ trước)
-  A.applyPayment = function (invoiceIds, amount, method, by) {
+  // opts.stallIds: điểm được thu trong giao dịch (thu theo phần). Không truyền → khoản chế độ theo phần sẽ
+  // ghi mọi điểm còn chưa thu (dùng cho QR tiểu thương tự nộp toàn bộ phần còn lại).
+  A.applyPayment = function (invoiceIds, amount, method, by, opts) {
     const db = A.db;
     let remain = amount;
     const out = [];
@@ -197,23 +314,30 @@
       if (remain <= 0) return;
       const take = Math.min(U.due(inv), remain);
       if (take <= 0) return;
+      const covered = A.invPartMode(inv) ? A.invCoveredStalls(inv) : null;
+      const stallIds = covered ? ((opts && opts.stallIds) || U.invStallIds(inv).filter(id => !covered.has(id))) : null;
       inv.paid += take;
       inv.status = inv.paid >= inv.amount ? 'paid' : 'partial';
       remain -= take;
-      const n = db.payments.length + 1;
+      const n = db.payments.reduce((m, x) => Math.max(m, Number(String(x.id).replace(/\D/g, '')) || 0), 0) + 1;
+      // BIEN_LAI_THEO_MA_KHOAN: chợ thu theo phần — số biên lai gắn mã khoản (1 khoản có thể trả bằng nhiều
+      // biên lai): BL-<kỳ>-<số khoản>-<lần thu>, vd PT-202609-00015 → BL-202609-00015-01, -02…
+      const receipt = covered ? 'BL-' + String(inv.id).replace(/^PT-/, '') + '-' + U.pad(db.payments.filter(x => x.invoiceId === inv.id).length + 1, 2) : 'BL2609-' + U.pad(n, 6);
       const p = {
         id: 'GD' + U.pad(n, 6), invoiceId: inv.id, market: inv.market, traderId: inv.traderId, amount: take, method,
-        date: db.today, time, by, receipt: 'BL2609-' + U.pad(n, 6),
+        date: db.today, time, by, receipt,
         paymentStatus: 'SUCCESS', paidAt: db.today + ' ' + time, receiptIssuedAt: db.today + ' ' + time,
         lookup: Math.random().toString(36).slice(2, 8).toUpperCase(), reconciled: method === 'tm' ? null : true,
         receiptDelivery: { miniApp: true, sentAt: db.today + ' ' + time, status: 'SENT_MOCK' },
         printStatus: 'PENDING'
       };
+      if (stallIds) p.stallIds = stallIds.slice();
+      if (opts && opts.debtId) p.debtId = opts.debtId; // THU_HOI_NO: giao dịch thu nợ vẫn ghi vào khoản thu gốc
       db.payments.push(p);
       out.push(p);
       if (method !== 'tm') {
         const bk = {
-          id: 'SK' + U.pad(db.bank.length + 1, 4), date: db.today, time, amount: take, ref: 'CHOSO ' + inv.id,
+          id: 'SK' + U.pad(db.bank.length + 1, 4), date: db.today, time, amount: take, ref: 'CHOSO ' + (opts && opts.debtId ? opts.debtId + ' ' : '') + inv.id,
           market: inv.market, bankName: (D.BANK_BY_MARKET && D.BANK_BY_MARKET[inv.market]) || 'Vietcombank',
           paymentId: p.id, receivableId: inv.id, receiptId: p.receipt,
           status: 'MATCHED_AUTO', matched: true, matchedBy: null, matchedAt: null, matchMethod: 'AUTO',
@@ -221,7 +345,7 @@
         };
         db.bank.push(bk);
       }
-      A.refreshStall(A.idx.stall.get(inv.stallId));
+      U.invStallIds(inv).forEach(id => { const st = A.idx.stall.get(id); if (st) A.refreshStall(st); });
     });
     A.save();
     return out;
@@ -261,7 +385,7 @@
       const s = p.sessionId && A.db.marketSessions ? A.db.marketSessions.find(x => x.id === p.sessionId) : null;
       const reg = p.registrationId && A.db.sessionRegistrations ? A.db.sessionRegistrations.find(x => x.id === p.registrationId) : null;
       const content = inv
-        ? `Kỳ ${U.per(inv.period)} · ${A.idx.stall.get(inv.stallId).code}`
+        ? `${inv.id}${p.debtId ? ' · Thu hồi nợ ' + p.debtId : ''} · Kỳ ${U.per(inv.period)} · ${Array.isArray(p.stallIds) && p.stallIds.length ? p.stallIds.map(id => (A.idx.stall.get(id) || {}).code || id).join(', ') : U.invPoints(inv)}`
         : `Phiên chợ quê · ${s ? U.dmy(s.sessionDate) : U.esc(p.sessionId || '')}${reg ? ' · ' + U.esc(reg.code || reg.id) : ''}`;
       return `<tr><td>${p.receipt}</td><td>${content}</td><td class="num">${U.money(p.amount)}</td></tr>`;
     });
@@ -346,7 +470,7 @@
   // gốc hoặc tạo role mới.
   const DEMO_ROLE_SHORT = {
     system_admin: 'QTHT', ward_leader: 'Lãnh đạo', market_manager: 'Trưởng BQL',
-    collector: 'Thu phí', technician: 'Kỹ thuật', trader: 'Tiểu thương'
+    collector: 'Thu phí', market_accountant: 'Kế toán', technician: 'Kỹ thuật', trader: 'Tiểu thương'
   };
   // DEMO_ACCOUNT_BAR_COMPACT_GROUPING (mục 4/5/6/10 yêu cầu): với 12 chợ, liệt kê phẳng mọi account
   // hợp lệ (bản cũ) làm thanh dài hàng chục nút khi selectedMarket='ALL'. Nhóm lại theo 2 tầng, vẫn
@@ -358,7 +482,7 @@
   //     12 chợ (mục 4).
   //   - selectedMarket=1 chợ cụ thể: thêm các nhóm MARKET-scoped account CÓ chợ đó trong marketScopes,
   //     xếp theo role (mục 5) — account KHÔNG thuộc chợ đang chọn không xuất hiện.
-  const DEMO_MARKET_ROLE_ORDER = ['market_manager', 'collector', 'technician', 'trader'];
+  const DEMO_MARKET_ROLE_ORDER = ['market_manager', 'collector', 'market_accountant', 'technician', 'trader'];
   function demoAccountBtnHtml(a, withRolePrefix) {
     const roleTxt = withRolePrefix ? (DEMO_ROLE_SHORT[A.ACCOUNTS.primaryRole(a)] || (A.PERM.role(A.ACCOUNTS.primaryRole(a)) || {}).name || '') : '';
     return `<button class="${ui.currentDemoAccountId === a.id ? 'on' : ''}" data-act="demo-account" data-id="${a.id}">${roleTxt ? U.esc(roleTxt) + ' — ' : ''}${U.esc(a.fullName)}</button>`;

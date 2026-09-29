@@ -6,7 +6,7 @@
   A.stallPanel = function (st) {
     const t = st.traderId ? A.idx.trader.get(st.traderId) : null;
     const c = st.contractId ? A.idx.contract.get(st.contractId) : null;
-    const unpaid = A.db.invoices.filter(i => i.stallId === st.id && i.status !== 'paid');
+    const unpaid = A.db.invoices.filter(i => U.invStallIds(i).indexOf(st.id) !== -1 && i.status !== 'paid');
     const canThuTien = A.canCollectReceivable(st.market);
     const canXemHoSo = A.canDo('so-do.xem-ho-so', st.market);
     const canTaoHopDong = A.canDo('so-do.tao-hop-dong', st.market) || A.canDo('hop-dong.tao', st.market);
@@ -57,7 +57,7 @@
     // screenMarketOk/marketScopes) — không action permission riêng, không hard-code role/market.
     const canXemHoSo = U.can('tieu-thuong');
     const canXemDiemKD = U.can('diem-kd');
-    const unpaid = t ? A.db.invoices.filter(i => i.stallId === st.id && i.status !== 'paid') : [];
+    const unpaid = t ? A.db.invoices.filter(i => U.invStallIds(i).indexOf(st.id) !== -1 && i.status !== 'paid') : [];
     const owe = U.sum(unpaid, U.due);
     const left = c ? U.days(U.today(), c.end) : null;
     const sec = (label, body) => `<div class="row"><b style="font-size:var(--font-size-sm)">${label}</b></div><div style="margin:6px 0 14px">${body}</div>`;

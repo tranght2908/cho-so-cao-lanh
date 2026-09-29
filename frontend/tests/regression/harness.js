@@ -5,7 +5,7 @@ const fs = require('fs'), vm = require('vm'), path = require('path');
 // The ONLY source of the runtime script list: the real <script src> order of frontend/index.html.
 function indexScripts(root) {
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-  return Array.from(html.matchAll(/<script src="([^"]+)"><\/script>/g)).map(m => m[1]);
+  return Array.from(html.matchAll(/<script src="([^"]+)"><\/script>/g)).map(m => m[1].split('?')[0]); // bỏ query cache-busting (?v=)
 }
 
 function createApp(root, opts) {

@@ -87,6 +87,13 @@
       // với dữ liệu mẫu sinh ngẫu nhiên có seed riêng; auto-link case demo LINKED thật lấy trực tiếp
       // từ A.db lúc runtime — xem A.ensureMiniAppDemoLink() ở js/core.js).
       { id: 'AC-TT01', code: 'TT-DEMO1', fullName: 'Nguyễn Thị Hoa', phone: '0909345678', accountType: roleName('trader'), title: 'Tiểu thương mẫu', roleIds: ['trader'], organization: 'Chợ Cao Lãnh', marketScopes: ['CL'], status: 'active', traderId: null },
+      // Tài khoản Mini App của TT0003 Trần Thị Kim Nhung (thuê 4 điểm KA-A03/KA-A04/HS-A01/TG-A01, Chợ
+      // Cao Lãnh) — SĐT trùng hồ sơ tiểu thương trong data.js; liên kết đúng 1 hồ sơ qua traderId.
+      { id: 'AC-TT03', code: 'TT0003', fullName: 'Trần Thị Kim Nhung', phone: '0918320516', accountType: roleName('trader'), title: 'Tiểu thương (thuê 4 điểm)', roleIds: ['trader'], organization: 'Chợ Cao Lãnh', marketScopes: ['CL'], status: 'active', linkedTraderId: 'TT0003', traderId: 'TT0003' },
+      // DOI_SOAT_CUOI_NGAY: Kế toán Ban Quản lý Chợ Cao Lãnh (role market_accountant) — nhận tiền mặt NV thu phí
+      // nộp cuối buổi và đối soát phiếu nộp. Tên là dữ liệu mẫu; không gán SĐT đăng nhập trong code (SĐT thử chỉ
+      // đặt ở trang local frontend/tai-khoan-thu-phi.local.html).
+      { id: 'AC-KT01', code: 'KT01', fullName: 'Lê Thị Thu Trang', phone: '', accountType: roleName('market_accountant'), title: 'Kế toán Ban Quản lý chợ', roleIds: ['market_accountant'], organization: 'Ban Quản lý Chợ Cao Lãnh', marketScopes: ['CL'], status: 'active' },
       { id: 'AC-TT02', code: 'TT-DEMO2', fullName: 'Trần Văn Sáu', phone: '0909456789', accountType: roleName('trader'), title: 'Tiểu thương mẫu (đã tạm khoá minh hoạ)', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'disabled', traderId: null }
     );
     return list.concat(newMarketAccounts());

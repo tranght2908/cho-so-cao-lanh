@@ -44,7 +44,8 @@
       const lp = landRate(st, date);
       if (!lp) warning(out, { code: 'MISSING_LAND_POLICY', contractId: c.id, businessPointId: st.id, message: 'Chưa có đơn giá sử dụng mặt bằng phù hợp.' });
       else { const amount = landAmount(lp, Number(st.area || 0)); out.drafts.push(draft(Object.assign({ sourceKey: 'LAND|' + c.id }, common), { chargeType: 'LAND', sourceType: 'CONTRACT', sourceId: c.id, name: itemName('LAND'), businessPointId: st.id, contractId: c.id, policyId: lp.id, policyReference: (lp.legalBasis || {}).docNo || '', quantity: Number(st.area || 0), unit: lp.unit, unitPrice: Number(lp.amount || 0), amount, explanation: 'Diện tích × đơn giá chính sách; chưa áp dụng quy tắc phân bổ ngày.' })); }
-      const applies = c.serviceApplicability || {}, reading = A.db.readings.find(x => x.stallId === st.id && x.period === period), utility = (applies.electricity || applies.water) && rate('utilities', market, date);
+      // HINH_THUC_THU_DIEN_NUOC: chợ thu điện, nước chia đều như dịch vụ → không tạo dòng theo công tơ.
+      const applies = A.SERVICE_CFG && A.SERVICE_CFG.utilityMode(market) === 'SERVICE' ? Object.assign({}, c.serviceApplicability || {}, { electricity: false, water: false }) : (c.serviceApplicability || {}), reading = A.db.readings.find(x => x.stallId === st.id && x.period === period), utility = (applies.electricity || applies.water) && rate('utilities', market, date);
       [['electricity', 'ELECTRICITY', 'elecPrev', 'elecCur', 'elecPrice', 'elecUnit', 'điện', 'elecAvg'], ['water', 'WATER', 'waterPrev', 'waterCur', 'waterPrice', 'waterUnit', 'nước', 'waterAvg']].forEach(x => {
         if (!applies[x[0]]) return;
         if (!utility) return warning(out, { code: 'MISSING_UTILITY_POLICY', contractId: c.id, businessPointId: st.id, chargeType: x[1], message: 'Chưa có biểu phí ' + x[6] + ' đang áp dụng.' });
@@ -69,11 +70,22 @@
     });
     // Issued receivables are immutable. Recalculation replaces only this period's
     // mutable drafts and never recreates a source that has already been issued.
-    const issuedKeys = new Set(A.db.invoices.filter(x => x.market === market && x.period === period && x.sourceKey).map(x => x.sourceKey));
+    const issuedKeys = issuedSourceKeys(market, period);
     out.drafts = out.drafts.filter(x => !issuedKeys.has(x.sourceKey));
     A.db.billingDrafts = A.db.billingDrafts.filter(x => !(x.market === market && x.period === period)).concat(out.drafts);
     A.db.billingWarnings = A.db.billingWarnings.filter(x => !(x.market === market && x.period === period)).concat(out.warnings.map(x => Object.assign({ market, period }, x)));
     bp.calculationStatus = out.warnings.some(x => x.severity === 'BLOCKING') ? 'REVIEW_REQUIRED' : 'DRAFT_CALCULATED'; A.save(); return out;
+  }
+  // Khoản đã phát hành có thể gộp nhiều nguồn (sourceKeys) khi chợ cấu hình receivableGrouping 'TRADER'.
+  function issuedSourceKeys(market, period) {
+    const keys = new Set();
+    A.db.invoices.filter(x => x.market === market && x.period === period).forEach(x => (Array.isArray(x.sourceKeys) ? x.sourceKeys : [x.sourceKey]).forEach(k => { if (k) keys.add(k); }));
+    return keys;
+  }
+  function nextInvoiceId(period) {
+    const prefix = 'PT-' + period.replace('-', '') + '-';
+    const max = A.db.invoices.reduce((m, x) => String(x.id).indexOf(prefix) === 0 ? Math.max(m, Number(String(x.id).slice(prefix.length)) || 0) : m, 0);
+    return prefix + U.pad(max + 1, 5);
   }
   function drafts(m, p) { return (Array.isArray(A.db.billingDrafts) ? A.db.billingDrafts : []).filter(x => x.market === m && x.period === p); }
   function warnings(m, p) { return (Array.isArray(A.db.billingWarnings) ? A.db.billingWarnings : []).filter(x => x.market === m && x.period === p); }
@@ -91,13 +103,45 @@
     if (!(A.db.meterPeriods || []).some(x => x.id === id)) A.db.meterPeriods.push({ id, month: Number(m), year: y, status: 'RECORDING', closeDate: y + '-' + m + '-' + lastDay });
     A.save(); return next;
   }
+  // PHAT_HANH_KHOAN_THU: phát hành = (1) sinh mã PT-…, (2) gửi thông báo số phải nộp cho TỪNG tiểu thương
+  // (Mini app/Zalo OA; mini app đọc traderLines[traderId]), (3) chuyển danh sách thu cho NV thu phí được phân
+  // công theo khu (stall.collectorId). Danh sách của NV vẫn đọc trực tiếp từ khoản phải thu + phân công.
+  function notifyIssued(market, period, issued, actor) {
+    if (!issued.length) return;
+    A.db.notifications = Array.isArray(A.db.notifications) ? A.db.notifications : [];
+    const mk = U.market(market) || {}, label = period.slice(5) + '/' + period.slice(0, 4);
+    const nextId = () => 'TB-' + U.pad(32 + A.db.notifications.length, 3);
+    const traderLines = {};
+    issued.forEach(i => { traderLines[i.traderId] = 'Mã khoản ' + i.id + ' · ' + U.money(i.amount) + ' · hạn nộp ' + U.dmy(i.due) + '. Nộp tiền mặt cho NV thu phí hoặc quét QR trên Mini app.'; });
+    A.db.notifications.unshift({ id: nextId(), at: U.today(), kind: 'RECEIVABLE_ISSUED', market, period, title: 'Thông báo khoản phải nộp kỳ ' + label, group: 'Tiểu thương có khoản phải thu · ' + (mk.short || market), channels: ['Mini app', 'Zalo OA'], sent: Object.keys(traderLines).length, delivered: 0.97, read: 0, auto: true, by: actor || '', traderLines });
+    const byC = {};
+    issued.forEach(i => (Array.isArray(i.stallIds) && i.stallIds.length ? i.stallIds : [i.stallId]).forEach(id => { const st = A.idx.stall.get(id); const c = (st && st.collectorId) || 'Chưa phân công'; byC[c] = (byC[c] || 0) + 1; }));
+    const accName = id => { const a = A.ACCOUNTS && A.ACCOUNTS.get && A.ACCOUNTS.get(id); return a ? a.fullName : id; };
+    A.db.notifications.unshift({ id: nextId(), at: U.today(), kind: 'RECEIVABLE_LIST_TO_COLLECTORS', market, period, title: 'Chuyển danh sách thu kỳ ' + label + ' cho nhân viên thu phí', group: 'Nhân viên thu phí · ' + (mk.short || market), channels: ['Ứng dụng nhân viên'], sent: Object.keys(byC).filter(k => k !== 'Chưa phân công').length, delivered: 1, read: 0, auto: true, by: actor || '', collectorCounts: byC, body: Object.keys(byC).map(k => accName(k) + ': ' + byC[k] + ' điểm').join(' · ') });
+  }
   function issue(market, period, actor) {
     const bp = A.db.billingPeriods.find(x => x.id === period), list = drafts(market, period), blocks = warnings(market, period).filter(x => x.severity === 'BLOCKING');
     if (!bp || !list.length || blocks.length) return { issued: [], blocking: blocks };
     const issued = [];
-    list.forEach(d => { if (A.db.invoices.some(x => x.sourceKey === d.sourceKey && x.market === market && x.period === period)) return; const inv = Object.assign({}, d, { id: 'PT-' + period.replace('-', '') + '-' + U.pad(A.db.invoices.length + 1, 5), status: 'unpaid', issued: U.today(), issuedAt: stamp(), issuedBy: actor || '', due: bp.dueDate, billingStatus: 'ISSUED', items: d.items.map(x => Object.assign({}, x, { status: 'ISSUED' })) }); A.db.invoices.push(inv); issued.push(inv); });
+    const done = issuedSourceKeys(market, period), fresh = list.filter(d => !done.has(d.sourceKey));
+    const base = { status: 'unpaid', issued: U.today(), issuedAt: stamp(), issuedBy: actor || '', due: bp.dueDate, billingStatus: 'ISSUED' };
+    const lineOf = d => d.items.map(x => Object.assign({}, x, { status: 'ISSUED', stallId: d.stallId || null, contractId: d.contractId || null }));
+    if ((U.market(market) || {}).receivableGrouping === 'TRADER') {
+      // GOM_KHOAN_THU_THEO_TIEU_THUONG: 1 khoản / tiểu thương / kỳ; mã PT-… chỉ sinh ở bước phát hành này.
+      const byTrader = new Map();
+      fresh.forEach(d => { if (!byTrader.has(d.traderId)) byTrader.set(d.traderId, []); byTrader.get(d.traderId).push(d); });
+      byTrader.forEach(ds => {
+        const uniq = a => a.filter((v, n) => v && a.indexOf(v) === n);
+        const items = [].concat.apply([], ds.map(lineOf));
+        const inv = Object.assign({}, ds[0], base, { id: nextInvoiceId(period), sourceKeys: ds.map(d => d.sourceKey), stallIds: uniq(ds.map(d => d.stallId)), contractIds: uniq(ds.map(d => d.contractId)), items, amount: items.reduce((a, b) => a + Number(b.amount || 0), 0), paid: 0 });
+        A.db.invoices.push(inv); issued.push(inv);
+      });
+    } else {
+      fresh.forEach(d => { const inv = Object.assign({}, d, base, { id: nextInvoiceId(period), items: lineOf(d) }); A.db.invoices.push(inv); issued.push(inv); });
+    }
     A.db.billingDrafts = A.db.billingDrafts.filter(x => !(x.market === market && x.period === period)); if (!A.db.issuedPeriods.includes(period)) A.db.issuedPeriods.push(period);
-    bp.status = 'COLLECTING'; bp.calculationStatus = 'ISSUED'; bp.issuedAt = stamp(); bp.issuedBy = actor || ''; A.reindex(); A.save(); return { issued, blocking: [] };
+    bp.status = 'COLLECTING'; bp.calculationStatus = 'ISSUED'; bp.issuedAt = stamp(); bp.issuedBy = actor || ''; A.reindex();
+    notifyIssued(market, period, issued, actor); A.save(); return { issued, blocking: [] };
   }
   Object.assign(billing, { ensure, calculatePeriod, drafts, warnings, issue, openNextPeriod });
 })(window.APP);
