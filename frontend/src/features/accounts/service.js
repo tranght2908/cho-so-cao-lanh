@@ -19,4 +19,9 @@
   // Persisted by the legacy store; the caller builds the record (role, scopes, status).
   service.add = function (account) { return repository.add(account); };
   service.setStatus = function (id, status) { return repository.setStatus(id, status); };
+  // "Loại người dùng" (nhóm danh tính) suy ra từ quan hệ sẵn có — vai trò trader, liên kết hồ sơ tiểu
+  // thương hoặc accountType cũ — không có field lưu riêng. Dùng chung cho màn quản trị tài khoản và
+  // màn Thông tin cá nhân.
+  service.USER_KIND = { staff: 'Cán bộ/Nhân viên', trader: 'Tiểu thương' };
+  service.userKind = function (a) { return a && (A.ACCOUNTS.primaryRole(a) === 'trader' || a.traderId || a.accountType === 'Tiểu thương') ? 'trader' : 'staff'; };
 })(window.APP);

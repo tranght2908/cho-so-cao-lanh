@@ -2,5 +2,7 @@
 *.png
 node_modules/
 .idea/
-# File tài khoản test cục bộ — không đẩy lên git
+
+# Local prototype backups
+backups/
 frontend/*.local.html

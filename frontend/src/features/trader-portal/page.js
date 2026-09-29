@@ -155,7 +155,7 @@
   function miniSessionAvailablePoints(s, cat) {
     if (!s) return [];
     const reserved = miniReservedPointIds(s.id);
-    return A.db.stalls.filter(st => st.market === s.marketId && U.rentalKind(st) === 'session' && st.status === 'trong' && !st.traderId && !reserved.has(st.id) && (!cat || st.cat === cat))
+    return A.db.stalls.filter(st => st.market === s.marketId && U.rentalKind(st) === 'session' && st.status === 'active' && !st.traderId && !reserved.has(st.id) && (!cat || st.cat === cat))
       .sort((a, b) => String(a.code || '').localeCompare(String(b.code || ''), 'vi'));
   }
   function miniSessionReceiptsForTrader(t) {
@@ -390,6 +390,138 @@
     const acc = A.currentAccount();
     return acc && D.STAFF.some(s => s.id === acc.code) ? acc.code : (acc ? acc.fullName : 'Mini app thu phí');
   }
+  function incidentStateLabel(id) {
+    const st = D.INCIDENT_STATES.find(s => s.id === id);
+    return st ? st.label : id;
+  }
+  function miniComplaintAllowed(t, incident) {
+    return !!(U.can('mini-app') && isTraderMini() && t && incident && incident.traderId === t.id && inMiniScopeMarket(incident.market));
+  }
+  function miniComplaintStats(items) {
+    return {
+      total: items.length,
+      open: items.filter(i => i.state !== 'hoanthanh' && i.state !== 'dong').length,
+      done: items.filter(i => i.state === 'hoanthanh' || i.state === 'dong').length
+    };
+  }
+  function miniComplaintStatusClass(i) {
+    if (!i) return '';
+    if (i.state === 'dong') return 'ok';
+    if (i.state === 'hoanthanh') return 'warn';
+    return 'info';
+  }
+  const MINI_ISSUE_META = [
+    { key: 'Điện', label: 'Điện, chiếu sáng', desc: 'Mất điện, chập điện, đèn chiếu sáng...', icon: 'bolt', tone: 'warn' },
+    { key: 'Cấp thoát nước', label: 'Cấp thoát nước', desc: 'Mất nước, rò rỉ, nghẹt thoát nước...', icon: 'settings', tone: 'blue' },
+    { key: 'Hạ tầng', label: 'Hạ tầng, cơ sở vật chất', desc: 'Sửa chữa, hư hỏng, xuống cấp...', icon: 'settings', tone: 'blue' },
+    { key: 'Vệ sinh', label: 'Vệ sinh môi trường', desc: 'Rác thải, vệ sinh khu vực...', icon: 'warning', tone: 'green' },
+    { key: 'PCCC', label: 'PCCC', desc: 'Thiết bị, lối thoát hiểm, an toàn cháy nổ...', icon: 'warning', tone: 'danger' }
+  ];
+  function miniIssueMeta(cat) {
+    return MINI_ISSUE_META.find(x => x.key === cat) || MINI_ISSUE_META[2];
+  }
+  function miniIssueOptions() {
+    const seen = new Set();
+    return MINI_ISSUE_META.filter(x => {
+      if (seen.has(x.label)) return false;
+      seen.add(x.label);
+      return true;
+    });
+  }
+  function miniIssueTag(cat) {
+    const meta = miniIssueMeta(cat);
+    return `<span class="merchant-issue-tag ${meta.tone}">${U.icon(meta.icon)}${U.esc(meta.label)}</span>`;
+  }
+  function miniComplaintAttachments() {
+    const m = mini();
+    if (Array.isArray(m.attachments)) return m.attachments;
+    if (m.attach) {
+      m.attachments = [{ id: 'A1', name: 'Ảnh minh họa 1.jpg' }];
+      m.attach = false;
+      return m.attachments;
+    }
+    m.attachments = [];
+    return m.attachments;
+  }
+  function miniCaptureComplaintDraft() {
+    const m = mini();
+    const text = A.$('#mr-text'), cat = A.$('#mr-cat'), stall = A.$('#mr-stall');
+    if (text) m.complaintText = text.value;
+    if (cat) m.complaintCat = cat.value;
+    if (stall) m.complaintStall = stall.value;
+  }
+  function miniAttachmentSummary() {
+    const xs = miniComplaintAttachments();
+    if (!xs.length) return 'Chọn ảnh hoặc kéo thả vào đây';
+    return 'Đã đính kèm ' + xs.length + '/3 ảnh';
+  }
+  function miniAttachmentListHtml() {
+    const xs = miniComplaintAttachments();
+    return xs.length ? `<div class="merchant-attachment-list">${xs.map(x => `<span>${U.icon('camera')}${U.esc(x.name)}<button type="button" data-act="mini-attach-remove" data-id="${U.esc(x.id)}" aria-label="Bỏ ảnh">×</button></span>`).join('')}</div>` : '';
+  }
+  function miniComplaintRow(i, n) {
+    const st = A.idx.stall.get(i.stallId);
+    const canRate = i.state === 'hoanthanh' || i.state === 'dong';
+    const actionLabel = canRate && !i.rating ? 'Đánh giá' : 'Xem';
+    return `<tr>
+      <td>${n}</td>
+      <td><b>${U.esc(i.id)}</b></td>
+      <td>${U.dmy(i.created)}<div class="small muted">${String(i.created || '').slice(11, 16) || '08:30'}</div></td>
+      <td><div class="merchant-issue-title"><span class="merchant-thumb">${U.icon(miniIssueMeta(i.cat).icon)}</span><span><b>${U.esc(i.title)}</b><small>${U.esc(i.desc || 'Khu vực cần Ban Quản lý kiểm tra, xử lý.')}</small></span></div></td>
+      <td>${miniIssueTag(i.cat)}</td>
+      <td>${U.esc(U.mShort(i.market))}<div class="small muted">${U.esc((st && (st.location || st.sectionName || st.code)) || 'Không xác định')}</div></td>
+      <td><span class="merchant-status ${miniComplaintStatusClass(i)}">${U.esc(incidentStateLabel(i.state))}</span></td>
+      <td>${U.esc(String((i.history && i.history.length && i.history[i.history.length - 1].at) || i.created || '').replace('T', ' · '))}</td>
+      <td><button class="btn sm merchant-view-btn" data-act="mini-complaint-open" data-id="${i.id}">${U.icon('dashboard')} ${actionLabel}</button></td>
+    </tr>`;
+  }
+  function miniComplaintHistory(i) {
+    const xs = (i.history && i.history.length ? i.history : (i.log || []).map(x => ({ at: x.at, action: x.text, detail: '' })));
+    return xs.length ? `<div class="inc-timeline">${xs.map(x => `<div class="inc-timeline-i"><b>${U.esc(String(x.at || '').replace('T', ' · '))}</b><strong>${U.esc(x.action || '')}</strong>${x.detail ? `<span>${U.esc(x.detail)}</span>` : ''}</div>`).join('')}</div>` : '<div class="empty small">Chưa có nhật ký xử lý.</div>';
+  }
+  function miniComplaintRatingHtml(i) {
+    if (i.state !== 'hoanthanh' && i.state !== 'dong') return '';
+    const m = mini(), drafts = m.ratingDrafts || (m.ratingDrafts = {});
+    const draft = drafts[i.id] || {};
+    const selected = Number(draft.rating || i.rating || 0);
+    const comment = draft.comment != null ? draft.comment : ((i.feedback || {}).comment || '');
+    return `<section class="merchant-rating-box">
+      <div><b>Đánh giá kết quả xử lý</b><small>${i.rating ? 'Bạn đã đánh giá phản ánh này.' : 'Vui lòng đánh giá sau khi xem kết quả xử lý.'}</small></div>
+      <div class="stars merchant-rating-stars">${[1, 2, 3, 4, 5].map(n => `<button class="${selected >= n ? 'on' : ''}" data-act="mini-rate-pick" data-id="${i.id}" data-n="${n}" aria-label="${n} sao">★</button>`).join('')}</div>
+      <textarea class="input" data-in="mini-rate-comment" data-id="${i.id}" rows="3" maxlength="300" placeholder="Nhập ý kiến thêm về kết quả xử lý...">${U.esc(comment || '')}</textarea>
+      <div class="row" style="justify-content:flex-end"><button class="btn primary" data-act="mini-rate-submit" data-id="${i.id}">${i.rating ? 'Cập nhật đánh giá' : 'Gửi đánh giá'}</button></div>
+    </section>`;
+  }
+  // Điều hướng của cổng tiểu thương trong trang quản lý. Mặc định 'home' (trước đây vào thẳng màn
+  // gửi phản ánh). Lưu trong ui.mini nên giữ nguyên qua các lần render/đổi màn.
+  const PORTAL_NAV = ['home', 'complaints', 'contracts', 'finance', 'notice', 'help'];
+  const portalNav = () => (PORTAL_NAV.indexOf(mini().portalNav) === -1 ? 'home' : mini().portalNav);
+  const PORTAL_CRUMB = {
+    home: ['Tổng quan', 'Trang chủ'],
+    complaints: ['Phản ánh & xử lý', ''],
+    contracts: ['Tổng quan', 'Hợp đồng & điểm kinh doanh'],
+    finance: ['Tổng quan', 'Nghĩa vụ tài chính'],
+    notice: ['Tổng quan', 'Thông báo'],
+    help: ['Tiện ích', 'Hướng dẫn']
+  };
+  function merchantPortalSidebar(nav, badges) {
+    const b = badges || {};
+    const item = (id, icon, label, count) => `<button class="${nav === id ? 'active' : ''}" data-act="merchant-nav" data-id="${id}">${U.icon(icon)}<span>${label}</span>${count ? `<i class="merchant-nav-badge">${count}</i>` : ''}</button>`;
+    return `<aside class="merchant-sidebar">
+      <div class="merchant-brand"><div class="merchant-brand-logo"><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true"><path d="M5 12l2-6h18l2 6z" fill="#0089df"/><path d="M5 12h22v3a3.5 3.5 0 0 1-7 0 3.5 3.5 0 0 1-7 0 3.5 3.5 0 0 1-7 0z" fill="#4fb3ff"/><path d="M7 17v10h18V17" fill="#0b4a9e"/><rect x="13" y="20" width="6" height="7" fill="#fff"/></svg></div><div><b>Chợ số Cao Lãnh</b><small>UBND Phường Cao Lãnh</small></div></div>
+      <nav class="merchant-nav">
+        <div class="merchant-nav-group">Tổng quan</div>
+        ${item('home', 'dashboard', 'Trang chủ')}
+        ${item('complaints', 'warning', 'Phản ánh & xử lý', b.complaints)}
+        ${item('contracts', 'file', 'Hợp đồng & điểm kinh doanh')}
+        ${item('finance', 'receipt', 'Nghĩa vụ tài chính', b.finance)}
+        ${item('notice', 'bell', 'Thông báo')}
+        <div class="merchant-nav-group">Tiện ích</div>
+        ${item('help', 'warning', 'Hướng dẫn')}
+        ${item('logout', 'close', 'Đăng xuất')}
+      </nav>
+    </aside>`;
+  }
   function sampleTraders() {
     const db = A.db, out = [];
     const add = t => { if (t && !out.includes(t)) out.push(t); };
@@ -472,7 +604,7 @@
         <dt>Diện tích</dt><dd>${st.area.toLocaleString('vi-VN')} m²</dd>
         <dt>Ngành hàng</dt><dd>${U.esc(st.cat) || 'Chưa có thông tin'}</dd>
         <dt>Hợp đồng</dt><dd>${c ? c.id : 'Chưa có hợp đồng hiệu lực'}</dd>
-        <dt>Trạng thái</dt><dd>${D.STATUS[st.status] ? D.STATUS[st.status].label : st.status}${st.structuralStatus === 'SPLIT' ? ' · Đã tách' : ''}</dd>
+        <dt>Trạng thái</dt><dd>${U.esc(A.mbStatusLabel(A.pointDisplayStatus(st)))}${st.structuralStatus === 'SPLIT' ? ' · Đã tách' : ''}</dd>
       </dl>
       <div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap">
         <button class="btn sm" data-act="mini-tab" data-id="contract">Xem chi tiết</button>
@@ -677,10 +809,10 @@
   function tabReport(t) {
     const m = mini(), mine = A.db.incidents.filter(i => i.traderId === t.id).reverse();
     return `<div class="m-card"><b>Gửi phản ánh, kiến nghị</b>
-      <div class="field" style="margin-top:8px"><label>Nhóm</label><select class="input" id="mr-cat">${['Điện', 'Cấp thoát nước', 'Vệ sinh', 'An ninh trật tự', 'PCCC', 'Hạ tầng', 'Khác'].map(c => `<option>${c}</option>`).join('')}</select></div>
-      <div class="field" style="margin-top:8px"><label>Điểm kinh doanh</label><select class="input" id="mr-stall">${t.stalls.map(id => `<option value="${id}">${A.idx.stall.get(id).code}</option>`).join('')}</select></div>
-      <div class="field" style="margin-top:8px"><label>Nội dung</label><textarea class="input" id="mr-text" rows="3">Đèn chiếu sáng trước quầy bị hỏng từ tối qua, nhờ Ban Quản lý kiểm tra.</textarea></div>
-      <button class="btn" style="margin-top:8px" data-act="mini-attach">${m.attach ? '✓ Đã đính kèm 1 ảnh' : '📷 Chụp / đính kèm ảnh'}</button>
+      <div class="field" style="margin-top:8px"><label>Nhóm</label><select class="input" id="mr-cat" data-ch="mini-complaint-cat">${['Điện', 'Cấp thoát nước', 'Vệ sinh', 'An ninh trật tự', 'PCCC', 'Hạ tầng', 'Khác'].map(c => `<option ${m.complaintCat === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+      <div class="field" style="margin-top:8px"><label>Điểm kinh doanh</label><select class="input" id="mr-stall" data-ch="mini-complaint-stall">${t.stalls.map(id => `<option value="${id}" ${m.complaintStall === id ? 'selected' : ''}>${A.idx.stall.get(id).code}</option>`).join('')}</select></div>
+      <div class="field" style="margin-top:8px"><label>Nội dung</label><textarea class="input" id="mr-text" data-in="mini-complaint-text" rows="3">${U.esc(m.complaintText || 'Đèn chiếu sáng trước quầy bị hỏng từ tối qua, nhờ Ban Quản lý kiểm tra.')}</textarea></div>
+      <button class="btn" style="margin-top:8px" data-act="mini-attach" ${miniComplaintAttachments().length >= 3 ? 'disabled' : ''}>${miniAttachmentSummary()}</button>${miniAttachmentListHtml()}
       <button class="m-btn solid" style="margin-top:10px" data-act="mini-report">Gửi phản ánh</button></div>
       ${mine.length ? `<div class="m-card"><b>Phản ánh đã gửi</b><div class="m-list">${mine.map(i => `<div class="it" style="flex-wrap:wrap"><span style="flex:1">${U.esc(i.title)}<div class="small muted">${i.id} · ${U.dmy(i.created)}</div></span><span class="tag info">${D.INCIDENT_STATES.find(s => s.id === i.state).label}</span>
         ${(i.state === 'hoanthanh' || i.state === 'dong') ? `<div class="stars" style="width:100%">${[1, 2, 3, 4, 5].map(n => `<button class="${i.rating >= n ? 'on' : ''}" data-act="mini-rate" data-id="${i.id}" data-n="${n}" aria-label="${n} sao">★</button>`).join('')}<span class="small muted">${i.rating ? 'Cảm ơn bạn đã đánh giá' : 'Đánh giá dịch vụ'}</span></div>` : ''}</div>`).join('')}</div></div>` : ''}`;
@@ -798,6 +930,100 @@
     return `<div class="phone"><div class="screen"><div class="notch"><span>9:41</span><span>□□□ 4G 🔋</span></div>${body}</div></div>`;
   }
 
+  // ==================== CỔNG TIỂU THƯƠNG (khung sidebar trong trang quản lý) ====================
+  // Các màn Trang chủ / Hợp đồng & điểm kinh doanh / Nghĩa vụ tài chính / Thông báo dùng ĐÚNG dữ liệu
+  // nghiệp vụ đang có (A.db.invoices, contracts, stalls, incidents, notifications) như trang quản lý
+  // và cổng /tieu-thuong/ — không tạo nguồn dữ liệu riêng, không tự sinh số liệu.
+  const portalStalls = t => t.stalls.map(id => A.idx.stall.get(id)).filter(Boolean);
+  const portalContracts = t => A.db.contracts.filter(c => c.traderId === t.id);
+  const portalInvoices = t => A.db.invoices.filter(i => i.traderId === t.id).sort((a, b) => b.period.localeCompare(a.period));
+  const portalPayments = t => {
+    const ids = A.db.invoices.filter(i => i.traderId === t.id).map(i => i.id);
+    return A.db.payments.filter(p => ids.indexOf(p.invoiceId) !== -1).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  };
+  const portalIncidents = t => A.db.incidents.filter(i => i.traderId === t.id && inMiniScopeMarket(i.market)).slice().reverse();
+  const portalBadges = (t, stats) => ({ complaints: stats ? stats.open : 0, finance: unpaid(t).length });
+  const portalEmpty = msg => `<div class="empty">${U.esc(msg)}</div>`;
+  const portalPanel = (icon, title, desc, body, foot) => `<section class="merchant-panel merchant-block">
+    <div class="merchant-title-row">${U.icon(icon)}<div><h2>${U.esc(title)}</h2>${desc ? `<p>${U.esc(desc)}</p>` : ''}</div>${foot || ''}</div>${body}</section>`;
+  const portalKpi = (label, value, note, tone) => `<div class="merchant-kpi ${tone || ''}"><span>${U.esc(label)}</span><b>${value}</b>${note ? `<small>${note}</small>` : ''}</div>`;
+  const portalLink = (nav, label) => `<button class="btn sm" data-act="merchant-nav" data-id="${nav}">${U.esc(label)}</button>`;
+  const stallLabel = st => (st ? `${U.esc(st.code)}${st.sectionName ? ' · ' + U.esc(st.sectionName) : ''}` : 'Chưa xác định');
+  function portalHome(t) {
+    const list = unpaid(t), total = U.sum(list, U.due), over = list.filter(U.isOver);
+    const incidents = portalIncidents(t), open = incidents.filter(i => i.state !== 'hoanthanh' && i.state !== 'dong');
+    const notices = notisFor(t).slice(0, 3), stalls = portalStalls(t);
+    const cons = portalContracts(t).filter(c => c.status === 'hieuluc');
+    return `<div class="merchant-kpis">
+        ${portalKpi('Còn phải nộp', U.money(total), list.length ? list.length + ' khoản chưa nộp' : 'Đã nộp đủ', total ? 'warn' : 'green')}
+        ${portalKpi('Quá hạn', U.money(U.sum(over, U.due)), over.length ? over.length + ' khoản quá hạn' : 'Không có khoản quá hạn', over.length ? 'danger' : 'green')}
+        ${portalKpi('Điểm kinh doanh', String(stalls.length), cons.length + ' hợp đồng đang hiệu lực', 'blue')}
+        ${portalKpi('Phản ánh đang xử lý', String(open.length), incidents.length + ' phản ánh đã gửi', open.length ? 'warn' : 'green')}
+      </div>
+      ${portalPanel('receipt', 'Khoản phí cần nộp', total ? 'Thanh toán trước hạn để tránh phát sinh nhắc nợ.' : 'Bạn đã nộp đủ các khoản phí.', list.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Kỳ thu</th><th>Điểm kinh doanh</th><th>Số tiền</th><th>Hạn nộp</th><th>Trạng thái</th></tr></thead><tbody>${list.slice(0, 4).map(i => `<tr><td>${U.per(i.period)}</td><td>${stallLabel(A.idx.stall.get(i.stallId))}</td><td><b>${U.money(U.due(i))}</b></td><td>${U.dmy(i.due)}</td><td>${U.invTag(i)}</td></tr>`).join('')}</tbody></table></div>` : portalEmpty('Không có khoản phí nào cần nộp.'), portalLink('finance', 'Xem tất cả'))}
+      ${portalPanel('file', 'Điểm kinh doanh của tôi', '', stalls.length ? `<div class="merchant-cards">${stalls.map(st => {
+        const c = st.contractId ? A.idx.contract.get(st.contractId) : null;
+        return `<div class="merchant-card"><b>${U.esc(st.code)}</b><small>${U.esc(st.sectionName || '')}</small>
+          <dl class="kv"><dt>Ngành hàng</dt><dd>${U.esc(st.cat) || 'Chưa có thông tin'}</dd>
+            <dt>Diện tích</dt><dd>${st.area.toLocaleString('vi-VN')} m²</dd>
+            <dt>Hợp đồng</dt><dd>${c ? U.esc(c.id) : 'Chưa có hợp đồng hiệu lực'}</dd>
+            <dt>Trạng thái</dt><dd>${D.STATUS[st.status] ? U.esc(D.STATUS[st.status].label) : U.esc(st.status)}</dd></dl></div>`;
+      }).join('')}</div>` : portalEmpty('Chưa có điểm kinh doanh nào được giao.'), portalLink('contracts', 'Xem hợp đồng'))}
+      ${portalPanel('bell', 'Thông báo mới', '', notices.length ? `<div class="merchant-rows">${notices.map(n => `<div class="merchant-row"><div><b>${U.esc(n.title)}</b><small>${U.dmy(n.at)} · ${U.esc(n.group || 'Ban Quản lý chợ')}</small></div></div>`).join('')}</div>` : portalEmpty('Chưa có thông báo.'), portalLink('notice', 'Tất cả'))}
+      ${portalPanel('warning', 'Phản ánh gần đây', '', incidents.length ? `<div class="merchant-rows">${incidents.slice(0, 3).map(i => `<div class="merchant-row"><div><b>${U.esc(i.title)}</b><small>${U.esc(i.id)} · ${U.dmy(i.created)}</small></div><span class="tag ${miniComplaintStatusClass(i)}">${U.esc(incidentStateLabel(i.state))}</span></div>`).join('')}</div>` : portalEmpty('Bạn chưa gửi phản ánh nào.'), portalLink('complaints', 'Gửi phản ánh'))}`;
+  }
+  function portalContractsScreen(t) {
+    const cons = portalContracts(t), stalls = portalStalls(t);
+    return `${portalPanel('file', 'Hợp đồng thuê điểm kinh doanh', 'Hợp đồng do Ban Quản lý chợ lập; mọi điều chỉnh liên hệ Ban Quản lý chợ.', cons.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Số hợp đồng</th><th>Loại</th><th>Điểm kinh doanh</th><th>Thời hạn</th><th>Giá dịch vụ/tháng</th><th>Trạng thái</th></tr></thead><tbody>${cons.map(c => {
+      const st = A.idx.stall.get(c.stallId);
+      return `<tr><td><b>${U.esc(c.id)}</b></td><td>${U.esc(c.kind || '')}</td><td>${stallLabel(st)}</td><td>${U.dmy(c.start)} – ${U.dmy(c.end)}</td><td>${c.monthly ? U.money(c.monthly) : '—'}</td><td><span class="tag ${c.status === 'hieuluc' ? 'ok' : ''}">${c.status === 'hieuluc' ? 'Đang hiệu lực' : 'Đã thanh lý'}</span></td></tr>`;
+    }).join('')}</tbody></table></div>` : portalEmpty('Chưa có hợp đồng nào.'))}
+      ${portalPanel('dashboard', 'Chi tiết điểm kinh doanh', '', stalls.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Mã điểm</th><th>Khu vực</th><th>Ngành hàng</th><th>Diện tích</th><th>Đơn giá</th><th>Trạng thái</th></tr></thead><tbody>${stalls.map(st => `<tr><td><b>${U.esc(st.code)}</b></td><td>${U.esc(st.sectionName || '')}</td><td>${U.esc(st.cat) || '—'}</td><td>${st.area.toLocaleString('vi-VN')} m²</td><td>${U.esc(U.unitLabel(st) || '')}</td><td>${D.STATUS[st.status] ? U.esc(D.STATUS[st.status].label) : U.esc(st.status)}</td></tr>`).join('')}</tbody></table></div>` : portalEmpty('Chưa có điểm kinh doanh nào được giao.'))}`;
+  }
+  // Cột "Khoản mục": bỏ phần công thức trong ngoặc (8.9 m² × 1.200 đ × 30 ngày…) cho gọn bảng; chi
+  // tiết đầy đủ vẫn nằm ở khoản phải thu bên trang quản lý.
+  function portalItemsLabel(i) {
+    const names = (i.items || []).map(x => String(x.name || '').replace(/\s*\(.*\)\s*$/, '').trim()).filter(Boolean);
+    if (!names.length) return '—';
+    return U.esc(names.slice(0, 2).join(', ')) + (names.length > 2 ? ` <span class="muted">+${names.length - 2} khoản</span>` : '');
+  }
+  function portalFinance(t) {
+    const invs = portalInvoices(t), pays = portalPayments(t);
+    const debt = U.traderDebt(t.id), over = U.traderOverdue(t.id), paid = U.sum(invs, i => i.paid || 0);
+    // THU_HOI_NO: khoản nợ quá hạn (CN-…) + nút quét QR trả nợ (action:mini-app.tra-no-qr) ở đầu Nghĩa vụ tài chính.
+    return `${miniDebtCard(t)}<div class="merchant-kpis">
+        ${portalKpi('Tổng còn phải nộp', U.money(debt), invs.filter(i => i.status !== 'paid').length + ' khoản', debt ? 'warn' : 'green')}
+        ${portalKpi('Trong đó quá hạn', U.money(over), over ? 'Cần nộp ngay' : 'Không có khoản quá hạn', over ? 'danger' : 'green')}
+        ${portalKpi('Đã nộp', U.money(paid), invs.length + ' kỳ có phát sinh', 'blue')}
+      </div>
+      ${portalPanel('receipt', 'Khoản phải nộp theo kỳ', 'Số liệu lấy từ khoản phải thu do Ban Quản lý chợ phát hành.', invs.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Kỳ thu</th><th>Điểm kinh doanh</th><th>Khoản mục</th><th>Phải nộp</th><th>Còn lại</th><th>Hạn nộp</th><th>Trạng thái</th></tr></thead><tbody>${invs.map(i => `<tr><td>${U.per(i.period)}</td><td>${stallLabel(A.idx.stall.get(i.stallId))}</td><td>${portalItemsLabel(i)}</td><td>${U.money(i.amount)}</td><td><b>${U.money(U.due(i))}</b></td><td>${U.dmy(i.due)}</td><td>${U.invTag(i)}</td></tr>`).join('')}</tbody></table></div>` : portalEmpty('Chưa phát sinh khoản phải nộp.'))}
+      ${portalPanel('file', 'Biên lai đã nộp', '', pays.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Số biên lai</th><th>Ngày nộp</th><th>Hình thức</th><th>Số tiền</th></tr></thead><tbody>${pays.map(p => `<tr><td><b>${U.esc(p.receipt || '')}</b></td><td>${U.dmy(p.date)}</td><td>${U.esc((D.METHOD && D.METHOD[p.method]) || p.method || '')}</td><td>${U.money(p.amount)}</td></tr>`).join('')}</tbody></table></div>` : portalEmpty('Chưa có biên lai nào.'))}`;
+  }
+  function portalNotices(t) {
+    const list = notisFor(t);
+    return portalPanel('bell', 'Thông báo từ Ban Quản lý chợ', '', list.length ? `<div class="merchant-rows">${list.map(n => `<div class="merchant-row"><div><b>${U.esc(n.title)}</b>${n.body ? `<p>${U.esc(n.body)}</p>` : ''}<small>${U.dmy(n.at)} · ${U.esc(n.group || 'Ban Quản lý chợ')}${n.channels && n.channels.length ? ' · ' + U.esc(n.channels.join(', ')) : ''}</small></div></div>`).join('')}</div>` : portalEmpty('Chưa có thông báo nào.'));
+  }
+  function portalHelp() {
+    return portalPanel('warning', 'Hướng dẫn sử dụng', 'Các việc tiểu thương thường làm trên hệ thống.', `<ol class="script">
+      <li><div><b>Xem khoản phí</b><div class="small muted">Vào mục Nghĩa vụ tài chính để xem khoản phải nộp theo kỳ, hạn nộp và biên lai đã nộp.</div></div></li>
+      <li><div><b>Nộp phí</b><div class="small muted">Nộp tiền mặt cho nhân viên thu phí hoặc chuyển khoản theo hướng dẫn của Ban Quản lý chợ; biên lai sẽ hiện trong mục Nghĩa vụ tài chính.</div></div></li>
+      <li><div><b>Gửi phản ánh</b><div class="small muted">Vào mục Phản ánh & xử lý, chọn nhóm vấn đề, mô tả và đính kèm ảnh; theo dõi tiến độ tại tab Xem phản ánh.</div></div></li>
+      <li><div><b>Tra cứu hợp đồng</b><div class="small muted">Mục Hợp đồng & điểm kinh doanh hiển thị số hợp đồng, thời hạn, giá dịch vụ và thông tin điểm kinh doanh.</div></div></li>
+      <li><div><b>Cần hỗ trợ thêm</b><div class="small muted">Liên hệ trực tiếp Ban Quản lý chợ nơi bạn kinh doanh để được hướng dẫn.</div></div></li>
+    </ol>`);
+  }
+  const PORTAL_SCREENS = { home: portalHome, contracts: portalContractsScreen, finance: portalFinance, notice: portalNotices, help: portalHelp };
+  function merchantShellHtml(t, nav, stats, inner) {
+    const crumb = PORTAL_CRUMB[nav] || PORTAL_CRUMB.home;
+    return `<div class="merchant-shell">${merchantPortalSidebar(nav, portalBadges(t, stats))}<main class="merchant-main"><div class="merchant-portal">
+      <div class="merchant-topline">
+        <div class="merchant-breadcrumb"><button class="btn sm">${U.icon('menu')}</button><span>${U.esc(crumb[0])}</span>${crumb[1] ? `<span>›</span><b>${U.esc(crumb[1])}</b>` : ''}</div>
+        <div class="merchant-user"><span class="merchant-bell">${U.icon('bell')}<i>${stats.open}</i></span><span class="merchant-avatar">${U.esc((t.name || '?').slice(0, 1))}</span><span><b>${U.esc(t.name)}</b><small>Tiểu thương</small></span></div>
+      </div>
+      ${inner}
+    </div></main></div>`;
+  }
+
   A.VIEWS['mini-app'] = function () {
     if (isCollectorMini() && !isTraderMini()) {
       return `<div class="mini-wrap"><div>${collectorPhone()}</div>
@@ -816,34 +1042,77 @@
     if (!isTraderMini()) {
       return '<div class="empty">Mini app nhân viên thu phí chỉ áp dụng cho luồng thu tiền mặt Chợ quê TTĐ, đúng phạm vi tài khoản và kỳ đang thu.</div>';
     }
-    const t = trader(), list = sampleTraders(), mine = A.db.incidents.filter(i => i.traderId === t.id).reverse();
+    const t = trader();
     if (!t) return '<div class="empty">Không có tiểu thương trong phạm vi tài khoản mini app.</div>';
-    return `${miniDebtCard(t)}<div class="page-head"><div><h2>Gửi phản ánh</h2><p class="muted">Tiểu thương gửi phản ánh, kiến nghị cho điểm kinh doanh thuộc phạm vi tài khoản.</p></div></div>
-      <div class="grid g2" style="align-items:start">
-        <div class="card"><div class="card-h"><h3>Thông tin người gửi</h3></div><div class="card-b">
-          <div class="field"><label>Tiểu thương</label><select class="input" data-ch="mini-trader">${list.map(x => `<option value="${x.id}" ${x.id === t.id ? 'selected' : ''}>${U.esc(x.name)} · ${x.stalls.map(id => A.idx.stall.get(id).code).join(', ')} · ${U.mShort(x.market)}</option>`).join('')}</select></div>
-          <dl class="kv" style="margin-top:12px"><dt>Chợ</dt><dd>${U.esc(U.mShort(t.market))}</dd><dt>Số điện thoại</dt><dd>${U.maskPhone(t.phone)}</dd><dt>Điểm kinh doanh</dt><dd>${t.stalls.map(id => U.esc((A.idx.stall.get(id) || {}).code || id)).join(', ')}</dd></dl>
-          <div class="note info" style="margin-top:12px">Phản ánh sau khi gửi sẽ vào màn <b>Phản ánh & sự cố</b> để Ban Quản lý tiếp nhận và phân công xử lý.</div>
-        </div></div>
-        <div class="card"><div class="card-h"><h3>Nội dung phản ánh</h3></div><div class="card-b">
-          <div class="field"><label>Nhóm</label><select class="input" id="mr-cat">${['Điện', 'Cấp thoát nước', 'Vệ sinh', 'An ninh trật tự', 'PCCC', 'Hạ tầng', 'Khác'].map(c => `<option>${c}</option>`).join('')}</select></div>
-          <div class="field" style="margin-top:10px"><label>Điểm kinh doanh</label><select class="input" id="mr-stall">${t.stalls.map(id => `<option value="${id}">${U.esc((A.idx.stall.get(id) || {}).code || id)}</option>`).join('')}</select></div>
-          <div class="field" style="margin-top:10px"><label>Nội dung</label><textarea class="input" id="mr-text" rows="5" placeholder="Nhập nội dung phản ánh, kiến nghị cần Ban Quản lý xử lý..."></textarea></div>
-          <div class="row" style="margin-top:12px;gap:8px;flex-wrap:wrap"><button class="btn" data-act="mini-attach">${mini().attach ? '✓ Đã đính kèm 1 ảnh' : 'Đính kèm ảnh minh họa'}</button><span class="spacer"></span><button class="btn primary" data-act="mini-report">Gửi phản ánh</button></div>
-        </div></div>
+    const mine = A.db.incidents.filter(i => i.traderId === t.id && inMiniScopeMarket(i.market)).reverse();
+    const tab = mini().complaintTab === 'list' ? 'list' : 'send';
+    const stats = miniComplaintStats(mine);
+    const selectedStalls = t.stalls.map(id => A.idx.stall.get(id)).filter(Boolean);
+    if (!mini().complaintCat) mini().complaintCat = miniIssueOptions()[0].key;
+    if (!mini().complaintStall && selectedStalls[0]) mini().complaintStall = selectedStalls[0].id;
+    const status = mini().complaintStatus || 'all';
+    const q = String(mini().complaintSearch || '').trim().toLowerCase();
+    const statusTabs = [
+      ['all', 'Tất cả', mine.length],
+      ['open', 'Đang xử lý', stats.open],
+      ['tiepnhan', 'Chờ xử lý', mine.filter(i => i.state === 'tiepnhan').length],
+      ['done', 'Đã xử lý', mine.filter(i => i.state === 'hoanthanh').length],
+      ['closed', 'Đã giải quyết', mine.filter(i => i.state === 'dong').length]
+    ];
+    const filtered = mine.filter(i => {
+      const statusOk = status === 'all' || (status === 'open' && i.state !== 'hoanthanh' && i.state !== 'dong') || (status === 'done' && i.state === 'hoanthanh') || (status === 'closed' && i.state === 'dong') || i.state === status;
+      const st = A.idx.stall.get(i.stallId);
+      const haystack = [i.id, i.title, i.desc, i.cat, U.mShort(i.market), st && st.code, st && st.location, st && st.sectionName].join(' ').toLowerCase();
+      return statusOk && (!q || haystack.indexOf(q) !== -1);
+    });
+    // Các màn còn lại của cổng (Trang chủ, Hợp đồng & điểm kinh doanh, Nghĩa vụ tài chính, Thông báo,
+    // Hướng dẫn) dùng chung khung sidebar; chỉ màn Phản ánh giữ nguyên bố cục gửi/xem sẵn có bên dưới.
+    const nav = portalNav();
+    if (nav !== 'complaints') return merchantShellHtml(t, nav, stats, PORTAL_SCREENS[nav](t));
+    return `<div class="merchant-shell">${merchantPortalSidebar(nav, portalBadges(t, stats))}<main class="merchant-main"><div class="merchant-portal ${tab === 'list' ? 'list-mode' : 'send-mode'}">
+      <div class="merchant-topline">
+        <div class="merchant-breadcrumb"><button class="btn sm">${U.icon('menu')}</button><span>Phản ánh & xử lý</span><span>›</span><b>${tab === 'list' ? 'Danh sách phản ánh' : 'Gửi phản ánh'}</b></div>
+        <div class="merchant-user"><span class="merchant-bell">${U.icon('bell')}<i>${stats.open}</i></span><span class="merchant-avatar">${U.esc((t.name || '?').slice(0, 1))}</span><span><b>${U.esc(t.name)}</b><small>Tiểu thương</small></span></div>
       </div>
-      <div class="card" style="margin-top:14px"><div class="card-h"><h3>Phản ánh đã gửi</h3></div><div class="card-b">
-        ${U.table([{ t: 'Mã' }, { t: 'Ngày gửi' }, { t: 'Điểm KD' }, { t: 'Nhóm' }, { t: 'Nội dung' }, { t: 'Trạng thái' }],
-          mine.map(i => `<tr><td><b>${i.id}</b></td><td>${U.dmy(i.created)}</td><td>${U.esc((A.idx.stall.get(i.stallId) || {}).code || '—')}</td><td>${U.esc(i.cat)}</td><td>${U.esc(i.title)}</td><td><span class="tag info">${U.esc((D.INCIDENT_STATES.find(s => s.id === i.state) || {}).label || i.state)}</span></td></tr>`),
-          { empty: 'Chưa có phản ánh nào.' })}
-      </div></div>`;
+      <div class="merchant-actions">
+        <button class="${tab === 'send' ? 'active' : ''}" data-act="mini-complaint-tab" data-id="send">${U.icon('warning')}<span>Gửi phản ánh</span></button>
+        <button class="${tab === 'list' ? 'active' : ''}" data-act="mini-complaint-tab" data-id="list">${U.icon('file')}<span>Xem phản ánh</span></button>
+      </div>
+      ${tab === 'send' ? `<div class="merchant-send-layout">
+        <section class="merchant-panel merchant-form-panel">
+          <div class="merchant-title-row">${U.icon('warning')}<div><h2>Gửi phản ánh</h2><p>Gửi phản ánh để Ban Quản lý chợ nắm bắt và xử lý kịp thời</p></div></div>
+          <div class="field"><label>Nhóm vấn đề <b>*</b></label><select class="input" id="mr-cat" data-ch="mini-complaint-cat">${miniIssueOptions().map(c => `<option value="${U.esc(c.key)}" ${mini().complaintCat === c.key ? 'selected' : ''}>${U.esc(c.label)}</option>`).join('')}</select></div>
+          <div class="field"><label>Mô tả <b>*</b></label><textarea class="input merchant-textarea" id="mr-text" data-in="mini-complaint-text" rows="8" maxlength="500" placeholder="Nhập mô tả chi tiết về vấn đề gặp phải...">${U.esc(mini().complaintText || '')}</textarea><div class="merchant-count">${String(mini().complaintText || '').length}/500</div></div>
+          <select id="mr-stall" data-ch="mini-complaint-stall" hidden>${selectedStalls.map(s => `<option value="${s.id}" ${mini().complaintStall === s.id ? 'selected' : ''}>${U.esc(s.code || s.id)}</option>`).join('')}</select>
+          <div class="field"><label>Đính kèm ảnh <span>(tối đa 3 ảnh)</span></label><button class="merchant-upload" data-act="mini-attach" ${miniComplaintAttachments().length >= 3 ? 'disabled' : ''}>${U.icon('camera')}<span>${miniAttachmentSummary()}<small>Hỗ trợ: JPG, PNG (tối đa 3 ảnh trong prototype)</small></span></button>${miniAttachmentListHtml()}</div>
+          <div class="merchant-submit-row"><button class="btn" data-act="mini-complaint-tab" data-id="list">Hủy</button><button class="btn primary" data-act="mini-report" ${selectedStalls.length ? '' : 'disabled'}>${U.icon('warning')} Gửi phản ánh</button></div>
+        </section>
+        <aside class="merchant-side">
+          <section class="merchant-note"><div class="merchant-note-title">${U.icon('bolt')}<b>Lưu ý khi gửi phản ánh</b></div><ul><li>Mô tả rõ địa điểm, thời gian, tình trạng gặp phải.</li><li>Có thể đính kèm hình ảnh, video để Ban quản lý xử lý nhanh hơn.</li><li>Phản ánh sẽ được tiếp nhận và xử lý theo quy trình của Ban Quản lý chợ.</li><li>Bạn có thể theo dõi tiến độ xử lý tại mục Danh sách phản ánh.</li></ul></section>
+        </aside>
+      </div>` : `<section class="merchant-panel merchant-list-panel">
+        <div class="merchant-list-head"><div class="merchant-title-row">${U.icon('warning')}<div><h2>Danh sách phản ánh của tôi</h2></div></div>
+          <div class="merchant-list-tools"><input class="input" data-in="mini-complaint-search" value="${U.esc(mini().complaintSearch || '')}" placeholder="Tìm kiếm phản ánh..."><button class="btn">${U.icon('settings')} Bộ lọc</button></div></div>
+        <div class="merchant-tabs">${statusTabs.map(x => `<button class="${status === x[0] ? 'active' : ''}" data-act="mini-complaint-status" data-id="${x[0]}">${x[1]} (${x[2]})</button>`).join('')}</div>
+        <div class="tbl-wrap"><table class="tbl merchant-table"><thead><tr><th>STT</th><th>Mã phản ánh</th><th>Thời gian gửi</th><th>Tiêu đề</th><th>Nhóm vấn đề</th><th>Địa điểm</th><th>Trạng thái</th><th>Cập nhật cuối</th><th>Thao tác</th></tr></thead><tbody>${filtered.map((i, n) => miniComplaintRow(i, n + 1)).join('') || `<tr><td colspan="9"><div class="empty">Không có phản ánh phù hợp.</div></td></tr>`}</tbody></table></div>
+        <div class="merchant-table-foot"><span>Hiển thị ${filtered.length ? '1 - ' + Math.min(filtered.length, 5) : '0'} của ${filtered.length} phản ánh</span><div><button class="btn sm">‹</button><button class="btn sm primary">1</button><button class="btn sm">2</button><button class="btn sm">›</button></div></div>
+      </section>`}
+    </div></main></div>`;
   };
 
-  A.CH['mini-trader'] = el => { miniResetLoginFlow(); Object.assign(mini(), { traderId: el.value, step: 'login', tab: 'home', pay: null, bill: null, attach: false }); A.render(); };
+  A.CH['mini-trader'] = el => { miniResetLoginFlow(); Object.assign(mini(), { traderId: el.value, step: 'login', tab: 'home', complaintTab: 'send', complaintText: '', complaintCat: '', complaintStall: '', pay: null, bill: null, attach: false, attachments: [] }); A.render(); };
   // ---- Đăng nhập/kích hoạt Mini App (SĐT + OTP) — field binding ----
   // Render lại ngay khi gõ để nút "Nhận mã đăng nhập" phản ánh đúng giá trị mới nhất khi cần (an
   // toàn vì A.render() giữ nguyên focus/caret cho input đang gõ, xem A.render() ở core.js).
   A.IN['mini-login-phone'] = el => { mini().loginPhone = el.value; };
+  A.IN['mini-complaint-search'] = el => { mini().complaintSearch = el.value; A.render(); };
+  A.IN['mini-complaint-text'] = el => { mini().complaintText = el.value; const c = A.$('.merchant-count'); if (c) c.textContent = String(el.value || '').length + '/500'; };
+  A.IN['mini-rate-comment'] = el => {
+    const drafts = mini().ratingDrafts || (mini().ratingDrafts = {});
+    drafts[el.dataset.id] = Object.assign({}, drafts[el.dataset.id] || {}, { comment: el.value });
+  };
+  A.CH['mini-complaint-cat'] = el => { mini().complaintCat = el.value; };
+  A.CH['mini-complaint-stall'] = el => { mini().complaintStall = el.value; };
   Object.assign(A.ACT, {
     // Tra cứu Trader Profile theo SĐT (mục 11 yêu cầu correction) — KHÔNG tạo trader/account ở bước
     // này, chỉ xác định CASE A (không thấy)/CASE B (thấy đúng 1)/nhiều kết quả (mục 22 — ambiguous).
@@ -923,7 +1192,49 @@
     },
     'mini-bill': el => { mini().bill = mini().bill === el.dataset.id ? null : el.dataset.id; A.render(); },
     'mini-pdf': () => U.toast('Mở bản số hóa hợp đồng (PDF) – minh họa'),
-    'mini-attach': () => { mini().attach = !mini().attach; A.render(); },
+    'mini-attach': () => {
+      miniCaptureComplaintDraft();
+      const xs = miniComplaintAttachments();
+      if (xs.length >= 3) { U.toast('Chỉ được đính kèm tối đa 3 ảnh.'); return; }
+      xs.push({ id: 'A' + (Date.now()), name: 'Ảnh minh họa ' + (xs.length + 1) + '.jpg' });
+      A.render();
+    },
+    'mini-attach-remove': el => {
+      miniCaptureComplaintDraft();
+      mini().attachments = miniComplaintAttachments().filter(x => x.id !== el.dataset.id);
+      A.render();
+    },
+    'merchant-nav': el => {
+      const id = el.dataset.id;
+      if (id === 'logout' && A.ACT['auth-logout']) { A.ACT['auth-logout'](); return; }
+      if (PORTAL_NAV.indexOf(id) === -1) return;
+      if (id === 'complaints' && portalNav() !== 'complaints') mini().complaintTab = 'send';
+      mini().portalNav = id;
+      A.render();
+    },
+    'mini-complaint-tab': el => { mini().complaintTab = el.dataset.id === 'list' ? 'list' : 'send'; A.render(); },
+    'mini-complaint-status': el => { mini().complaintStatus = el.dataset.id || 'all'; A.render(); },
+    'mini-issue-pick': el => {
+      const cat = el.dataset.cat;
+      const sel = A.$('#mr-cat');
+      if (sel && cat) sel.value = cat;
+    },
+    'mini-complaint-open': el => {
+      const t = trader(), i = A.db.incidents.find(x => x.id === el.dataset.id);
+      if (!miniComplaintAllowed(t, i)) { U.toast('Không có quyền xem phản ánh này.'); return; }
+      const st = A.idx.stall.get(i.stallId);
+      A.modal(A.mHead(i.id + ' · ' + U.esc(i.title)) + `<div class="modal-b">
+        <dl class="kv"><dt>Trạng thái</dt><dd><span class="tag ${miniComplaintStatusClass(i)}">${U.esc(incidentStateLabel(i.state))}</span></dd>
+          <dt>Nhóm</dt><dd>${U.esc(i.cat)}</dd><dt>Điểm kinh doanh</dt><dd>${U.esc((st && st.code) || 'Không xác định')}</dd>
+          <dt>Ngày gửi</dt><dd>${U.dmy(i.created)}</dd><dt>Hạn xử lý</dt><dd>${U.esc(String(i.deadline || '').replace('T', ' · '))}</dd>
+          ${i.desc ? `<dt>Nội dung</dt><dd>${U.esc(i.desc)}</dd>` : ''}${i.photo || (i.images && i.images.report && i.images.report.length) ? '<dt>Ảnh</dt><dd><span class="tag info">Có ảnh đính kèm</span></dd>' : ''}
+          ${i.work && i.work.result ? `<dt>Kết quả</dt><dd>${U.esc(i.work.result)}</dd>` : ''}${i.rating ? `<dt>Đánh giá</dt><dd>${'★'.repeat(i.rating)}${'☆'.repeat(5 - i.rating)}</dd>` : ''}${i.feedback && i.feedback.comment ? `<dt>Ý kiến</dt><dd>${U.esc(i.feedback.comment)}</dd>` : ''}</dl>
+        ${miniComplaintRatingHtml(i)}
+        <div class="divider"></div><b class="small">Nhật ký xử lý</b>${miniComplaintHistory(i)}
+      </div><div class="modal-f">
+        <button class="btn" data-act="close">Đóng</button>
+      </div>`, true);
+    },
     'mini-debt-pay': el => {
       const t = trader(), acc = A.currentAccount() || {}, d = (A.db.debts || []).find(x => x.id === el.dataset.id);
       if (!U.can('mini-app') || !isTraderMini() || !t || !d || d.traderId !== t.id || (acc.traderId || acc.linkedTraderId) !== t.id || !inMiniScopeMarket(d.market) || !A.canDo('mini-app.tra-no-qr', d.market)) { U.toast('Không có quyền thanh toán khoản nợ này'); return; }
@@ -941,9 +1252,11 @@
       }
       const text = A.$('#mr-text').value.trim();
       if (!text) { U.toast('Vui lòng nhập nội dung'); return; }
-      const title = text.length > 60 ? text.slice(0, 57) + '…' : text;
-      const i = A.addIncident(stall.id, A.$('#mr-cat').value, title, text, 'Mini app tiểu thương', mini().attach);
-      mini().attach = false; A.render();
+      const titleBase = text;
+      const title = titleBase.length > 60 ? titleBase.slice(0, 57) + '…' : titleBase;
+      const i = A.addIncident(stall.id, A.$('#mr-cat').value, title, text, 'Mini app tiểu thương', miniComplaintAttachments().slice(0, 3));
+      Object.assign(mini(), { attach: false, attachments: [], complaintText: '', complaintCat: '', complaintStall: '', complaintTab: 'list' });
+      A.render();
       U.toast('Đã gửi ' + i.id + '. Ban Quản lý đã tiếp nhận phản ánh của bạn.');
     },
     'mini-reg-kind': () => { mini().regForm = Object.assign(mini().regForm || {}, { kind: 'SESSION' }); A.render(); },
@@ -987,12 +1300,29 @@
       A.save(); A.render();
       U.toast('Thanh toán thành công. Biên lai ' + receipt.receiptNumber + ' đã gửi Mini app');
     },
-    'mini-rate': el => {
-      const i = A.db.incidents.find(x => x.id === el.dataset.id);
-      i.rating = Number(el.dataset.n);
+    'mini-rate-pick': el => {
+      const t = trader(), i = A.db.incidents.find(x => x.id === el.dataset.id);
+      if (!miniComplaintAllowed(t, i) || (i.state !== 'hoanthanh' && i.state !== 'dong')) { U.toast('Không có quyền đánh giá phản ánh này.'); return; }
+      const drafts = mini().ratingDrafts || (mini().ratingDrafts = {});
+      drafts[i.id] = Object.assign({}, drafts[i.id] || {}, { rating: Number(el.dataset.n) });
+      A.ACT['mini-complaint-open']({ dataset: { id: i.id } });
+    },
+    'mini-rate-submit': el => {
+      const t = trader(), i = A.db.incidents.find(x => x.id === el.dataset.id);
+      if (!miniComplaintAllowed(t, i) || (i.state !== 'hoanthanh' && i.state !== 'dong')) { U.toast('Không có quyền đánh giá phản ánh này.'); return; }
+      const draft = ((mini().ratingDrafts || {})[i.id]) || {};
+      const rating = Number(draft.rating || i.rating || 0);
+      if (!rating) { U.toast('Vui lòng chọn số sao đánh giá.'); return; }
+      i.rating = rating;
+      i.feedback = { at: U.today(), by: t.id, comment: String(draft.comment || '').trim() };
       if (i.state === 'hoanthanh') i.state = 'dong';
-      i.log.push({ at: U.today(), text: 'Tiểu thương đánh giá ' + i.rating + ' sao' });
-      A.save(); A.render(); U.toast('Cảm ơn bạn đã đánh giá ' + i.rating + ' sao');
+      i.log.push({ at: U.today(), text: 'Tiểu thương đánh giá ' + i.rating + ' sao' + (i.feedback.comment ? ': ' + i.feedback.comment : '') });
+      if (mini().ratingDrafts) delete mini().ratingDrafts[i.id];
+      A.save(); A.closeModal(); A.render(); U.toast('Cảm ơn bạn đã đánh giá kết quả xử lý.');
+    },
+    'mini-rate': el => {
+      A.ACT['mini-rate-pick'](el);
+      A.ACT['mini-rate-submit'](el);
     }
   });
 })(window.APP);

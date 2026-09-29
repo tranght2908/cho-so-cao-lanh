@@ -3,7 +3,7 @@
  * wf-account-* commands that create the PENDING_ACTIVATION trader account. */
 (function (A) {
   'use strict';
-  const U = A.U;
+  const U = A.U, ui = A.ui;
   const active = c => c && c.status === 'hieuluc';
   const trader = id => A.idx.trader.get(id);
   const stall = id => A.idx.stall.get(id);
@@ -18,8 +18,21 @@
 
   function accountTaskHtml() {
     const rows = needsAccount();
-    if (!rows.length) return '';
-    return `<section class="card workflow-task"><div class="card-h"><div><h3>Cần xử lý <span class="tag">${rows.length}</span></h3><div class="small muted">Tiểu thương đã có hợp đồng và điểm kinh doanh nhưng chưa có tài khoản.</div></div></div><div class="card-b">${rows.map(t => { const c = A.db.contracts.find(x => active(x) && x.traderId === t.id), s = stall(c.stallId); return `<div class="workflow-task-row"><div><b>${U.esc(t.name)}</b><div class="small muted">Tiểu thương · ${U.esc(marketName(t.market))} · ${U.maskPhone(t.phone)}</div><div class="small">Hồ sơ tiểu thương · Hợp đồng ${c.id} · Điểm ${s.code} · Chưa có tài khoản</div></div><button class="btn primary" data-act="wf-account-open" data-id="${t.id}">Tạo tài khoản</button></div>`; }).join('')}</div></section>`;
+    return A.UI.pending.summary({ count: rows.length, title: 'Tiểu thương chưa có tài khoản', description: 'Tiểu thương đã có hợp đồng và điểm kinh doanh nhưng chưa có tài khoản.', action: 'wf-account-worklist', actionLabel: A.canDo('tai-khoan.tao-moi') ? 'Xem & xử lý' : 'Xem danh sách' });
+  }
+
+  function pendingAccountRows() {
+    const q = String(ui.pendingAccountSearch || '').trim().toLowerCase();
+    return needsAccount().map(t => {
+      const c = A.db.contracts.find(x => active(x) && x.traderId === t.id), s = c && stall(c.stallId);
+      return { t, c, s };
+    }).filter(x => !q || [x.t.name, x.t.id, x.t.phone, x.c && x.c.id, x.s && x.s.code].join(' ').toLowerCase().includes(q));
+  }
+  function showAccountWorklist() {
+    const all = needsAccount(), rows = pendingAccountRows(), pg = A.UI.pending.pager({ key: 'pendingAccounts', total: rows.length, size: 15, action: 'wf-account-worklist-page' });
+    const canCreate = A.canDo('tai-khoan.tao-moi');
+    const body = rows.slice(pg.start, pg.end).map(({ t, c, s }) => `<div class="pending-work-row"><div><b>${U.esc(t.name)}</b><div class="small muted">${t.id} · ${U.maskPhone(t.phone)} · ${U.esc(marketName(t.market))}</div><div class="small">${s ? 'Điểm ' + s.code : 'Chưa có điểm'} · Hợp đồng ${c ? c.id : '—'}</div></div>${canCreate ? `<button class="btn sm primary" data-act="wf-account-open" data-id="${t.id}">Tạo tài khoản</button>` : ''}</div>`).join('');
+    A.modal(A.UI.pending.worklist({ title: 'Tiểu thương chưa có tài khoản', count: all.length, searchKey: 'wf-account-search', searchValue: ui.pendingAccountSearch, placeholder: 'Tìm tên, mã TT, SĐT, điểm KD, hợp đồng...', rows: body, pagerHtml: pg.html }), true);
   }
 
   A.ACT['wf-account-open'] = el => {
@@ -28,6 +41,9 @@
     if (!t || !c || !s || accountFor(t.id)) return;
     A.modal(A.mHead('Tạo tài khoản tiểu thương') + `<div class="modal-b"><dl class="kv"><dt>Họ tên</dt><dd>${U.esc(t.name)}</dd><dt>Số điện thoại</dt><dd>${U.maskPhone(t.phone)}</dd><dt>Vai trò</dt><dd>Tiểu thương</dd><dt>Chợ</dt><dd>${U.esc(marketName(t.market))}</dd><dt>Điểm kinh doanh</dt><dd>${s.code}</dd></dl><div class="note info" style="margin-top:12px">Thông tin được lấy từ hồ sơ, hợp đồng và điểm kinh doanh hiện có.</div></div><div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="wf-account-create" data-id="${t.id}">Tạo tài khoản</button></div>`);
   };
+  A.ACT['wf-account-worklist'] = () => { ui.page.pendingAccounts = 0; showAccountWorklist(); };
+  A.ACT['wf-account-worklist-page'] = el => { ui.page[el.dataset.k] = Math.max(0, (ui.page[el.dataset.k] || 0) + Number(el.dataset.d)); showAccountWorklist(); };
+  A.IN['wf-account-search'] = el => { ui.pendingAccountSearch = el.value; ui.page.pendingAccounts = 0; showAccountWorklist(); };
   A.ACT['wf-account-create'] = el => {
     if (!A.canDo('tai-khoan.tao-moi')) return;
     const t = trader(el.dataset.id); if (!t || accountFor(t.id)) return;
@@ -37,5 +53,11 @@
   };
   A.ACT['wf-send-activation'] = el => { const t = trader(el.dataset.id); if (!t || !accountFor(t.id)) return; A.closeModal(); U.toast('Đã gửi thông báo kích hoạt: dùng số điện thoại đã đăng ký để đăng nhập OTP.'); };
   accounts.tradersNeedingAccount = needsAccount;
+  // Read-only selector for the account-management work queue. The page owns rendering;
+  // this module remains the sole owner of the trader/contract eligibility rule.
+  accounts.traderAccountRows = () => needsAccount().map(t => {
+    const c = A.db.contracts.find(x => active(x) && x.traderId === t.id), s = c && stall(c.stallId);
+    return { t, c, s };
+  });
   A.features.accounts.traderAccountTaskHtml = accountTaskHtml;
 })(window.APP);

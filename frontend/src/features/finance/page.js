@@ -499,19 +499,21 @@
     const amount = U.sum(lines, l => l.amount), paid = U.sum(lines, l => l.paidAmount);
     return Object.assign({}, i, { amount, paid, status: paid >= amount ? 'paid' : paid > 0 ? 'partial' : 'unpaid', portion: true });
   }
-  // Khu vực lấy từ CẤU TRÚC CHỢ đã khai báo (Hạ tầng chợ › Mặt bằng & điểm kinh doanh — store layout duy
-  // nhất A.features.marketLayout.store): Khối → Tầng → Khu; khu khớp dữ liệu thật qua zone.code === section.
-  function ptLayoutBlocks() {
-    const store = A.features.marketLayout && A.features.marketLayout.store;
-    return store && store.of(ui.market) ? store.blocksOf(ui.market) : [];
+  // Vùng thu = DÃY (Row) của mô hình mặt bằng v16 (A.db.buildings → floors → rows → stalls). Dãy là đơn vị
+  // phân công NV thu phí (row.collectorId); stall.section (getter) = row.code nên các bộ lọc cũ vẫn khớp.
+  // Thứ tự: Toà nhà → Tầng → Dãy (theo order) — dùng cho lộ trình đi thu và Bản đồ thu.
+  function ptLayoutRows(mid) {
+    const bOrd = new Map((A.db.buildings || []).filter(b => b.market === mid).map(b => [b.id, b.order || 0]));
+    const fOrd = new Map((A.db.floors || []).filter(x => x.market === mid).map(x => [x.id, x.order || 0]));
+    return (A.db.rows || []).filter(r => r.market === mid && r.status !== 'inactive')
+      .sort((a, b) => (bOrd.get(a.buildingId) || 0) - (bOrd.get(b.buildingId) || 0) || (a.floorId ? fOrd.get(a.floorId) || 0 : 999) - (b.floorId ? fOrd.get(b.floorId) || 0 : 999) || (a.order || 0) - (b.order || 0));
+  }
+  function ptRowPlace(r) {
+    const fl = r.floorId && A.idx.floor ? A.idx.floor.get(r.floorId) : null, b = A.idx.building ? A.idx.building.get(r.buildingId) : null;
+    return fl ? fl.name : b ? b.name : '';
   }
   function ptZones() {
-    const out = [];
-    ptLayoutBlocks().forEach(b => b.floors.forEach(fl => fl.zones.forEach(z => {
-      const ctx = A.mbResolveZoneContext(ui.market, z);
-      if (ctx.matched && !out.some(x => x.id === ctx.section.id)) out.push({ id: ctx.section.id, name: (z.name || ctx.section.name) + (b.floors.length > 1 || ptLayoutBlocks().length > 1 ? ' · ' + fl.name : '') });
-    })));
-    return out;
+    return ptLayoutRows(ui.market).map(r => ({ id: r.code, rowId: r.id, name: r.name + (ptRowPlace(r) ? ' · ' + ptRowPlace(r) : '') }));
   }
   // Bảng chi tiết khoản thu theo phần: mỗi điểm 1 dòng tiêu đề (người thu, phải thu, đã thu) + các dòng tiền.
   // Đã thu → mờ; chưa thu → đậm. onlyStalls: giới hạn điểm được xem (NV thu phí chỉ thấy phần của mình).
@@ -536,45 +538,42 @@
     return summary + U.table([{ t: 'Nội dung' }, { t: 'Người thu' }, { t: 'Số tiền', num: true }, { t: 'Đã thu', num: true }, { t: '' }],
       rows.concat([`<tr><td><b>${totalLabel || (onlyStalls ? 'Cộng phần của bạn' : 'Tổng cộng')}</b></td><td></td><td class="num"><b>${U.money(amount)}</b></td><td class="num"><b>${U.money(paid)}</b></td><td></td></tr>`]));
   }
-  // Bản đồ thu: vẽ ĐÚNG theo cấu trúc chợ đã khai báo ở Mặt bằng & điểm kinh doanh (Khối → Tầng → Khu →
-  // dãy → điểm, cùng thứ tự dãy/số điểm mỗi dãy như sơ đồ mặt bằng); mỗi ô tô màu theo tình trạng thu của
-  // điểm trong kỳ đang xem và hiện số tiền. Khu chưa khớp dữ liệu thật (đang quy hoạch) hiện ghi chú.
+  // Bản đồ thu: vẽ theo cấu trúc mặt bằng v16 (Toà nhà → Tầng → Dãy → điểm theo số thứ tự), mỗi ô tô màu theo
+  // tình trạng thu của điểm trong kỳ đang xem và hiện số tiền. NV thu phí (không có xem toàn chợ) chỉ thấy Dãy
+  // được phân công cho mình (phân công theo Dãy nên không lẫn quầy của người khác).
   function ptMapHtml(fp, scopeAll, zone) {
     const me = (A.currentAccount() || {}).id, mid = ui.market;
     const byStall = new Map();
     A.db.invoices.filter(i => i.period === fp.id && U.inM(i)).forEach(i => { const cov = A.invCoveredStalls(i); U.invStallIds(i).forEach(id => byStall.set(id, { i, line: ptStallLine(i, id, cov) })); });
-    const COLORS = { paid: ['#dff3e6', '#2e8b57'], unpaid: ['#ffffff', '#6b7280'], over: ['#fde2e2', '#d6453b'], none: ['#f1f2f4', '#c3c7cf'], hidden: ['#f7f7f8', '#e3e5e8'] };
+    const COLORS = { paid: ['#dff3e6', '#2e8b57'], unpaid: ['#ffffff', '#6b7280'], over: ['#fde2e2', '#d6453b'], none: ['#f1f2f4', '#c3c7cf'] };
     const legend = [['paid', 'Đã thu'], ['unpaid', 'Chưa thu'], ['over', 'Quá hạn'], ['none', 'Không phát sinh khoản / điểm trống']].map(([k, t]) => `<span style="display:inline-flex;align-items:center;gap:6px;margin-right:14px"><i style="width:14px;height:14px;border-radius:3px;background:${COLORS[k][0]};border:1.5px solid ${COLORS[k][1]}"></i>${t}</span>`).join('');
     const cell = st => {
-      const x = byStall.get(st.id), mine = scopeAll || st.collectorId === me;
-      let k = 'none';
-      if (!mine) k = 'hidden'; else if (x) k = x.line.paid ? 'paid' : (U.isOver(x.i) ? 'over' : 'unpaid');
+      const x = byStall.get(st.id);
+      const k = x ? (x.line.paid ? 'paid' : (U.isOver(x.i) ? 'over' : 'unpaid')) : 'none';
       const t = x && A.idx.trader.get(x.i.traderId);
-      const tip = mine && x ? `${st.code} · ${t ? t.name : ''} · ${U.money(x.line.amount)} · ${x.line.paid ? 'Đã thu' : 'Chưa thu'} · Người thu: ${ptCollectorName(st)} · ${x.i.id}` : `${st.code}${mine ? ' · không phát sinh khoản kỳ này' : ' · ngoài phạm vi phân công của bạn'}`;
-      return `<button class="cell" title="${U.esc(tip)}" ${mine && x ? `data-act="inv-open" data-id="${x.i.id}" data-stall="${st.id}"` : 'disabled'} style="height:44px;line-height:1.15;display:flex;flex-direction:column;justify-content:center;background:${COLORS[k][0]};border:1.5px solid ${COLORS[k][1]};color:#1f2937;cursor:${mine && x ? 'pointer' : 'default'};${k === 'paid' ? 'opacity:.7;font-weight:500' : k === 'unpaid' || k === 'over' ? 'font-weight:700' : 'font-weight:500'}">${U.esc(st.code)}${mine && x ? `<span style="font-weight:400;font-size:10px">${U.moneyShort(x.line.amount)}</span>` : ''}</button>`;
+      const tip = x ? `${st.code} · ${t ? t.name : ''} · ${U.money(x.line.amount)} · ${x.line.paid ? 'Đã thu' : 'Chưa thu'} · Người thu: ${ptCollectorName(st)} · ${x.i.id}` : `${st.code} · không phát sinh khoản kỳ này`;
+      return `<button class="cell" title="${U.esc(tip)}" ${x ? `data-act="inv-open" data-id="${x.i.id}" data-stall="${st.id}"` : 'disabled'} style="height:44px;line-height:1.15;display:flex;flex-direction:column;justify-content:center;background:${COLORS[k][0]};border:1.5px solid ${COLORS[k][1]};color:#1f2937;cursor:${x ? 'pointer' : 'default'};${k === 'paid' ? 'opacity:.7;font-weight:500' : k === 'unpaid' || k === 'over' ? 'font-weight:700' : 'font-weight:500'}">${U.esc(st.code)}${x ? `<span style="font-weight:400;font-size:10px">${U.moneyShort(x.line.amount)}</span>` : ''}</button>`;
     };
-    const zoneHtml = (fl, z) => {
-      const ctx = A.mbResolveZoneContext(mid, z);
-      if (!ctx.matched) return zone ? '' : `<div class="plan-section"><h4>${U.esc(z.name || '(chưa đặt tên)')}<span>${U.esc(z.code || '')}</span></h4><div class="small muted">Khu đang quy hoạch — chưa có điểm kinh doanh thực tế, không phát sinh khoản thu.</div></div>`;
-      const sec = ctx.section;
-      if (zone && sec.id !== zone) return '';
-      // NV thu phí (không có action:phai-thu.xem-toan-cho): chỉ vẽ ĐIỂM được phân công cho mình (không hiện
-      // quầy của người khác, kể cả cùng khu); khu không có điểm nào của mình thì bỏ.
-      const stalls = A.mbBusinessPointsForZone(mid, z).filter(st => scopeAll || st.collectorId === me);
-      if (!scopeAll && !stalls.length) return '';
+    const rowHtml = r => {
+      if (zone && r.code !== zone) return '';
+      if (!scopeAll && r.collectorId !== me) return '';
+      const stalls = A.db.stalls.filter(st => st.rowId === r.id).sort((a, b) => (a.num || 0) - (b.num || 0));
+      if (!stalls.length) return '';
       let tot = 0, got = 0, nPaid = 0, nDue = 0;
-      stalls.forEach(st => { const x = byStall.get(st.id); if (!x || !(scopeAll || st.collectorId === me)) return; tot += x.line.amount; got += x.line.paidAmount; nDue++; if (x.line.paid) nPaid++; });
-      const collectors = Array.from(new Set(stalls.map(ptCollectorName)));
-      const rows = sec.rows.filter(r => scopeAll || stalls.some(st => st.row === r)).map(r => `<div class="plan-row"><span class="rl">${r}</span><div class="cells" style="--n:${sec.per};grid-template-columns:repeat(${sec.per},minmax(58px,1fr))">${stalls.filter(st => st.row === r).sort((a, b) => (a.num || 0) - (b.num || 0)).map(cell).join('')}</div></div>`).join('<div class="aisle"></div>');
-      return `<div class="plan-section"><h4>${U.esc(z.name || sec.name)}<span>${U.esc(z.code || sec.id)} · Người thu: ${U.esc(collectors.join(', '))}</span><span style="margin-left:auto"><span class="tag ${nDue && nPaid === nDue ? 'ok' : ''}">${nPaid}/${nDue} điểm đã thu</span> <span class="tag">${U.money(got)} / ${U.money(tot)}</span></span></h4>
-        <div class="bar-mini" style="margin:2px 0 8px"><i style="width:${U.pct(got, tot)}%"></i></div>${rows}</div>`;
+      stalls.forEach(st => { const x = byStall.get(st.id); if (!x) return; tot += x.line.amount; got += x.line.paidAmount; nDue++; if (x.line.paid) nPaid++; });
+      const per = Math.min(Math.max(stalls.length, 4), 12);
+      return `<div class="plan-section"><h4>${U.esc(r.name)}<span>${U.esc(r.code)} · Người thu: ${U.esc(ptCollectorName(stalls[0]))}</span><span style="margin-left:auto"><span class="tag ${nDue && nPaid === nDue ? 'ok' : ''}">${nPaid}/${nDue} điểm đã thu</span> <span class="tag">${U.money(got)} / ${U.money(tot)}</span></span></h4>
+        <div class="bar-mini" style="margin:2px 0 8px"><i style="width:${U.pct(got, tot)}%"></i></div><div class="plan-row"><div class="cells" style="--n:${per};grid-template-columns:repeat(${per},minmax(58px,1fr))">${stalls.map(cell).join('')}</div></div></div>`;
     };
-    const blocks = ptLayoutBlocks();
-    const body = blocks.map(b => {
-      const floors = b.floors.map(fl => { const zs = fl.zones.map(z => zoneHtml(fl, z)).filter(Boolean).join(''); return zs ? `${b.floors.length > 1 ? `<div class="mb-floor-heading"><b>${U.esc(fl.name)}</b></div>` : ''}${zs}` : ''; }).filter(Boolean).join('');
-      return floors ? `<div class="card" style="margin-bottom:12px"><div class="card-h"><h3>${U.esc(b.name)}</h3><span class="small muted">Theo cấu trúc tại Hạ tầng chợ › Mặt bằng & điểm kinh doanh</span></div><div class="card-b"><div class="plan">${floors}</div></div></div>` : '';
+    const rows = ptLayoutRows(mid);
+    const body = (A.db.buildings || []).filter(b => b.market === mid).sort((a, b) => (a.order || 0) - (b.order || 0)).map(b => {
+      const own = rows.filter(r => r.buildingId === b.id);
+      const groups = [];
+      own.forEach(r => { const g = groups.find(x => x.floorId === (r.floorId || null)); if (g) g.rows.push(r); else groups.push({ floorId: r.floorId || null, rows: [r] }); });
+      const html = groups.map(g => { const zs = g.rows.map(rowHtml).filter(Boolean).join(''); const fl = g.floorId && A.idx.floor ? A.idx.floor.get(g.floorId) : null; return zs ? `${fl && groups.length > 1 ? `<div class="mb-floor-heading"><b>${U.esc(fl.name)}</b></div>` : ''}${zs}` : ''; }).filter(Boolean).join('');
+      return html ? `<div class="card" style="margin-bottom:12px"><div class="card-h"><h3>${U.esc(b.name)}</h3><span class="small muted">Theo cấu trúc tại Hạ tầng chợ › Mặt bằng & điểm kinh doanh</span></div><div class="card-b"><div class="plan">${html}</div></div></div>` : '';
     }).join('');
-    return `<div class="card"><div class="card-b small" style="padding-top:12px">${legend}<span class="muted">${scopeAll ? 'Bấm vào ô để xem tiền của riêng điểm đó trong mã khoản thu.' : 'Chỉ hiện khu, điểm kinh doanh và số tiền thuộc phần được phân công cho bạn. Bấm vào ô để xem chi tiết.'}</span></div></div>${body || (scopeAll ? '' : '<div class="empty">Bạn chưa được phân công điểm kinh doanh nào ở chợ này.</div>') || '<div class="empty">Chợ chưa khai báo cấu trúc mặt bằng (Khối/Tầng/Khu) hoặc không có khu khớp bộ lọc.</div>'}`;
+    return `<div class="card"><div class="card-b small" style="padding-top:12px">${legend}<span class="muted">${scopeAll ? 'Bấm vào ô để xem tiền của riêng điểm đó trong mã khoản thu.' : 'Chỉ hiện Dãy, điểm kinh doanh và số tiền thuộc phần được phân công cho bạn. Bấm vào ô để xem chi tiết.'}</span></div></div>${body || (scopeAll ? '<div class="empty">Chợ chưa khai báo cấu trúc mặt bằng (Toà nhà/Tầng/Dãy) hoặc không có Dãy khớp bộ lọc.</div>' : '<div class="empty">Bạn chưa được phân công Dãy nào ở chợ này.</div>')}`;
   }
   // Khoản phải thu — góc nhìn NV thu phí: không hiện tiền (tiền cần thu xem ở Thu tiền & biên lai),
   // chỉ đếm khoản theo tình trạng thu và liệt kê điểm KD được phân công cho chính mình.
@@ -818,7 +817,6 @@
     i.amount = i.amount + delta;
     if (i.paid >= i.amount) i.status = 'paid';
     req.status = 'APPROVED'; req.decidedBy = (A.currentAccount() || {}).fullName || 'Không rõ'; req.decidedAt = nowStamp();
-    U.invStallIds(i).forEach(id => { const st = A.idx.stall.get(id); if (st) A.refreshStall(st); });
     U.log(`Phê duyệt yêu cầu điều chỉnh khoản ${i.id}: ${U.esc(req.itemName || '')} ${ptMoneySigned(delta)} (${req.reason})`);
     A.save(); A.closeModal(); A.render(); U.toast('Đã phê duyệt và cập nhật khoản phải thu ' + ptMoneySigned(delta));
   };
@@ -1105,13 +1103,13 @@
       parts.forEach(pt => {
         if (!scopeAll && pt.collectorId !== meId) return;
         if (i.period < p && pt.paid) return;
-        const sts = pt.stallIds.map(id => A.idx.stall.get(id) || {}).sort((a, b) => zIdx(a.section) - zIdx(b.section) || String(a.row).localeCompare(String(b.row)) || (a.num || 0) - (b.num || 0));
+        const sts = pt.stallIds.map(id => A.idx.stall.get(id) || {}).sort((a, b) => zIdx(a.section) - zIdx(b.section) || String(a.section).localeCompare(String(b.section)) || (a.num || 0) - (b.num || 0));
         const first = sts[0] || {};
         const pay = pt.paid ? (pays.find(x => Array.isArray(x.stallIds) && pt.stallIds.every(id => x.stallIds.indexOf(id) !== -1)) || (i.status === 'paid' ? pays[pays.length - 1] : null)) : null;
         rows.push({ inv: i, part: pt, sts, first, zone: first.section, zi: zIdx(first.section), t: A.idx.trader.get(i.traderId), pay, debt: pt.paid ? null : A.debtOf(i), old: i.period < p, over: !pt.paid && U.isOver(i), note: thuLastNote(i.id, pt.collectorId), nParts: parts.length });
       });
     });
-    return rows.sort((a, b) => a.zi - b.zi || String(a.first.row).localeCompare(String(b.first.row)) || (a.first.num || 0) - (b.first.num || 0) || a.inv.period.localeCompare(b.inv.period));
+    return rows.sort((a, b) => a.zi - b.zi || (a.first.num || 0) - (b.first.num || 0) || a.inv.period.localeCompare(b.inv.period));
   }
   function thuRouteHtml(p, payDate) {
     const acc = A.currentAccount() || {}, meId = acc.id, meCode = acc.code || acc.id;
@@ -1165,7 +1163,7 @@
         body.push(`<tr style="background:#eef2f9"><td colspan="${cols.length}"><b>${U.esc(z ? z.name : (r.first.sectionName || r.zone || ''))}</b> <span class="small muted">· ${zDone.length}/${zr.length} tiểu thương đã thu · ${U.money(U.sum(zDone, x => x.part.amount))} / ${U.money(U.sum(zr, x => x.part.amount))}</span></td></tr>`);
       }
       const paid = r.part.paid;
-      const rowsOf = r.sts.map(st => st.row).filter((v, n, a) => v && a.indexOf(v) === n);
+      const rowsOf = r.sts.map(st => st.section).filter((v, n, a) => v && a.indexOf(v) === n);
       const pos = r.sts.map(st => `<b>${U.esc(st.code || '')}</b>`).join(', ') + `<div class="small muted">Dãy ${U.esc(rowsOf.join(', ') || '—')}</div>`;
       const byQr = paid && r.pay && r.pay.method !== 'tm';
       const status = paid

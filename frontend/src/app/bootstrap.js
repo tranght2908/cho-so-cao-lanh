@@ -148,10 +148,8 @@
       && U.can('thu-tien') && A.canDo('thu-tien.thu', targetMarket);
   };
 
-  A.refreshStall = function (st) {
-    if (st.status !== 'thue' && st.status !== 'no') return;
-    st.status = A.db.invoices.some(i => U.invStallIds(i).indexOf(st.id) !== -1 && U.isOver(i)) ? 'no' : 'thue';
-  };
+  // v16: A.refreshStall đã bỏ — "Nợ phí" không còn ghi vào stall.status mà suy ra từ khoản phải thu
+  // (features/business-points/service.js: debtStatus/displayStatus).
 
   // ---------- RBAC V1 — Account Demo đang dùng ----------
   // Nguồn xác thực runtime: currentDemoAccountId → account → account.status → account.roleIds.
@@ -173,10 +171,14 @@
   // không được tự ý coi 'ALL' là 1 market cụ thể. RBAC_MARKET_SCOPE_MIGRATION: KHÔNG còn hard-code
   // ['CL','TTD'] — market hợp lệ tra theo D.MARKETS động, để account MARKET scoped tới bất kỳ chợ
   // nào trong 12 chợ đều được nhận diện đúng, không chỉ 2 chợ demo gốc.
+  // Danh sách chợ hợp lệ = A.effectiveMarkets() (D.MARKETS + chợ custom trong Danh mục chợ, xem
+  // features/markets/store.js); trước khi store đó nạp thì chỉ có D.MARKETS. Tạo chợ custom KHÔNG cấp
+  // scope cho ai: 'ALL' tự bao gồm chợ mới, account giới hạn chỉ thấy khi có đúng id trong marketScopes.
   A.allowedMarkets = function (account) {
     const scopes = (account && account.marketScopes) || [];
-    if (scopes.indexOf('ALL') !== -1) return D.MARKETS.map(m => m.id);
-    const validIds = new Set(D.MARKETS.map(m => m.id));
+    const markets = typeof A.effectiveMarkets === 'function' ? A.effectiveMarkets() : D.MARKETS;
+    if (scopes.indexOf('ALL') !== -1) return markets.map(m => m.id);
+    const validIds = new Set(markets.map(m => m.id));
     return scopes.filter(m => validIds.has(m));
   };
   // Market applicability theo RBAC_V1_SPEC.md mục 6 — nguồn cấu hình TẬP TRUNG duy nhất, tránh
@@ -271,8 +273,6 @@
   // khớp, tránh gây hiểu lầm "AC-TT01 tên khác nhưng lại đại diện cho 1 trader tên khác".
   A.ensureMiniAppDemoLink = function () {
     if (!A.ACCOUNTS || !A.db) return;
-    const hasAnyLink = A.ACCOUNTS.list().some(a => A.ACCOUNTS.primaryRole(a) === 'trader' && a.traderId);
-    if (hasAnyLink) return;
     const acc = A.ACCOUNTS.get('AC-TT01');
     const kaA01 = A.db.stalls && A.db.stalls.find(s => s.id === 'CL-KA-A01');
     const trader = kaA01 && A.db.traders.find(t => t.id === kaA01.traderId);
@@ -345,7 +345,6 @@
         };
         db.bank.push(bk);
       }
-      U.invStallIds(inv).forEach(id => { const st = A.idx.stall.get(id); if (st) A.refreshStall(st); });
     });
     A.save();
     return out;
@@ -452,17 +451,44 @@
       { id: 'cong-no', ico: '⏰', label: 'Công nợ & nhắc nợ' }
     ] },
     { group: 'Vận hành', items: [
-      { id: 'su-co', ico: U.icon('warning'), label: 'Phản ánh & sự cố', badge: () => A.db.incidents.filter(i => U.inM(i) && i.state === 'tiepnhan').length },
+      { id: 'su-co', ico: U.icon('warning'), label: 'Phản ánh & sự cố', badge: () => suCoMenuBadge() },
       { id: 'thong-bao', ico: U.icon('bell'), label: 'Thông báo đa kênh' },
       { id: 'bao-cao', ico: U.icon('chart'), label: 'Báo cáo thống kê' },
       { id: 'tai-khoan', ico: U.icon('users'), label: 'Tài khoản người dùng' },
       { id: 'cai-dat', ico: U.icon('settings'), label: 'Cài đặt & phân quyền' }
     ] },
     { group: 'Dành cho tiểu thương', items: [
-      { id: 'mini-app', ico: U.icon('warning'), label: 'Gửi phản ánh' }
+      { id: 'mini-app', ico: U.icon('warning'), label: 'Cổng tiểu thương' }
     ] }
   ];
   A.menuItem = id => { for (const g of A.MENU) for (const it of g.items) if (it.id === id) return it; return null; };
+  function suCoTechMenuContext() {
+    return A.canDo('su-co.cap-nhat-xu-ly', ui.market) && !A.canDo('su-co.phan-cong', ui.market);
+  }
+  function suCoMenuLabel() {
+    return suCoTechMenuContext() ? 'Công việc kỹ thuật' : 'Phản ánh & sự cố';
+  }
+  function suCoMenuBadge() {
+    if (suCoTechMenuContext()) {
+      const acc = A.currentAccount && A.currentAccount();
+      const code = acc && acc.code;
+      return code ? A.db.incidents.filter(i => U.inM(i) && i.assignee === code && (i.state === 'phancong' || i.state === 'dangxuly')).length : 0;
+    }
+    return A.db.incidents.filter(i => U.inM(i) && i.state === 'tiepnhan').length;
+  }
+  function suCoTechMenuItemsHtml() {
+    const acc = A.currentAccount && A.currentAccount();
+    const code = acc && acc.code;
+    const rows = code ? A.db.incidents.filter(i => U.inM(i) && i.assignee === code) : [];
+    const items = [
+      { tab: 'assigned', icon: 'bell', label: 'Việc mới', count: rows.filter(i => i.state === 'phancong').length },
+      { tab: 'doing', icon: 'settings', label: 'Đang xử lý', count: rows.filter(i => i.state === 'dangxuly').length },
+      { tab: 'done', icon: 'check', label: 'Kết quả đã gửi', count: rows.filter(i => ['hoanthanh', 'dong'].indexOf(i.state) !== -1).length },
+      { tab: 'all', icon: 'file', label: 'Tất cả công việc', count: rows.length }
+    ];
+    const active = ui.incFlowTab || 'assigned';
+    return `<div class="tech-work-nav">${items.map(it => `<a href="#/su-co" class="${A.current === 'su-co' && active === it.tab ? 'active' : ''}" data-act="su-co-tech-menu" data-tab="${it.tab}"><span class="ico">${U.icon(it.icon)}</span><span class="nav-label">${it.label}</span>${it.count ? `<span class="badge">${it.count}</span>` : ''}</a>`).join('')}</div>`;
+  }
 
   // Nhãn rút gọn cho thanh "Tài khoản demo" (mục 14 yêu cầu — biết ngay account thuộc role nào mà
   // không làm thanh quá dài với tới 12 chợ × nhiều role). Role tuỳ biến/không có trong map vẫn hiển
@@ -470,7 +496,8 @@
   // gốc hoặc tạo role mới.
   const DEMO_ROLE_SHORT = {
     system_admin: 'QTHT', ward_leader: 'Lãnh đạo', market_manager: 'Trưởng BQL',
-    collector: 'Thu phí', market_accountant: 'Kế toán', technician: 'Kỹ thuật', trader: 'Tiểu thương'
+    collector: 'Thu phí', market_accountant: 'Kế toán', technician: 'Kỹ thuật', central_accountant: 'KT Trung tâm',
+    ward_accountant: 'KT phường', trader: 'Tiểu thương'
   };
   // DEMO_ACCOUNT_BAR_COMPACT_GROUPING (mục 4/5/6/10 yêu cầu): với 12 chợ, liệt kê phẳng mọi account
   // hợp lệ (bản cũ) làm thanh dài hàng chục nút khi selectedMarket='ALL'. Nhóm lại theo 2 tầng, vẫn
@@ -482,7 +509,7 @@
   //     12 chợ (mục 4).
   //   - selectedMarket=1 chợ cụ thể: thêm các nhóm MARKET-scoped account CÓ chợ đó trong marketScopes,
   //     xếp theo role (mục 5) — account KHÔNG thuộc chợ đang chọn không xuất hiện.
-  const DEMO_MARKET_ROLE_ORDER = ['market_manager', 'collector', 'market_accountant', 'technician', 'trader'];
+  const DEMO_MARKET_ROLE_ORDER = ['market_manager', 'collector', 'market_accountant', 'technician', 'central_accountant', 'trader'];
   function demoAccountBtnHtml(a, withRolePrefix) {
     const roleTxt = withRolePrefix ? (DEMO_ROLE_SHORT[A.ACCOUNTS.primaryRole(a)] || (A.PERM.role(A.ACCOUNTS.primaryRole(a)) || {}).name || '') : '';
     return `<button class="${ui.currentDemoAccountId === a.id ? 'on' : ''}" data-act="demo-account" data-id="${a.id}">${roleTxt ? U.esc(roleTxt) + ' — ' : ''}${U.esc(a.fullName)}</button>`;
@@ -525,8 +552,9 @@
       if (!items.some(it => !it.sub)) return '';
       return `<div class="nav-group">${g.group}</div>` + items.map(it => {
         if (it.sub) return `<div class="nav-subgroup">${it.sub}</div>`;
+        if (it.id === 'su-co' && suCoTechMenuContext()) return suCoTechMenuItemsHtml();
         const b = it.badge ? it.badge() : 0;
-        const label = it.id === 'mat-bang' && ui.market === 'CL' ? 'Mặt bằng & điểm kinh doanh' : it.label;
+        const label = it.id === 'mat-bang' && ui.market === 'CL' ? 'Mặt bằng & điểm kinh doanh' : (it.id === 'su-co' ? suCoMenuLabel() : it.label);
         return `<a href="#/${it.id}" class="${A.current === it.id ? 'active' : ''}"><span class="ico">${it.ico}</span>${label}${b ? `<span class="badge">${b}</span>` : ''}</a>`;
       }).join('');
     }).join('');
@@ -541,6 +569,8 @@
       if (accountModeLabel) accountModeLabel.style.display = 'none';
       $('#role-seg').innerHTML = A.userHeaderHtml ? A.userHeaderHtml(A.currentAccount()) : '';
     }
+    const notificationHost = $('#personal-notification-host');
+    if (notificationHost) notificationHost.innerHTML = A.personalNotifications ? A.personalNotifications.headerHtml(A.currentAccount()) : '';
     const activeRole = A.PERM.role(ui.role);
     const roleLabelEl = $('#active-role-label');
     if (roleLabelEl) roleLabelEl.textContent = demoMode && activeRole ? ('Vai trò: ' + activeRole.name) : '';
@@ -559,7 +589,9 @@
     // trước) không đổi.
     $('#market-wrap').style.display = (A.current === 'mini-app' || A.current === 'tong-quan') ? 'none' : '';
     const it = A.menuItem(A.current);
-    const pageLabel = it && it.id === 'mat-bang' && ui.market === 'CL' ? 'Mặt bằng & điểm kinh doanh' : (it ? it.label : '');
+    const pageLabel = it && it.id === 'mat-bang' && ui.market === 'CL'
+      ? 'Mặt bằng & điểm kinh doanh'
+      : (it ? (it.id === 'su-co' ? suCoMenuLabel() : it.label) : (A.PERSONAL_ROUTES && A.PERSONAL_ROUTES[A.current]) || '');
     $('#page-title').textContent = pageLabel;
     document.title = (pageLabel ? pageLabel + ' · ' : '') + 'Chợ số Cao Lãnh – Prototype';
   }
@@ -602,6 +634,9 @@
     for (const g of A.MENU) for (const it of g.items) if (!it.sub && U.can(it.id)) return it.id;
     return null;
   };
+  // Màn cá nhân của CHÍNH tài khoản đang đăng nhập (không phải màn nghiệp vụ, không có trong menu,
+  // không cần screen permission — ai đã đăng nhập đều xem được hồ sơ của mình).
+  A.PERSONAL_ROUTES = { 'thong-tin-ca-nhan': 'Thông tin cá nhân' };
   A.route = function () {
     // Đồng bộ role + selectedMarket từ account đang dùng TRƯỚC khi đánh giá quyền — đảm bảo
     // U.can() bên dưới luôn dựa trên context mới nhất, kể cả khi route() được gọi ngay sau khi
@@ -630,7 +665,7 @@
     // Không còn fallback hard-code 'tong-quan' — dò screen đầu tiên account thực sự có quyền VÀ
     // applicable với market hiện tại; nếu không còn screen nào, A.current = null và A.render() sẽ
     // hiện trạng thái "chưa được cấp quyền" thay vì render bất kỳ view nào.
-    if (!r || !U.can(r)) {
+    if (!r || (!U.can(r) && !(A.PERSONAL_ROUTES[r] && A.currentAccount()))) {
       const role = A.PERM.role(ui.role);
       r = (role && role.selfService && U.can('mini-app')) ? 'mini-app' : A.firstAccessibleScreen();
     }
@@ -688,6 +723,12 @@
       ui.market = id; ui.page = {}; ui.sel = null; A.saveUi(); A.route();
     },
     go: el => A.go(el.dataset.to),
+    'su-co-tech-menu': (el, e) => {
+      if (e && e.preventDefault) e.preventDefault();
+      if (!suCoTechMenuContext()) return;
+      ui.incFlowTab = el.dataset.tab || 'assigned';
+      A.go('su-co');
+    },
     receipt: el => A.showReceipt(A.db.payments.filter(p => p.receipt === el.dataset.id && U.inM(p) && A.receiptBusinessStateOk(p))),
     guide: () => A.guide()
   });
@@ -714,6 +755,9 @@
 
   function init() {
     A.load();
+    // Dữ liệu mẫu của cổng tiểu thương (tài khoản tiểu thương gắn hồ sơ thật, có khoản nợ và phản
+    // ánh) — dùng chung với /tieu-thuong/, idempotent nên chạy lại không nhân bản.
+    if (A.traderWebDemoSeed) A.traderWebDemoSeed();
     document.addEventListener('click', e => {
       const el = e.target.closest('[data-act]');
       if (!el) return;

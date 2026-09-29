@@ -23,7 +23,7 @@
   // crash/sinh dữ liệu giả cho các chợ chưa có khảo sát — báo cáo trả rỗng/0 cho các chợ đó.
   const scopeIds = xm => (xm === 'ALL' ? A.allowedMarkets(A.currentAccount()) : [xm]).filter(id => ASSET[id]);
   const stallsOf = id => A.db.stalls.filter(s => s.market === id);
-  const occupied = id => stallsOf(id).filter(s => s.status === 'thue' || s.status === 'no').length;
+  const occupied = id => stallsOf(id).filter(s => A.features.businessPoints.service.usageStatus(s) === 'occupied').length;
   const paidYear = id => U.sum(A.db.payments.filter(p => p.market === id && p.date.startsWith(YEAR)), p => p.amount);
   const invoicedYear = id => U.sum(A.db.invoices.filter(i => i.market === id && i.period.startsWith(YEAR)), i => i.amount);
   const money = v => num(v);

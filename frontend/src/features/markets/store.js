@@ -1,6 +1,6 @@
 /* Dữ liệu "Danh mục chợ" (Điều hành > Danh mục chợ) — quản lý thông tin CẤP CHỢ (tên, mã, địa
  * điểm, hạng, Ban Quản lý/người phụ trách, bảng giá áp dụng, trạng thái). KHÔNG lẫn với dữ liệu
- * cấu trúc bên trong 1 chợ (Khu/Tầng/Dãy/Điểm kinh doanh — đó là D.MARKETS[].floors, xem màn
+ * cấu trúc bên trong 1 chợ (Khối/Tầng/Dãy/Điểm kinh doanh — đó là A.db.buildings/floors/rows/stalls, xem màn
  * "Mặt bằng & điểm kinh doanh", js/v-cautruc.js/v-tieuthuong.js).
  *
  * Nguồn dữ liệu DUY NHẤT cho DANH SÁCH chợ thuộc market master (12 chợ — RBAC_MARKET_SCOPE_MIGRATION,
@@ -12,16 +12,16 @@
  * module này vẫn seed đủ meta danh mục cho cả 12 chợ, không cần biết market nào có/thiếu cấu trúc
  * mặt bằng thật.
  *
- * "+ Thêm chợ mới" (V1 prototype, cho chợ THẬT SỰ NGOÀI market master 12 chợ, vd. mới sáp nhập/mới
- * phát sinh) chỉ tạo bản ghi CATALOG (tên, mã, địa điểm, hạng, BQL, bảng giá, trạng thái) — CỐ Ý
- * KHÔNG tự sinh thêm 1 phần tử D.MARKETS[] mới (không floors/sections) vì nhiều nơi trong app tra
- * cứu Chợ theo đúng market master hiện có (vd. account.marketScopes chỉ hợp lệ với id trong
- * D.MARKETS — xem A.allowedMarkets() ở js/core.js, D.BANK_BY_MARKET, ASSET ở js/v-baocao-mau.js…) —
- * thêm 1 market "rỗng" vào đó có nguy cơ hiện nhãn/undefined sai ở những màn KHÔNG thuộc phạm vi yêu
- * cầu này. Chợ mới tạo qua đây hiển thị đầy đủ trong "Danh mục chợ" (isCustom:true) nhưng CHƯA xuất
- * hiện ở bộ chọn Chợ trên topbar / Mặt bằng & điểm kinh doanh / gán account.marketScopes — đúng
- * nghiệp vụ thật: khai báo danh mục trước, khảo sát/triển khai hạ tầng (Mặt bằng) và mở rộng market
- * master là bước sau, ngoài phạm vi yêu cầu này.
+ * "+ Thêm chợ mới" (chợ NGOÀI 12 chợ gốc) chỉ tạo bản ghi CATALOG (isCustom:true) — KHÔNG ghi thêm
+ * phần tử vào D.MARKETS (mock seed tĩnh của data.js).
+ *
+ * DANH SÁCH CHỢ HIỆU LỰC — read-model DUY NHẤT cho toàn app: A.effectiveMarkets()
+ *   = D.MARKETS (12 chợ gốc, giữ nguyên object/id) + chợ custom trong danh mục, merge theo id (chợ
+ *   gốc luôn thắng, không bao giờ trùng). Chợ custom được trình bày cùng shape với chợ gốc (không mang
+ *   cấu trúc mặt bằng — cấu trúc nằm ở A.db.buildings/floors/rows), object ổn định theo id. U.market()/U.mShort() và A.allowedMarkets()
+ *   (giải mã marketScopes) đều đọc qua đây. KHÔNG tự cấp marketScope cho account nào: account có
+ *   'ALL' (Quản trị hệ thống/Lãnh đạo phường) thấy chợ custom; account bị giới hạn marketScopes chỉ
+ *   thấy khi được gán đúng id chợ đó.
  */
 (function (A) {
   'use strict';
@@ -104,20 +104,66 @@
   ensureSeeded();
 
   function metaRow(id) { return LIST.find(x => x.id === id); }
+  // Quy mô & chỉ tiêu điểm kinh doanh do Quản trị hệ thống khai báo (capacity/quy hoạch):
+  //   totalArea          : tổng diện tích chợ (m²)
+  //   businessArea       : diện tích phục vụ kinh doanh (m²), 0 <= businessArea <= totalArea
+  //   capacityByAreaType : [{ areaTypeId, maxPointCount, maxArea }] — areaTypeId theo U.AREA_TYPE_CODES
+  // Field TUỲ CHỌN, thêm tương thích ngược: bản ghi đã lưu trước đây (chưa có field) đọc ra null =
+  // "Chưa cập nhật" — không migration ghi đè, không tự bịa số liệu cho 12 chợ hiện có. Phần "đã sử
+  // dụng" KHÔNG lưu ở đây (suy ra từ điểm kinh doanh thật, xem features/markets/service.js).
+  function num(v) { return v === null || v === undefined || v === '' || !isFinite(Number(v)) ? null : Number(v); }
+  function scaleOf(meta) {
+    const cap = Array.isArray(meta.capacityByAreaType)
+      ? meta.capacityByAreaType.filter(x => x && x.areaTypeId).map(x => ({ areaTypeId: String(x.areaTypeId), maxPointCount: num(x.maxPointCount) || 0, maxArea: num(x.maxArea) || 0 }))
+      : null;
+    return { totalArea: num(meta.totalArea), businessArea: num(meta.businessArea), capacityByAreaType: cap };
+  }
   function mergedRow(id) {
     const meta = metaRow(id);
     if (!meta) return null;
     if (isBuiltin(id)) {
       const m = D.MARKETS.find(x => x.id === id);
-      return {
+      return Object.assign({
         id: m.id, code: meta.code || m.id, name: m.name, address: m.address,
         rank: meta.rank, unit: meta.unit, manager: meta.manager, phone: meta.phone,
         priceConfigId: meta.priceConfigId, status: meta.status, isCustom: false,
         createdBy: meta.createdBy, createdAt: meta.createdAt, updatedBy: meta.updatedBy, updatedAt: meta.updatedAt
-      };
+      }, scaleOf(meta));
     }
-    return Object.assign({ isCustom: true }, meta);
+    return Object.assign({ isCustom: true }, meta, scaleOf(meta));
   }
+  // Mã cho CHỢ MỚI do hệ thống tự sinh (CHO13, CHO14…) — không trùng id D.MARKETS lẫn mã danh mục đã
+  // có; mã/id của các chợ hiện có giữ nguyên, không đổi tên.
+  function nextCode() {
+    const taken = new Set(LIST.map(x => String(x.code || x.id).toUpperCase()).concat((D.MARKETS || []).map(m => m.id.toUpperCase())));
+    let n = LIST.length + 1, code;
+    do { code = 'CHO' + String(n++).padStart(2, '0'); } while (taken.has(code));
+    return code;
+  }
+
+  // ---- Danh sách chợ hiệu lực (xem ghi chú đầu file) ----
+  const CUSTOM_VIEWS = new Map(); // id → object chợ custom ổn định (cùng shape D.MARKETS[])
+  function customMarketView(meta) {
+    let m = CUSTOM_VIEWS.get(meta.id);
+    if (!m) { m = { id: meta.id, note: '', priceNote: '', kind: 'daily', isCustom: true }; CUSTOM_VIEWS.set(meta.id, m); }
+    m.name = meta.name || meta.id;
+    m.short = meta.name || meta.id;
+    m.address = meta.address || '';
+    m.hang = RANKS[meta.rank] ? 'Chợ ' + RANKS[meta.rank].toLowerCase() : '';
+    return m;
+  }
+  function effectiveMarkets() {
+    const base = D.MARKETS || [];
+    const seen = new Set(base.map(m => m.id));
+    const custom = [];
+    LIST.forEach(x => {
+      if (!x || !x.id || seen.has(x.id)) return; // chợ gốc thắng; không trùng id
+      seen.add(x.id);
+      custom.push(customMarketView(x));
+    });
+    return custom.length ? base.concat(custom) : base;
+  }
+  A.effectiveMarkets = effectiveMarkets;
 
   const MC = A.MARKET_CATALOG = {
     KEY: CKEY,
@@ -128,18 +174,22 @@
     rows: () => { ensureSeeded(); return LIST.map(x => mergedRow(x.id)).filter(Boolean); },
     get: id => { ensureSeeded(); return mergedRow(id); },
     isBuiltin: isBuiltin,
+    effectiveMarkets: effectiveMarkets,
     codeTaken: (code, excludeId) => {
       const c = String(code || '').trim().toUpperCase();
       if (!c) return false;
       return MC.rows().some(r => r.id !== excludeId && r.code.toUpperCase() === c);
     },
+    nextCode: nextCode,
     // Chỉ tạo bản ghi DANH MỤC (không tạo D.MARKETS[] mới — xem ghi chú đầu file).
     add: (rec, user) => {
-      const id = String(rec.code || '').trim().toUpperCase();
+      const id = String(rec.code || '').trim().toUpperCase() || nextCode();
       const row = {
         id: id, code: id, name: (rec.name || '').trim(), address: (rec.address || '').trim(),
         rank: rec.rank, unit: (rec.unit || '').trim(), manager: (rec.manager || '').trim(),
         phone: (rec.phone || '').trim(), priceConfigId: rec.priceConfigId, status: rec.status || 'active',
+        totalArea: num(rec.totalArea), businessArea: num(rec.businessArea),
+        capacityByAreaType: Array.isArray(rec.capacityByAreaType) ? rec.capacityByAreaType : null,
         createdBy: user || 'Không rõ', createdAt: new Date().toISOString(), updatedBy: user || 'Không rõ', updatedAt: new Date().toISOString()
       };
       LIST.push(row);
@@ -159,7 +209,7 @@
         if (patch.name !== undefined) meta.name = String(patch.name || '').trim();
         if (patch.address !== undefined) meta.address = String(patch.address || '').trim();
       }
-      ['rank', 'unit', 'manager', 'phone', 'priceConfigId', 'status'].forEach(k => {
+      ['rank', 'unit', 'manager', 'phone', 'priceConfigId', 'status', 'totalArea', 'businessArea', 'capacityByAreaType'].forEach(k => {
         if (patch[k] !== undefined) meta[k] = patch[k];
       });
       meta.updatedBy = user || 'Không rõ';
@@ -175,6 +225,8 @@
       get: MC.get,
       priceConfig: MC.priceConfig,
       codeTaken: MC.codeTaken,
+      effectiveMarkets: MC.effectiveMarkets,
+      nextCode: MC.nextCode,
       add: MC.add,
       update: MC.update,
       RANKS: MC.RANKS,
@@ -183,7 +235,7 @@
     });
   }
 
-  // Market master lookup helpers (from js/core.js, Phase 15.5).
-  U.market = id => D.MARKETS.find(m => m.id === id);
+  // Market lookup helpers (from js/core.js, Phase 15.5) — tra trên danh sách hiệu lực.
+  U.market = id => A.effectiveMarkets().find(m => m.id === id);
   U.mShort = id => U.market(id).short;
 })(window.APP);

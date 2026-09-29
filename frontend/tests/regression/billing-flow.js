@@ -7,6 +7,10 @@ const { createApp } = require('./harness');
 const h = createApp(path.resolve(__dirname, '../..'));
 const A = h.A;
 A.ui.sessionAccountId = 'AC-NV01'; A.ui.market = 'CL'; A.syncAccountContext();
+// Luồng này kiểm tra phát hành THEO NGUỒN (1 khoản / nguồn thu). Chợ Cao Lãnh cấu hình receivableGrouping
+// 'TRADER' (gộp 1 khoản / tiểu thương / kỳ — nhánh Tài chính); tắt cấu hình trong phạm vi test để giữ nguyên
+// các khẳng định theo nguồn bên dưới.
+const clMarket = (A.D.MARKETS || []).find(m => m.id === 'CL'); if (clMarket) delete clMarket.receivableGrouping;
 
 // Isolate official financial output; configuration stays in its existing store.
 A.db.invoices = []; A.db.payments = []; A.db.billingDrafts = []; A.db.billingWarnings = [];

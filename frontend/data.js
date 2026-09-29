@@ -54,23 +54,17 @@ window.DATA = (function () {
   // stall của market mới — vốn không có gì để sinh — và còn giữ role text cũ) tự rebuild.
   // 14 → 15 (PHAN_CONG_NHAN_VIEN_THU_PHI): thêm field collectorId (null mặc định) trên mỗi điểm kinh
   // doanh — cache A.db cũ chưa có field này cần rebuild để field tồn tại nhất quán trên mọi điểm.
-  // 15 → 16 (DEMO_TIEU_THUONG_NHIEU_DIEM): TT0003 thuê 4 điểm ở 3 khu khác nhau, 4 điểm được phân công
-  // cho NV thu phí AC-NV04 — cache A.db cũ cần rebuild để thấy dữ liệu mẫu mới.
-  // 16 → 17 (DONG_BO_TIEN_DIEN_NUOC): tiền điện, nước trên khoản phải thu tính từ chỉ số cùng kỳ; bổ sung
-  // bảng chỉ số kỳ 05, 06/2026 (đã chốt) để mọi khoản phải thu có tiền điện/nước đều truy được chỉ số.
-  // 17 → 18: kỳ 09/2026 của TT0003 đủ chỉ số điện nước 4 điểm, khoản phải thu kỳ 09 chưa thu.
-  // 18 → 19 (GOM_KHOAN_THU_THEO_TIEU_THUONG): Chợ Cao Lãnh 1 khoản phải thu / tiểu thương / kỳ.
-  // 19 → 20 (THU_THEO_PHAN_NHAN_VIEN): phân công NV thu phí theo khu ở Chợ Cao Lãnh, khoản chưa thu đủ
-  // về CHƯA THU, giao dịch ghi điểm đã thu (stallIds).
-  // 20 → 21 (GHI_CHI_SO_THEO_KHU_PHAN_CONG): phân công NV thu phí cho Chợ quê TTĐ; người ghi chỉ số = NV phụ trách.
-  // 21 → 22 (KY_09_PHAT_HANH_DU): chỉ số điện, nước kỳ 09 ghi đủ mọi điểm có công tơ + chốt kỳ ghi số 09;
-  // Chợ Cao Lãnh: toàn bộ khoản phải thu kỳ 09 đã phát hành, CHƯA THU.
-  // 22 → 23 (PHAT_HANH_KHOAN_THU): thông báo phát hành kỳ 09 gửi từng tiểu thương + danh sách thu cho NV thu phí.
-  // 23 → 24 (BIEN_LAI_THEO_MA_KHOAN): số biên lai Chợ Cao Lãnh gắn mã khoản.
-  // 24 → 25 (QUA_HAN_CHUYEN_CONG_NO): Chợ Cao Lãnh chỉ còn 10 khoản quá hạn (kỳ 08/2026) để demo chuyển công nợ.
-  // 25 → 26 (QUA_HAN_KY_09): kỳ 09 hạn nộp 30/09; 10 khoản CL hạn 28/09 đã quá hạn; ngày dữ liệu 29/09/2026.
-  // 26 → 27 (THU_HOI_NO demo): hạn 10 khoản nợ kỳ 09 trải 28/25/22/20 tháng 9.
-  const VERSION = 27;
+  // 15 → 16 (MAT_BANG_DATA_MODEL_V16): mặt bằng chỉ còn MỘT graph trong A.db — buildings → floors
+  // (tuỳ chọn) → rows (Dãy, đúng 1 ngành hàng, allocatedArea) → stalls (rowId, area, areaTypeId,
+  // status vận hành). MARKETS[].floors[].sections[] đã bỏ. Dataset demo mới nhỏ (CL 49 điểm, TTD
+  // 22 điểm); toàn bộ dữ liệu nghiệp vụ tham chiếu điểm được sinh lại đồng bộ. Backup seed v15:
+  // backups/mock-v15-20260929/.
+  // 16 → 28 (MERGE_TAI_CHINH_P, 29/09/2026): gộp nhánh Tài chính của P lên mô hình mặt bằng v16 (Dãy). Chợ Cao
+  // Lãnh: 1 khoản phải thu / tiểu thương / kỳ (receivableGrouping 'TRADER'), phân công NV thu phí theo Dãy
+  // (row.collectorId), TT0003 thuê 3 điểm ở 3 Dãy của 3 NV, kỳ 09 phát hành đủ + hạn 30/09, 10 khoản quá hạn
+  // (hạn 28/25/22/20 tháng 9) để demo công nợ / thu hồi nợ, số biên lai gắn mã khoản, ngày dữ liệu 29/09/2026.
+  // (Nhánh Tài chính trước đó dùng VERSION 17–27 trên mô hình khu cũ — lấy 28 để mọi cache cũ đều dựng lại.)
+  const VERSION = 28;
   const TODAY = new Date(2026, 8, 13); // 13/09/2026
 
   // Giá dịch vụ sử dụng diện tích bán hàng – QĐ 480/QĐ-UBND ngày 14/02/2026 (đ/m²/ngày, đã gồm VAT)
@@ -146,97 +140,95 @@ window.DATA = (function () {
   const MARKETS = [
     {
       id: 'CL', name: 'Chợ Cao Lãnh', short: 'Chợ Cao Lãnh', hang: 'Chợ hạng 1', kind: 'daily',
-      // GOM_KHOAN_THU_THEO_TIEU_THUONG (v19): cấu hình cấp chợ — mỗi tiểu thương 1 khoản phải thu (1 mã
-      // PT-…) / kỳ, gồm mọi điểm KD họ thuê; chi tiết khoản mới tách theo từng điểm. Chợ không khai báo
-      // field này giữ mặc định 1 khoản / hợp đồng (điểm KD). Người dùng chốt 28/09/2026: chỉ Chợ Cao Lãnh.
+      // GOM_KHOAN_THU_THEO_TIEU_THUONG (P chốt 28/09/2026): mỗi tiểu thương 1 khoản phải thu (1 mã PT-…) / kỳ,
+      // gồm mọi điểm KD họ thuê; chi tiết khoản tách theo từng điểm. Chợ khác giữ 1 khoản / hợp đồng.
       receivableGrouping: 'TRADER',
       address: 'Khóm 7, phường Cao Lãnh, tỉnh Đồng Tháp',
       note: 'Tòa nhà chợ mới: 1 hầm, 1 trệt, 1 lầu, khoảng 20.435 m² sàn',
       priceNote: 'Giá dịch vụ theo QĐ 480/QĐ-UBND ngày 14/02/2026: ki-ốt và trong nhà lồng 2.000 đ/m²/ngày; ngoài nhà lồng 800 đ/m²/ngày',
-      // pointType (CHỈ Chợ Cao Lãnh — màn "Điểm kinh doanh"): "loại điểm kinh doanh" theo nghĩa bán
-      // lẻ (Quầy hàng/Sạp hàng/Ki-ốt/Cửa hàng), KHÁC với `type` phía trên (hạng mục tính đơn giá
-      // dịch vụ theo QĐ 480 — giữ nguyên, không đổi) và KHÁC với `cat` (ngành hàng). Khai báo RÕ
-      // RÀNG theo từng khu vực thực tế ngay tại đây (không suy đoán từ `cat`/ngành hàng):
-      //   kiot   = Ki-ốt (đúng nghĩa vật lý — có vách ngăn, cửa riêng, mặt tiền)
-      //   sap    = Sạp hàng (bàn/bục cố định — hàng tươi sống/khô/ăn uống)
-      //   cuahang= Cửa hàng (không gian khép kín, diện tích lớn hơn — bách hóa/may mặc/dịch vụ)
-      //   quay   = Quầy hàng (khu trưng bày nhỏ gọn ngoài nhà lồng)
-      floors: [
-        {
-          id: 'T1', name: 'Tầng 1', desc: 'Lương thực, thực phẩm, thủy hải sản', sections: [
-            { id: 'KA', name: 'Ki-ốt mặt tiền tầng 1', cat: 'Ki-ốt tổng hợp', type: 'kiot', pointType: 'kiot', rows: ['A'], per: 20, area: [12, 16], meter: true },
-            { id: 'HS', name: 'Khu thủy hải sản', cat: 'Thủy hải sản', type: 'nhalong', pointType: 'sap', rows: ['A', 'B', 'C'], per: 12, area: [4, 6], meter: true },
-            { id: 'TG', name: 'Khu thịt, gia cầm', cat: 'Thịt, gia cầm', type: 'nhalong', pointType: 'sap', rows: ['A', 'B'], per: 12, area: [4, 6], meter: true },
-            { id: 'RC', name: 'Khu rau củ, trái cây', cat: 'Rau củ, trái cây', type: 'nhalong', pointType: 'sap', rows: ['A', 'B', 'C'], per: 12, area: [3, 5] },
-            { id: 'LT', name: 'Khu lương thực, thực phẩm khô', cat: 'Lương thực, thực phẩm khô', type: 'nhalong', pointType: 'sap', rows: ['A', 'B'], per: 12, area: [4, 8] }
-          ]
-        },
-        {
-          id: 'T2', name: 'Tầng 2', desc: 'Bách hóa tổng hợp, ăn uống, dịch vụ', sections: [
-            { id: 'KB', name: 'Ki-ốt tầng 2', cat: 'Ki-ốt tổng hợp', type: 'kiot', pointType: 'kiot', rows: ['A'], per: 16, area: [12, 16], meter: true },
-            { id: 'BH', name: 'Khu bách hóa tổng hợp', cat: 'Bách hóa tổng hợp', type: 'nhalong', pointType: 'cuahang', rows: ['A', 'B', 'C'], per: 12, area: [4, 8] },
-            { id: 'MM', name: 'Khu may mặc, giày dép', cat: 'May mặc, giày dép', type: 'nhalong', pointType: 'cuahang', rows: ['A', 'B', 'C'], per: 12, area: [4, 8] },
-            { id: 'AU', name: 'Khu ăn uống', cat: 'Ăn uống', type: 'nhalong', pointType: 'sap', rows: ['A', 'B'], per: 10, area: [6, 10], meter: true },
-            { id: 'DV', name: 'Khu dịch vụ cho thuê', cat: 'Dịch vụ', type: 'nhalong', pointType: 'cuahang', rows: ['A'], per: 10, area: [8, 12], meter: true }
-          ]
-        },
-        {
-          id: 'NL', name: 'Ngoài nhà lồng', desc: 'Bán hàng tự sản tự tiêu', sections: [
-            { id: 'TS', name: 'Khu tự sản tự tiêu', cat: 'Nông sản tự sản tự tiêu', type: 'ngoai', pointType: 'quay', rows: ['A', 'B'], per: 15, area: [2, 3] }
-          ]
-        },
-        { id: 'H', name: 'Tầng hầm', desc: 'Bãi xe và khu kỹ thuật – không bố trí điểm kinh doanh', sections: [], parking: true }
-      ]
     },
     {
       id: 'TTD', name: 'Chợ quê Cù lao Tân Thuận Đông', short: 'Chợ quê Tân Thuận Đông', hang: 'Phiên chợ du lịch cộng đồng', kind: 'session',
       address: 'Tổ 4, khóm Tân Phát, phường Cao Lãnh, tỉnh Đồng Tháp',
       note: 'Họp chiều thứ Bảy hằng tuần, 14h–20h',
       priceNote: 'Chợ quê không có trong phụ lục QĐ 480. Mức thu 20.000 đ/quầy/phiên chỉ là GIẢ ĐỊNH để minh họa, do phường quyết định',
-      floors: [
-        {
-          id: 'KHU', name: 'Khu chợ quê', desc: 'Họp chiều thứ Bảy, 14h–20h', sections: [
-            { id: 'CD', name: 'Khu quầy thuê cố định', cat: 'Quầy cố định tháng/quý', type: 'nhalong', rows: ['A'], per: 8, area: [8, 12], meter: true },
-            { id: 'AT', name: 'Khu ẩm thực dân dã', cat: 'Ẩm thực dân dã', type: 'phien', rows: ['A', 'B'], per: 10, area: [6, 9] },
-            { id: 'NS', name: 'Khu nông sản, đặc sản', cat: 'Nông sản, đặc sản', type: 'phien', rows: ['A'], per: 7, area: [6, 9] },
-            { id: 'TN', name: 'Khu trải nghiệm tự làm món', cat: 'Trải nghiệm', type: 'phien', rows: ['A'], per: 9, area: [6, 9] }
-          ]
-        }
-      ]
     },
     // 10 chợ còn lại trong phạm vi quản lý mới (RBAC_MARKET_SCOPE_MIGRATION — mục 4 yêu cầu) — CHỈ
-    // khai báo thông tin CẤP CHỢ (tên/địa điểm/hạng), `floors: []` vì chưa khảo sát hạ tầng, KHÔNG
-    // thuộc phạm vi công việc này (xem ghi chú v14 ở đầu file). `kind: 'daily'` (chợ họp hằng ngày,
+    // khai báo thông tin CẤP CHỢ (tên/địa điểm/hạng); chưa có mặt bằng (không có building/row nào
+    // trong A.db) vì chưa khảo sát hạ tầng, KHÔNG thuộc phạm vi công việc này (xem ghi chú v14 ở đầu file). `kind: 'daily'` (chợ họp hằng ngày,
     // giống Chợ Cao Lãnh) là giả định hợp lý cho prototype — không có dữ liệu khảo sát thật để phân
     // biệt "daily"/"session" cho từng chợ trong số này.
-    { id: 'HA', name: 'Chợ Hòa An', short: 'Chợ Hòa An', hang: 'Chợ hạng 2', kind: 'daily', address: 'Khóm Hòa Khánh, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '', floors: [] },
-    { id: 'TVH', name: 'Chợ Tân Việt Hòa', short: 'Chợ Tân Việt Hòa', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm Tân Hòa Việt, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '', floors: [] },
-    { id: 'TTT', name: 'Chợ Tân Thuận Tây', short: 'Chợ Tân Thuận Tây', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm Tân Dân, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '', floors: [] },
-    { id: 'TL', name: 'Chợ Thông Lưu', short: 'Chợ Thông Lưu', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm Đông Bình, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '', floors: [] },
-    { id: 'TT', name: 'Chợ Tân Tịch', short: 'Chợ Tân Tịch', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm Tân Thuận, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '', floors: [] },
-    { id: 'TTH', name: 'Chợ Tịnh Thới', short: 'Chợ Tịnh Thới', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm Tịnh Long, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '', floors: [] },
-    { id: 'MN', name: 'Chợ Mỹ Ngãi', short: 'Chợ Mỹ Ngãi', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm 1, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '', floors: [] },
-    { id: 'LH', name: 'Chợ Long Hồi', short: 'Chợ Long Hồi', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm Tịnh Hưng, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '', floors: [] },
-    { id: 'XB', name: 'Chợ Xẻo Bèo (CDC)', short: 'Chợ Xẻo Bèo', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm Hòa Mỹ, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '', floors: [] },
-    { id: 'SQ', name: 'Chợ Sáu Quốc', short: 'Chợ Sáu Quốc', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm Hòa Long, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '', floors: [] }
+    { id: 'HA', name: 'Chợ Hòa An', short: 'Chợ Hòa An', hang: 'Chợ hạng 2', kind: 'daily', address: 'Khóm Hòa Khánh, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '' },
+    { id: 'TVH', name: 'Chợ Tân Việt Hòa', short: 'Chợ Tân Việt Hòa', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm Tân Hòa Việt, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '' },
+    { id: 'TTT', name: 'Chợ Tân Thuận Tây', short: 'Chợ Tân Thuận Tây', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm Tân Dân, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '' },
+    { id: 'TL', name: 'Chợ Thông Lưu', short: 'Chợ Thông Lưu', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm Đông Bình, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '' },
+    { id: 'TT', name: 'Chợ Tân Tịch', short: 'Chợ Tân Tịch', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm Tân Thuận, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '' },
+    { id: 'TTH', name: 'Chợ Tịnh Thới', short: 'Chợ Tịnh Thới', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm Tịnh Long, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '' },
+    { id: 'MN', name: 'Chợ Mỹ Ngãi', short: 'Chợ Mỹ Ngãi', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm 1, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '' },
+    { id: 'LH', name: 'Chợ Long Hồi', short: 'Chợ Long Hồi', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm Tịnh Hưng, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '' },
+    { id: 'XB', name: 'Chợ Xẻo Bèo (CDC)', short: 'Chợ Xẻo Bèo', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm Hòa Mỹ, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '' },
+    { id: 'SQ', name: 'Chợ Sáu Quốc', short: 'Chợ Sáu Quốc', hang: 'Chợ hạng 3', kind: 'daily', address: 'Khóm Hòa Long, phường Cao Lãnh, tỉnh Đồng Tháp', note: '', priceNote: '' }
   ];
 
+  // Danh mục ngành hàng DUY NHẤT (thuộc Dãy — điểm kế thừa từ Dãy). 'Quầy cố định tháng/quý' là nhóm
+  // cũ của TTD, giữ tạm vì biểu phí quầy cố định TTD đang khớp theo tên này (xem U.appliedStallPrice).
+  const INDUSTRIES = ['Ki-ốt tổng hợp', 'Thủy hải sản', 'Thịt, gia cầm', 'Rau củ, trái cây', 'Lương thực, thực phẩm khô',
+    'Bách hóa tổng hợp', 'May mặc, giày dép', 'Ăn uống', 'Dịch vụ', 'Nông sản tự sản tự tiêu',
+    'Ẩm thực dân dã', 'Nông sản, đặc sản', 'Trải nghiệm', 'Quầy cố định tháng/quý', 'Khác'];
+  // Tiền tố mã Dãy theo ngành hàng (Row.code = tiền tố + hậu tố chữ cái: HS-A, HS-B…). Thuộc cùng danh
+  // mục ngành hàng ở trên; các mã HS/TG/RC/BH/AU/TS/CD/AT/NS/TN khớp dữ liệu Dãy hiện có.
+  const INDUSTRY_CODES = { 'Ki-ốt tổng hợp': 'KI', 'Thủy hải sản': 'HS', 'Thịt, gia cầm': 'TG', 'Rau củ, trái cây': 'RC',
+    'Lương thực, thực phẩm khô': 'LT', 'Bách hóa tổng hợp': 'BH', 'May mặc, giày dép': 'MM', 'Ăn uống': 'AU', 'Dịch vụ': 'DV',
+    'Nông sản tự sản tự tiêu': 'TS', 'Ẩm thực dân dã': 'AT', 'Nông sản, đặc sản': 'NS', 'Trải nghiệm': 'TN',
+    'Quầy cố định tháng/quý': 'CD', 'Khác': 'KH' };
+  // Trạng thái VẬN HÀNH lưu trên điểm (stall.status). Tình trạng sử dụng (hợp đồng) và công nợ (khoản
+  // phải thu) KHÔNG lưu trên điểm — suy ra ở features/business-points/service.js.
+  const POINT_STATUS = { active: 'Hoạt động', suspended: 'Tạm ngừng', disputed: 'Đang tranh chấp' };
+
+  // Seed mặt bằng v16: Market → Building → Floor (tuỳ chọn) → Row (Dãy) → điểm kinh doanh.
+  // Row.code = mã khu cũ + dãy vật lý (HS-A, HS-B…); mã điểm = Row.code + số thứ tự (HS-A01).
+  // points: [areaTypeId, diện tích m²]; type = cầu nối tính giá cũ (kiot|nhalong|ngoai|phien).
+  const LAYOUT_SEED = {
+    CL: [
+      { code: 'NCC', name: 'Nhà chợ chính', floors: [
+        { code: 'T1', name: 'Tầng 1', businessArea: 420, rows: [
+          { code: 'KA-A', name: 'Dãy ki-ốt mặt tiền A', industry: 'Ki-ốt tổng hợp', allocatedArea: 100, type: 'kiot', meter: true, points: [['covered', 14], ['covered', 13.5], ['covered', 15], ['covered', 12.5], ['covered', 14], ['covered', 16]] },
+          { code: 'HS-A', name: 'Dãy thủy hải sản A', industry: 'Thủy hải sản', allocatedArea: 36, type: 'nhalong', meter: true, points: [['covered', 5], ['covered', 5.5], ['covered', 4.5], ['covered', 6], ['uncovered', 4], ['uncovered', 4]] },
+          { code: 'HS-B', name: 'Dãy thủy hải sản B', industry: 'Thủy hải sản', allocatedArea: 26, type: 'nhalong', meter: true, points: [['covered', 5], ['covered', 5], ['covered', 5.5], ['covered', 4.5]] },
+          { code: 'TG-A', name: 'Dãy thịt, gia cầm A', industry: 'Thịt, gia cầm', allocatedArea: 32, type: 'nhalong', meter: true, points: [['covered', 5], ['covered', 5], ['covered', 6], ['covered', 4.5], ['covered', 5]] },
+          { code: 'RC-A', name: 'Dãy rau củ, trái cây A', industry: 'Rau củ, trái cây', allocatedArea: 30, type: 'nhalong', points: [['covered', 4], ['covered', 4], ['covered', 3.5], ['uncovered', 4], ['uncovered', 3]] }
+        ] },
+        { code: 'T2', name: 'Tầng 2', businessArea: 300, rows: [
+          { code: 'KB-A', name: 'Dãy ki-ốt tầng 2', industry: 'Ki-ốt tổng hợp', allocatedArea: 64, type: 'kiot', meter: true, points: [['covered', 14], ['covered', 13], ['covered', 15], ['covered', 12.5]] },
+          { code: 'BH-A', name: 'Dãy bách hóa tổng hợp A', industry: 'Bách hóa tổng hợp', allocatedArea: 40, type: 'nhalong', points: [['covered', 6], ['covered', 6], ['covered', 7], ['covered', 5.5], ['covered', 6]] },
+          { code: 'AU-A', name: 'Dãy ăn uống A', industry: 'Ăn uống', allocatedArea: 40, type: 'nhalong', meter: true, points: [['covered', 8], ['covered', 8], ['covered', 7.5], ['covered', 9]] }
+        ] }
+      ] },
+      { code: 'NNL', name: 'Khu ngoài nhà lồng', floors: [], rows: [
+        { code: 'TS-A', name: 'Dãy tự sản tự tiêu A', industry: 'Nông sản tự sản tự tiêu', allocatedArea: 20, type: 'ngoai', points: [['self_produced', 2.5], ['self_produced', 2.5], ['self_produced', 3], ['self_produced', 2], ['self_produced', 2.5], ['self_produced', 3]] },
+        { code: 'TS-B', name: 'Dãy tự sản tự tiêu B', industry: 'Nông sản tự sản tự tiêu', allocatedArea: 16, type: 'ngoai', points: [['self_produced', 2.5], ['self_produced', 3], ['uncovered', 3], ['uncovered', 3]] }
+      ] }
+    ],
+    TTD: [
+      { code: 'KCQ', name: 'Khu chợ quê', floors: [], rows: [
+        { code: 'CD-A', name: 'Dãy quầy thuê cố định', industry: 'Quầy cố định tháng/quý', allocatedArea: 70, type: 'nhalong', meter: true, points: [['covered', 10], ['covered', 9], ['covered', 11], ['covered', 10], ['covered', 8.5], ['covered', 12]] },
+        { code: 'AT-A', name: 'Dãy ẩm thực dân dã A', industry: 'Ẩm thực dân dã', allocatedArea: 40, type: 'phien', points: [['session', 7], ['session', 7.5], ['session', 6.5], ['session', 8], ['session', 7]] },
+        { code: 'AT-B', name: 'Dãy ẩm thực dân dã B', industry: 'Ẩm thực dân dã', allocatedArea: 32, type: 'phien', points: [['session', 7], ['session', 7], ['session', 6.5], ['session', 8]] },
+        { code: 'NS-A', name: 'Dãy nông sản, đặc sản', industry: 'Nông sản, đặc sản', allocatedArea: 32, type: 'phien', points: [['session', 6.5], ['session', 7], ['session', 7], ['uncovered', 6]] },
+        { code: 'TN-A', name: 'Dãy trải nghiệm tự làm món', industry: 'Trải nghiệm', allocatedArea: 24, type: 'phien', points: [['session', 7], ['session', 6.5], ['session', 7]] }
+      ] }
+    ]
+  };
+
+  // Chú giải HIỂN THỊ "tình trạng" tổng hợp của điểm trên Mặt bằng/bảng (suy ra — xem
+  // businessPoints.service.displayStatus): thue/no/trong từ hợp đồng + khoản phải thu, ngung/tranhchap
+  // từ trạng thái vận hành. KHÔNG phải giá trị lưu trên stall.status.
   const STATUS = {
-    // Giữ nguyên mã trạng thái `thue` để tương thích dữ liệu/contracts cũ;
-    // chỉ chuẩn hóa nhãn hiển thị theo nghiệp vụ bố trí điểm mới.
     thue: { label: 'Đang kinh doanh', color: '#3aa85b' },
     no: { label: 'Nợ phí', color: '#de3b3d' },
     ngung: { label: 'Tạm ngừng', color: '#ef852e' },
     tranhchap: { label: 'Đang tranh chấp', color: '#7c54cd' },
     trong: { label: 'Còn trống', color: '#c9d3cf' }
-  };
-
-  // "Loại điểm kinh doanh" (màn Điểm kinh doanh, Chợ Cao Lãnh) — xem ghi chú `pointType` ở MARKETS.
-  const POINT_TYPE = {
-    quay: { label: 'Quầy hàng' },
-    sap: { label: 'Sạp hàng' },
-    kiot: { label: 'Ki-ốt' },
-    cuahang: { label: 'Cửa hàng' }
   };
 
   const METHOD = { tm: 'Tiền mặt', qr: 'Quét mã QR', ck: 'Chuyển khoản' };
@@ -245,7 +237,6 @@ window.DATA = (function () {
     { id: 'tiepnhan', label: 'Tiếp nhận' },
     { id: 'phancong', label: 'Phân công' },
     { id: 'dangxuly', label: 'Đang xử lý' },
-    { id: 'chonghiemthu', label: 'Chờ nghiệm thu' },
     { id: 'hoanthanh', label: 'Hoàn thành' },
     { id: 'dong', label: 'Đóng' }
   ];
@@ -281,6 +272,20 @@ window.DATA = (function () {
     { role: 'Quản trị hệ thống', scope: 'Toàn hệ thống (12 chợ)', rights: 'Tài khoản, phân quyền, danh mục chợ, cấu hình đơn giá, kỳ thu, nhật ký' }
   ];
 
+  // Danh mục actor nghiệp vụ chỉ dùng để hiển thị tại Cài đặt → Vai trò & phân quyền.
+  // roleId chỉ nối tới role RBAC đã tồn tại; null nghĩa là chưa có ma trận quyền hiện hữu.
+  // Danh mục này không cấp, thu hồi hay suy diễn quyền runtime.
+  const ACTORS = [
+    { id: 'A01', code: 'QT', name: 'Quản trị hệ thống', unit: 'Cán bộ CNTT/Trung tâm', scope: 'Toàn hệ thống', responsibility: 'Quản lý tài khoản, vai trò, phân quyền; danh mục 12 chợ; bảng giá QĐ 480; tra nhật ký.', roleId: 'system_admin' },
+    { id: 'A02', code: 'TT', name: 'Tổ trưởng Tổ Quản lý chợ', unit: 'Tổ Quản lý chợ, bến xe, bến khách ngang sông', scope: 'Chợ được phân công', responsibility: 'Quy hoạch khu, phân công nhân viên thu phí theo khu, khai báo mức thu, mở/chốt kỳ thu tháng, duyệt miễn giảm, duyệt tiểu thương, giao và theo dõi phản ánh, xem báo cáo.', roleId: 'market_manager' },
+    { id: 'A03', code: 'NVTP', name: 'Nhân viên thu phí', unit: 'Tổ Quản lý chợ', scope: 'Chỉ các khu/điểm kinh doanh mình phụ trách', responsibility: 'Thu phí tháng tại điểm kinh doanh, phát biên lai điện tử, nộp tiền mặt tháng cho kế toán Trung tâm, nhắc nộp phí.', roleId: 'collector' },
+    { id: 'A04', code: 'NVKT', name: 'Nhân viên kỹ thuật', unit: 'Tổ Quản lý chợ', scope: 'Phản ánh được giao', responsibility: 'Nhận và xử lý phản ánh của tiểu thương/người dân, cập nhật tiến độ, kết quả kèm ảnh.', roleId: 'technician' },
+    { id: 'A05', code: 'KTTT', name: 'Kế toán Trung tâm', unit: 'Tổ Văn phòng – Trung tâm Cung ứng dịch vụ công', scope: 'Chợ được phân công', responsibility: 'Xác nhận phiếu nộp tiền mặt của nhân viên thu phí, đối soát số thu kỳ tháng với chứng từ, gửi danh sách thu cho kế toán phường.', roleId: 'central_accountant' },
+    { id: 'A06', code: 'KTP', name: 'Kế toán phường', unit: 'UBND phường Cao Lãnh', scope: 'Kỳ thu đã được gửi', responsibility: 'Chỉ xem và xuất danh sách thu/báo cáo thu; không đối soát, không sửa dữ liệu.', roleId: 'ward_accountant' },
+    { id: 'A07', code: 'TTH', name: 'Tiểu thương', unit: 'Thương nhân kinh doanh tại chợ', scope: 'Chỉ dữ liệu của chính mình', responsibility: 'Tự đăng ký tài khoản, xem khoản phải nộp, thanh toán QR/chuyển khoản, xem biên lai, gửi và đánh giá phản ánh, nhận thông báo.', roleId: 'trader' },
+    { id: 'A08', code: 'LĐ', name: 'Lãnh đạo UBND phường', unit: 'UBND phường Cao Lãnh', scope: 'Tổng hợp 12 chợ (chỉ xem)', responsibility: 'Xem số liệu tổng hợp thu phí, công nợ, phản ánh của 12 chợ; không thao tác nghiệp vụ.', roleId: 'ward_leader' }
+  ];
+
   const HO = ['Nguyễn', 'Trần', 'Lê', 'Phạm', 'Huỳnh', 'Võ', 'Phan', 'Đặng', 'Bùi', 'Đỗ', 'Ngô', 'Dương', 'Lý', 'Hồ', 'Mai', 'Trương', 'Châu', 'Lâm'];
   const DEM_NU = ['Thị', 'Thị Kim', 'Thị Ngọc', 'Thị Thanh', 'Thị Mỹ', 'Thị Bích', 'Thị Hồng'];
   const DEM_NAM = ['Văn', 'Minh', 'Hoàng', 'Quốc', 'Thanh', 'Công', 'Hữu'];
@@ -305,57 +310,67 @@ window.DATA = (function () {
     const saturdays = (y, m) => { const r = []; const d = new Date(y, m, 1); while (d.getMonth() === m) { if (d.getDay() === 6) r.push(new Date(d)); d.setDate(d.getDate() + 1); } return r; };
 
     const stalls = [], traders = [], contracts = [], invoices = [], payments = [];
+    const buildings = [], floors = [], rows = [];
 
-    // ---- Điểm kinh doanh ----
-    MARKETS.forEach(m => m.floors.forEach(f => f.sections.forEach(s => s.rows.forEach(row => {
-      for (let i = 1; i <= s.per; i++) {
-        const code = s.id + '-' + row + pad(i);
-        const area = +(s.area[0] + R() * (s.area[1] - s.area[0])).toFixed(1);
-        let status;
-        const r = R();
-        if (m.kind === 'session') status = r < 0.05 ? 'trong' : r < 0.10 ? 'no' : 'thue';
-        else status = r < 0.10 ? 'trong' : r < 0.14 ? 'ngung' : r < 0.21 ? 'no' : r < 0.225 ? 'tranhchap' : 'thue';
-        stalls.push({
-          id: m.id + '-' + code, code, market: m.id, floor: f.id, section: s.id, sectionName: s.name,
-          // areaType is the physical-area taxonomy used by the Mặt bằng table/filter.
-          // `type` remains the service-rate category; pointType remains the legacy retail point type.
-          row, num: i, type: s.type, areaType: ({ kiot: 'covered', nhalong: 'covered', ngoai: 'self_produced', phien: 'session' }[s.type] || 'covered'), pointType: s.pointType || null, cat: s.cat, area, hasMeter: !!s.meter, status, traderId: null,
-          // sellerId (CHỈ Chợ Cao Lãnh — màn "Điểm kinh doanh"): người TRỰC TIẾP bán tại điểm, THAM
-          // CHIẾU đúng entity `traders` sẵn có (không tạo entity/duplicate tên) — null = "chưa xác
-          // định/giống người thuê hiện hành" (gán cụ thể ở bước tạo tiểu thương bên dưới cho điểm đã
-          // có người thuê). KHÔNG dùng cho bất kỳ logic tài chính/hợp đồng/công nợ nào — các nghiệp
-          // vụ đó GIỮ NGUYÊN gắn với traderId.
-          // collectorId (PHAN_CONG_NHAN_VIEN_THU_PHI): THAM CHIẾU account.id (js/accounts.js, role
-          // 'collector'), KHÔNG tạo entity nhân viên riêng. null = "chưa phân công". Gán qua UI "Sửa
-          // dãy" (js/v-cautruc.js) — chọn 1 NV cho cả dãy sẽ set field này trên MỌI điểm thật thuộc
-          // dãy đó, nhưng field luôn ở cấp ĐIỂM (không phải cấp dãy) — dãy chỉ là cách chọn nhanh.
-          // Đây CHỈ là dữ liệu phân công (ai phụ trách điểm nào), KHÔNG thay đổi RBAC — quyền hạn vẫn
-          // do role 'collector' quyết định (permissions.js), không suy ra từ field này.
-          collectorId: null,
-          sellerId: null, contractId: null, history: []
+    // ---- Mặt bằng v16: Building → Floor (tuỳ chọn) → Row (Dãy) → điểm kinh doanh (LAYOUT_SEED) ----
+    // Điểm chỉ lưu field của chính nó; ngành hàng thuộc Row, vị trí suy từ rowId, người thuê/hợp đồng
+    // suy từ contracts, công nợ suy từ invoices. `type` giữ làm cầu nối cho biểu phí/phiên chợ cũ.
+    const rowById = new Map();
+    Object.keys(LAYOUT_SEED).forEach(mid => LAYOUT_SEED[mid].forEach((b, bi) => {
+      const building = { id: mid + '-B-' + b.code, market: mid, code: b.code, name: b.name, order: bi + 1, status: 'active' };
+      buildings.push(building);
+      const addRows = (list, floorId) => list.forEach(r => {
+        const row = {
+          id: mid + '-R-' + r.code, market: mid, buildingId: building.id, floorId, code: r.code, name: r.name,
+          industry: r.industry, allocatedArea: r.allocatedArea, order: rows.filter(x => x.market === mid).length + 1,
+          status: 'active', collectorId: null, note: ''
+        };
+        rows.push(row);
+        rowById.set(row.id, row);
+        r.points.forEach((pt, pi) => {
+          const code = r.code + pad(pi + 1);
+          stalls.push({
+            id: mid + '-' + code, code, market: mid, rowId: row.id, num: pi + 1, area: pt[1], areaTypeId: pt[0],
+            status: 'active', hasMeter: !!r.meter, type: r.type, note: '', history: []
+          });
         });
-      }
-    }))));
+      });
+      (b.floors || []).forEach((f, fi) => {
+        const floor = { id: mid + '-F-' + b.code + '-' + f.code, market: mid, buildingId: building.id, code: f.code, name: f.name, businessArea: f.businessArea, order: fi + 1 };
+        floors.push(floor);
+        addRows(f.rows, floor.id);
+      });
+      addRows(b.rows || [], null);
+    }));
+    const industryOf = st => rowById.get(st.rowId).industry;
+    const sectionOf = st => st.code.split('-')[0]; // mã khu cũ (KA, HS, AU…) — chỉ dùng khi sinh số liệu mẫu
 
-    // ---- Tiểu thương ----
-    // Keep session-rental points available for the TTD market-session registration flow.
-    // These stalls remain unassigned, so traders can choose a concrete point in the Mini app.
-    const guaranteedEmptySession = new Set([
-      'TTD-AT-A01', 'TTD-AT-A02', 'TTD-AT-A03', 'TTD-AT-B01', 'TTD-AT-B02',
-      'TTD-NS-A01', 'TTD-NS-A02', 'TTD-NS-A03',
-      'TTD-TN-A01', 'TTD-TN-A02', 'TTD-TN-A03'
-    ]);
+    // ---- Kịch bản sử dụng điểm của seed (chỉ dùng khi sinh dữ liệu; KHÔNG lưu trên điểm) ----
+    const VACANT = new Set(['CL-KA-A06', 'CL-HS-A06', 'CL-RC-A04', 'CL-RC-A05', 'CL-TS-A06', 'CL-TS-B04', 'CL-KB-A03', 'CL-KB-A04', 'CL-BH-A04', 'CL-BH-A05', 'CL-AU-A03', 'TTD-CD-A06']);
+    const SUSPENDED = new Set(['CL-RC-A05']);
+    const DISPUTED = new Set(['CL-TG-A05']);
+    // Quầy theo phiên TTD: 5 khách quen (không có hợp đồng tháng), các quầy còn lại để trống cho đăng ký phiên.
+    const SESSION_REGULAR = new Set(['TTD-AT-A04', 'TTD-AT-A05', 'TTD-AT-B03', 'TTD-AT-B04', 'TTD-NS-A04']);
+    const SHARED = [['CL-KA-A01', 'CL-KA-A02'], ['CL-HS-B01', 'CL-HS-B02'],
+      // THU_THEO_PHAN_NHAN_VIEN (nhánh Tài chính): TT0003 thuê 3 điểm ở 3 Dãy của 3 NV thu phí khác nhau.
+      ['CL-KA-A04', 'CL-HS-A01', 'CL-TG-A01']]; // 1 tiểu thương nhiều điểm
+    // Dữ liệu mẫu chỉ giữ nợ ở kỳ gần nhất, không treo nợ quá 1 tháng.
+    const DEBT_MONTHS = { 'CL-HS-A03': 1, 'CL-TG-A02': 1, 'CL-BH-A02': 1, 'CL-TS-B02': 1 };
+    const PARTIAL = { 'CL-AU-A02': '2026-08', 'CL-KA-A03': '2026-09' };
+    const EXPIRING = { 'CL-HS-B04': 7, 'CL-AU-A04': 18, 'CL-TS-A05': 25 }; // số ngày còn lại
     stalls.forEach(st => {
-      if (guaranteedEmptySession.has(st.id)) st.status = 'trong';
+      if (SUSPENDED.has(st.id)) st.status = 'suspended';
+      if (DISPUTED.has(st.id)) st.status = 'disputed';
     });
 
+    // ---- Tiểu thương ----
     let tSeq = 0;
-    function newTrader(market, cat) {
+    function newTrader(market, cat, fixed) {
       const female = chance(0.78);
       const name = female
         ? pick(HO) + ' ' + pick(DEM_NU) + ' ' + pick(TEN_NU)
         : pick(HO) + ' ' + pick(DEM_NAM) + ' ' + pick(TEN_NAM);
-      const t = {
+      const t = Object.assign({
         id: 'TT' + pad(++tSeq, 4), name, gender: female ? 'Nữ' : 'Nam',
         phone: '09' + between(0, 9) + between(1000000, 9999999),
         idNo: '087' + between(100000000, 999999999),
@@ -367,107 +382,84 @@ window.DATA = (function () {
         stalls: [],
         // v12 — TRADER_PROFILE_AND_MINIAPP_WORKFLOW: hồ sơ seed/đã có sẵn coi là chính thức
         // (ACTIVE, nguồn STAFF — do BQL quản lý từ trước, không phải đăng ký qua Mini App).
-        // supplementNote/licenseNo/licenseDate để trống — chỉ dùng khi thật sự có giá trị.
         profileStatus: 'ACTIVE', source: 'STAFF', supplementNote: '', licenseNo: null, licenseDate: null
-      };
+      }, fixed || {});
       traders.push(t);
       return t;
     }
-
-    let prev = null;
+    // TT0001 (account demo AC-TT01) và TTD-CQ (account AC-CHI-QUYET) là 2 hồ sơ cố định — account
+    // đã lưu trỏ tới 2 id này nên seed luôn phải có, kèm điểm + hợp đồng hợp lệ.
+    const FIXED_TRADERS = {
+      'CL-KA-A01': { name: 'Nguyễn Thị Hoa', gender: 'Nữ', phone: '0909345678', app: true },
+      // TT0003 — account demo AC-TT03 (Trần Thị Kim Nhung), tiểu thương nhiều điểm của nhánh Tài chính.
+      'CL-KA-A04': { name: 'Trần Thị Kim Nhung', gender: 'Nữ', app: true }
+    };
+    const holder = new Map(); // pointId → tiểu thương đang sử dụng (người thuê / khách phiên quen)
     stalls.forEach(st => {
-      if (st.status === 'trong') { prev = null; return; }
+      if (VACANT.has(st.id)) return;
+      if (st.type === 'phien' && !SESSION_REGULAR.has(st.id)) return;
       let t;
-      if (prev && prev.market === st.market && prev.cat === st.cat && prev.stalls.length < 2 && chance(0.07)) t = prev;
-      else t = newTrader(st.market, st.cat);
-      t.stalls.push(st.id);
-      st.traderId = t.id;
-      prev = t;
-    });
-
-    const cqStall = stalls.find(s => s.market === 'TTD' && s.section === 'CD' && s.row === 'A' && s.num === 1)
-      || stalls.find(s => s.market === 'TTD' && s.type !== 'phien');
-    if (cqStall) {
-      const old = traders.find(t => t.id === cqStall.traderId);
-      if (old) old.stalls = old.stalls.filter(id => id !== cqStall.id);
-      const cqTrader = {
-        id: 'TTD-CQ', name: 'Chí Quyết', phone: '0909000001', cccd: '087093000001',
-        address: 'Khóm Tân Phát, phường Cao Lãnh',
-        market: 'TTD', cat: cqStall.cat, hkd: true, since: '2026-01-01',
-        app: true, bank: true, stalls: [cqStall.id]
-      };
-      traders.push(cqTrader);
-      cqStall.traderId = cqTrader.id;
-      cqStall.status = 'thue';
-    }
-
-    // ---- DEMO_TIEU_THUONG_NHIEU_DIEM: TT0003 thuê thêm 2 điểm ở 2 khu khác (tổng 4 điểm, 3 khu) ----
-    // Chạy TRƯỚC hợp đồng/khoản phải thu để mọi bản ghi sinh ra đã đúng chủ thể. Không dùng RNG và không
-    // đổi độ dài mảng traders ở bước này (người thuê cũ chỉ bị rút hết điểm, được xoá ở cuối build() nếu
-    // không còn bị tham chiếu) → chuỗi RNG của dữ liệu mẫu khác giữ nguyên.
-    const multiMovedOwners = [];
-    (function assignMultiPointTrader() {
-      const multi = traders.find(t => t.id === 'TT0003');
-      if (!multi) return;
-      const usedSections = new Set(multi.stalls.map(id => (stalls.find(x => x.id === id) || {}).section));
-      stalls.forEach(st => {
-        if (multiMovedOwners.length >= 2 || st.market !== 'CL' || st.status !== 'thue' || !st.hasMeter || st.type === 'phien' || usedSections.has(st.section)) return;
-        const owner = traders.find(t => t.id === st.traderId);
-        if (!owner || owner.id === multi.id || owner.stalls.length !== 1) return;
-        st.traderId = multi.id; multi.stalls.push(st.id); owner.stalls = [];
-        multiMovedOwners.push(owner.id); usedSections.add(st.section);
-      });
-    })();
-
-    // ---- Người bán thực tế (sellerId, CHỈ Chợ Cao Lãnh — xem ghi chú ở stalls.push()) ----
-    // Mặc định người bán = người thuê (đúng thực tế đa số điểm KD). Sau đó đổi sellerId khác
-    // traderId ở MỘT SỐ ÍT điểm để minh hoạ đúng 2 trường hợp bắt buộc: (a) người thuê nhượng lại
-    // cho người khác trực tiếp bán, (b) một người thuê nhiều điểm nhưng người bán từng điểm khác
-    // nhau. Điểm còn trống KHÔNG gán sellerId (giữ null — không tạo người bán giả để lấp UI).
-    const clOccupied = stalls.filter(s => s.market === 'CL' && s.traderId);
-    clOccupied.forEach(s => { s.sellerId = s.traderId; });
-    const clMultiStallTrader = traders.find(t => t.market === 'CL' && t.stalls.length >= 2);
-    if (clMultiStallTrader) {
-      const othersForMulti = traders.filter(x => x.market === 'CL' && x.id !== clMultiStallTrader.id);
-      const st2 = othersForMulti.length && stalls.find(s => s.id === clMultiStallTrader.stalls[1]);
-      if (st2) st2.sellerId = pick(othersForMulti).id;
-    }
-    let sellerSwaps = 0;
-    clOccupied.forEach(s => {
-      if (sellerSwaps >= 6 || s.sellerId !== s.traderId) return; // bỏ qua điểm đã đổi ở bước trên
-      if (chance(0.03)) {
-        const others = traders.filter(x => x.market === 'CL' && x.id !== s.traderId);
-        if (others.length) { s.sellerId = pick(others).id; sellerSwaps++; }
+      if (st.id === 'TTD-CD-A01') {
+        t = {
+          id: 'TTD-CQ', name: 'Chí Quyết', gender: 'Nam', phone: '0909000001', cccd: '087093000001', idNo: '087093000001',
+          address: 'Khóm Tân Phát, phường Cao Lãnh', market: 'TTD', cat: industryOf(st), hkd: true, since: '2026-01-01',
+          app: true, bank: true, stalls: [], profileStatus: 'ACTIVE', source: 'STAFF', supplementNote: '', licenseNo: null, licenseDate: null
+        };
+        traders.push(t);
+      } else {
+        const group = SHARED.find(g => g.indexOf(st.id) > 0);
+        t = group ? holder.get(group[0]) : newTrader(st.market, industryOf(st), FIXED_TRADERS[st.id]);
       }
+      t.stalls.push(st.id);
+      holder.set(st.id, t);
     });
+    // Hồ sơ chưa có hợp đồng (chưa được bố trí điểm) — demo "tiểu thương chưa có HĐ".
+    newTrader('CL', 'Rau củ, trái cây');
+    newTrader('CL', 'Bách hóa tổng hợp');
 
     // ---- Hợp đồng ----
+    const TYPE_PRICE_LABEL = { kiot: 'Ki-ốt', nhalong: 'Trong nhà lồng chợ', ngoai: 'Tự sản tự tiêu', phien: 'Quầy theo phiên' };
+    function unitFor(st) {
+      const pol = RATE_POLICY_SEED.stallPrices.find(x => x.marketId === st.market && x.marketModel === RATE_MARKET_MODEL.FIXED_MONTHLY && x.status === 'active'
+        && (x.stallType === TYPE_PRICE_LABEL[st.type] || x.stallType === industryOf(st)));
+      return pol ? pol.amount : UNIT[st.type];
+    }
     let cSeq = 0;
-    stalls.filter(s => s.traderId && s.type !== 'phien').forEach(st => {
-      const m = st.market;
+    const contractOfPoint = new Map(); // hợp đồng đang hiệu lực của điểm (chỉ dùng khi sinh dữ liệu)
+    function mkContract(st, t, start, end, extra) {
+      const unit = unitFor(st);
+      const monthly = Math.round(st.area * unit * 30 / 1000) * 1000;
+      const c = Object.assign({
+        id: 'HĐ-' + st.market + '-' + start.slice(0, 4) + '-' + pad(++cSeq, 4),
+        stallId: st.id, traderId: t.id, market: st.market,
+        kind: 'Hợp đồng thuê cố định quầy tháng/quý',
+        start, end, unit, monthly, deposit: monthly, status: 'hieuluc', scanned: chance(0.8)
+      }, extra || {});
+      contracts.push(c);
+      return c;
+    }
+    stalls.forEach(st => {
+      const t = holder.get(st.id);
+      if (!t || st.type === 'phien') return;
       let start, end;
-      if (m === 'TTD') {
-        start = new Date(2026, 0, 1); end = new Date(2026, 11, 31);
-      } else if (chance(0.075)) {
-        end = addDays(TODAY, between(3, 30)); start = addMonths(end, -36);
+      if (st.market === 'TTD') { start = '2026-01-01'; end = '2026-12-31'; }
+      else if (EXPIRING[st.id]) {
+        const e = addDays(new Date(2026, 8, 29), EXPIRING[st.id]); // tính theo ngày dữ liệu 29/09/2026 (db.today)
+        end = iso(e); start = iso(addDays(addMonths(e, -36), 1));
       } else {
         // bắt đầu từ 11/2023 đến 07/2026 để hợp đồng còn hiệu lực sau ngày 13/09/2026
-        start = addMonths(new Date(2023, 10, 1), between(0, 32));
-        end = addDays(addMonths(start, 36), -1);
+        const s0 = addMonths(new Date(2023, 10, 1), between(0, 32));
+        start = iso(s0); end = iso(addDays(addMonths(s0, 36), -1));
       }
-      const fixedPolicy = RATE_POLICY_SEED.stallPrices.find(x => x.marketId === m && x.marketModel === RATE_MARKET_MODEL.FIXED_MONTHLY && x.status === 'active');
-      const unit = fixedPolicy ? fixedPolicy.amount : UNIT[st.type];
-      const monthly = Math.round(st.area * unit * 30 / 1000) * 1000;
-      const c = {
-        id: 'HĐ-' + m + '-' + start.getFullYear() + '-' + pad(++cSeq, 4),
-        stallId: st.id, traderId: st.traderId, market: m,
-        kind: 'Hợp đồng thuê cố định quầy tháng/quý',
-        start: iso(start), end: iso(end), unit, monthly,
-        deposit: monthly, status: 'hieuluc', scanned: chance(0.8)
-      };
-      contracts.push(c);
-      st.contractId = c.id;
+      contractOfPoint.set(st.id, mkContract(st, t, start, end));
     });
+    // Hợp đồng đã kết thúc: điểm nay đang trống, lịch sử + khoản thu cũ vẫn giữ.
+    const endedContracts = [
+      mkContract(stalls.find(x => x.id === 'CL-KB-A04'), newTrader('CL', 'Ki-ốt tổng hợp'), '2023-07-01', '2026-06-30',
+        { status: 'thanhly', liquidatedAt: '2026-07-05', liquidationNote: 'Hết hạn hợp đồng, tiểu thương không gia hạn; đã hoàn tất công nợ và bàn giao mặt bằng.' }),
+      mkContract(stalls.find(x => x.id === 'CL-BH-A05'), newTrader('CL', 'Bách hóa tổng hợp'), '2025-03-01', '2028-02-29',
+        { status: 'chamdut', termination: { date: '2026-08-16', reason: 'Tiểu thương xin chấm dứt trước hạn do chuyển địa điểm kinh doanh.' } })
+    ];
 
     // ---- Khoản phải thu & thanh toán ----
     const PERIODS = ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09'];
@@ -491,7 +483,7 @@ window.DATA = (function () {
       items.push({ name: 'Phí quầy cố định tháng/quý (' + st.area + ' m² × ' + c.unit.toLocaleString('vi-VN') + ' đ × 30 ngày)', amount: c.monthly });
       if (st.hasMeter) {
         const kwh = between(st.type === 'kiot' ? 120 : 50, st.type === 'kiot' ? 320 : 180);
-        const m3 = between(2, st.section === 'AU' || st.section === 'HS' ? 18 : 6);
+        const m3 = between(2, sectionOf(st) === 'AU' || sectionOf(st) === 'HS' ? 18 : 6);
         items.push({ name: 'Tiền điện (' + kwh + ' kWh × ' + ELEC.toLocaleString('vi-VN') + ' đ)', amount: kwh * ELEC });
         items.push({ name: 'Tiền nước (' + m3 + ' m³ × ' + WATER.toLocaleString('vi-VN') + ' đ)', amount: m3 * WATER });
       }
@@ -506,33 +498,41 @@ window.DATA = (function () {
       return items;
     }
 
-    stalls.filter(s => s.contractId).forEach(st => {
-      const c = contracts.find(x => x.id === st.contractId);
-      const debtMonths = st.status === 'no' ? between(1, 4) : 0;
+    // Phát sinh khoản phải thu theo HỢP ĐỒNG, kể cả hợp đồng đã kết thúc,
+    // nhưng chỉ trong các kỳ hợp đồng còn hiệu lực.
+    contracts.forEach(c => {
+      const st = stalls.find(x => x.id === c.stallId);
+      if (!st) return;
+      // Dữ liệu mẫu không để nợ phí quá 1 tháng.
+      const debtMonths = Math.min(DEBT_MONTHS[st.id] || 0, 1);
+      const stop = c.status === 'chamdut' && c.termination?.date ? c.termination.date : c.end;
       PERIODS.forEach((p, pi) => {
         const pStart = p + '-01';
         if (c.start > pStart && c.start.slice(0, 7) !== p) return;
-        if (st.status === 'ngung' && pi >= 3) return; // tạm ngừng: không phát sinh 2 kỳ gần nhất
+        if (stop < pStart) return;
         const items = makeItems(st, c, p);
         const amount = items.reduce((a, b) => a + b.amount, 0);
         const [y, mo] = p.split('-').map(Number);
         const inv = {
           id: 'PT-' + p.replace('-', '') + '-' + pad(++iSeq, 5), period: p, market: st.market,
-          stallId: st.id, traderId: st.traderId, contractId: c.id, items, amount, paid: 0,
+          stallId: st.id, traderId: c.traderId, contractId: c.id, items, amount, paid: 0,
           issued: iso(new Date(y, mo - 1, 1)), due: iso(new Date(y, mo - 1, 15)), status: 'unpaid', adjust: null, reminders: 0
         };
         const unpaidBecauseDebt = debtMonths && pi >= PERIODS.length - debtMonths;
         let pay = !unpaidBecauseDebt;
         if (p === '2026-09' && pay) pay = chance(0.62);
+        if (PARTIAL[st.id] === p) pay = true;
         if (pay) {
-          const partial = chance(0.03);
+          // Thanh toán một phần chỉ dùng cho các kỳ seed gần nhất,
+          // tránh tạo công nợ cũ kéo dài quá 1 tháng.
+          const partial = PARTIAL[st.id] === p && pi >= PERIODS.length - 2;
           const amt = partial ? Math.round(amount * 0.5 / 1000) * 1000 : amount;
           const noncash = chance(NONCASH[p]);
           const method = noncash ? (chance(0.72) ? 'qr' : 'ck') : 'tm';
           let day = between(1, p === '2026-09' ? 13 : 15);
           if (p === '2026-09' && chance(0.22)) day = 13;
           const pr = {
-            id: 'GD' + pad(++rSeq, 6), invoiceId: inv.id, market: st.market, traderId: st.traderId,
+            id: 'GD' + pad(++rSeq, 6), invoiceId: inv.id, market: st.market, traderId: c.traderId,
             amount: amt, method, date: iso(new Date(y, mo - 1, day)),
             time: pad(between(6, 17)) + ':' + pad(between(0, 59)),
             by: method === 'tm' ? pick(collectors[st.market]) : 'Hệ thống',
@@ -550,10 +550,12 @@ window.DATA = (function () {
 
     // Ổn định mã tra cứu theo seed
     function seedTtdOverdueDebt() {
+      // Không để nợ quá 1 tháng: các khoản còn nợ của Chợ quê TTĐ chỉ nằm ở kỳ 08 và 09/2026
+      // (quá hạn nhiều nhất 29 ngày so với ngày hiện tại 13/09/2026).
       const profiles = [
-        { period: '2026-06', due: '2026-06-15', amount: 120000, reminders: 2 },
-        { period: '2026-07', due: '2026-07-15', amount: 90000, reminders: 1 },
-        { period: '2026-08', due: '2026-08-15', amount: 70000, reminders: 1 },
+        { period: '2026-08', due: '2026-08-15', amount: 120000, reminders: 2 },
+        { period: '2026-08', due: '2026-08-15', amount: 90000, reminders: 1 },
+        { period: '2026-09', due: '2026-09-10', amount: 70000, reminders: 1 },
         { period: '2026-09', due: '2026-09-10', amount: 40000, reminders: 0 }
       ];
       const used = new Set();
@@ -592,8 +594,7 @@ window.DATA = (function () {
     const METER_PERIODS = [
       { id: '2026-07', month: 7, year: 2026, status: 'CLOSED', closeDate: '2026-08-10', closedBy: 'Trần Minh Khoa', closedAt: '10/08/2026 17:05' },
       { id: '2026-08', month: 8, year: 2026, status: 'CLOSED', closeDate: '2026-09-10', closedBy: 'Trần Minh Khoa', closedAt: '10/09/2026 17:20' },
-      // KY_09_PHAT_HANH_DU (v22): theo swimlane, ghi chỉ số xong → chốt kỳ ghi số → phát hành khoản thu.
-      // Kỳ 09 đã phát hành toàn bộ nên kỳ ghi số 09 đã chốt (trước hạn nộp 15/09).
+      // KY_09_PHAT_HANH_DU: ghi chỉ số xong → chốt kỳ ghi số → phát hành khoản thu; kỳ 09 đã phát hành đủ.
       { id: '2026-09', month: 9, year: 2026, status: 'CLOSED', closeDate: '2026-09-12', closedBy: 'Trần Minh Khoa', closedAt: '12/09/2026 17:00' }
     ];
     const recAt = (mo, y, dMin, dMax) => pad(between(dMin, dMax)) + '/' + pad(mo) + '/' + y + ' ' + pad(between(7, 17)) + ':' + pad(between(0, 59));
@@ -601,7 +602,7 @@ window.DATA = (function () {
 
     const readings = [];
     const meterRecorders = { CL: 'NV05', TTD: 'NV09' };
-    stalls.filter(s => s.hasMeter && s.traderId && s.status !== 'ngung').forEach(st => {
+    stalls.filter(s => s.hasMeter && contractOfPoint.has(s.id) && s.status === 'active').forEach(st => {
       const avg = st.type === 'kiot' ? between(150, 260) : between(60, 150);
       const wAvg = between(3, 12);
 
@@ -641,6 +642,21 @@ window.DATA = (function () {
       mk('2026-09', 9, 2026, base09, elecCur09, wBase09, waterCur09, false);
     });
 
+    // ---- PHÂN CÔNG NV THU PHÍ THEO DÃY (nhánh Tài chính, trước v16 là theo khu) ----
+    // Chợ Cao Lãnh: Dãy ki-ốt mặt tiền (KA-…) → Nguyễn Thị Diễm (AC-NV04), thủy hải sản (HS-…) → Lê Thị Ngọc Hân
+    // (AC-NV02), thịt gia cầm (TG-…) → Phạm Văn Lợi (AC-NV03); các nhóm Dãy còn lại chia vòng 3 NV. Chợ quê TTĐ:
+    // chia vòng 2 NV (AC-NV07, AC-NV08). Ghi lên Row.collectorId (mô hình v16: phân công theo Dãy).
+    (function assignCollectorsByRow() {
+      const prefix = r => String(r.code).split('-')[0];
+      const plan = { CL: { fixed: { KA: 'AC-NV04', HS: 'AC-NV02', TG: 'AC-NV03' }, ring: ['AC-NV02', 'AC-NV03', 'AC-NV04'] }, TTD: { fixed: {}, ring: ['AC-NV07', 'AC-NV08'] } };
+      Object.keys(plan).forEach(mid => {
+        const p = plan[mid], zone = Object.assign({}, p.fixed); let k = 0;
+        rows.filter(r => r.market === mid).forEach(r => { const z = prefix(r); if (!zone[z]) zone[z] = p.ring[k++ % p.ring.length]; r.collectorId = zone[z]; });
+      });
+    })();
+    const collectorOfStall = st => { const r = st && rowById.get(st.rowId); return (r && r.collectorId) || ''; };
+    // Người ghi chỉ số = NV thu phí phụ trách Dãy của điểm (mã NV, bỏ tiền tố 'AC-').
+    Object.keys(meterRecorders).forEach(k => delete meterRecorders[k]);
     // ---- DONG_BO_TIEN_DIEN_NUOC (v17): tiền điện, nước trên khoản phải thu = chỉ số thật ----
     // Trước v17 makeItems() random kWh/m³ độc lập với bảng chỉ số → số tiền không khớp chỉ số. Quy tắc
     // khớp với billing.js (phát hành thật): khoản phải thu kỳ P dùng chỉ số kỳ P, sản lượng = mới − cũ,
@@ -675,7 +691,7 @@ window.DATA = (function () {
         if (!st) return;
         if (r.elecCur == null) r.elecCur = r.elecPrev + r.elecAvg;
         if (r.waterCur == null) r.waterCur = r.waterPrev + r.waterAvg;
-        Object.assign(r, { status: 'RECORDED', recordedBy: meterRecorders[st.market] || 'NV05', recordedAt: pad(5 + (st.num || 0) % 7) + '/09/2026 ' + pad(7 + (st.num || 0) % 9) + ':' + pad((st.num || 0) * 7 % 60),
+        Object.assign(r, { status: 'RECORDED', recordedBy: collectorOfStall(st).replace(/^AC-/, '') || 'NV05', recordedAt: pad(5 + (st.num || 0) % 7) + '/09/2026 ' + pad(7 + (st.num || 0) % 9) + ':' + pad((st.num || 0) * 7 % 60),
           elecPhoto: r.elecPhoto || { name: st.code + '-dien-09-2026.jpg', type: 'image/jpeg', size: 300000, mock: true },
           waterPhoto: r.waterPhoto || { name: st.code + '-nuoc-09-2026.jpg', type: 'image/jpeg', size: 300000, mock: true } });
       });
@@ -697,7 +713,7 @@ window.DATA = (function () {
             stallId: st.id, period: p,
             elecPrev: elecAnchor - kwh, elecCur: elecAnchor, elecAvg: elecAvg || kwh,
             waterPrev: waterAnchor - m3, waterCur: waterAnchor, waterAvg: waterAvg || m3,
-            status: 'RECORDED', recordedBy: meterRecorders[st.market] || 'NV05', recordedAt: closedAt(p),
+            status: 'RECORDED', recordedBy: collectorOfStall(st).replace(/^AC-/, '') || 'NV05', recordedAt: closedAt(p),
             elecPhoto: { name: st.code + '-dien-' + p.slice(5) + '-' + p.slice(0, 4) + '.jpg', type: 'image/jpeg', size: 300000, mock: true },
             waterPhoto: { name: st.code + '-nuoc-' + p.slice(5) + '-' + p.slice(0, 4) + '.jpg', type: 'image/jpeg', size: 300000, mock: true }
           };
@@ -787,6 +803,8 @@ window.DATA = (function () {
       });
     })();
 
+    readings.forEach(r => { if (!r.recordedBy) return; const st = stalls.find(x => x.id === r.stallId); const c = collectorOfStall(st); if (c) r.recordedBy = c.replace(/^AC-/, ''); });
+
     // ---- Phản ánh, sự cố ----
     const TPL = [
       ['Điện', 'Mất điện dãy ki-ốt, cần kiểm tra CB tổng'],
@@ -804,14 +822,14 @@ window.DATA = (function () {
       ['Điện', 'Ổ cắm quầy bị chập, có mùi khét'],
       ['Khác', 'Đề nghị bố trí thêm chỗ để xe cho khách']
     ];
-    const stateCycle = ['tiepnhan', 'phancong', 'dangxuly', 'dangxuly', 'chonghiemthu', 'hoanthanh', 'dong', 'tiepnhan', 'phancong', 'dangxuly', 'hoanthanh', 'dong', 'tiepnhan', 'chonghiemthu'];
-    const rented = stalls.filter(s => s.traderId);
+    const stateCycle = ['tiepnhan', 'phancong', 'dangxuly', 'dangxuly', 'hoanthanh', 'hoanthanh', 'dong', 'tiepnhan', 'phancong', 'dangxuly', 'hoanthanh', 'dong', 'tiepnhan', 'hoanthanh'];
+    const rented = stalls.filter(s => holder.has(s.id));
     const incidents = TPL.map((t, i) => {
       const st = i % 5 === 3 ? pick(rented.filter(s => s.market === 'TTD')) : pick(rented.filter(s => s.market === 'CL'));
       const created = addDays(TODAY, -between(0, 9));
       const state = stateCycle[i];
       return {
-        id: 'SC-' + pad(i + 101, 4), market: st.market, stallId: st.id, traderId: st.traderId,
+        id: 'SC-' + pad(i + 101, 4), market: st.market, stallId: st.id, traderId: holder.get(st.id).id,
         cat: t[0], title: t[1], state, source: i % 3 === 0 ? 'Nhập tại Ban Quản lý' : 'Mini app tiểu thương',
         escalated: i === 3 || i === 10,
         created: iso(created), deadline: iso(addDays(created, t[0] === 'PCCC' || t[0] === 'Điện' ? 1 : 3)),
@@ -892,7 +910,7 @@ window.DATA = (function () {
         noncash: +(0.25 + R() * 0.2).toFixed(2)
       });
     }
-    const ttdSessionCats = Array.from(new Set(stalls.filter(s => s.market === 'TTD' && s.type === 'phien').map(s => s.cat).filter(Boolean))).slice(0, 4);
+    const ttdSessionCats = Array.from(new Set(stalls.filter(s => s.market === 'TTD' && s.type === 'phien').map(industryOf).filter(Boolean))).slice(0, 4);
     const ttdSessionExtras = RATE_POLICY_SEED.extraServices
       .filter(x => x.marketId === 'TTD' && x.status === 'active' && x.marketModel === RATE_MARKET_MODEL.MARKET_SESSION)
       .map(x => ({ name: x.name, amount: x.amount || 0, sourceId: x.id }));
@@ -1034,7 +1052,7 @@ window.DATA = (function () {
     const cashDeposits = [
       { id: 'NQ-00030', employeeId: 'NV03', market: 'CL', date: todayIso, amount: nv03Cash, depositedAt: '13/09/2026 17:10', receivedBy: 'NV02', attachment: { name: 'phieu_nop_quy_00030.pdf', type: 'application/pdf' } },
       { id: 'NQ-00031', employeeId: 'NV04', market: 'CL', date: todayIso, amount: Math.max(0, nv04Cash - 93600), depositedAt: '13/09/2026 17:30', receivedBy: 'NV02', attachment: { name: 'phieu_nop_quy_00031.pdf', type: 'application/pdf' } }
-    ].filter(d => d.amount > 0); // v22: kỳ 09 Chợ Cao Lãnh chưa thu → không có phiếu nộp quỹ 0 đ
+    ].filter(d => d.amount > 0); // kỳ 09 Chợ Cao Lãnh chưa thu → không có phiếu nộp quỹ 0 đ
     const cashConfirms = [];
 
     // ---- Chuỗi 12 tháng (mô phỏng) cho biểu đồ ----
@@ -1050,7 +1068,7 @@ window.DATA = (function () {
 
     const audit = [
       { at: '13/09/2026 08:12', who: 'Lê Thị Ngọc Hân', what: 'Đối soát tự động sao kê ngân hàng ngày 12/09/2026' },
-      { at: '12/09/2026 16:40', who: 'Trần Minh Khoa', what: 'Phê duyệt miễn giảm 50% kỳ 09/2026 cho điểm KD HS-B07 (lý do: sửa chữa mái che)' },
+      { at: '12/09/2026 16:40', who: 'Trần Minh Khoa', what: 'Phê duyệt miễn giảm 50% kỳ 09/2026 cho điểm KD HS-B03 (lý do: sửa chữa mái che)' },
       { at: '12/09/2026 09:05', who: 'Quản trị hệ thống', what: 'Cập nhật đơn giá theo QĐ 480/QĐ-UBND ngày 14/02/2026' },
       { at: '11/09/2026 14:21', who: 'Phạm Văn Lợi', what: 'Hủy biên lai BL2609-000388 (thu nhầm), lập lại BL2609-000391' },
       { at: '01/09/2026 00:05', who: 'Hệ thống', what: 'Tự động phát hành khoản phải thu kỳ 09/2026' }
@@ -1075,6 +1093,7 @@ window.DATA = (function () {
     // trên, KHÔNG hard-code số liệu minh họa) để phương án hợp lệ ngay từ đầu.
     const pointRequests = [];
     (function seedSplitRequests() {
+      const holderId = st => (holder.get(st.id) || {}).id || null;
       const kaA01 = stalls.find(s => s.id === 'CL-KA-A01');
       const kaA03 = stalls.find(s => s.id === 'CL-KA-A03');
       const rcA01 = stalls.find(s => s.id === 'CL-RC-A01');
@@ -1085,18 +1104,18 @@ window.DATA = (function () {
         const a1 = 7.0, a2 = +(kaA01.area - a1).toFixed(1);
         pointRequests.push({
           id: 'YC-0015', type: 'SPLIT', market: 'CL', pointId: kaA01.id, source: 'TRADER',
-          requestedByName: traders.find(t => t.id === kaA01.traderId).name, requestedByTraderId: kaA01.traderId,
-          createdBy: kaA01.traderId, assignedTo: 'AC-NV08',
+          requestedByName: traders.find(t => t.id === holderId(kaA01)).name, requestedByTraderId: holderId(kaA01),
+          createdBy: holderId(kaA01), assignedTo: 'AC-NV08',
           requestedAt: '2026-09-10',
           reason: 'Muốn tách điểm để cùng người thân kinh doanh riêng, mỗi người phụ trách một ngành hàng.',
           note: '', attachments: [],
           status: 'PENDING_APPROVAL',
           plan: {
-            a: { code: kaA01.code + 'A', area: a1, pointType: kaA01.pointType, cat: kaA01.cat },
-            b: { code: kaA01.code + 'B', area: a2, pointType: kaA01.pointType, cat: kaA01.cat }
+            a: { code: kaA01.code + 'A', area: a1, cat: industryOf(kaA01) },
+            b: { code: kaA01.code + 'B', area: a2, cat: industryOf(kaA01) }
           },
           timeline: [
-            { key: 'created', at: '10/09/2026', by: traders.find(t => t.id === kaA01.traderId).name + ' (Mini app)' },
+            { key: 'created', at: '10/09/2026', by: traders.find(t => t.id === holderId(kaA01)).name + ' (Mini app)' },
             { key: 'received', at: '10/09/2026', by: STAFF_NAME },
             { key: 'planned', at: '11/09/2026', by: STAFF_NAME },
             { key: 'submitted', at: '12/09/2026', by: STAFF_NAME }
@@ -1115,8 +1134,8 @@ window.DATA = (function () {
           note: '', attachments: [],
           status: 'STAFF_REVIEW',
           plan: {
-            a: { code: kaA03.code + 'A', area: a1, pointType: kaA03.pointType, cat: kaA03.cat },
-            b: { code: kaA03.code + 'B', area: a2, pointType: kaA03.pointType, cat: kaA03.cat }
+            a: { code: kaA03.code + 'A', area: a1, cat: industryOf(kaA03) },
+            b: { code: kaA03.code + 'B', area: a2, cat: industryOf(kaA03) }
           },
           timeline: [{ key: 'created', at: '12/09/2026', by: STAFF_NAME }],
           resultPointIds: null
@@ -1125,14 +1144,14 @@ window.DATA = (function () {
       if (rcA01) {
         pointRequests.push({
           id: 'YC-0017', type: 'SPLIT', market: 'CL', pointId: rcA01.id, source: 'TRADER',
-          requestedByName: traders.find(t => t.id === rcA01.traderId).name, requestedByTraderId: rcA01.traderId,
-          createdBy: rcA01.traderId, assignedTo: null,
+          requestedByName: traders.find(t => t.id === holderId(rcA01)).name, requestedByTraderId: holderId(rcA01),
+          createdBy: holderId(rcA01), assignedTo: null,
           requestedAt: '2026-09-13',
           reason: 'Muốn tách quầy để chia sẻ kinh doanh cùng người thân, mỗi người phụ trách một nửa quầy.',
           note: '', attachments: [],
           status: 'DRAFT',
           plan: null,
-          timeline: [{ key: 'created', at: '13/09/2026', by: traders.find(t => t.id === rcA01.traderId).name + ' (Mini app)' }],
+          timeline: [{ key: 'created', at: '13/09/2026', by: traders.find(t => t.id === holderId(rcA01)).name + ' (Mini app)' }],
           resultPointIds: null
         });
       }
@@ -1165,36 +1184,22 @@ window.DATA = (function () {
     // build() để tránh lỗi runtime nếu còn chỗ nào đọc `A.db.miniLinkRequests`), không seed nội dung.
     const miniLinkRequests = [];
 
-    // Migrate dữ liệu mẫu người bán cũ thành assignment ACTIVE có lịch sử. Không sửa/xoá sellerId:
-    // các UI ngoài phạm vi vẫn đọc được quan hệ cũ trong khi V1 mới dùng collection này.
-    // ---- DEMO_TIEU_THUONG_NHIEU_DIEM (hoàn tất) ----
-    // Người thuê cũ của 2 điểm đã chuyển cho TT0003 (xem assignMultiPointTrader) được xoá nếu không còn bị
-    // tham chiếu ở dữ liệu nào; 4 điểm của TT0003 phân công NV thu phí Nguyễn Thị Diễm (AC-NV04).
-    (function finishMultiPointTrader() {
-      const multi = traders.find(t => t.id === 'TT0003');
-      if (!multi) return;
-      const refs = JSON.stringify([contracts, invoices, payments, incidents, notifications, pointRequests, miniLinkRequests, cashDeposits, audit, marketAssets, sessionRegistrations, sessionPayments, stalls.map(x => [x.traderId, x.sellerId])]);
-      multiMovedOwners.forEach(id => {
-        if (refs.indexOf('"' + id + '"') !== -1) return;
-        const n = traders.findIndex(t => t.id === id);
-        if (n >= 0) traders.splice(n, 1);
-      });
-      // v20 — PHÂN CÔNG THU PHÍ THEO KHU (Chợ Cao Lãnh): mỗi khu giao 1 NV thu phí. Khu ki-ốt mặt tiền
-      // (KA) → Nguyễn Thị Diễm, thủy hải sản (HS) → Lê Thị Ngọc Hân, thịt gia cầm (TG) → Phạm Văn Lợi, các khu
-      // còn lại chia vòng 3 NV. Nhờ đó khoản của TT0003 có 3 phần của 3 NV khác nhau (minh hoạ thu theo phần).
-      const ZONE = { KA: 'AC-NV04', HS: 'AC-NV02', TG: 'AC-NV03' }, ring = ['AC-NV02', 'AC-NV03', 'AC-NV04'];
-      const sections = Array.from(new Set(stalls.filter(x => x.market === 'CL').map(x => x.section)));
-      let k = 0;
-      sections.forEach(sec => { if (!ZONE[sec]) ZONE[sec] = ring[k++ % ring.length]; });
-      stalls.filter(x => x.market === 'CL').forEach(x => { x.collectorId = ZONE[x.section] || null; });
-      // v21 — Chợ quê TTĐ: chia khu vòng cho 2 NV thu phí của chợ (AC-NV07, AC-NV08) để mọi điểm có người ghi chỉ số.
-      const ttdRing = ['AC-NV07', 'AC-NV08'], ttdZone = {};
-      Array.from(new Set(stalls.filter(x => x.market === 'TTD').map(x => x.section))).forEach((sec, n) => { ttdZone[sec] = ttdRing[n % ttdRing.length]; });
-      stalls.filter(x => x.market === 'TTD').forEach(x => { x.collectorId = ttdZone[x.section] || null; });
-      // Người ghi chỉ số = NV thu phí phụ trách điểm (mã NV, bỏ tiền tố 'AC-').
-      readings.forEach(r => { if (!r.recordedBy) return; const st = stalls.find(x => x.id === r.stallId); if (st && st.collectorId) r.recordedBy = st.collectorId.replace(/^AC-/, ''); });
-    })();
-
+    // Người trực tiếp kinh doanh (Chợ Cao Lãnh): mặc định = người thuê; 2 điểm minh hoạ người bán thay
+    // (điểm thứ 2 của tiểu thương nhiều điểm, và 1 điểm nhượng lại cho người khác trực tiếp bán).
+    const noContractCl = traders.filter(t => t.market === 'CL' && !t.stalls.length && !contracts.some(c => c.traderId === t.id));
+    const SELLER_OTHER = { 'CL-KA-A02': noContractCl[0], 'CL-TG-A03': noContractCl[1] };
+    const directSellerAssignments = stalls.filter(s => s.market === 'CL' && contractOfPoint.has(s.id)).map((s, i) => {
+      const owner = holder.get(s.id);
+      const person = SELLER_OTHER[s.id] || owner;
+      return {
+        id: 'DSA-' + pad(i + 1, 4), market: s.market, pointId: s.id,
+        traderId: person.id, personId: person.id,
+        fullName: person.name, idNumber: person.idNo || '', phone: person.phone || '',
+        relationship: person.id === owner.id ? 'Chủ thể hợp đồng trực tiếp kinh doanh' : 'Người bán thay',
+        startDate: '2026-01-01', endDate: null, status: 'ACTIVE', source: 'SEED',
+        verifiedBy: 'AC-NV01', verifiedAt: '2026-01-01', note: '', createdAt: '2026-01-01', updatedAt: '2026-01-01'
+      };
+    });
     // ---- QUA_HAN_CHUYEN_CONG_NO (v25): demo ĐÚNG 10 khoản quá hạn ở Chợ Cao Lãnh ----
     // Giữ 10 khoản kỳ 08/2026 chưa thu (quá hạn 15/08 → hệ thống tự chuyển công nợ lúc chạy), chia đều các NV thu
     // phí; mọi khoản chưa thu khác của kỳ 05–08 coi như đã thu tiền mặt đúng kỳ (1 biên lai / khoản, người thu =
@@ -1202,7 +1207,7 @@ window.DATA = (function () {
     (function seedDemoDebts() {
       const grouped = new Set(MARKETS.filter(m => m.receivableGrouping === 'TRADER').map(m => m.id));
       const old = invoices.filter(i => grouped.has(i.market) && i.period < '2026-09' && i.status !== 'paid').sort((a, b) => a.id.localeCompare(b.id));
-      const collectorOf = i => { const st = stalls.find(x => x.id === ((i.stallIds && i.stallIds[0]) || i.stallId)); return (st && st.collectorId) || ''; };
+      const collectorOf = i => collectorOfStall(stalls.find(x => x.id === ((i.stallIds && i.stallIds[0]) || i.stallId)));
       const byC = {};
       // QUA_HAN_KY_09 (v26, P chốt 29/09): demo nợ lấy từ KỲ 09 (không còn nợ kỳ 05–08). Mọi khoản kỳ 09 hạn nộp
       // 30/09; riêng 10 khoản CL (chia đều NV, 1 gian/khoản, bỏ TT0003) hạn 28/09 → quá hạn vào ngày dữ liệu 29/09
@@ -1243,7 +1248,7 @@ window.DATA = (function () {
         const traderLines = {}, collectorCounts = {};
         inv.forEach(i => {
           traderLines[i.traderId] = 'Mã khoản ' + i.id + ' · ' + i.amount.toLocaleString('vi-VN') + ' đ · hạn nộp ' + i.due.split('-').reverse().join('/') + '. Nộp tiền mặt cho NV thu phí hoặc quét QR trên Mini app.';
-          (Array.isArray(i.stallIds) && i.stallIds.length ? i.stallIds : [i.stallId]).forEach(id => { const st = stalls.find(x => x.id === id); const c = (st && st.collectorId) || 'Chưa phân công'; collectorCounts[c] = (collectorCounts[c] || 0) + 1; });
+          (Array.isArray(i.stallIds) && i.stallIds.length ? i.stallIds : [i.stallId]).forEach(id => { const c = collectorOfStall(stalls.find(x => x.id === id)) || 'Chưa phân công'; collectorCounts[c] = (collectorCounts[c] || 0) + 1; });
         });
         const by = MANAGER[m.id] || '';
         notifications.unshift({ id: 'TB-' + pad(seq++, 3), at: P + '-01', kind: 'RECEIVABLE_LIST_TO_COLLECTORS', market: m.id, period: P, title: 'Chuyển danh sách thu kỳ ' + label + ' cho nhân viên thu phí', group: 'Nhân viên thu phí · ' + m.short, channels: ['Ứng dụng nhân viên'], sent: Object.keys(collectorCounts).filter(k => k !== 'Chưa phân công').length, delivered: 1, read: 1, auto: true, by, collectorCounts });
@@ -1252,26 +1257,18 @@ window.DATA = (function () {
       BILLING_PERIODS.filter(b => b.id === P).forEach(b => { b.calculationStatus = 'ISSUED'; b.issuedAt = '01/09/2026 08:00'; b.issuedBy = 'Trần Minh Khoa'; });
     })();
 
-    const directSellerAssignments = stalls.filter(s => s.market === 'CL' && s.sellerId).map((s, i) => {
-      const person = traders.find(t => t.id === s.sellerId);
-      return {
-        id: 'DSA-' + pad(i + 1, 4), market: s.market, pointId: s.id,
-        traderId: person ? person.id : null, personId: person ? person.id : null,
-        fullName: person ? person.name : 'Chưa xác định', idNumber: person ? person.idNo : '', phone: person ? person.phone : '',
-        relationship: person && person.id === s.traderId ? 'Chủ thể hợp đồng trực tiếp kinh doanh' : 'Người bán thay',
-        startDate: '2026-01-01', endDate: null, status: 'ACTIVE', source: 'SEED_LEGACY',
-        verifiedBy: 'AC-NV01', verifiedAt: '2026-01-01', note: '', createdAt: '2026-01-01', updatedAt: '2026-01-01'
-      };
-    });
     return {
-      // QUA_HAN_KY_09: "hôm nay" của prototype = 29/09/2026 (dữ liệu mẫu vẫn sinh theo mốc TODAY 13/09 để không đổi chuỗi RNG).
-      version: VERSION, today: '2026-09-29', stalls, traders, contracts, invoices, payments, readings, incidents, marketAssets,
+      // QUA_HAN_KY_09: "hôm nay" của prototype = 29/09/2026 (dữ liệu mẫu vẫn sinh theo mốc TODAY 13/09).
+      version: VERSION, today: '2026-09-29', buildings, floors, rows, stalls, traders, contracts, invoices, payments, readings, incidents, marketAssets,
       notifications, sessions, marketSessions, sessionRegistrations, sessionPayments, sessionReceipts, sessionNotifications, sessionAttendances, sessionReplacements, bank, months, audit, issuedPeriods: PERIODS.slice(), extraLog: [],
       meterPeriods: METER_PERIODS, meterAdjustRequests: [], receivableAdjustRequests: [],
       cashDeposits, cashConfirms, billingPeriods: BILLING_PERIODS,
+      // Metadata trình bày của actor. Identity/name/roleId tiếp tục chỉ thuộc DATA.ACTORS;
+      // collection này không được dùng cho RBAC và chỉ lưu hai field được phép chỉnh sửa trên UI.
+      actorMetadata: ACTORS.map(a => ({ id: a.id, unit: a.unit, responsibilities: String(a.responsibility || '').split(/[;,]\s*/).filter(Boolean) })),
       pointRequests, directSellerAssignments, miniLinkRequests
     };
   }
 
-  return { VERSION, TODAY, UNIT, SESSION_FEE, ELEC, WATER, RATE_MARKET_MODEL, RATE_COLLECTION_CYCLE, RATE_TAX_CLASS, WAIVER_TYPES, RATE_POLICY_SEED, BANK_BY_MARKET, BANKS, BANK_ACCOUNT_SEED, MARKETS, STATUS, POINT_TYPE, METHOD, INCIDENT_STATES, STAFF, ROLES, build };
+  return { VERSION, TODAY, UNIT, SESSION_FEE, ELEC, WATER, RATE_MARKET_MODEL, RATE_COLLECTION_CYCLE, RATE_TAX_CLASS, WAIVER_TYPES, RATE_POLICY_SEED, BANK_BY_MARKET, BANKS, BANK_ACCOUNT_SEED, MARKETS, INDUSTRIES, INDUSTRY_CODES, POINT_STATUS, LAYOUT_SEED, STATUS, METHOD, INCIDENT_STATES, STAFF, ROLES, ACTORS, build };
 })();

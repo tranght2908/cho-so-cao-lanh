@@ -41,20 +41,19 @@
       <div class="field"><label>Loại giấy tờ *</label><select class="input" data-ch="wf-p-idtype"><option ${d.idType === 'CCCD' ? 'selected' : ''}>CCCD</option><option ${d.idType === 'CMND' ? 'selected' : ''}>CMND</option><option ${d.idType === 'Hộ chiếu' ? 'selected' : ''}>Hộ chiếu</option></select></div>
       <div class="field"><label>Số giấy tờ *</label><input class="input" data-in="wf-p-idno" value="${U.esc(d.idNo)}"></div>
       <div class="field"><label>Địa chỉ</label><input class="input" data-in="wf-p-address" value="${U.esc(d.address)}"></div>
-      <div class="field"><label>Ngành hàng</label><input class="input" data-in="wf-p-cat" value="${U.esc(d.cat)}"></div>
     </div><section style="margin-top:16px"><h4>B. HỒ SƠ ĐÍNH KÈM</h4><div class="small muted">Prototype chỉ lưu metadata/ảnh xem trước cục bộ, không tải lên máy chủ.</div>${profileFileButtons()}</section><section style="margin-top:16px"><div class="row"><div><h4 style="margin:0">C. PHƯƠNG TIỆN</h4><div class="small muted">Không bắt buộc. Mỗi đăng ký là một phương tiện riêng.</div></div><span class="spacer"></span><button class="btn sm" data-act="wf-profile-vehicle-add">+ Thêm phương tiện</button></div><div style="margin-top:8px">${profileVehicleRows()}</div></section>
-    <div class="note info" style="margin-top:14px">Hồ sơ được tạo độc lập. Điểm kinh doanh, hợp đồng và tài khoản sẽ được thực hiện ở bước tiếp theo.</div></div>
+    <div class="note info" style="margin-top:14px">Hồ sơ được tạo độc lập. Ngành hàng được xác định khi bố trí điểm kinh doanh trong hợp đồng; không nhập tại hồ sơ tiểu thương.</div></div>
     <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="wf-profile-save">Lưu hồ sơ</button></div>`);
   }
   function profileSuccess(t) {
-    A.modal(A.mHead('Đã tạo hồ sơ tiểu thương') + `<div class="modal-b"><dl class="kv"><dt>Tiểu thương</dt><dd><b>${U.esc(t.name)} · ${t.id}</b></dd><dt>Trạng thái nghiệp vụ</dt><dd><span class="tag">Chưa có hợp đồng</span></dd></dl><div class="note info" style="margin-top:12px">Bước tiếp theo: tạo hợp đồng để bố trí điểm kinh doanh.</div></div><div class="modal-f"><button class="btn" data-act="wf-profile-later">Để sau</button><button class="btn primary" data-act="wf-profile-contract" data-id="${t.id}">Tạo hợp đồng ngay</button></div>`);
+    A.modal(A.mHead('Đã tạo hồ sơ tiểu thương') + `<div class="modal-b"><dl class="kv"><dt>Tiểu thương</dt><dd><b>${U.esc(t.name)} · ${t.id}</b></dd><dt>Trạng thái hồ sơ</dt><dd><span class="tag warn">Chờ bố trí</span></dd></dl><div class="note info" style="margin-top:12px">Bước tiếp theo: tạo hợp đồng để bố trí điểm kinh doanh.</div></div><div class="modal-f"><button class="btn" data-act="wf-profile-later">Để sau</button><button class="btn primary" data-act="wf-profile-contract" data-id="${t.id}">Tạo hợp đồng ngay</button></div>`);
   }
   A.ACT['tt-new'] = () => {
     if (!A.canDo('tieu-thuong.them-moi', ui.market)) return;
-    profileDraft = { name: '', phone: '', idType: 'CCCD', idNo: '', address: '', cat: '', files: {}, vehicles: [] };
+    profileDraft = { name: '', phone: '', idType: 'CCCD', idNo: '', address: '', files: {}, vehicles: [] };
     renderProfile();
   };
-  ['name', 'phone', 'idno', 'address', 'cat'].forEach(k => { A.IN['wf-p-' + k] = el => { if (profileDraft) profileDraft[{ idno: 'idNo' }[k] || k] = el.value; }; });
+  ['name', 'phone', 'idno', 'address'].forEach(k => { A.IN['wf-p-' + k] = el => { if (profileDraft) profileDraft[{ idno: 'idNo' }[k] || k] = el.value; }; });
   A.CH['wf-p-idtype'] = el => { if (profileDraft) profileDraft.idType = el.value; };
   A.ACT['wf-profile-file'] = el => {
     if (!profileDraft) return;
@@ -80,7 +79,7 @@
     const d = profileDraft;
     if (!d || !d.name.trim() || !d.phone.trim() || !d.idNo.trim()) return U.toast('Vui lòng nhập họ tên, số điện thoại và số giấy tờ.');
     if (A.db.traders.some(t => t.market === ui.market && t.idNo === d.idNo.trim())) return U.toast('Số giấy tờ đã tồn tại trong chợ.');
-    const t = { id: nextTraderId(), name: d.name.trim(), phone: d.phone.trim(), idNo: d.idNo.trim(), idType: d.idType, address: d.address.trim(), cat: d.cat.trim() || 'Chưa gán', market: ui.market, stalls: [], profileStatus: 'ACTIVE', source: 'STAFF', docFiles: Object.assign({}, d.files), since: U.today(), app: false, bank: false };
+    const t = { id: nextTraderId(), name: d.name.trim(), phone: d.phone.trim(), idNo: d.idNo.trim(), idType: d.idType, address: d.address.trim(), market: ui.market, stalls: [], source: 'STAFF', docFiles: Object.assign({}, d.files), since: U.today(), app: false, bank: false };
     TS.create(t);
     (d.vehicles || []).forEach(v => A.VEHICLES.create(Object.assign({}, v, { traderId: t.id, market: t.market }), false));
     if ((d.vehicles || []).length) A.save();

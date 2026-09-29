@@ -7,14 +7,15 @@
     const t = st.traderId ? A.idx.trader.get(st.traderId) : null;
     const c = st.contractId ? A.idx.contract.get(st.contractId) : null;
     const unpaid = A.db.invoices.filter(i => U.invStallIds(i).indexOf(st.id) !== -1 && i.status !== 'paid');
+    const loc = A.features.businessPoints.service.location(st);
     const canThuTien = A.canCollectReceivable(st.market);
     const canXemHoSo = A.canDo('so-do.xem-ho-so', st.market);
     const canTaoHopDong = A.canDo('so-do.tao-hop-dong', st.market) || A.canDo('hop-dong.tao', st.market);
     const canDoiTrangThai = A.canDo('so-do.doi-trang-thai', st.market);
     const left = c ? U.days(U.today(), c.end) : null;
-    return `<div class="row"><h3>${st.code}</h3>${U.statusTag(st.status)}</div>
-      <div class="muted small" style="margin:2px 0 12px">${U.esc(st.sectionName)} · ${U.market(st.market).floors.find(f => f.id === st.floor).name} · ${U.mShort(st.market)}</div>
-      <dl class="kv"><dt>Ngành hàng</dt><dd>${U.esc(st.cat)}</dd><dt>Loại quầy</dt><dd>${U.rentalLabel(st)}</dd><dt>Loại mặt bằng</dt><dd>${U.typeLabel(st.type)}</dd>
+    return `<div class="row"><h3>${st.code}</h3>${A.mbStatusTag(A.pointDisplayStatus(st))}</div>
+      <div class="muted small" style="margin:2px 0 12px">${U.esc(loc.label)} · ${U.mShort(st.market)}</div>
+      <dl class="kv"><dt>Ngành hàng</dt><dd>${U.esc(st.cat)}</dd><dt>Loại quầy</dt><dd>${U.rentalLabel(st)}</dd><dt>Loại diện tích</dt><dd>${U.esc(U.areaTypeLabel(st.areaTypeId) || '—')}</dd>
         <dt>Diện tích</dt><dd>${st.area.toLocaleString('vi-VN')} m²</dd><dt>Đơn giá</dt><dd>${U.unitLabel(st)}</dd>
         ${c && c.monthly ? `<dt>Giá dịch vụ/tháng</dt><dd>${U.money(c.monthly)}</dd>` : ''}</dl>
       <div class="divider"></div>
@@ -25,7 +26,7 @@
         : '<div class="note info">Điểm kinh doanh đang trống, có thể cho thuê.</div>'}
       ${(canThuTien || canXemHoSo || canTaoHopDong || canDoiTrangThai) ? `<div class="row" style="margin-top:14px">
         ${canThuTien && t && unpaid.length ? `<button class="btn primary" data-act="pay-open" data-id="${t.id}">${U.icon('card')}Thu tiền</button>` : ''}
-        ${t ? (canXemHoSo ? `<button class="btn" data-act="trader" data-id="${t.id}">Hồ sơ</button>` : '') : (canTaoHopDong ? `<button class="btn primary" data-act="ct-new" data-id="${st.id}">Tạo hợp đồng</button>` : '')}
+        ${t ? (canXemHoSo ? `<button class="btn" data-act="trader" data-id="${t.id}">Hồ sơ</button>` : '') : (canTaoHopDong ? `<button class="btn primary" data-act="ct-new" data-point="${st.id}">Tạo hợp đồng</button>` : '')}
         ${canDoiTrangThai ? `<button class="btn" data-act="stall-status" data-id="${st.id}">Đổi trạng thái</button>` : ''}</div>` : ''}
       ${st.history && st.history.length ? `<div class="divider"></div><div class="small"><b>Lịch sử thay đổi</b>${st.history.map(h => `<div class="muted">${h}</div>`).join('')}</div>` : ''}`;
   };
@@ -36,10 +37,6 @@
   // NHANH (4 nhóm A/B/C/D), KHÔNG có nút "Đổi trạng thái"/"Thu tiền"/"Tạo hợp đồng", KHÔNG mở modal
   // hồ sơ lớn tại chỗ — thay bằng 2 nút điều hướng dùng lại router/state hiện có (A.go + A.ACT có
   // sẵn của chính 2 màn đích), không tạo màn/modal chi tiết thứ hai.
-  function mbStallPointTypeLabel(st) {
-    return st.pointType && D.POINT_TYPE[st.pointType] ? D.POINT_TYPE[st.pointType].label : 'Chưa có thông tin';
-  }
-
   // Người bán thực tế: tham chiếu ĐÚNG model sellerId đã chốt — KHÔNG suy đoán "giống người thuê"
   // khi sellerId rỗng (khác dkSeller() ở màn Điểm kinh doanh — nơi đó null = mặc định giống người
   // thuê); ở đây null hiển thị đúng nghĩa "chưa ghi nhận" theo yêu cầu, không tự bịa dữ liệu.
@@ -64,9 +61,9 @@
     const actions = [];
     if (t && canXemHoSo) actions.push(`<button class="btn" data-act="mb-open-trader" data-id="${t.id}">Xem hồ sơ tiểu thương</button>`);
     if (canXemDiemKD) actions.push(`<button class="btn" data-act="mb-open-diemkd" data-id="${st.id}">Xem điểm kinh doanh</button>`);
-    return `<div class="muted small" style="margin:2px 0 12px">${U.esc(st.sectionName)} · ${U.market(st.market).floors.find(f => f.id === st.floor).name} · ${U.esc(U.market(st.market).name)}</div>
+    return `<div class="muted small" style="margin:2px 0 12px">${U.esc(A.features.businessPoints.service.location(st).label)} · ${U.esc(U.market(st.market).name)}</div>
       ${sec('A. Thông tin điểm', `<dl class="kv">
-        <dt>Loại điểm</dt><dd>${U.esc(mbStallPointTypeLabel(st))}</dd>
+        <dt>Loại diện tích</dt><dd>${U.esc(U.areaTypeLabel(st.areaTypeId) || '—')}</dd>
         <dt>Diện tích</dt><dd>${st.area.toLocaleString('vi-VN')} m²</dd>
         <dt>Ngành hàng</dt><dd>${U.esc(st.cat)}</dd>
         <dt>Đơn giá áp dụng</dt><dd>${U.unitLabel(st)}</dd></dl>`)}
@@ -102,7 +99,7 @@
     }
     ui.sel = st.id;
     A.$('#modal-root').innerHTML = `<div class="drawer-overlay" data-act="close"></div><div class="drawer">${A.drawerBackHtml()}
-        <div class="drawer-h"><div><h3>${st.code}</h3><div class="small muted" style="margin-top:2px">${U.statusTag(st.status)}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
+        <div class="drawer-h"><div><h3>${st.code}</h3><div class="small muted" style="margin-top:2px">${A.mbStatusTag(A.pointDisplayStatus(st))}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
         <div class="drawer-b">${st.market === 'CL' ? mbStallPanelCL(st) : A.stallPanel(st)}</div></div>`;
     A.render();
   }
@@ -111,11 +108,12 @@
       const st = A.mbBusinessPointById(ui.market, el.dataset.id);
       if (!st) { U.toast('Không tìm thấy điểm kinh doanh trong chợ hiện tại'); return; }
       if (!A.canDo('so-do.doi-trang-thai', st.market)) return;
-      const opts = ['thue', 'ngung', 'tranhchap'].concat(st.traderId ? [] : ['trong']);
-      A.modal(A.mHead('Đổi trạng thái điểm ' + st.code) + `<div class="modal-b"><div class="form-grid">
-        <div class="field"><label>Trạng thái mới</label><select class="input" id="ss-status">${opts.map(k => `<option value="${k}" ${st.status === k ? 'selected' : ''}>${D.STATUS[k].label}</option>`).join('')}</select></div>
+      // Chỉ đổi trạng thái VẬN HÀNH; Đang thuê/Còn trống theo hợp đồng, Nợ phí theo khoản phải thu.
+      const opts = Object.keys(D.POINT_STATUS);
+      A.modal(A.mHead('Đổi trạng thái vận hành điểm ' + st.code) + `<div class="modal-b"><div class="form-grid">
+        <div class="field"><label>Trạng thái vận hành</label><select class="input" id="ss-status">${opts.map(k => `<option value="${k}" ${st.status === k ? 'selected' : ''}>${A.pointOpLabel(k)}</option>`).join('')}</select></div>
         <div class="field"><label>Lý do</label><input class="input" id="ss-reason" placeholder="VD: tiểu thương xin tạm nghỉ 1 tháng"></div></div>
-        <div class="small muted" style="margin-top:10px">Trạng thái "Nợ phí" do hệ thống tự xác định theo công nợ quá hạn.</div></div>
+        <div class="small muted" style="margin-top:10px">Tình trạng sử dụng do hợp đồng quyết định; "Nợ phí" do hệ thống xác định theo khoản phải thu quá hạn.</div></div>
         <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="stall-status-save" data-id="${st.id}">Lưu</button></div>`);
     },
     'stall-status-save': el => {
@@ -123,10 +121,11 @@
       if (!st) { U.toast('Không tìm thấy điểm kinh doanh trong chợ hiện tại'); return; }
       if (!A.canDo('so-do.doi-trang-thai', st.market)) return;
       const ns = A.$('#ss-status').value, reason = A.$('#ss-reason').value.trim();
+      if (!D.POINT_STATUS[ns]) return;
       st.history = st.history || [];
-      st.history.unshift(`${U.dmy(U.today())}: ${D.STATUS[st.status].label} → ${D.STATUS[ns].label}${reason ? ' (' + reason + ')' : ''}`);
-      st.status = ns; A.refreshStall(st);
-      U.log(`Đổi trạng thái điểm ${st.code} sang ${D.STATUS[st.status].label}`);
+      st.history.unshift(`${U.dmy(U.today())}: ${A.pointOpLabel(st.status)} → ${A.pointOpLabel(ns)}${reason ? ' (' + reason + ')' : ''}`);
+      st.status = ns;
+      U.log(`Đổi trạng thái vận hành điểm ${st.code} sang ${A.pointOpLabel(st.status)}`);
       A.save(); A.closeModal(); A.render(); U.toast('Đã cập nhật trạng thái ' + st.code);
     }
   });

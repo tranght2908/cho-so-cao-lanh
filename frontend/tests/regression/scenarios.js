@@ -76,7 +76,8 @@ function runScenarios(root) {
   const nc = A.WORKFLOW.needsContract('CL');
   const newTrader = nc[0];
   snap('wf-contract-open', () => h.act('wf-contract-open', { id: newTrader && newTrader.id }));
-  const vacant = A.db.stalls.filter(s => s.market === 'CL' && s.status === 'trong' && !A.db.contracts.some(c => c.status === 'hieuluc' && c.stallId === s.id));
+  // v16: occupancy is derived (stall.status is operational only).
+  const vacant = A.db.stalls.filter(s => s.market === 'CL' && A.pointDisplayStatus(s) === 'trong' && !A.db.contracts.some(c => c.status === 'hieuluc' && c.stallId === s.id));
   snap('wf-contract-file', () => { h.setFiles([{ name: 'scan1.jpg', type: 'image/jpeg', size: 10 }]); h.act('wf-contract-file', {}); });
   snap('wf-contract-save invalid', () => { h.input('#wf-ct-trader', newTrader.id); h.input('#wf-ct-stall', vacant[0].id); h.input('#wf-ct-start', '2026-05-15'); h.input('#wf-ct-end', '2026-01-01'); h.act('wf-contract-save', {}); });
   snap('wf-contract-save', () => { h.input('#wf-ct-trader', newTrader.id); h.input('#wf-ct-stall', vacant[0].id); h.input('#wf-ct-start', '2026-05-15'); h.input('#wf-ct-end', '2027-05-14'); h.input('#wf-ct-monthly', '1500000'); h.input('#wf-ct-fees', 'Vệ sinh: 50000\nBảo vệ: 30000'); h.act('wf-contract-save', {}); });
