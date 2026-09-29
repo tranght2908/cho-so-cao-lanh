@@ -83,7 +83,7 @@
     });
     // NHAC_NO_TU_DONG (P chốt 29/09/2026): theo Cài đặt › Kỳ thu — nhắc lần 1 sau reminder1Days (3) ngày quá hạn,
     // lần 2 sau reminder2Days (7) ngày (khi bật "Tự động nhắc nợ"). Quá reminder2Days ngày → thôi nhắc, khoản nợ
-    // thành KHÔNG THU HỒI, vào DANH SÁCH CẮT ĐIỆN và hệ thống gửi thông báo cắt điện → luồng kết thúc (không thu nữa).
+    // thành KHÔNG THU HỒI, vào DANH SÁCH CẮT ĐIỆN và hệ thống gửi thông báo cắt điện → thôi nhắc; vẫn nhận trả đủ để tất toán (TAT_TOAN_SAU_CAT_DIEN).
     // Mọi bước tự động ghi Nhật ký kiểm toán + lưu trên bản ghi nợ để các vai trò liên quan xem lại được.
     const cyc = (A.SERVICE_CFG && A.SERVICE_CFG.cycle && A.SERVICE_CFG.cycle()) || {};
     const r1 = Number(cyc.reminder1Days) || 3, r2 = Math.max(r1, Number(cyc.reminder2Days) || 7), autoRemind = cyc.autoRemind !== false;
@@ -118,13 +118,30 @@
   // Tiền của các gian (theo dòng chi tiết) trong 1 khoản.
   A.stallsAmount = (i, ids) => { const all = U.invStallIds(i); return U.sum(i.items.filter(x => ids.indexOf(x.stallId || all[0]) !== -1), x => x.amount); };
   // THU_HOI_NO: thu nợ = ghi vào KHOẢN THU GỐC (gian còn nợ), gắn debtId; đủ → tất toán nợ. Không thu một phần.
+  // TAT_TOAN_SAU_CAT_DIEN (P chốt 29/09/2026): nợ đã vào danh sách cắt điện (UNRECOVERABLE) VẪN nhận thanh toán đủ để
+  // tất toán. Tất toán xong → rút khỏi danh sách cắt điện; hệ thống CHỈ gửi thông báo (tiểu thương + Trưởng Ban xem xét
+  // cấp điện lại) — chưa có action/người xác nhận cấp điện lại (NEED_CONFIRMATION → chưa cấp quyền cho ai).
   A.payDebt = function (d, method, by, stallIds) {
     const inv = d && A.idx.invoice.get(d.invoiceId);
-    if (!inv || d.status !== 'OPEN') return [];
+    if (!inv || (d.status !== 'OPEN' && d.status !== 'UNRECOVERABLE')) return [];
+    const wasCut = d.status === 'UNRECOVERABLE';
     const cov = A.invCoveredStalls(inv), ids = (stallIds || U.invStallIds(inv)).filter(id => !cov.has(id));
     if (!ids.length) return [];
     const pays = A.applyPayment([inv.id], A.stallsAmount(inv, ids), method, by, { stallIds: ids, debtId: d.id });
     if (inv.status === 'paid') Object.assign(d, { status: 'CLOSED', closedAt: U.dmy(U.today()) + ' ' + U.nowTime(), closedBy: by });
+    if (wasCut && d.status === 'CLOSED') {
+      const at = d.closedAt, t = A.idx.trader.get(d.traderId), gian = d.stallIds.map(id => (A.idx.stall.get(id) || {}).code || id).join(', ');
+      d.powerCut = Object.assign({}, d.powerCut, { settledAt: at, restoreNoticeAt: at, restoreStatus: 'NOTIFIED' });
+      A.db.notifications = A.db.notifications || [];
+      A.db.notifications.unshift({ id: 'TB-' + U.pad(32 + A.db.notifications.length, 3), at: U.today(), kind: 'POWER_RESTORE_NOTICE', market: d.market, debtId: d.id, invoiceId: d.invoiceId,
+        title: 'Đã tất toán nợ ' + d.id + ' · xem xét cấp điện lại gian ' + gian, group: 'Danh sách cắt điện · tất toán', channels: ['Hệ thống'], sent: 1, delivered: 1, read: 0, auto: true,
+        body: (t ? t.name : d.traderId) + ' đã trả đủ nợ ' + d.id + ' (khoản ' + d.invoiceId + ') — rút khỏi danh sách cắt điện. Đề nghị Trưởng Ban Quản lý xem xét cấp điện lại gian ' + gian + '.' });
+      A.db.notifications.unshift({ id: 'TB-' + U.pad(32 + A.db.notifications.length, 3), at: U.today(), kind: 'DEBT_SETTLED_AFTER_CUT', market: d.market, traderId: d.traderId, debtId: d.id, invoiceId: d.invoiceId,
+        title: 'Đã tất toán nợ ' + d.id, group: 'Công nợ · ' + (t ? t.name : d.traderId), channels: ['Mini app', 'Zalo OA'], sent: 1, delivered: 1, read: 0, auto: true,
+        body: 'Khoản nợ đã được thanh toán đủ và rút khỏi danh sách cắt điện. Ban Quản lý chợ sẽ xem xét cấp điện lại gian ' + gian + '.' });
+      A.db.extraLog = A.db.extraLog || [];
+      A.db.extraLog.unshift({ at, who: by, what: 'Tất toán nợ ' + d.id + ' sau khi đã vào danh sách cắt điện → rút khỏi danh sách, gửi thông báo xem xét cấp điện lại gian ' + gian });
+    }
     // Tiểu thương nhận biên lai (cùng số BL-…) qua Mini app / Zalo.
     A.db.notifications = A.db.notifications || [];
     pays.forEach(p => A.db.notifications.unshift({ id: 'TB-' + U.pad(32 + A.db.notifications.length, 3), at: U.today(), kind: 'DEBT_RECEIPT', market: d.market, traderId: d.traderId, debtId: d.id, invoiceId: d.invoiceId,
@@ -214,11 +231,19 @@
   // "truy cập được" (không biến mất khỏi menu, route không bị bật lại về màn khác) — nhưng renderer
   // thật của màn đó KHÔNG được gọi với ui.market='ALL' (xem A.render()/A.marketRequiredHtml()), tự
   // hiện thông báo "chọn 1 chợ cụ thể" thay vì render sai dữ liệu hoặc crash.
+  // SCREEN_BUSINESS_STATE (P chốt 29/09/2026): market applicability theo CẤU HÌNH NGHIỆP VỤ của chợ đang chọn
+  // (không phải permission). 'dien-nuoc' chỉ áp dụng khi chợ thu điện, nước THEO CÔNG TƠ; chợ chọn chia đều
+  // (SERVICE) thì màn "Chỉ số điện, nước" biến khỏi menu và route — mọi role, cùng 1 điểm kiểm tra.
+  A.SCREEN_BUSINESS_STATE = {
+    'dien-nuoc': market => !(A.SERVICE_CFG && A.SERVICE_CFG.utilityMode && A.SERVICE_CFG.utilityMode(market) === 'SERVICE')
+  };
   A.screenMarketOk = function (screenId, account) {
     const kind = A.SCREEN_MARKET[screenId];
     if (!kind || kind === 'CROSS' || kind === 'SYSTEM') return true;
     if (ui.market === 'ALL') return true;
     if (A.allowedMarkets(account).indexOf(ui.market) === -1) return false; // ngoài phạm vi account
+    const bizOk = A.SCREEN_BUSINESS_STATE[screenId];
+    if (bizOk && !bizOk(ui.market)) return false;
     if (kind === 'BOTH') return true;
     return kind === ui.market; // 'CL' hoặc 'TTD' cụ thể
   };
@@ -331,6 +356,13 @@
         receiptDelivery: { miniApp: true, sentAt: db.today + ' ' + time, status: 'SENT_MOCK' },
         printStatus: 'PENDING'
       };
+      const bankAccount = method !== 'tm' && A.BANK_ACCOUNTS && A.BANK_ACCOUNTS.get
+        ? (opts && opts.bankAccountId ? A.BANK_ACCOUNTS.get(opts.bankAccountId) : A.BANK_ACCOUNTS.collectionAccount(inv.market)) : null;
+      if (bankAccount) {
+        p.bankAccountId = bankAccount.id;
+        p.bankName = A.BANK_ACCOUNTS.bankName(bankAccount.bankCode);
+        p.bankAccountNumber = bankAccount.accountNumber;
+      }
       if (stallIds) p.stallIds = stallIds.slice();
       if (opts && opts.debtId) p.debtId = opts.debtId; // THU_HOI_NO: giao dịch thu nợ vẫn ghi vào khoản thu gốc
       db.payments.push(p);
@@ -338,7 +370,8 @@
       if (method !== 'tm') {
         const bk = {
           id: 'SK' + U.pad(db.bank.length + 1, 4), date: db.today, time, amount: take, ref: 'CHOSO ' + (opts && opts.debtId ? opts.debtId + ' ' : '') + inv.id,
-          market: inv.market, bankName: (D.BANK_BY_MARKET && D.BANK_BY_MARKET[inv.market]) || 'Vietcombank',
+          market: inv.market, bankName: p.bankName || ((D.BANK_BY_MARKET && D.BANK_BY_MARKET[inv.market]) || 'Vietcombank'),
+          bankAccountId: p.bankAccountId || null, recipientAccountNumber: p.bankAccountNumber || '',
           paymentId: p.id, receivableId: inv.id, receiptId: p.receipt,
           status: 'MATCHED_AUTO', matched: true, matchedBy: null, matchedAt: null, matchMethod: 'AUTO',
           log: [{ at: time, actor: 'Hệ thống', text: 'Nhận sao kê tương ứng thanh toán ' + p.id }, { at: time, actor: 'Hệ thống', text: 'Khớp tự động với khoản phải thu ' + inv.id }]
@@ -392,6 +425,8 @@
       <div class="row" style="align-items:flex-start;gap:16px"><dl class="kv" style="flex:1">
         <dt>Người nộp</dt><dd>${U.esc(t.name)} (${t.id})</dd>
         <dt>Hình thức</dt><dd>${D.METHOD[p0.method]}</dd>
+        <dt>Trạng thái</dt><dd><span class="tag ok">Thanh toán thành công</span></dd>
+        ${p0.method !== 'tm' && p0.bankName ? `<dt>Tài khoản nhận</dt><dd>${U.esc(p0.bankName)} · ${U.esc(p0.bankAccountNumber || '')}</dd>` : ''}
         <dt>Thời gian</dt><dd>${U.dmy(p0.date)} ${p0.time}</dd>
         <dt>Người thu</dt><dd>${U.esc(p0.by === 'Hệ thống' || p0.by === 'Mini app' ? p0.by + ' (tự động)' : U.staffName(p0.by))}</dd>
         <dt>Mã tra cứu</dt><dd><b>${p0.lookup}</b></dd>

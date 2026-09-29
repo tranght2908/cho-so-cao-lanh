@@ -64,7 +64,8 @@ window.DATA = (function () {
   // (row.collectorId), TT0003 thuê 3 điểm ở 3 Dãy của 3 NV, kỳ 09 phát hành đủ + hạn 30/09, 10 khoản quá hạn
   // (hạn 28/25/22/20 tháng 9) để demo công nợ / thu hồi nợ, số biên lai gắn mã khoản, ngày dữ liệu 29/09/2026.
   // (Nhánh Tài chính trước đó dùng VERSION 17–27 trên mô hình khu cũ — lấy 28 để mọi cache cũ đều dựng lại.)
-  const VERSION = 28;
+  // 29 → 30: TT0048 (4 sạp 4 khu) chuyển sang 4 điểm mới cuối Dãy, trả lại 8 điểm trống của seed.
+  const VERSION = 30;
   const TODAY = new Date(2026, 8, 13); // 13/09/2026
 
   // Giá dịch vụ sử dụng diện tích bán hàng – QĐ 480/QĐ-UBND ngày 14/02/2026 (đ/m²/ngày, đã gồm VAT)
@@ -1203,6 +1204,69 @@ window.DATA = (function () {
     // Giữ 10 khoản kỳ 08/2026 chưa thu (quá hạn 15/08 → hệ thống tự chuyển công nợ lúc chạy), chia đều các NV thu
     // phí; mọi khoản chưa thu khác của kỳ 05–08 coi như đã thu tiền mặt đúng kỳ (1 biên lai / khoản, người thu =
     // NV phụ trách gian). Không dùng RNG; không đụng ngày hôm nay nên sao kê / nộp quỹ không đổi.
+    // ---- TIEU_THUONG_4_SAP_4_KHU (v29, P 29/09/2026): 1 tiểu thương ký hợp đồng 4 sạp ở 4 khu khác nhau ----
+    // Nguyễn Thị Thanh Trúc (TT0048) thuê từ 01/07/2026 4 điểm có công tơ (thêm mới cuối Dãy): KA-A07 (ki-ốt mặt
+    // tiền, NV Diễm), HS-A07 (thủy hải sản, NV Hân), KB-A05 (ki-ốt tầng 2, NV Lợi), AU-A05 (ăn uống, NV Hân). Chỉ số điện,
+    // nước ghi THEO MÃ ĐIỂM KD cho kỳ 07, 08, 09/2026 — người ghi là NV thu phí phụ trách Dãy của từng điểm.
+    // Khoản phải thu gộp theo tiểu thương (1 mã PT-/kỳ) có tiền điện, nước theo đúng chỉ số. Không dùng RNG
+    // (chạy sau mọi phần sinh ngẫu nhiên nên không làm lệch dữ liệu khác).
+    (function seedTraderFourStalls() {
+      // v30: 4 điểm MỚI thêm cuối Dãy (không lấy 8 điểm đang trống của seed — test hồi quy dùng làm điểm trống).
+      // Diện tích nằm trong phần diện tích phân bổ còn lại của từng Dãy.
+      const NEW_PTS = [['KA-A', 12], ['HS-A', 4], ['KB-A', 7], ['AU-A', 6]];
+      if (traders.some(t => t.id === 'TT0048')) return;
+      const pts = NEW_PTS.map(([rc, area]) => {
+        const row = rows.find(r => r.market === 'CL' && r.code === rc);
+        if (!row) return null;
+        const sib = stalls.filter(x => x.rowId === row.id), num = sib.reduce((m, x) => Math.max(m, x.num), 0) + 1;
+        const used = sib.reduce((a, x) => a + x.area, 0);
+        if (!sib.length || used + area > row.allocatedArea) return null;
+        const code = rc + pad(num);
+        const st = { id: 'CL-' + code, code, market: 'CL', rowId: row.id, num, area, areaTypeId: sib[0].areaTypeId,
+          status: 'active', hasMeter: true, type: sib[0].type, note: '', history: [] };
+        stalls.push(st); return st;
+      });
+      if (pts.some(x => !x)) return;
+      const ids = pts.map(st => st.id);
+      const t = { id: 'TT0048', name: 'Nguyễn Thị Thanh Trúc', gender: 'Nữ', phone: '0934567812', idNo: '087186004812', birth: 1986,
+        address: 'Khóm 3, phường Cao Lãnh', market: 'CL', cat: 'Ki-ốt tổng hợp', hkd: true, since: '2026-07-01', app: true, bank: true,
+        stalls: ids.slice(), profileStatus: 'ACTIVE', source: 'STAFF', supplementNote: '', licenseNo: null, licenseDate: null };
+      traders.push(t);
+      const cs = pts.map(st => {
+        const unit = unitFor(st), monthly = Math.round(st.area * unit * 30 / 1000) * 1000;
+        const c = { id: 'HĐ-CL-2026-' + pad(++cSeq, 4), stallId: st.id, traderId: t.id, market: 'CL', kind: 'Hợp đồng thuê cố định quầy tháng/quý',
+          start: '2026-07-01', end: '2029-06-30', unit, monthly, deposit: monthly, status: 'hieuluc', scanned: true };
+        contracts.push(c); return c;
+      });
+      const P3 = [['2026-07', 7], ['2026-08', 8], ['2026-09', 9]];
+      pts.forEach((st, k) => {
+        const code = collectorOfStall(st).replace(/^AC-/, '') || 'NV05', kiot = st.type === 'kiot';
+        const eAvg = kiot ? 210 : 95, wAvg = kiot ? 8 : 5;
+        let e = 3000 + k * 1250, w = 200 + k * 45;
+        P3.forEach(([p, mo], j) => {
+          const de = Math.round(eAvg * [0.95, 1.05, 1.0][j]), dw = wAvg + [0, 1, -1][j];
+          readings.push({ stallId: st.id, period: p, elecPrev: e, elecCur: e + de, elecAvg: eAvg, waterPrev: w, waterCur: w + dw, waterAvg: wAvg,
+            status: 'RECORDED', recordedBy: code, recordedAt: pad(5 + k) + '/' + pad(mo) + '/2026 ' + pad(8 + k) + ':' + pad(10 + j * 15),
+            elecPhoto: { name: st.code + '-dien-' + pad(mo) + '-2026.jpg', type: 'image/jpeg', size: 310000, mock: true },
+            waterPhoto: { name: st.code + '-nuoc-' + pad(mo) + '-2026.jpg', type: 'image/jpeg', size: 290000, mock: true } });
+          e += de; w += dw;
+        });
+      });
+      P3.forEach(([p]) => {
+        const pre = 'PT-' + p.replace('-', '') + '-';
+        const next = invoices.filter(i => String(i.id).indexOf(pre) === 0).reduce((m, i) => Math.max(m, Number(i.id.slice(pre.length)) || 0), 0) + 1;
+        const items = [];
+        pts.forEach((st, k) => {
+          const c = cs[k], r = readings.find(x => x.stallId === st.id && x.period === p), kwh = r.elecCur - r.elecPrev, m3 = r.waterCur - r.waterPrev;
+          items.push({ name: 'Phí quầy cố định tháng/quý (' + st.area + ' m² × ' + c.unit.toLocaleString('vi-VN') + ' đ × 30 ngày)', amount: c.monthly, stallId: st.id, contractId: c.id });
+          items.push({ name: 'Tiền điện (' + kwh + ' kWh × ' + ELEC.toLocaleString('vi-VN') + ' đ)', amount: kwh * ELEC, stallId: st.id, contractId: c.id });
+          items.push({ name: 'Tiền nước (' + m3 + ' m³ × ' + WATER.toLocaleString('vi-VN') + ' đ)', amount: m3 * WATER, stallId: st.id, contractId: c.id });
+        });
+        invoices.push({ id: pre + pad(next, 5), period: p, market: 'CL', stallId: ids[0], traderId: t.id, contractId: cs[0].id, items,
+          amount: items.reduce((a, b) => a + b.amount, 0), paid: 0, issued: p + '-01', due: p + '-15', status: 'unpaid', adjust: null, reminders: 0,
+          stallIds: ids.slice(), contractIds: cs.map(c => c.id) });
+      });
+    })();
     (function seedDemoDebts() {
       const grouped = new Set(MARKETS.filter(m => m.receivableGrouping === 'TRADER').map(m => m.id));
       const old = invoices.filter(i => grouped.has(i.market) && i.period < '2026-09' && i.status !== 'paid').sort((a, b) => a.id.localeCompare(b.id));

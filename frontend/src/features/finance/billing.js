@@ -37,6 +37,13 @@
     if (!bp) { warning(out, { code: 'PERIOD_NOT_FOUND', message: 'Không tìm thấy kỳ thu.' }); return out; }
     if (A.db.issuedPeriods.includes(period)) { warning(out, { code: 'PERIOD_ALREADY_ISSUED', message: 'Kỳ thu đã phát hành, không thể tính lại.' }); return out; }
     const date = bp.endDate, handledVehicles = new Set();
+    // DIEN_NUOC_CHIA_DEU_THEO_THANG: chợ SERVICE → mỗi điểm KD 1 dòng điện + 1 dòng nước theo dòng "có hiệu lực" của
+    // tháng: ưu tiên mức theo dãy > khu ngành hàng > toàn chợ. Thiếu dòng cho điểm → cảnh báo CHẶN phát hành.
+    const flatMode = !!(A.SERVICE_CFG && A.SERVICE_CFG.utilityMode(market) === 'SERVICE' && A.SERVICE_CFG.utilityFlatActive);
+    const flatRowsOf = kind => flatMode ? A.SERVICE_CFG.utilityFlatActive(market, kind, period) : [];
+    const flatByKind = { ELECTRICITY: flatRowsOf('ELECTRICITY'), WATER: flatRowsOf('WATER') }, flatMissing = { ELECTRICITY: 0, WATER: 0 };
+    const flatFor = (kind, st) => { const r = st && A.idx.row ? A.idx.row.get(st.rowId) : null, xs = flatByKind[kind];
+      return (r && xs.find(x => x.area === 'ROW:' + r.id)) || (r && xs.find(x => x.area === 'IND:' + r.industry)) || xs.find(x => x.area === 'ALL') || null; };
     A.db.contracts.filter(c => c.market === market && c.status === 'hieuluc' && c.start <= date && (!c.end || c.end >= bp.startDate)).forEach(c => {
       const st = A.idx.stall.get(c.businessPointId || c.stallId), t = A.idx.trader.get(c.traderId);
       if (!st || !t || st.traderId !== t.id) return warning(out, { code: 'INVALID_CONTRACT_SOURCE', contractId: c.id, message: 'Hợp đồng không còn liên kết rõ ràng với điểm kinh doanh.' });
@@ -45,9 +52,13 @@
       if (!lp) warning(out, { code: 'MISSING_LAND_POLICY', contractId: c.id, businessPointId: st.id, message: 'Chưa có đơn giá sử dụng mặt bằng phù hợp.' });
       else { const amount = landAmount(lp, Number(st.area || 0)); out.drafts.push(draft(Object.assign({ sourceKey: 'LAND|' + c.id }, common), { chargeType: 'LAND', sourceType: 'CONTRACT', sourceId: c.id, name: itemName('LAND'), businessPointId: st.id, contractId: c.id, policyId: lp.id, policyReference: (lp.legalBasis || {}).docNo || '', quantity: Number(st.area || 0), unit: lp.unit, unitPrice: Number(lp.amount || 0), amount, explanation: 'Diện tích × đơn giá chính sách; chưa áp dụng quy tắc phân bổ ngày.' })); }
       // HINH_THUC_THU_DIEN_NUOC: chợ thu điện, nước chia đều như dịch vụ → không tạo dòng theo công tơ.
-      const applies = A.SERVICE_CFG && A.SERVICE_CFG.utilityMode(market) === 'SERVICE' ? Object.assign({}, c.serviceApplicability || {}, { electricity: false, water: false }) : (c.serviceApplicability || {}), reading = A.db.readings.find(x => x.stallId === st.id && x.period === period), utility = (applies.electricity || applies.water) && rate('utilities', market, date);
+      const applies = A.SERVICE_CFG && A.SERVICE_CFG.utilityMode(market) === 'SERVICE' ? Object.assign({}, c.serviceApplicability || {}, { electricity: false, water: false }) : (c.serviceApplicability || {}), reading = A.db.readings.find(x => x.stallId === st.id && x.period === period);
       [['electricity', 'ELECTRICITY', 'elecPrev', 'elecCur', 'elecPrice', 'elecUnit', 'điện', 'elecAvg'], ['water', 'WATER', 'waterPrev', 'waterCur', 'waterPrice', 'waterUnit', 'nước', 'waterAvg']].forEach(x => {
         if (!applies[x[0]]) return;
+        // GIA_DIEN_NUOC_THEO_LOAI: giá điện / giá nước riêng, lấy giá có hiệu lực ở đầu kỳ (giá đổi giữa tháng chỉ
+        // áp dụng từ tháng sau — ngày hiệu lực luôn là ngày 01).
+        const up = A.SERVICE_CFG && A.SERVICE_CFG.utilityPriceAt ? A.SERVICE_CFG.utilityPriceAt(market, x[1], bp.startDate) : null;
+        const utility = up ? { id: up.id, legalBasis: up.legalBasis, [x[4]]: up.price, [x[5]]: up.unit } : null;
         if (!utility) return warning(out, { code: 'MISSING_UTILITY_POLICY', contractId: c.id, businessPointId: st.id, chargeType: x[1], message: 'Chưa có biểu phí ' + x[6] + ' đang áp dụng.' });
         if (!reading || reading[x[3]] == null) return warning(out, { code: 'MISSING_METER_READING', contractId: c.id, businessPointId: st.id, chargeType: x[1], message: 'Thiếu chỉ số ' + x[6] + ' kỳ này.' });
         const qty = Number(reading[x[3]]) - Number(reading[x[2]]);
@@ -56,6 +67,15 @@
         if (Number(reading[x[7]]) && qty > Number(reading[x[7]]) * 1.5) warning(out, { severity: 'WARNING', code: 'ABNORMAL_CONSUMPTION', contractId: c.id, businessPointId: st.id, chargeType: x[1], message: 'Sản lượng ' + x[6] + ' cao bất thường, cần kiểm tra.' });
         out.drafts.push(draft(Object.assign({ sourceKey: x[1] + '|' + st.id }, common), { chargeType: x[1], sourceType: 'METER_READING', sourceId: st.id + '|' + period + '|' + x[0], name: itemName(x[1]), businessPointId: st.id, contractId: c.id, meter: { previous: Number(reading[x[2]]), current: Number(reading[x[3]]), consumption: qty }, policyId: utility.id, policyReference: (utility.legalBasis || {}).docNo || '', quantity: qty, unit: utility[x[5]], unitPrice: price, amount, explanation: 'Chỉ số mới − chỉ số cũ = ' + qty + ' ' + utility[x[5]] }));
       });
+      if (flatMode) {
+        const own = c.serviceApplicability || {};
+        [['electricity', 'ELECTRICITY', 'điện'], ['water', 'WATER', 'nước']].forEach(x => {
+          if (own[x[0]] === false) return;
+          const fr = flatFor(x[1], st);
+          if (!fr) { flatMissing[x[1]]++; return; }
+          out.drafts.push(draft(Object.assign({ sourceKey: x[1] + '|' + st.id }, common), { chargeType: x[1], sourceType: 'FLAT_UTILITY', sourceId: fr.id, name: itemName(x[1]) + ' (chia đều ' + (bp.label || period) + ')', businessPointId: st.id, contractId: c.id, policyId: fr.id, policyReference: fr.basis || '', quantity: 1, unit: 'đ/điểm/tháng', unitPrice: Number(fr.perPoint), amount: Number(fr.perPoint), explanation: (fr.method === 'SPLIT_TOTAL' ? 'Hóa đơn ' + x[2] + ' ' + U.money(fr.total) + ' chia đều ' + fr.pointCount + ' điểm' : 'Mức ' + x[2] + ' theo khu') + ' · ' + fr.id }));
+        });
+      }
       if (applies.marketService) {
         const services = (A.SERVICE_CFG ? A.SERVICE_CFG.list('extraServices') : []).filter(x => x.marketId === market && x.category !== 'VEHICLE' && active(x, date));
         if (!services.length) warning(out, { severity: 'WARNING', code: 'NO_MARKET_SERVICE_POLICY', contractId: c.id, businessPointId: st.id, message: 'Có áp dụng dịch vụ chợ nhưng chưa có biểu phí.' });
@@ -68,6 +88,7 @@
         const amount = Number(vp.amount || 0); out.drafts.push(draft(Object.assign({ sourceKey: 'VEHICLE|' + v.id, vehicleId: v.id }, common), { chargeType: 'VEHICLE', sourceType: 'VEHICLE_REGISTRATION', sourceId: v.id, name: itemName('VEHICLE', v), vehicleId: v.id, businessPointId: st.id, contractId: c.id, policyId: vp.id, policyReference: (vp.legalBasis || {}).docNo || '', quantity: 1, unit: vp.unit, unitPrice: amount, amount, explanation: 'Phương tiện ' + v.plateNumber + ' · ' + v.type + '.' }));
       });
     });
+    if (flatMode) Object.keys(flatMissing).forEach(k => { if (flatMissing[k]) warning(out, { code: 'MISSING_FLAT_UTILITY', chargeType: k, message: flatMissing[k] + ' điểm KD chưa có ' + (k === 'ELECTRICITY' ? 'tiền điện' : 'tiền nước') + ' chia đều tháng ' + (bp.label || period) + ' (Chính sách thu và biểu phí › Điện & nước).' }); });
     // Issued receivables are immutable. Recalculation replaces only this period's
     // mutable drafts and never recreates a source that has already been issued.
     const issuedKeys = issuedSourceKeys(market, period);
@@ -89,6 +110,27 @@
   }
   function drafts(m, p) { return (Array.isArray(A.db.billingDrafts) ? A.db.billingDrafts : []).filter(x => x.market === m && x.period === p); }
   function warnings(m, p) { return (Array.isArray(A.db.billingWarnings) ? A.db.billingWarnings : []).filter(x => x.market === m && x.period === p); }
+  // KY_GHI_CHI_SO_MOI (P 29/09/2026): mở kỳ ghi chỉ số mới phải có sẵn danh sách đồng hồ để NV thu phí đi ghi + chụp ảnh.
+  // Tạo dòng chỉ số cho mọi điểm KD có công tơ (hasMeter), đang hoạt động, có hợp đồng hiệu lực, ở chợ thu THEO CÔNG TƠ;
+  // chỉ số cũ = chỉ số mới gần nhất của điểm đó. Idempotent (không tạo trùng); không đổi quyền — ghi vẫn qua mrCanRecord.
+  A.ensureMeterReadings = function (periodId) {
+    const mp = (A.db.meterPeriods || []).find(x => x.id === periodId);
+    if (!mp || mp.status !== 'RECORDING') return 0;
+    const has = new Set(A.db.readings.filter(r => r.period === periodId).map(r => r.stallId));
+    const withContract = new Set(A.db.contracts.filter(c => c.status === 'hieuluc').map(c => c.businessPointId || c.stallId));
+    let n = 0;
+    A.db.stalls.filter(st => st.hasMeter && st.status === 'active' && withContract.has(st.id) && !has.has(st.id)
+      && !(A.SERVICE_CFG && A.SERVICE_CFG.utilityMode && A.SERVICE_CFG.utilityMode(st.market) === 'SERVICE')).forEach(st => {
+      const last = A.db.readings.filter(r => r.stallId === st.id && r.period < periodId).sort((a, b) => b.period.localeCompare(a.period))[0] || {};
+      const pick = (cur, prev) => cur != null ? cur : (prev != null ? prev : 0);
+      A.db.readings.push({ stallId: st.id, period: periodId,
+        elecPrev: pick(last.elecCur, last.elecPrev), elecCur: null, elecAvg: last.elecAvg || 0,
+        waterPrev: pick(last.waterCur, last.waterPrev), waterCur: null, waterAvg: last.waterAvg || 0,
+        status: 'PENDING', recordedBy: null, recordedAt: null, elecPhoto: null, waterPhoto: null });
+      n++;
+    });
+    return n;
+  };
   function openNextPeriod() {
     const all = A.db.billingPeriods.slice().sort((a, b) => String(a.id).localeCompare(String(b.id)));
     const last = all[all.length - 1];
@@ -101,6 +143,7 @@
     const next = { id, label: m + '/' + y, startDate: y + '-' + m + '-01', endDate: y + '-' + m + '-' + lastDay, dueDate: y + '-' + m + '-15', status: 'OPEN', calculationStatus: 'DATA_ENTRY' };
     A.db.billingPeriods.push(next);
     if (!(A.db.meterPeriods || []).some(x => x.id === id)) A.db.meterPeriods.push({ id, month: Number(m), year: y, status: 'RECORDING', closeDate: y + '-' + m + '-' + lastDay });
+    A.ensureMeterReadings(id);
     A.save(); return next;
   }
   // PHAT_HANH_KHOAN_THU: phát hành = (1) sinh mã PT-…, (2) gửi thông báo số phải nộp cho TỪNG tiểu thương
