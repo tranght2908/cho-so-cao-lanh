@@ -494,15 +494,18 @@
   }
   // Điều hướng của cổng tiểu thương trong trang quản lý. Mặc định 'home' (trước đây vào thẳng màn
   // gửi phản ánh). Lưu trong ui.mini nên giữ nguyên qua các lần render/đổi màn.
-  const PORTAL_NAV = ['home', 'complaints', 'contracts', 'finance', 'notice', 'help'];
+  // 'profile' mở từ Avatar → Thông tin cá nhân hoặc sidebar Tài khoản, cả hai qua A.openTraderPortalProfile,
+  // để hồ sơ tiểu thương render trong vùng nội dung, giữ nguyên sidebar/header của cổng.
+  const PORTAL_NAV = ['home', 'complaints', 'contracts', 'finance', 'notice', 'help', 'profile'];
   const portalNav = () => (PORTAL_NAV.indexOf(mini().portalNav) === -1 ? 'home' : mini().portalNav);
   const PORTAL_CRUMB = {
-    home: ['Tổng quan', 'Trang chủ'],
+    home: ['Tổng quan', 'Tổng quan của tôi'],
     complaints: ['Phản ánh & xử lý', ''],
     contracts: ['Tổng quan', 'Hợp đồng & điểm kinh doanh'],
     finance: ['Tổng quan', 'Nghĩa vụ tài chính'],
     notice: ['Tổng quan', 'Thông báo'],
-    help: ['Tiện ích', 'Hướng dẫn']
+    help: ['Tiện ích', 'Hướng dẫn'],
+    profile: ['Tài khoản', 'Thông tin cá nhân']
   };
   function merchantPortalSidebar(nav, badges) {
     const b = badges || {};
@@ -511,13 +514,15 @@
       <div class="merchant-brand"><div class="merchant-brand-logo"><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true"><path d="M5 12l2-6h18l2 6z" fill="#0089df"/><path d="M5 12h22v3a3.5 3.5 0 0 1-7 0 3.5 3.5 0 0 1-7 0 3.5 3.5 0 0 1-7 0z" fill="#4fb3ff"/><path d="M7 17v10h18V17" fill="#0b4a9e"/><rect x="13" y="20" width="6" height="7" fill="#fff"/></svg></div><div><b>Chợ số Cao Lãnh</b><small>UBND Phường Cao Lãnh</small></div></div>
       <nav class="merchant-nav">
         <div class="merchant-nav-group">Tổng quan</div>
-        ${item('home', 'dashboard', 'Trang chủ')}
-        ${item('complaints', 'warning', 'Phản ánh & xử lý', b.complaints)}
+        ${item('home', 'dashboard', 'Tổng quan của tôi')}
+        <div class="merchant-nav-group">Kinh doanh của tôi</div>
         ${item('contracts', 'file', 'Hợp đồng & điểm kinh doanh')}
         ${item('finance', 'receipt', 'Nghĩa vụ tài chính', b.finance)}
+        <div class="merchant-nav-group">Hỗ trợ</div>
+        ${item('complaints', 'warning', 'Phản ánh & xử lý', b.complaints)}
         ${item('notice', 'bell', 'Thông báo')}
-        <div class="merchant-nav-group">Tiện ích</div>
-        ${item('help', 'warning', 'Hướng dẫn')}
+        <div class="merchant-nav-group">Tài khoản</div>
+        ${item('profile', 'users', 'Thông tin cá nhân')}
         ${item('logout', 'close', 'Đăng xuất')}
       </nav>
     </aside>`;
@@ -931,11 +936,14 @@
   }
 
   // ==================== CỔNG TIỂU THƯƠNG (khung sidebar trong trang quản lý) ====================
-  // Các màn Trang chủ / Hợp đồng & điểm kinh doanh / Nghĩa vụ tài chính / Thông báo dùng ĐÚNG dữ liệu
+  // Các màn Tổng quan của tôi / Hợp đồng & điểm kinh doanh / Nghĩa vụ tài chính / Thông báo dùng ĐÚNG dữ liệu
   // nghiệp vụ đang có (A.db.invoices, contracts, stalls, incidents, notifications) như trang quản lý
   // và cổng /tieu-thuong/ — không tạo nguồn dữ liệu riêng, không tự sinh số liệu.
   const portalStalls = t => t.stalls.map(id => A.idx.stall.get(id)).filter(Boolean);
-  const portalContracts = t => A.db.contracts.filter(c => c.traderId === t.id);
+  const portalContractPhaseOrder = { current: 0, upcoming: 1, expired: 2, terminated: 3, liquidated: 4, ended: 5 };
+  const portalContractService = () => A.features.contracts && A.features.contracts.service;
+  const portalContractPhase = c => (portalContractService() && portalContractService().presentationStatus(c)) || 'ended';
+  const portalContracts = t => A.db.contracts.filter(c => c.traderId === t.id).sort((a, b) => (portalContractPhaseOrder[portalContractPhase(a)] - portalContractPhaseOrder[portalContractPhase(b)]) || String(b.start || '').localeCompare(String(a.start || '')));
   const portalInvoices = t => A.db.invoices.filter(i => i.traderId === t.id).sort((a, b) => b.period.localeCompare(a.period));
   const portalPayments = t => {
     const ids = A.db.invoices.filter(i => i.traderId === t.id).map(i => i.id);
@@ -955,13 +963,12 @@
     const notices = notisFor(t).slice(0, 3), stalls = portalStalls(t);
     const cons = portalContracts(t).filter(c => c.status === 'hieuluc');
     return `<div class="merchant-kpis">
+        ${portalKpi('Điểm kinh doanh', String(stalls.length), cons.length + ' hợp đồng đang hiệu lực', 'blue')}
         ${portalKpi('Còn phải nộp', U.money(total), list.length ? list.length + ' khoản chưa nộp' : 'Đã nộp đủ', total ? 'warn' : 'green')}
         ${portalKpi('Quá hạn', U.money(U.sum(over, U.due)), over.length ? over.length + ' khoản quá hạn' : 'Không có khoản quá hạn', over.length ? 'danger' : 'green')}
-        ${portalKpi('Điểm kinh doanh', String(stalls.length), cons.length + ' hợp đồng đang hiệu lực', 'blue')}
         ${portalKpi('Phản ánh đang xử lý', String(open.length), incidents.length + ' phản ánh đã gửi', open.length ? 'warn' : 'green')}
       </div>
-      ${portalPanel('receipt', 'Khoản phí cần nộp', total ? 'Thanh toán trước hạn để tránh phát sinh nhắc nợ.' : 'Bạn đã nộp đủ các khoản phí.', list.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Kỳ thu</th><th>Điểm kinh doanh</th><th>Số tiền</th><th>Hạn nộp</th><th>Trạng thái</th></tr></thead><tbody>${list.slice(0, 4).map(i => `<tr><td>${U.per(i.period)}</td><td>${stallLabel(A.idx.stall.get(i.stallId))}</td><td><b>${U.money(U.due(i))}</b></td><td>${U.dmy(i.due)}</td><td>${U.invTag(i)}</td></tr>`).join('')}</tbody></table></div>` : portalEmpty('Không có khoản phí nào cần nộp.'), portalLink('finance', 'Xem tất cả'))}
-      ${portalPanel('file', 'Điểm kinh doanh của tôi', '', stalls.length ? `<div class="merchant-cards">${stalls.map(st => {
+      ${portalPanel('file', 'Điểm kinh doanh & hợp đồng của tôi', '', stalls.length ? `<div class="merchant-cards">${stalls.map(st => {
         const c = st.contractId ? A.idx.contract.get(st.contractId) : null;
         return `<div class="merchant-card"><b>${U.esc(st.code)}</b><small>${U.esc(st.sectionName || '')}</small>
           <dl class="kv"><dt>Ngành hàng</dt><dd>${U.esc(st.cat) || 'Chưa có thông tin'}</dd>
@@ -969,16 +976,70 @@
             <dt>Hợp đồng</dt><dd>${c ? U.esc(c.id) : 'Chưa có hợp đồng hiệu lực'}</dd>
             <dt>Trạng thái</dt><dd>${D.STATUS[st.status] ? U.esc(D.STATUS[st.status].label) : U.esc(st.status)}</dd></dl></div>`;
       }).join('')}</div>` : portalEmpty('Chưa có điểm kinh doanh nào được giao.'), portalLink('contracts', 'Xem hợp đồng'))}
-      ${portalPanel('bell', 'Thông báo mới', '', notices.length ? `<div class="merchant-rows">${notices.map(n => `<div class="merchant-row"><div><b>${U.esc(n.title)}</b><small>${U.dmy(n.at)} · ${U.esc(n.group || 'Ban Quản lý chợ')}</small></div></div>`).join('')}</div>` : portalEmpty('Chưa có thông báo.'), portalLink('notice', 'Tất cả'))}
-      ${portalPanel('warning', 'Phản ánh gần đây', '', incidents.length ? `<div class="merchant-rows">${incidents.slice(0, 3).map(i => `<div class="merchant-row"><div><b>${U.esc(i.title)}</b><small>${U.esc(i.id)} · ${U.dmy(i.created)}</small></div><span class="tag ${miniComplaintStatusClass(i)}">${U.esc(incidentStateLabel(i.state))}</span></div>`).join('')}</div>` : portalEmpty('Bạn chưa gửi phản ánh nào.'), portalLink('complaints', 'Gửi phản ánh'))}`;
+      ${portalPanel('receipt', 'Nghĩa vụ tài chính', total ? 'Thanh toán trước hạn để tránh phát sinh nhắc nợ.' : 'Bạn đã nộp đủ các khoản phí.', list.length ? `<div class="tbl-wrap"><table class="tbl merchant-due-tbl"><thead><tr><th>Kỳ</th><th>Khoản thu</th><th class="num">Số tiền</th><th class="num">Còn lại</th><th>Trạng thái</th></tr></thead><tbody>${list.slice(0, 3).map(i => { const st = A.idx.stall.get(i.stallId); return `<tr><td>${U.per(i.period)}</td><td><b>${portalItemsLabel(i)}</b><small>${st ? U.esc(st.code) + ' · ' : ''}Hạn ${U.dmy(i.due)}</small></td><td class="num">${U.money(i.amount)}</td><td class="num"><b>${U.money(U.due(i))}</b></td><td>${U.invTag(i)}</td></tr>`; }).join('')}</tbody></table></div>` : portalEmpty('Không có khoản phí nào cần nộp.'), portalLink('finance', 'Xem tất cả'))}
+      ${portalPanel('warning', 'Phản ánh gần đây', '', incidents.length ? `<div class="merchant-rows is-compact">${incidents.slice(0, 3).map(i => { const st = A.idx.stall.get(i.stallId), at = String(i.created || ''); return `<div class="merchant-row" data-act="mini-complaint-open" data-id="${U.esc(i.id)}"><div><b>${U.esc(i.title)}</b><small>${U.esc(i.id)}${st ? ' · ' + U.esc(st.code) : ''}</small><small>${U.dmy(at)}${at.length > 10 ? ' ' + U.esc(at.slice(11, 16)) : ''}</small></div><span class="tag ${miniComplaintStatusClass(i)}">${U.esc(incidentStateLabel(i.state))}</span></div>`; }).join('')}</div>` : portalEmpty('Bạn chưa gửi phản ánh nào.'), portalLink('complaints', 'Gửi phản ánh'))}
+      ${portalPanel('bell', 'Thông báo mới', '', notices.length ? `<div class="merchant-rows">${notices.map(n => `<div class="merchant-row"><div><b>${U.esc(n.title)}</b><small>${U.dmy(n.at)} · ${U.esc(n.group || 'Ban Quản lý chợ')}</small></div></div>`).join('')}</div>` : portalEmpty('Chưa có thông báo.'), portalLink('notice', 'Tất cả'))}`;
+  }
+  const portalContractPointId = c => c && (c.businessPointId || c.stallId);
+  const portalContractPoint = c => A.idx.stall.get(portalContractPointId(c));
+  function portalContractStatus(c) {
+    const phase = portalContractPhase(c);
+    const labels = { current: 'Đang hiệu lực', upcoming: 'Chưa đến hiệu lực', expired: 'Đã hết hạn', terminated: 'Đã chấm dứt', liquidated: 'Đã thanh lý', ended: 'Đã kết thúc' };
+    return `<span class="portal-contract-status ${phase}">${labels[phase] || '—'}</span>`;
+  }
+  function portalPointUsage(c) {
+    const labels = { current: 'Đang thuê', upcoming: 'Chưa đến hiệu lực', expired: 'Đã hết hạn', terminated: 'Đã chấm dứt', liquidated: 'Đã thanh lý', ended: 'Đã kết thúc' };
+    return labels[portalContractPhase(c)] || '—';
+  }
+  function portalTraderBusinessStatus(t) {
+    const TS = A.features.traders && A.features.traders.service;
+    const state = TS && TS.deriveBusinessStatus ? TS.deriveBusinessStatus(t) : '';
+    return state === 'ACTIVE' ? 'Đang hoạt động' : state === 'INACTIVE' ? 'Ngừng hoạt động' : 'Chờ bố trí';
+  }
+  function portalLocation(point) {
+    const BP = A.features.businessPoints.service;
+    const loc = BP.location(point);
+    return (loc && loc.label && loc.label !== '—') ? loc.label : (point.sectionName || point.location || '—');
+  }
+  function portalChargeHtml(c) {
+    const snapshot = Array.isArray(c.feeSnapshot) ? c.feeSnapshot.filter(x => x && x.amount !== undefined && x.amount !== null) : [];
+    const monthly = Number(c.monthly), policyAmount = c.feePolicy && Number(c.feePolicy.amount), amount = monthly > 0 ? monthly : (policyAmount > 0 ? policyAmount : null);
+    const rows = snapshot.length ? snapshot.map(x => ({ name: x.name || 'Khoản thu', unit: x.unitLabel || '—', amount: x.amount, note: x.note || '—' })) : (amount ? [{ name: 'Mức giá theo hợp đồng', unit: 'tháng', amount, note: 'Theo hợp đồng' }] : []);
+    if (!rows.length) return '<div class="small muted">Chưa có thông tin mức thu.</div>';
+    return `<div class="portal-charge-table"><div class="portal-charge-head"><span>STT</span><span>Khoản thu</span><span>Đơn vị tính</span><span>Mức áp dụng</span><span>Ghi chú</span></div>${rows.map((x, index) => `<div><span>${index + 1}</span><span>${U.esc(x.name)}</span><span>${U.esc(x.unit)}</span><b>${U.money(x.amount)}</b><span>${U.esc(x.note)}</span></div>`).join('')}</div>`;
+  }
+  function portalContractPointCard(c) {
+    const point = portalContractPoint(c);
+    if (!point) return `<div class="portal-contract-point"><div class="portal-point-head"><div class="portal-point-icon">${U.icon('store')}</div><div><b>Chưa xác định được điểm kinh doanh</b><small>Thông tin điểm kinh doanh hiện chưa khả dụng.</small></div>${portalContractStatus(c)}</div></div>`;
+    const BP = A.features.businessPoints.service, row = BP.row(point), collector = typeof BP.pointCollector === 'function' ? BP.pointCollector(point.id) : (row && row.collectorId ? A.ACCOUNTS.get(row.collectorId) : null);
+    const industry = BP.industry(point) || point.cat || '—';
+    const areaType = U.areaTypeLabel(point.areaTypeId || point.areaType) || '—';
+    return `<article class="portal-contract-point">
+      <div class="portal-point-head"><div class="portal-point-icon">${U.icon('store')}</div><div><b>${U.esc(point.code || '—')}</b><small>${U.esc((row && row.name) || point.sectionName || 'Điểm kinh doanh')}</small></div><span class="portal-point-usage ${portalContractPhase(c)}">${portalPointUsage(c)}</span></div>
+      <div class="portal-point-detail-list"><div><span>Vị trí</span><b>${U.esc(portalLocation(point))}</b></div><div><span>Ngành hàng</span><b>${U.esc(industry)}</b></div><div><span>Diện tích</span><b>${Number.isFinite(Number(point.area)) ? Number(point.area).toLocaleString('vi-VN') + ' m²' : '—'}</b></div><div><span>Loại diện tích</span><b>${U.esc(areaType)}</b></div></div>
+      ${collector ? `<div class="portal-point-collector"><span>Nhân viên thu phí phụ trách</span><b>${U.esc(collector.fullName || collector.name || '—')}</b></div>` : ''}
+    </article>`;
   }
   function portalContractsScreen(t) {
-    const cons = portalContracts(t), stalls = portalStalls(t);
-    return `${portalPanel('file', 'Hợp đồng thuê điểm kinh doanh', 'Hợp đồng do Ban Quản lý chợ lập; mọi điều chỉnh liên hệ Ban Quản lý chợ.', cons.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Số hợp đồng</th><th>Loại</th><th>Điểm kinh doanh</th><th>Thời hạn</th><th>Giá dịch vụ/tháng</th><th>Trạng thái</th></tr></thead><tbody>${cons.map(c => {
-      const st = A.idx.stall.get(c.stallId);
-      return `<tr><td><b>${U.esc(c.id)}</b></td><td>${U.esc(c.kind || '')}</td><td>${stallLabel(st)}</td><td>${U.dmy(c.start)} – ${U.dmy(c.end)}</td><td>${c.monthly ? U.money(c.monthly) : '—'}</td><td><span class="tag ${c.status === 'hieuluc' ? 'ok' : ''}">${c.status === 'hieuluc' ? 'Đang hiệu lực' : 'Đã thanh lý'}</span></td></tr>`;
-    }).join('')}</tbody></table></div>` : portalEmpty('Chưa có hợp đồng nào.'))}
-      ${portalPanel('dashboard', 'Chi tiết điểm kinh doanh', '', stalls.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Mã điểm</th><th>Khu vực</th><th>Ngành hàng</th><th>Diện tích</th><th>Đơn giá</th><th>Trạng thái</th></tr></thead><tbody>${stalls.map(st => `<tr><td><b>${U.esc(st.code)}</b></td><td>${U.esc(st.sectionName || '')}</td><td>${U.esc(st.cat) || '—'}</td><td>${st.area.toLocaleString('vi-VN')} m²</td><td>${U.esc(U.unitLabel(st) || '')}</td><td>${D.STATUS[st.status] ? U.esc(D.STATUS[st.status].label) : U.esc(st.status)}</td></tr>`).join('')}</tbody></table></div>` : portalEmpty('Chưa có điểm kinh doanh nào được giao.'))}`;
+    const cons = portalContracts(t);
+    if (!cons.length) return `<section class="merchant-panel portal-contract-empty"><div class="portal-empty-icon">${U.icon('file')}</div><h2>Bạn chưa có hợp đồng kinh doanh</h2><p>Khi được bố trí điểm kinh doanh và hợp đồng có hiệu lực, thông tin sẽ xuất hiện tại đây.</p></section>`;
+    const selected = cons.find(c => c.id === mini().portalContractId) || cons[0];
+    mini().portalContractId = selected.id;
+    const point = portalContractPoint(selected), signedDate = selected.signedDate || '';
+    const BP = A.features.businessPoints.service, selectedRow = point && BP.row(point);
+    const collector = point ? (typeof BP.pointCollector === 'function' ? BP.pointCollector(point.id) : (selectedRow && selectedRow.collectorId ? A.ACCOUNTS.get(selectedRow.collectorId) : null)) : null;
+    return `<div class="portal-contract-layout">
+        <aside class="portal-contract-list"><div class="portal-contract-list-label">Danh sách hợp đồng</div>${cons.map(c => {
+          const hasPoint = !!portalContractPoint(c);
+          return `<button class="portal-contract-choice${c.id === selected.id ? ' selected' : ''}" data-act="mini-contract-select" data-id="${U.esc(c.id)}" aria-pressed="${c.id === selected.id}"><div><b>${U.esc(c.id)}</b>${portalContractStatus(c)}</div><span>${U.dmy(c.start)} – ${U.dmy(c.end)}</span><span>${U.esc(U.market(c.market || t.market).name)}</span><small>${hasPoint ? '01 điểm kinh doanh' : 'Chưa có điểm kinh doanh'} <i>›</i></small></button>`;
+        }).join('')}</aside>
+        <section class="merchant-panel portal-contract-detail"><header class="portal-detail-head"><div><h2>${U.esc(selected.id)}</h2><p>Hợp đồng thuê điểm kinh doanh</p></div>${portalContractStatus(selected)}</header>
+          <section class="portal-contract-section portal-contract-overview"><h3>Thông tin hợp đồng</h3><div class="portal-contract-detail-list"><div><span>Thời hạn</span><b>${U.dmy(selected.start)} – ${U.dmy(selected.end)}</b></div><div><span>Chợ</span><b>${U.esc(U.market(selected.market || t.market).name)}</b></div><div><span>Loại hợp đồng</span><b>${U.esc(selected.kind || '—')}</b></div></div></section>
+          <section class="portal-contract-section"><h3>Điểm kinh doanh thuộc hợp đồng</h3>${portalContractPointCard(selected)}</section>
+          <section class="portal-contract-section"><h3>Giá và các khoản thu áp dụng</h3>${portalChargeHtml(selected)}<p class="small muted">Khoản phải thu thực tế được xác định theo chính sách, biểu phí có hiệu lực tại từng kỳ thu.</p></section>
+          <section class="portal-contract-section"><h3>Thông tin khác</h3><div class="portal-contract-detail-list portal-contract-other"><div><span>Ngày ký hợp đồng</span><b>${signedDate ? U.dmy(signedDate) : '—'}</b></div><div><span>Trạng thái điểm</span><b>${portalPointUsage(selected)}</b></div><div><span>Trạng thái tiểu thương</span><b>${portalTraderBusinessStatus(t)}</b></div><div><span>Nhân viên thu phí phụ trách</span><b>${U.esc((collector && (collector.fullName || collector.name)) || '—')}</b></div></div></section>
+        </section>
+      </div>`;
   }
   // Cột "Khoản mục": bỏ phần công thức trong ngoặc (8.9 m² × 1.200 đ × 30 ngày…) cho gọn bảng; chi
   // tiết đầy đủ vẫn nằm ở khoản phải thu bên trang quản lý.
@@ -1012,13 +1073,34 @@
       <li><div><b>Cần hỗ trợ thêm</b><div class="small muted">Liên hệ trực tiếp Ban Quản lý chợ nơi bạn kinh doanh để được hướng dẫn.</div></div></li>
     </ol>`);
   }
-  const PORTAL_SCREENS = { home: portalHome, contracts: portalContractsScreen, finance: portalFinance, notice: portalNotices, help: portalHelp };
+  // Hồ sơ dùng lại màn Thông tin cá nhân dùng chung (accounts/profile.js), chỉ đổi khung chứa.
+  const portalProfile = () => (A.VIEWS['thong-tin-ca-nhan'] ? A.VIEWS['thong-tin-ca-nhan']() : portalEmpty('Không mở được thông tin cá nhân.'));
+  const PORTAL_SCREENS = { home: portalHome, contracts: portalContractsScreen, finance: portalFinance, notice: portalNotices, help: portalHelp, profile: portalProfile };
+  // Avatar → Thông tin cá nhân (auth.js): tiểu thương ở lại route mini-app thay vì chuyển sang
+  // #/thong-tin-ca-nhan (route đó nằm ngoài shell cổng nên mất sidebar/header tiểu thương).
+  // Trả về false cho các vai trò cán bộ để auth.js giữ luồng hồ sơ quản lý như cũ.
+  A.openTraderPortalProfile = function () {
+    if (!U.can('mini-app') || !isTraderMini() || !trader()) return false;
+    mini().portalNav = 'profile';
+    if (A.current === 'mini-app') A.render(); else A.go('mini-app');
+    return true;
+  };
+  // Mini App hides the shared .topbar while a trader is signed in.  Render the
+  // existing shared header controls here instead of maintaining inert copies
+  // of their icons in the trader-only shell.
+  function merchantHeaderHtml(t) {
+    const account = A.currentAccount && A.currentAccount();
+    if (!account) return `<span class="merchant-avatar">${U.esc((t.name || '?').slice(0, 1))}</span><span><b>${U.esc(t.name)}</b><small>Tiểu thương</small></span>`;
+    const notifications = A.personalNotifications ? A.personalNotifications.headerHtml(account) : '';
+    const userMenu = A.userHeaderHtml ? A.userHeaderHtml(account) : '';
+    return notifications + userMenu;
+  }
   function merchantShellHtml(t, nav, stats, inner) {
     const crumb = PORTAL_CRUMB[nav] || PORTAL_CRUMB.home;
     return `<div class="merchant-shell">${merchantPortalSidebar(nav, portalBadges(t, stats))}<main class="merchant-main"><div class="merchant-portal">
       <div class="merchant-topline">
         <div class="merchant-breadcrumb"><button class="btn sm">${U.icon('menu')}</button><span>${U.esc(crumb[0])}</span>${crumb[1] ? `<span>›</span><b>${U.esc(crumb[1])}</b>` : ''}</div>
-        <div class="merchant-user"><span class="merchant-bell">${U.icon('bell')}<i>${stats.open}</i></span><span class="merchant-avatar">${U.esc((t.name || '?').slice(0, 1))}</span><span><b>${U.esc(t.name)}</b><small>Tiểu thương</small></span></div>
+        <div class="merchant-user">${merchantHeaderHtml(t)}</div>
       </div>
       ${inner}
     </div></main></div>`;
@@ -1065,14 +1147,14 @@
       const haystack = [i.id, i.title, i.desc, i.cat, U.mShort(i.market), st && st.code, st && st.location, st && st.sectionName].join(' ').toLowerCase();
       return statusOk && (!q || haystack.indexOf(q) !== -1);
     });
-    // Các màn còn lại của cổng (Trang chủ, Hợp đồng & điểm kinh doanh, Nghĩa vụ tài chính, Thông báo,
+    // Các màn còn lại của cổng (Tổng quan của tôi, Hợp đồng & điểm kinh doanh, Nghĩa vụ tài chính, Thông báo,
     // Hướng dẫn) dùng chung khung sidebar; chỉ màn Phản ánh giữ nguyên bố cục gửi/xem sẵn có bên dưới.
     const nav = portalNav();
     if (nav !== 'complaints') return merchantShellHtml(t, nav, stats, PORTAL_SCREENS[nav](t));
     return `<div class="merchant-shell">${merchantPortalSidebar(nav, portalBadges(t, stats))}<main class="merchant-main"><div class="merchant-portal ${tab === 'list' ? 'list-mode' : 'send-mode'}">
       <div class="merchant-topline">
         <div class="merchant-breadcrumb"><button class="btn sm">${U.icon('menu')}</button><span>Phản ánh & xử lý</span><span>›</span><b>${tab === 'list' ? 'Danh sách phản ánh' : 'Gửi phản ánh'}</b></div>
-        <div class="merchant-user"><span class="merchant-bell">${U.icon('bell')}<i>${stats.open}</i></span><span class="merchant-avatar">${U.esc((t.name || '?').slice(0, 1))}</span><span><b>${U.esc(t.name)}</b><small>Tiểu thương</small></span></div>
+        <div class="merchant-user">${merchantHeaderHtml(t)}</div>
       </div>
       <div class="merchant-actions">
         <button class="${tab === 'send' ? 'active' : ''}" data-act="mini-complaint-tab" data-id="send">${U.icon('warning')}<span>Gửi phản ánh</span></button>
@@ -1142,6 +1224,12 @@
     },
     'mini-logout': () => { miniResetLoginFlow(); Object.assign(mini(), { step: 'login', pay: null, tab: 'home' }); A.render(); },
     'mini-tab': el => { mini().tab = el.dataset.id; mini().bill = null; A.render(); },
+    'mini-contract-select': el => {
+      const t = trader();
+      if (!t || !portalContracts(t).some(c => c.id === el.dataset.id)) return;
+      mini().portalContractId = el.dataset.id;
+      A.render();
+    },
     'mini-home': () => { mini().pay = null; mini().tab = 'home'; A.render(); },
     'mini-pay': () => { mini().pay = 'qr'; A.render(); },
     'mini-paid': () => {
@@ -1207,6 +1295,8 @@
     'merchant-nav': el => {
       const id = el.dataset.id;
       if (id === 'logout' && A.ACT['auth-logout']) { A.ACT['auth-logout'](); return; }
+      // Cùng một action với Avatar → Thông tin cá nhân (auth-profile → A.openTraderPortalProfile).
+      if (id === 'profile' && A.ACT['auth-profile']) { A.ACT['auth-profile'](); return; }
       if (PORTAL_NAV.indexOf(id) === -1) return;
       if (id === 'complaints' && portalNav() !== 'complaints') mini().complaintTab = 'send';
       mini().portalNav = id;

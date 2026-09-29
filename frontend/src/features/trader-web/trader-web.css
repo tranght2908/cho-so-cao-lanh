@@ -10,7 +10,8 @@
 /* thanh trên: cùng màu thương hiệu với thanh bên của hệ thống */
 .tw-top { background: var(--brand); color: #fff; position: sticky; top: 0; z-index: 30; }
 .tw-top-in { max-width: 980px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 16px; }
-.tw-brand { display: flex; align-items: center; gap: 10px; color: #fff; text-decoration: none; }
+.tw-brand { display: flex; min-width: 0; align-items: center; gap: 10px; color: #fff; text-decoration: none; }
+.tw-brand > span:last-child { min-width: 0; }
 .tw-brand .brand-logo { width: 36px; height: 36px; border-radius: 9px; background: #fff; display: grid; place-items: center; flex: none; }
 .tw-brand b { display: block; font-size: var(--font-size-md); line-height: 1.2; }
 .tw-brand small { display: block; font-size: var(--font-size-xs); color: #cfe0f5; }
@@ -18,11 +19,47 @@
 .tw-nav a { position: relative; color: #dbe3ee; text-decoration: none; padding: 8px 12px; border-radius: 8px; font-weight: 600; }
 .tw-nav a:hover { background: rgba(255, 255, 255, .1); }
 .tw-nav a.on { background: #fff; color: var(--brand); }
-.tw-me { display: flex; align-items: center; gap: 8px; color: #fff; text-decoration: none; padding: 4px 8px 4px 4px; border-radius: 99px; }
-.tw-me:hover, .tw-me.on { background: rgba(255, 255, 255, .14); }
+.tw-header-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.tw-header-popover-anchor { position: relative; display: inline-flex; align-items: center; }
+.tw-header-bell { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; border: 1px solid transparent; border-radius: 8px; background: transparent; color: #fff; cursor: pointer; }
+.tw-header-bell .ui-icon { width: 20px; height: 20px; }
+.tw-header-bell:hover, .tw-me:hover, .tw-me.on { background: rgba(255, 255, 255, .14); }
+.tw-header-bell:focus-visible, .tw-me:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.tw-header-badge { position: absolute; top: 2px; right: 2px; display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; border: 2px solid var(--brand); border-radius: 999px; background: var(--danger); color: #fff; font-size: 10px; font-style: normal; font-weight: 700; line-height: 1; }
+.tw-me { display: flex; align-items: center; gap: 8px; padding: 4px 8px 4px 4px; border: 0; border-radius: 99px; background: transparent; color: #fff; cursor: pointer; font: inherit; text-align: left; }
 .tw-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); display: grid; place-items: center; font-weight: 700; }
-.tw-me-n { font-weight: 600; max-width: 160px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tw-me-copy { display: grid; min-width: 0; gap: 1px; }
+.tw-me-n { display: block; max-width: 160px; overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.tw-me-role { display: block; color: #cfe0f5; font-size: 12px; line-height: 1.2; }
 .tw-badge { font-style: normal; display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 6px; border-radius: 9px; background: var(--danger); color: #fff; font-size: 11px; font-weight: 700; }
+
+/* Popover header: neo vào đúng trigger, cùng quy tắc với Web quản lý. */
+.tw-header-popover { position: absolute; top: calc(100% + 8px); right: 0; z-index: 70; max-width: calc(100vw - 24px); overflow: hidden; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; box-shadow: 0 12px 30px rgba(15, 23, 42, .18); color: var(--ink); }
+.tw-notification-popover { width: min(380px, calc(100vw - 24px)); }
+.tw-header-popover-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-bottom: 1px solid #e2e8f0; }
+.tw-header-popover-head b { font-size: var(--font-size-base); }
+.tw-header-popover-head span { color: var(--muted); font-size: var(--font-size-xs); }
+.tw-notification-list { max-height: min(420px, calc(100vh - 100px)); overflow-y: auto; }
+.tw-notification-item { position: relative; display: grid; grid-template-columns: 8px minmax(0, 1fr); width: 100%; gap: 8px; padding: 11px 14px; border: 0; border-bottom: 1px solid #e2e8f0; background: #fff; color: var(--ink); cursor: pointer; font: inherit; text-align: left; }
+.tw-notification-item:last-child { border-bottom: 0; }
+.tw-notification-item:hover { background: var(--surface-2); }
+.tw-notification-item.unread { background: #f8fbff; }
+.tw-notification-item > i { width: 7px; height: 7px; margin-top: 6px; border-radius: 50%; background: transparent; }
+.tw-notification-item.unread > i { background: var(--brand); }
+.tw-notification-item span { display: grid; min-width: 0; gap: 3px; }
+.tw-notification-item b { overflow: hidden; font-size: var(--font-size-sm); text-overflow: ellipsis; white-space: nowrap; }
+.tw-notification-item small, .tw-notification-item em { overflow: hidden; color: var(--muted); font-size: var(--font-size-xs); font-style: normal; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.tw-notification-empty { padding: 22px 14px; color: var(--muted); font-size: var(--font-size-sm); text-align: center; }
+.tw-account-popover { width: min(280px, calc(100vw - 24px)); }
+.tw-account-summary { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; padding: 14px; }
+.tw-avatar-lg { width: 38px; height: 38px; }
+.tw-account-summary > div { display: grid; min-width: 0; gap: 2px; }
+.tw-account-summary b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tw-account-summary small { color: var(--muted); font-size: var(--font-size-xs); }
+.tw-account-actions { padding: 6px; border-top: 1px solid #e2e8f0; }
+.tw-account-actions button { display: flex; align-items: center; width: 100%; gap: 9px; padding: 9px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--ink); cursor: pointer; font: inherit; font-size: var(--font-size-sm); text-align: left; }
+.tw-account-actions button:hover { background: var(--surface-2); }
+.tw-account-actions .ui-icon { width: 17px; height: 17px; color: var(--muted); }
 
 /* nội dung */
 .tw-main { max-width: 720px; margin: 0 auto; padding: 18px 16px 40px; display: flex; flex-direction: column; gap: 14px; }
@@ -34,6 +71,41 @@
 .tw-center { text-align: center; padding-top: 16px; }
 .tw-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
 .tw-seg { align-self: flex-start; }
+
+/* Hợp đồng & điểm kinh doanh: danh sách hợp đồng dẫn tới một chi tiết rõ ràng,
+ * không tách điểm kinh doanh thành bảng độc lập. */
+.tw-contract-workspace { display: grid; grid-template-columns: minmax(280px, 320px) minmax(0, 1fr); align-items: start; gap: 14px; }
+.tw-contract-list { display: flex; flex-direction: column; gap: 8px; }
+.tw-contract-list-title { padding: 2px 2px 6px; color: var(--muted); font-size: var(--font-size-xs); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.tw-contract-choice { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px 10px; padding: 13px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.tw-contract-choice:hover { border-color: var(--brand-2); background: var(--surface-2); }
+.tw-contract-choice.on { border-color: var(--brand); background: var(--brand-soft); }
+.tw-contract-choice > b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tw-contract-choice > span, .tw-contract-choice > small { grid-column: 1 / -1; color: var(--muted); font-size: var(--font-size-sm); line-height: 1.35; }
+.tw-contract-choice > small { font-size: var(--font-size-xs); }
+.tw-contract-detail { min-width: 0; }
+.tw-contract-detail-h { align-items: flex-start; }
+.tw-contract-detail-h h3 { margin-bottom: 2px; }
+.tw-contract-section { padding: 16px 0; border-top: 1px solid var(--line); }
+.tw-contract-section:first-child { padding-top: 0; border-top: 0; }
+.tw-contract-section:last-child { padding-bottom: 0; }
+.tw-contract-section > h3 { margin: 0 0 12px; font-size: var(--font-size-base); }
+.tw-contract-info-grid, .tw-point-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; }
+.tw-contract-info-grid > div, .tw-point-meta > div { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.tw-contract-info-grid span, .tw-point-meta span, .tw-contract-location > span, .tw-contract-extra > span { color: var(--muted); font-size: var(--font-size-sm); }
+.tw-contract-info-grid b, .tw-point-meta b, .tw-contract-location b, .tw-contract-extra b { overflow-wrap: anywhere; }
+.tw-contract-point { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; background: var(--surface); }
+.tw-contract-point-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.tw-contract-point-h > b { font-size: var(--font-size-md); }
+.tw-contract-location { display: flex; flex-direction: column; gap: 4px; margin: 14px 0; }
+.tw-point-meta { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.tw-contract-extra { display: flex; flex-direction: column; gap: 3px; margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.tw-charge-list { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.tw-charge-list > div { display: flex; justify-content: space-between; gap: 16px; padding: 10px 12px; font-size: var(--font-size-sm); }
+.tw-charge-list > div + div { border-top: 1px solid var(--line); }
+.tw-charge-list span { color: var(--ink-2); }
+.tw-charge-list b { white-space: nowrap; }
+.tw-charge-list + .small { margin: 10px 0 0; }
 
 /* kỳ thu hiện tại */
 .tw-period { border-top: 4px solid var(--brand); }
@@ -80,8 +152,8 @@
 
 .tw-tabbar { display: none; }
 @media (max-width: 760px) {
-  .tw-nav, .tw-me-n { display: none; }
-  .tw-top-in { justify-content: space-between; }
+  .tw-nav, .tw-me-copy { display: none; }
+  .tw-top-in { justify-content: space-between; gap: 10px; }
   .tw-main { padding-bottom: 90px; }
   .tw-tabbar { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: var(--surface); border-top: 1px solid var(--line); padding: 6px 2px calc(6px + env(safe-area-inset-bottom)); }
   .tw-tabbar a { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--muted); text-decoration: none; font-size: 11px; padding: 3px 0; }
@@ -89,6 +161,15 @@
   .tw-tabbar .ui-icon { width: 22px; height: 22px; }
   .tw-tabbar .tw-badge { position: absolute; top: -2px; left: 56%; margin: 0; }
   #tw-root ~ .toasts { bottom: calc(80px + env(safe-area-inset-bottom)); }
+  .tw-contract-workspace { grid-template-columns: 1fr; }
+  .tw-contract-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  .tw-contract-list-title { grid-column: 1 / -1; }
+  .tw-point-meta { grid-template-columns: 1fr; }
+}
+@media (max-width: 480px) {
+  .tw-brand > span:last-child { display: none; }
+  .tw-top-in { padding-right: 12px; padding-left: 12px; }
+  .tw-header-actions { gap: 5px; }
 }
 @media print {
   #tw-root { display: none !important; }

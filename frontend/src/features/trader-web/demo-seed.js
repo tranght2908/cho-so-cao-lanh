@@ -4,7 +4,9 @@
  * phí khác nhau (quá hạn, thu một phần, chưa đến hạn) rồi cấp tài khoản tiểu thương cho họ qua
  * A.ACCOUNTS.add — đúng như Quản trị cấp tài khoản trên trang quản lý. Bổ sung 2 phản ánh mẫu
  * (đang xử lý, đã hoàn thành) và 1 thông báo cá nhân theo đúng cấu trúc hiện có.
- * Idempotent: nhận diện bằng id cố định (AC-TW-DEMO-*, SC-TW-*, TB-TW-*), chạy lại không nhân bản. */
+ * Ngoại lệ: ensurePortalDemo() thêm khoản phải thu/giao dịch/phản ánh MINH HỌA (gắn demoSeed) cho
+ * tiểu thương demo TTD-CQ để xem trình bày màn "Tổng quan của tôi".
+ * Idempotent: nhận diện bằng id cố định (AC-TW-DEMO-*, SC-TW-*, TB-TW-*, *-DEMO-TTDCQ-*, PA-2026-*), chạy lại không nhân bản. */
 (function (A) {
   'use strict';
   if (!A) return;
@@ -85,11 +87,55 @@
     return true;
   }
 
+  // Dữ liệu minh họa cho màn "Tổng quan của tôi" (#/mini-app) của tiểu thương demo TTD-CQ (đăng nhập
+  // 0909000001): 3 khoản phải thu (quá hạn / thu một phần / chưa đến hạn) + 3 phản ánh. Chỉ để xem trình
+  // bày. Ghi vào đúng A.db.invoices/payments/incidents theo cấu trúc hiện có nên KPI tự tính qua helper
+  // sẵn có; khoản thu một phần có giao dịch chuyển khoản tương ứng để số đã nộp khớp lịch sử thu.
+  // Id cố định (PT-/GD-/BL-DEMO-TTDCQ-*, PA-2026-*) + demoSeed → chạy lại không nhân bản, dễ lọc/xóa.
+  const PORTAL_DEMO_TRADER = 'TTD-CQ';
+  function ensurePortalDemo() {
+    const t = A.idx.trader.get(PORTAL_DEMO_TRADER), st = t && A.idx.stall.get(t.stalls[0]);
+    if (!st) return false;
+    const contract = A.db.contracts.find(c => c.traderId === t.id && c.status === 'hieuluc');
+    let changed = false;
+    const invoice = (id, period, name, amount, paid, due) => {
+      if (A.db.invoices.some(i => i.id === id)) return;
+      A.db.invoices.push({ id, period, market: st.market, stallId: st.id, traderId: t.id, contractId: contract ? contract.id : null,
+        items: [{ name, amount }], amount, paid, issued: period + '-01', due, status: paid >= amount ? 'paid' : paid > 0 ? 'partial' : 'unpaid',
+        adjust: null, reminders: 0, demoSeed: TAG });
+      changed = true;
+    };
+    invoice('PT-DEMO-TTDCQ-01', '2026-09', 'Phí sử dụng điểm kinh doanh', 360000, 0, '2026-09-10');
+    invoice('PT-DEMO-TTDCQ-02', '2026-09', 'Phí vệ sinh', 50000, 20000, '2026-09-30');
+    invoice('PT-DEMO-TTDCQ-03', '2026-10', 'Phí sử dụng điểm kinh doanh', 360000, 0, '2026-10-10');
+    if (!A.db.payments.some(p => p.id === 'GD-DEMO-TTDCQ-01') && A.db.invoices.some(i => i.id === 'PT-DEMO-TTDCQ-02')) {
+      A.db.payments.push({ id: 'GD-DEMO-TTDCQ-01', invoiceId: 'PT-DEMO-TTDCQ-02', market: st.market, traderId: t.id, amount: 20000, method: 'ck',
+        date: '2026-09-12', time: '09:00', by: 'Hệ thống', receipt: 'BL-DEMO-TTDCQ-01', lookup: 'DEMOCQ', reconciled: true, demoSeed: TAG });
+      changed = true;
+    }
+    // Đẩy theo thứ tự cũ → mới: danh sách phản ánh của cổng hiển thị bản ghi mới nhất trước.
+    [
+      { id: 'PA-2026-011', state: 'hoanthanh', cat: 'Điện', title: 'Đề nghị kiểm tra ổ cắm điện tại quầy', created: '2026-09-20T14:20' },
+      { id: 'PA-2026-015', state: 'tiepnhan', cat: 'Cấp thoát nước', title: 'Khu vực trước quầy bị đọng nước', created: '2026-09-25T08:15' },
+      { id: 'PA-2026-018', state: 'dangxuly', cat: 'Điện', title: 'Đèn chiếu sáng tại dãy bị hỏng', created: '2026-09-28T18:30' }
+    ].forEach(x => {
+      if (A.db.incidents.some(i => i.id === x.id)) return;
+      A.db.incidents.push({ id: x.id, market: st.market, stallId: st.id, traderId: t.id, cat: x.cat, title: x.title,
+        desc: x.title + '. Nhờ Ban Quản lý chợ kiểm tra giúp.', source: 'Web app tiểu thương', state: x.state, assetId: null,
+        assignee: x.state === 'tiepnhan' ? null : 'NV05', deadline: null, created: x.created, rating: null, escalated: false, photo: false,
+        work: x.state === 'hoanthanh' ? { content: 'Đã kiểm tra, thay ổ cắm mới.', result: 'Ổ cắm hoạt động bình thường.', completedAt: x.created.slice(0, 10) + 'T17:00', note: '' } : null,
+        history: [{ at: x.created, action: 'Tiếp nhận phản ánh', detail: 'Nguồn: Web app tiểu thương' }],
+        log: [{ at: x.created.slice(0, 10), text: 'Tiếp nhận phản ánh từ Web app tiểu thương' }], demoSeed: TAG });
+      changed = true;
+    });
+    return changed;
+  }
+
   A.traderWebDemoSeed = function () {
     try {
       ensureAccounts();
-      const a = ensureIncidents(), b = ensureNotifications();
-      if (a || b) A.save();
+      const a = ensureIncidents(), b = ensureNotifications(), c = ensurePortalDemo();
+      if (a || b || c) A.save();
     } catch (e) { console.error('[trader-web] demo seed', e); }
   };
 })(window.APP);
