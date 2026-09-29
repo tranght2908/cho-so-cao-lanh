@@ -758,6 +758,8 @@
     // Dữ liệu mẫu của cổng tiểu thương (tài khoản tiểu thương gắn hồ sơ thật, có khoản nợ và phản
     // ánh) — dùng chung với /tieu-thuong/, idempotent nên chạy lại không nhân bản.
     if (A.traderWebDemoSeed) A.traderWebDemoSeed();
+    // Hồ sơ sự cố mẫu gắn tài sản (SC-DEMO-*) — idempotent, để mở thẳng "Tài sản chợ" vẫn thấy lịch sử sự cố.
+    if (A.features.complaints && A.features.complaints.ensureDemoIncidents) A.features.complaints.ensureDemoIncidents();
     document.addEventListener('click', e => {
       const el = e.target.closest('[data-act]');
       if (!el) return;

@@ -17,6 +17,7 @@
   A.resetAll = function () {
     A.data.clearPersisted();
     A.fresh(); ui.sel = null; ui.page = {};
+    if (A.features.complaints && A.features.complaints.ensureDemoIncidents) A.features.complaints.ensureDemoIncidents();
     ui.mini = { traderId: null, step: 'login', tab: 'home', pay: null, lastPays: null, attach: false, bill: null };
   };
 })(window.APP);
