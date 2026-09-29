@@ -25,14 +25,18 @@
   U.invStallIds = i => !i ? [] : Array.isArray(i.stallIds) && i.stallIds.length ? i.stallIds : (i.stallId ? [i.stallId] : []);
   U.invPoints = i => U.invStallIds(i).map(id => (A.idx.stall.get(id) || {}).code || id).join(', ');
   U.invStall = i => Object.assign({}, A.idx.stall.get(U.invStallIds(i)[0]) || {}, { code: U.invPoints(i) });
-  // ---------- THU_THEO_PHAN_NHAN_VIEN (chợ receivableGrouping 'TRADER') ----------
-  // 1 mã khoản / tiểu thương / kỳ; tiền mặt thu theo PHẦN = các điểm cùng 1 NV thu phí phụ trách
-  // (stall.collectorId, đọc theo phân công HIỆN TẠI → đổi người thì phần chưa thu chuyển sang người mới).
-  // Điểm đã thu được ghi trên giao dịch (payment.stallIds) nên lịch sử của người cũ giữ nguyên.
-  // Quy tắc người dùng chốt 28/09/2026: mỗi phần thu đủ hoặc không; QR tiểu thương tự nộp = TẤT CẢ phần
-  // còn lại (số cố định); QR do NV đưa tại sạp = đúng phần của NV đó; tiểu thương không tự nhập/chọn phần;
-  // Trưởng Ban không thu hộ (chỉ NV được phân công điểm mới thu được phần đó).
-  A.invPartMode = i => !!(i && i.stallId && (U.market(i.market) || {}).receivableGrouping === 'TRADER');
+  // FINANCE_MARKET_SCOPE_MIGRATION: khoản phải thu thuộc Market, không còn được chia theo
+  // collectorId của Dãy/Điểm. `invParts`/`invMyPart` được giữ như adapter read-only cho
+  // consumer legacy; workflow Finance mới tuyệt đối không dùng chúng để cấp quyền hay tính tiền.
+  A.receivableMarket = function (i) {
+    if (!i) return null;
+    if (i.market) return i.market;
+    const point = A.idx.stall.get(U.invStallIds(i)[0]);
+    if (point && point.market) return point.market;
+    const trader = A.idx.trader.get(i.traderId);
+    return (trader && trader.market) || null;
+  };
+  A.invPartMode = () => false;
   A.invCoveredStalls = function (i) {
     const all = U.invStallIds(i);
     if (i.status === 'paid') return new Set(all);
@@ -41,24 +45,11 @@
     return s;
   };
   A.invParts = function (i) {
-    const covered = A.invCoveredStalls(i), ids = U.invStallIds(i), map = new Map();
-    ids.forEach(id => {
-      const st = A.idx.stall.get(id) || {}, key = st.collectorId || '';
-      if (!map.has(key)) map.set(key, { collectorId: key || null, stallIds: [], amount: 0, paidStalls: 0 });
-      const part = map.get(key), its = i.items.filter(x => (x.stallId || ids[0]) === id);
-      part.stallIds.push(id); part.amount += U.sum(its, x => x.amount);
-      if (covered.has(id)) part.paidStalls++;
-    });
-    return Array.from(map.values()).map(x => Object.assign(x, { paid: x.paidStalls === x.stallIds.length, due: x.paidStalls === x.stallIds.length ? 0 : x.amount }));
+    if (!i) return [];
+    return [{ legacy: true, stallIds: U.invStallIds(i), amount: i.amount || 0, paid: i.status === 'paid', due: U.due(i) }];
   };
-  A.invMyPart = function (i, accId) {
-    if (!accId) return null;
-    return A.invParts(i).find(x => x.collectorId === accId) || null;
-  };
-  A.invPartLabel = function (i) {
-    const parts = A.invParts(i), done = parts.filter(x => x.paid).length;
-    return parts.length > 1 && done && done < parts.length ? `<span class="tag warn">Đã thu ${done}/${parts.length} phần</span>` : null;
-  };
+  A.invMyPart = () => null;
+  A.invPartLabel = () => null;
   // ---------- QUA_HAN_CHUYEN_CONG_NO (chợ receivableGrouping 'TRADER') ----------
   // P chốt 29/09/2026: quá hạn nộp mà chưa thu đủ → HỆ THỐNG tự chuyển phần còn lại của mã khoản sang Công nợ
   // (1 dòng nợ / mã khoản, mã CN-<kỳ>-<số khoản>). Từ đó KHÔNG thu theo luồng thường nữa (NV không còn nút Đã
@@ -71,13 +62,12 @@
     db.debts = Array.isArray(db.debts) ? db.debts : [];
     db.extraLog = Array.isArray(db.extraLog) ? db.extraLog : [];
     let n = 0;
-    db.invoices.filter(i => A.invPartMode(i) && i.status !== 'paid' && i.due < U.today()).sort((a, b) => a.due.localeCompare(b.due) || a.id.localeCompare(b.id)).forEach(i => {
+    db.invoices.filter(i => A.receivableMarket(i) && i.status !== 'paid' && i.due < U.today()).sort((a, b) => a.due.localeCompare(b.due) || a.id.localeCompare(b.id)).forEach(i => {
       if (db.debts.some(d => d.invoiceId === i.id)) return;
       const next = new Date(i.due + 'T00:00:00'); next.setDate(next.getDate() + 1);
       const at = U.dmy(next.getFullYear() + '-' + U.pad(next.getMonth() + 1) + '-' + U.pad(next.getDate())) + ' 00:05';
-      const parts = A.invParts(i).filter(p => !p.paid).map(p => ({ collectorId: p.collectorId, stallIds: p.stallIds.slice(), amount: p.due }));
-      const d = { id: 'CN-' + String(i.id).replace(/^PT-/, ''), invoiceId: i.id, market: i.market, traderId: i.traderId, period: i.period, dueDate: i.due,
-        amount: U.due(i), parts, stallIds: [].concat.apply([], parts.map(p => p.stallIds)), status: 'OPEN', createdAt: at, createdBy: 'Hệ thống (tự động)' };
+      const d = { id: 'CN-' + String(i.id).replace(/^PT-/, ''), invoiceId: i.id, market: A.receivableMarket(i), traderId: i.traderId, period: i.period, dueDate: i.due,
+        amount: U.due(i), stallIds: U.invStallIds(i), status: 'OPEN', createdAt: at, createdBy: 'Hệ thống (tự động)' };
       db.debts.push(d); n++;
       db.extraLog.unshift({ at, who: 'Hệ thống (tự động)', what: 'Khoản ' + i.id + ' quá hạn nộp ' + U.dmy(i.due) + ' → chuyển công nợ ' + d.id + ' (' + U.money(d.amount) + ')' });
     });
@@ -115,15 +105,15 @@
     if (n && A.save && !(opts && opts.save === false)) A.save(); // lúc nạp dữ liệu: không ghi (tính lại được, idempotent)
     return n;
   };
-  // Tiền của các gian (theo dòng chi tiết) trong 1 khoản.
+  // Tiền của các điểm (theo dòng chi tiết) trong 1 khoản. Không phải ownership collector.
   A.stallsAmount = (i, ids) => { const all = U.invStallIds(i); return U.sum(i.items.filter(x => ids.indexOf(x.stallId || all[0]) !== -1), x => x.amount); };
   // THU_HOI_NO: thu nợ = ghi vào KHOẢN THU GỐC (gian còn nợ), gắn debtId; đủ → tất toán nợ. Không thu một phần.
   A.payDebt = function (d, method, by, stallIds) {
     const inv = d && A.idx.invoice.get(d.invoiceId);
     if (!inv || d.status !== 'OPEN') return [];
-    const cov = A.invCoveredStalls(inv), ids = (stallIds || U.invStallIds(inv)).filter(id => !cov.has(id));
-    if (!ids.length) return [];
-    const pays = A.applyPayment([inv.id], A.stallsAmount(inv, ids), method, by, { stallIds: ids, debtId: d.id });
+    const amount = U.due(inv);
+    if (amount <= 0) return [];
+    const pays = A.applyPayment([inv.id], amount, method, by, { debtId: d.id });
     if (inv.status === 'paid') Object.assign(d, { status: 'CLOSED', closedAt: U.dmy(U.today()) + ' ' + U.nowTime(), closedBy: by });
     // Tiểu thương nhận biên lai (cùng số BL-…) qua Mini app / Zalo.
     A.db.notifications = A.db.notifications || [];
@@ -135,7 +125,7 @@
   };
   // QR thu nợ: nội dung chứa mã nợ CN-… → tự khớp về khoản thu gốc, thu TOÀN BỘ nợ còn lại (số cố định).
   A.payDebtByQr = function (debtId, by) { const d = (A.db.debts || []).find(x => x.id === debtId); return A.payDebt(d, 'qr', by || 'Mini app'); };
-  U.invTag = i => (i && A.debtOf && A.debtOf(i) && `<span class="tag danger">Quá hạn · đã chuyển công nợ</span>`) || (i && i.status === 'paid' && (A.db.debts || []).some(d => d.invoiceId === i.id) && '<span class="tag ok">Đã thu hồi nợ</span>') || (i && i.status === 'partial' && A.invPartMode && A.invPartMode(i) && A.invPartLabel(i)) || (i.status === 'paid' ? '<span class="tag ok">Đã thu</span>'
+  U.invTag = i => (i && A.debtOf && A.debtOf(i) && `<span class="tag danger">Quá hạn · đã chuyển công nợ</span>`) || (i && i.status === 'paid' && (A.db.debts || []).some(d => d.invoiceId === i.id) && '<span class="tag ok">Đã thu hồi nợ</span>') || (i.status === 'paid' ? '<span class="tag ok">Đã thu</span>'
     : i.status === 'partial' ? '<span class="tag warn">Thu một phần</span>'
       : U.isOver(i) ? `<span class="tag danger">Quá hạn ${U.overDays(i)} ngày</span>` : '<span class="tag">Chưa đến hạn</span>');
   U.traderDebt = id => U.sum(A.db.invoices.filter(i => i.traderId === id && i.status !== 'paid'), U.due);
@@ -144,8 +134,10 @@
     return targetMarket === 'TTD' && ui.market === 'TTD' && U.can('thu-tien') && A.canDo('thu-tien.thu', targetMarket);
   };
   A.canCollectReceivable = function (targetMarket) {
-    return (targetMarket === 'CL' || targetMarket === 'TTD')
-      && U.can('thu-tien') && A.canDo('thu-tien.thu', targetMarket);
+    const account = A.currentAccount();
+    return !!(targetMarket && targetMarket === ui.market && account
+      && A.allowedMarkets(account).indexOf(targetMarket) !== -1
+      && U.can('thu-tien') && A.canDo('thu-tien.thu', targetMarket));
   };
 
   // v16: A.refreshStall đã bỏ — "Nợ phí" không còn ghi vào stall.status mà suy ra từ khoản phải thu
@@ -238,6 +230,7 @@
     const accNow = A.currentAccount();
     const isGlobal = A.ACCOUNTS.scopeType(accNow) === 'GLOBAL';
     const opts = (isGlobal ? [['ALL', 'Tất cả']] : []).concat(A.allowedMarkets(accNow).map(id => [id, U.mShort(id)]));
+    if (!opts.length) return '<option value="" selected>Chưa được phân công chợ</option>';
     return opts.map(o => `<option value="${o[0]}" ${ui.market === o[0] ? 'selected' : ''}>${U.esc(o[1])}</option>`).join('');
   };
   // ui.role KHÔNG còn được set trực tiếp qua hành động chọn role, và ui.market luôn phải là 1 chợ
@@ -254,11 +247,15 @@
     ui.role = acc ? A.ACCOUNTS.primaryRole(acc) : null;
     const allowed = A.allowedMarkets(acc);
     const isGlobal = acc && A.ACCOUNTS.scopeType(acc) === 'GLOBAL';
-    if (ui.market === 'ALL') {
-      if (!isGlobal) ui.market = allowed[0] || 'CL'; // clamp: ALL không hợp lệ với account MARKET-scoped
+    if (!allowed.length && !isGlobal) {
+      // An active collector may legitimately lose its final market during a
+      // transfer. Never fall back to CL (or any other unauthorized market).
+      ui.market = '';
+    } else if (ui.market === 'ALL') {
+      if (!isGlobal) ui.market = allowed[0]; // clamp: ALL không hợp lệ với account MARKET-scoped
     } else if (allowed.length) {
       if (allowed.indexOf(ui.market) === -1) ui.market = isGlobal ? 'ALL' : allowed[0];
-    } else if (!ui.market) ui.market = 'CL'; // phòng thủ tối đa, không kỳ vọng xảy ra với seed hiện tại
+    }
     return { role: ui.role, market: ui.market };
   };
 
@@ -301,9 +298,8 @@
     A.syncAccountContext();
   };
 
-  // Ghi nhận thanh toán cho danh sách khoản phải thu (trả khoản cũ trước)
-  // opts.stallIds: điểm được thu trong giao dịch (thu theo phần). Không truyền → khoản chế độ theo phần sẽ
-  // ghi mọi điểm còn chưa thu (dùng cho QR tiểu thương tự nộp toàn bộ phần còn lại).
+  // Ghi nhận thanh toán cho danh sách khoản phải thu (trả khoản cũ trước).
+  // `by` là actor lịch sử đã thực hiện giao dịch; không được thay bằng NV đang phụ trách Market sau này.
   A.applyPayment = function (invoiceIds, amount, method, by, opts) {
     const db = A.db;
     let remain = amount;
@@ -314,31 +310,26 @@
       if (remain <= 0) return;
       const take = Math.min(U.due(inv), remain);
       if (take <= 0) return;
-      const covered = A.invPartMode(inv) ? A.invCoveredStalls(inv) : null;
-      const stallIds = covered ? ((opts && opts.stallIds) || U.invStallIds(inv).filter(id => !covered.has(id))) : null;
       inv.paid += take;
       inv.status = inv.paid >= inv.amount ? 'paid' : 'partial';
       remain -= take;
       const n = db.payments.reduce((m, x) => Math.max(m, Number(String(x.id).replace(/\D/g, '')) || 0), 0) + 1;
-      // BIEN_LAI_THEO_MA_KHOAN: chợ thu theo phần — số biên lai gắn mã khoản (1 khoản có thể trả bằng nhiều
-      // biên lai): BL-<kỳ>-<số khoản>-<lần thu>, vd PT-202609-00015 → BL-202609-00015-01, -02…
-      const receipt = covered ? 'BL-' + String(inv.id).replace(/^PT-/, '') + '-' + U.pad(db.payments.filter(x => x.invoiceId === inv.id).length + 1, 2) : 'BL2609-' + U.pad(n, 6);
+      const receipt = 'BL2609-' + U.pad(n, 6);
       const p = {
-        id: 'GD' + U.pad(n, 6), invoiceId: inv.id, market: inv.market, traderId: inv.traderId, amount: take, method,
+        id: 'GD' + U.pad(n, 6), invoiceId: inv.id, market: A.receivableMarket(inv), traderId: inv.traderId, amount: take, method,
         date: db.today, time, by, receipt,
         paymentStatus: 'SUCCESS', paidAt: db.today + ' ' + time, receiptIssuedAt: db.today + ' ' + time,
         lookup: Math.random().toString(36).slice(2, 8).toUpperCase(), reconciled: method === 'tm' ? null : true,
         receiptDelivery: { miniApp: true, sentAt: db.today + ' ' + time, status: 'SENT_MOCK' },
         printStatus: 'PENDING'
       };
-      if (stallIds) p.stallIds = stallIds.slice();
       if (opts && opts.debtId) p.debtId = opts.debtId; // THU_HOI_NO: giao dịch thu nợ vẫn ghi vào khoản thu gốc
       db.payments.push(p);
       out.push(p);
       if (method !== 'tm') {
         const bk = {
           id: 'SK' + U.pad(db.bank.length + 1, 4), date: db.today, time, amount: take, ref: 'CHOSO ' + (opts && opts.debtId ? opts.debtId + ' ' : '') + inv.id,
-          market: inv.market, bankName: (D.BANK_BY_MARKET && D.BANK_BY_MARKET[inv.market]) || 'Vietcombank',
+          market: A.receivableMarket(inv), bankName: (D.BANK_BY_MARKET && D.BANK_BY_MARKET[A.receivableMarket(inv)]) || 'Vietcombank',
           paymentId: p.id, receivableId: inv.id, receiptId: p.receipt,
           status: 'MATCHED_AUTO', matched: true, matchedBy: null, matchedAt: null, matchMethod: 'AUTO',
           log: [{ at: time, actor: 'Hệ thống', text: 'Nhận sao kê tương ứng thanh toán ' + p.id }, { at: time, actor: 'Hệ thống', text: 'Khớp tự động với khoản phải thu ' + inv.id }]
@@ -375,6 +366,13 @@
     const paidAt = receiptPaymentSuccessAt(p), issuedAt = receiptIssuedAt(p);
     return !!(p && p.receipt && paidAt && issuedAt && issuedAt >= paidAt);
   };
+  A.paymentActorLabel = function (p) {
+    const actor = p && (p.collectedBy || p.by || p.createdBy);
+    if (!actor) return '—';
+    if (actor === 'Hệ thống' || actor === 'Mini app') return actor + ' (tự động)';
+    const account = A.ACCOUNTS && A.ACCOUNTS.list && A.ACCOUNTS.list().find(a => a.id === actor || a.code === actor);
+    return account ? account.fullName : U.staffName(actor);
+  };
   A.receiptHtml = function (pays) {
     pays = (pays || []).filter(A.receiptBusinessStateOk);
     if (!pays.length) return '<div class="note danger">Bien lai khong hop le: chi phat hanh sau khi thanh toan thanh cong.</div>';
@@ -393,7 +391,7 @@
         <dt>Người nộp</dt><dd>${U.esc(t.name)} (${t.id})</dd>
         <dt>Hình thức</dt><dd>${D.METHOD[p0.method]}</dd>
         <dt>Thời gian</dt><dd>${U.dmy(p0.date)} ${p0.time}</dd>
-        <dt>Người thu</dt><dd>${U.esc(p0.by === 'Hệ thống' || p0.by === 'Mini app' ? p0.by + ' (tự động)' : U.staffName(p0.by))}</dd>
+        <dt>Người thu</dt><dd>${U.esc(A.paymentActorLabel(p0))}</dd>
         <dt>Mã tra cứu</dt><dd><b>${p0.lookup}</b></dd>
         <dt>Gửi Mini app</dt><dd><span class="tag ok">Đã gửi</span></dd></dl>
         <div class="note info" style="max-width:220px">Biên lai dùng để rà soát dữ liệu, truy vết giao dịch và kiểm soát thu theo từng phương thức.</div></div>
@@ -618,7 +616,7 @@
     // có tồn tại hay không (NO SCREEN PERMISSION = NO SCREEN RENDER).
     const view = A.current ? A.VIEWS[A.current] : null;
     const kind = A.current ? A.SCREEN_MARKET[A.current] : null;
-    const needsMarket = ui.market === 'ALL' && (kind === 'BOTH' || kind === 'CL' || kind === 'TTD');
+    const needsMarket = (!ui.market || ui.market === 'ALL') && (kind === 'BOTH' || kind === 'CL' || kind === 'TTD');
     $('#view').innerHTML = A.current
       ? (needsMarket ? A.marketRequiredHtml(A.current) : (view ? view() : '<div class="empty">Đang xây dựng</div>'))
       : '<div class="empty">Tài khoản hiện chưa được cấp quyền truy cập chức năng.</div>';

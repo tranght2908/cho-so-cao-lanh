@@ -243,11 +243,10 @@
     U.toast('Đã gửi yêu cầu điều chỉnh (giả lập, chờ phê duyệt) – chưa có quy trình phê duyệt backend');
   };
 
-  // ---------- GHI_CHI_SO_THEO_KHU_PHAN_CONG ----------
-  // Chỉ NV thu phí được phân công điểm (stall.collectorId === tài khoản đang đăng nhập) mới ghi chỉ số của
-  // điểm đó; vẫn cần action:dien-nuoc.ghi-chi-so + chợ đang chọn. Trưởng Ban xem & chốt kỳ, không ghi thay.
+  // ---------- GHI_CHI_SO_THEO_MARKET_SCOPE ----------
+  // NV thu phí ghi chỉ số cho Point thuộc Market đang chọn khi RBAC và marketScopes cho phép.
   const mrMe = () => A.currentAccount() || null;
-  const mrCanRecord = st => { const acc = mrMe(); return !!(st && acc && A.canDo('dien-nuoc.ghi-chi-so', st.market) && st.collectorId && st.collectorId === acc.id); };
+  const mrCanRecord = st => { const acc = mrMe(); return !!(st && acc && st.market === ui.market && A.allowedMarkets(acc).indexOf(st.market) !== -1 && A.canDo('dien-nuoc.ghi-chi-so', st.market)); };
   const mrRecorder = () => { const acc = mrMe(); return acc ? (acc.code || acc.id) : null; };
   // ---------- Meter Reading UI V1 -------------------------------------------------
   // Backward-compatible adapter: the stored reading remains one record per
@@ -316,21 +315,6 @@
     out.classList.toggle('danger',diff!=null&&diff<0);
     out.innerHTML=diff!=null&&diff<0?'Chỉ số mới nhỏ hơn chỉ số kỳ trước. Vui lòng kiểm tra lại chỉ số hoặc đồng hồ.':diff===0?'Không phát sinh tiêu thụ trong kỳ.':diff==null?'Sản lượng = chỉ số mới − chỉ số kỳ trước.':`${current.toLocaleString('vi-VN')} − ${Number(previous).toLocaleString('vi-VN')} = <b>${diff.toLocaleString('vi-VN')} ${item.cfg.unit}</b>`;
   });
-  // LOC_THEO_NV_THU_PHI: NV thu phí được phân công khu/dãy nào thì ghi chỉ số điện, nước ở khu đó.
-  // Nguồn DUY NHẤT là stall.collectorId (phân công ở #/mat-bang, business-points/collectors.js); danh
-  // sách NV lấy qua businessPoints.service.collectorAccounts(market) (A.ACCOUNTS + marketScopes). Đây
-  // là bộ lọc HIỂN THỊ trong screen:dien-nuoc — không phát sinh screen/action permission mới, không
-  // mutation. Chưa có điểm nào được phân công → chỉ còn "Tất cả".
-  function mrCollectorOptions(groups) {
-    const assigned = new Set(groups.map(g => g.st.collectorId).filter(Boolean));
-    if (!assigned.size) return [];
-    const opts = A.features.businessPoints.service.collectorAccounts(ui.market)
-      .filter(a => assigned.has(a.id))
-      .map(a => ({ id: a.id, label: a.fullName, count: groups.filter(g => g.st.collectorId === a.id).length }));
-    const unassigned = groups.filter(g => !g.st.collectorId).length;
-    if (unassigned) opts.push({ id: 'UNASSIGNED', label: 'Chưa phân công', count: unassigned });
-    return opts;
-  }
   // HINH_THUC_THU_DIEN_NUOC: chợ thu điện, nước chia đều như dịch vụ → không ghi chỉ số.
   const mrServiceMode = () => A.SERVICE_CFG && A.SERVICE_CFG.utilityMode(ui.market) === 'SERVICE';
   A.VIEWS['dien-nuoc'] = function () {
@@ -339,15 +323,10 @@
     const p=currentPeriod(), q=(f.mrSearch||'').toLowerCase(), filter=f.mrStatus||'all';
     const groups=A.db.readings.filter(r=>r.period===p.id&&U.inM(A.idx.stall.get(r.stallId))).map(r=>({r,st:A.idx.stall.get(r.stallId),elec:mrItem(r,'elec'),water:mrItem(r,'water')}));
     const match=g=>!q||[g.st.code,g.st.traderId&&A.idx.trader.get(g.st.traderId)&&A.idx.trader.get(g.st.traderId).name,g.st.traderId,mrCode(g.st,'elec'),mrCode(g.st,'water')].join(' ').toLowerCase().includes(q);
-    const cOpts=mrCollectorOptions(groups), meId=(mrMe()||{}).id;
-    // NV thu phí mở màn lần đầu: mặc định lọc khu của chính mình (tiện thao tác, không phải phân quyền).
-    if(f.mrCollectorFor!==meId){f.mrCollectorFor=meId;f.mrCollector=cOpts.some(o=>o.id===meId)?meId:'all';}
-    const collector=cOpts.some(o=>o.id===f.mrCollector)?f.mrCollector:'all';
-    const byCollector=g=>collector==='all'||(collector==='UNASSIGNED'?!g.st.collectorId:g.st.collectorId===collector);
-    const rows=groups.filter(g=>match(g)&&byCollector(g)&&(filter==='all'||(filter==='PENDING'?(g.elec.current==null||g.water.current==null):filter==='RECORDED'?(g.elec.current!=null&&g.water.current!=null):mrPointState(g)===filter)));
-    const scoped=groups.filter(byCollector), total=scoped.length, done=scoped.filter(g=>g.elec.current!=null&&g.water.current!=null).length, incomplete=total-done, abnormalCount=scoped.filter(g=>mrPointState(g)==='ABNORMAL').length, pg=U.pager('mrpoint'+p.id+filter+collector,rows.length,20);
+    const rows=groups.filter(g=>match(g)&&(filter==='all'||(filter==='PENDING'?(g.elec.current==null||g.water.current==null):filter==='RECORDED'?(g.elec.current!=null&&g.water.current!=null):mrPointState(g)===filter)));
+    const total=groups.length, done=groups.filter(g=>g.elec.current!=null&&g.water.current!=null).length, incomplete=total-done, abnormalCount=groups.filter(g=>mrPointState(g)==='ABNORMAL').length, pg=U.pager('mrpoint'+p.id+filter,rows.length,20);
     const kpi=(title,val,status,danger)=>`<button class="card kpi" data-act="mr-status" data-id="${status}" style="text-align:left"><div class="k-label">${title}</div><div class="k-value" ${danger?'style="color:#df2225"':''}>${val}</div>${title==='Tổng điểm cần ghi'?`<div class="k-sub">${total} điểm · ${total*2} đồng hồ</div>`:''}</button>`;
-    return `<div class="card meter-title"><div class="card-b"><h2>GHI CHỈ SỐ ĐIỆN, NƯỚC</h2><p>Theo dõi và ghi nhận chỉ số điện, nước theo từng kỳ, kèm ảnh đồng hồ và cảnh báo tiêu thụ bất thường.</p></div></div>${periodHeaderHtml(p)}<div class="kpis">${kpi('Tổng điểm cần ghi',total,'all')}${kpi('Đã ghi đủ',done,'RECORDED')}${kpi('Chưa ghi đủ',incomplete,'PENDING',true)}${kpi('Bất thường',abnormalCount,'ABNORMAL',true)}</div><div class="card"><div class="card-h"><div class="seg">${[['all','Tất cả'],['PENDING','Chưa ghi đủ'],['RECORDED','Đã ghi đủ'],['ABNORMAL','Bất thường']].map(x=>`<button class="${filter===x[0]?'on':''}" data-act="mr-status" data-id="${x[0]}">${x[1]}</button>`).join('')}</div><label class="small muted" style="display:flex;align-items:center;gap:6px">Khu vực ghi theo nhân viên thu phí<select class="input" data-ch="mr-collector" ${cOpts.length?'':'disabled title="Chưa phân công nhân viên thu phí cho khu vực nào của chợ"'}><option value="all">Tất cả</option>${cOpts.map(o=>`<option value="${o.id}" ${collector===o.id?'selected':''}>${U.esc(o.label)} (${o.count} điểm)</option>`).join('')}</select></label><span class="spacer"></span><input class="input meter-search" data-in="mr-search" placeholder="Tìm mã điểm, tiểu thương, mã đồng hồ..." value="${U.esc(f.mrSearch||'')}">${p.status==='RECORDING'&&A.canDo('dien-nuoc.chot-ky',ui.market)?'<button class="btn" data-act="dn-close-period">Chốt kỳ</button>':''}</div><div class="card-b">${U.table([{t:'Điểm KD'},{t:'Mã tiểu thương'},{t:'Tên tiểu thương'},{t:'Chỉ số điện kỳ này'},{t:'Chỉ số nước kỳ này'},{t:'Cảnh báo'},{t:'Trạng thái'},{t:'Thao tác'}],rows.slice(pg.start,pg.end).map(g=>{const state=mrPointState(g),t=g.st.traderId?A.idx.trader.get(g.st.traderId):null,warning=mrAbnormal(g.elec)&&mrAbnormal(g.water)?'⚠ Điện & nước cần kiểm tra':mrAbnormal(g.elec)?'⚠ Điện bất thường':mrAbnormal(g.water)?'⚠ Nước bất thường':'—',action=!mrCanRecord(g.st)?'<button class="btn sm" data-act="mr-point-detail" data-id="'+g.st.id+'" data-period="'+p.id+'">Xem</button>':state==='PENDING'?'<button class="btn sm primary" data-act="mr-point-open" data-id="'+g.st.id+'" data-period="'+p.id+'">Ghi chỉ số</button>':state==='MISSING_ELEC'?'<button class="btn sm primary" data-act="mr-open" data-id="'+g.st.id+'" data-period="'+p.id+'" data-kind="elec">Ghi điện</button>':state==='MISSING_WATER'?'<button class="btn sm primary" data-act="mr-open" data-id="'+g.st.id+'" data-period="'+p.id+'" data-kind="water">Ghi nước</button>':'<button class="btn sm" data-act="mr-point-detail" data-id="'+g.st.id+'" data-period="'+p.id+'">'+(state==='ABNORMAL'?'Kiểm tra':'Xem')+'</button>';return `<tr><td><b>${g.st.code}</b></td><td>${t?t.id:'<span class="muted">—</span>'}</td><td>${t?U.esc(t.name):'<span class="muted">Chưa có tiểu thương</span>'}</td><td>⚡ ${mrValueCell(g.elec)}</td><td>💧 ${mrValueCell(g.water)}</td><td>${warning==='—'?'<span class="muted">—</span>':'<span class="tag warn">'+warning+'</span>'}</td><td>${mrPointLabel(state)}</td><td>${action}</td></tr>`;}))}${pg.html}<div class="small muted" style="margin-top:8px">Một điểm kinh doanh hiển thị một dòng; điện và nước vẫn là hai reading độc lập.</div></div></div>`;
+    return `<div class="card meter-title"><div class="card-b"><h2>GHI CHỈ SỐ ĐIỆN, NƯỚC</h2><p>Theo dõi và ghi nhận chỉ số điện, nước theo từng kỳ, kèm ảnh đồng hồ và cảnh báo tiêu thụ bất thường.</p></div></div>${periodHeaderHtml(p)}<div class="kpis">${kpi('Tổng điểm cần ghi',total,'all')}${kpi('Đã ghi đủ',done,'RECORDED')}${kpi('Chưa ghi đủ',incomplete,'PENDING',true)}${kpi('Bất thường',abnormalCount,'ABNORMAL',true)}</div><div class="card"><div class="card-h"><div class="seg">${[['all','Tất cả'],['PENDING','Chưa ghi đủ'],['RECORDED','Đã ghi đủ'],['ABNORMAL','Bất thường']].map(x=>`<button class="${filter===x[0]?'on':''}" data-act="mr-status" data-id="${x[0]}">${x[1]}</button>`).join('')}</div><span class="spacer"></span><input class="input meter-search" data-in="mr-search" placeholder="Tìm mã điểm, tiểu thương, mã đồng hồ..." value="${U.esc(f.mrSearch||'')}">${p.status==='RECORDING'&&A.canDo('dien-nuoc.chot-ky',ui.market)?'<button class="btn" data-act="dn-close-period">Chốt kỳ</button>':''}</div><div class="card-b">${U.table([{t:'Điểm KD'},{t:'Mã tiểu thương'},{t:'Tên tiểu thương'},{t:'Chỉ số điện kỳ này'},{t:'Chỉ số nước kỳ này'},{t:'Cảnh báo'},{t:'Trạng thái'},{t:'Thao tác'}],rows.slice(pg.start,pg.end).map(g=>{const state=mrPointState(g),t=g.st.traderId?A.idx.trader.get(g.st.traderId):null,warning=mrAbnormal(g.elec)&&mrAbnormal(g.water)?'⚠ Điện & nước cần kiểm tra':mrAbnormal(g.elec)?'⚠ Điện bất thường':mrAbnormal(g.water)?'⚠ Nước bất thường':'—',action=!mrCanRecord(g.st)?'<button class="btn sm" data-act="mr-point-detail" data-id="'+g.st.id+'" data-period="'+p.id+'">Xem</button>':state==='PENDING'?'<button class="btn sm primary" data-act="mr-point-open" data-id="'+g.st.id+'" data-period="'+p.id+'">Ghi chỉ số</button>':state==='MISSING_ELEC'?'<button class="btn sm primary" data-act="mr-open" data-id="'+g.st.id+'" data-period="'+p.id+'" data-kind="elec">Ghi điện</button>':state==='MISSING_WATER'?'<button class="btn sm primary" data-act="mr-open" data-id="'+g.st.id+'" data-period="'+p.id+'" data-kind="water">Ghi nước</button>':'<button class="btn sm" data-act="mr-point-detail" data-id="'+g.st.id+'" data-period="'+p.id+'">'+(state==='ABNORMAL'?'Kiểm tra':'Xem')+'</button>';return `<tr><td><b>${g.st.code}</b></td><td>${t?t.id:'<span class="muted">—</span>'}</td><td>${t?U.esc(t.name):'<span class="muted">Chưa có tiểu thương</span>'}</td><td>⚡ ${mrValueCell(g.elec)}</td><td>💧 ${mrValueCell(g.water)}</td><td>${warning==='—'?'<span class="muted">—</span>':'<span class="tag warn">'+warning+'</span>'}</td><td>${mrPointLabel(state)}</td><td>${action}</td></tr>`;}))}${pg.html}<div class="small muted" style="margin-top:8px">Một điểm kinh doanh hiển thị một dòng; điện và nước vẫn là hai reading độc lập.</div></div></div>`;
   };
   A.ACT['mr-point-open']=el=>{const r=findReading(el.dataset.id,el.dataset.period);if(!r)return;const e=mrItem(r,'elec'),w=mrItem(r,'water');A.modal(A.mHead('Ghi chỉ số · '+e.st.code)+`<div class="modal-b"><p>Chọn loại đồng hồ cần ghi cho <b>${e.st.code}</b>.</p><div class="row"><button class="btn primary" data-act="mr-open" data-id="${e.st.id}" data-period="${r.period}" data-kind="elec">⚡ Ghi điện</button><button class="btn primary" data-act="mr-open" data-id="${e.st.id}" data-period="${r.period}" data-kind="water">💧 Ghi nước</button></div></div><div class="modal-f"><button class="btn" data-act="close">Đóng</button></div>`);};
   A.ACT['mr-point-detail']=el=>{const r=findReading(el.dataset.id,el.dataset.period);if(!r)return;const e=mrItem(r,'elec'),w=mrItem(r,'water'),card=x=>{const c=mrConsumption(x),his=A.db.readings.filter(y=>y.stallId===x.st.id).sort((a,b)=>b.period.localeCompare(a.period));return `<section class="meter-section"><h4>${x.kind==='elec'?'⚡ ĐIỆN':'💧 NƯỚC'}</h4><dl class="kv"><dt>Mã đồng hồ</dt><dd>${x.meterId}</dd><dt>Chỉ số kỳ trước</dt><dd>${x.previous} ${x.cfg.unit}</dd><dt>Chỉ số kỳ này</dt><dd><b>${x.current==null?'—':x.current+' '+x.cfg.unit}</b></dd><dt>Sản lượng</dt><dd>${c==null?'—':x.current+' − '+x.previous+' = '+c+' '+x.cfg.unit}</dd><dt>Cảnh báo</dt><dd>${mrAbnormal(x)?'<span class="tag warn">Bất thường</span>':'Bình thường'}</dd></dl><div class="mr-detail-preview">${PHOTO_URLS[mrPreviewKey(x)]?`<img src="${PHOTO_URLS[mrPreviewKey(x)]}">`:(mrPhoto(x)?'📷 '+U.esc(mrPhoto(x).name):'Chưa có ảnh')}</div><h4 style="margin-top:12px">LỊCH SỬ ${x.cfg.label.toUpperCase()}</h4>${U.table([{t:'Kỳ'},{t:'Chỉ số cũ'},{t:'Chỉ số mới'},{t:'Tiêu thụ'},{t:'Ảnh'}],his.map(y=>{const z=mrItem(y,x.kind),v=mrConsumption(z);return `<tr><td>${U.per(y.period)}</td><td>${z.previous}</td><td>${z.current==null?'—':z.current}</td><td>${v==null?'—':v+' '+x.cfg.unit}</td><td>${mrPhoto(z)?'📷':'—'}</td></tr>`}))}</section>`;};A.modal(A.mHead('CHI TIẾT GHI CHỈ SỐ · '+e.st.code+' · Kỳ '+U.per(r.period))+`<div class="modal-b meter-modal">${card(e)}${card(w)}</div><div class="modal-f"><button class="btn" data-act="close">Đóng</button></div>`,true);};
@@ -464,15 +443,12 @@
   // Màn Khoản phải thu phục vụ ĐỊNH HƯỚNG THU: thu của ai, bao nhiêu, đã thu chưa. Mỗi dòng = 1 tiểu thương
   // trong kỳ; tiểu thương thuê nhiều điểm được gộp tổng, vào chi tiết mới thấy từng khoản (mỗi khoản vẫn
   // giữ mã PT-… sinh khi Trưởng Ban phát hành, dùng xuyên suốt ở biên lai / công nợ).
-  // Phạm vi xem: luôn trong ui.market (⊂ marketScopes). Có action:phai-thu.xem-toan-cho → cả chợ; không có
-  // → chỉ khoản của điểm KD được phân công cho chính tài khoản (stall.collectorId).
+  // Phạm vi xem: luôn trong ui.market (⊂ marketScopes). Quyền action và Market scope độc lập với Layout.
   const ptScopeAll = () => A.canDo('phai-thu.xem-toan-cho', ui.market);
   function ptInScope(i, all) {
-    if (!i || !U.inM(i)) return false;
-    if (all === undefined ? ptScopeAll() : all) return true;
+    if (!i || A.receivableMarket(i) !== ui.market) return false;
     const acc = A.currentAccount();
-    // Khoản gộp nhiều điểm: NV thấy nếu ÍT NHẤT 1 điểm của khoản được phân công cho mình.
-    return !!(acc && U.invStallIds(i).some(id => { const st = A.idx.stall.get(id); return st && st.collectorId === acc.id; }));
+    return !!(acc && A.allowedMarkets(acc).indexOf(ui.market) !== -1 && U.can('phai-thu'));
   }
   function ptGroups(invs) {
     const map = new Map();
@@ -486,7 +462,7 @@
   }
   // ---------- PHAI_THU_THEO_KHU_VA_BAN_DO (chợ thu theo phần: receivableGrouping 'TRADER') ----------
   // Số tiền / đã thu theo TỪNG ĐIỂM của 1 mã khoản (đã thu = điểm có trong payment.stallIds).
-  const ptCollectorName = st => { const a = st && st.collectorId && A.ACCOUNTS.get(st.collectorId); return a ? a.fullName : 'Chưa gán'; };
+  const ptCollectorName = () => '';
   function ptStallLine(i, id, covered) {
     const ids = U.invStallIds(i), its = i.items.filter(x => (x.stallId || ids[0]) === id), amount = U.sum(its, x => x.amount);
     const paid = covered.has(id);
@@ -542,7 +518,7 @@
   // tình trạng thu của điểm trong kỳ đang xem và hiện số tiền. NV thu phí (không có xem toàn chợ) chỉ thấy Dãy
   // được phân công cho mình (phân công theo Dãy nên không lẫn quầy của người khác).
   function ptMapHtml(fp, scopeAll, zone) {
-    const me = (A.currentAccount() || {}).id, mid = ui.market;
+    const mid = ui.market;
     const byStall = new Map();
     A.db.invoices.filter(i => i.period === fp.id && U.inM(i)).forEach(i => { const cov = A.invCoveredStalls(i); U.invStallIds(i).forEach(id => byStall.set(id, { i, line: ptStallLine(i, id, cov) })); });
     const COLORS = { paid: ['#dff3e6', '#2e8b57'], unpaid: ['#ffffff', '#6b7280'], over: ['#fde2e2', '#d6453b'], none: ['#f1f2f4', '#c3c7cf'] };
@@ -551,18 +527,17 @@
       const x = byStall.get(st.id);
       const k = x ? (x.line.paid ? 'paid' : (U.isOver(x.i) ? 'over' : 'unpaid')) : 'none';
       const t = x && A.idx.trader.get(x.i.traderId);
-      const tip = x ? `${st.code} · ${t ? t.name : ''} · ${U.money(x.line.amount)} · ${x.line.paid ? 'Đã thu' : 'Chưa thu'} · Người thu: ${ptCollectorName(st)} · ${x.i.id}` : `${st.code} · không phát sinh khoản kỳ này`;
+      const tip = x ? `${st.code} · ${t ? t.name : ''} · ${U.money(x.line.amount)} · ${x.line.paid ? 'Đã thu' : 'Chưa thu'} · ${x.i.id}` : `${st.code} · không phát sinh khoản kỳ này`;
       return `<button class="cell" title="${U.esc(tip)}" ${x ? `data-act="inv-open" data-id="${x.i.id}" data-stall="${st.id}"` : 'disabled'} style="height:44px;line-height:1.15;display:flex;flex-direction:column;justify-content:center;background:${COLORS[k][0]};border:1.5px solid ${COLORS[k][1]};color:#1f2937;cursor:${x ? 'pointer' : 'default'};${k === 'paid' ? 'opacity:.7;font-weight:500' : k === 'unpaid' || k === 'over' ? 'font-weight:700' : 'font-weight:500'}">${U.esc(st.code)}${x ? `<span style="font-weight:400;font-size:10px">${U.moneyShort(x.line.amount)}</span>` : ''}</button>`;
     };
     const rowHtml = r => {
       if (zone && r.code !== zone) return '';
-      if (!scopeAll && r.collectorId !== me) return '';
       const stalls = A.db.stalls.filter(st => st.rowId === r.id).sort((a, b) => (a.num || 0) - (b.num || 0));
       if (!stalls.length) return '';
       let tot = 0, got = 0, nPaid = 0, nDue = 0;
       stalls.forEach(st => { const x = byStall.get(st.id); if (!x) return; tot += x.line.amount; got += x.line.paidAmount; nDue++; if (x.line.paid) nPaid++; });
       const per = Math.min(Math.max(stalls.length, 4), 12);
-      return `<div class="plan-section"><h4>${U.esc(r.name)}<span>${U.esc(r.code)} · Người thu: ${U.esc(ptCollectorName(stalls[0]))}</span><span style="margin-left:auto"><span class="tag ${nDue && nPaid === nDue ? 'ok' : ''}">${nPaid}/${nDue} điểm đã thu</span> <span class="tag">${U.money(got)} / ${U.money(tot)}</span></span></h4>
+      return `<div class="plan-section"><h4>${U.esc(r.name)}<span>${U.esc(r.code)}</span><span style="margin-left:auto"><span class="tag ${nDue && nPaid === nDue ? 'ok' : ''}">${nPaid}/${nDue} điểm đã thu</span> <span class="tag">${U.money(got)} / ${U.money(tot)}</span></span></h4>
         <div class="bar-mini" style="margin:2px 0 8px"><i style="width:${U.pct(got, tot)}%"></i></div><div class="plan-row"><div class="cells" style="--n:${per};grid-template-columns:repeat(${per},minmax(58px,1fr))">${stalls.map(cell).join('')}</div></div></div>`;
     };
     const rows = ptLayoutRows(mid);
@@ -579,7 +554,7 @@
   // chỉ đếm khoản theo tình trạng thu và liệt kê điểm KD được phân công cho chính mình.
   function ptMyPoints(list, meId) {
     const ids = [];
-    list.forEach(i => U.invStallIds(i).forEach(id => { const st = A.idx.stall.get(id); if (st && st.collectorId === meId && ids.indexOf(st.code || id) === -1) ids.push(st.code || id); }));
+    list.forEach(i => U.invStallIds(i).forEach(id => { const st = A.idx.stall.get(id); if (st && ids.indexOf(st.code || id) === -1) ids.push(st.code || id); }));
     return ids.join(', ') || '—';
   }
   function ptCollectorKpis(groups) {
@@ -600,20 +575,13 @@
     const blockingWarnings = billingWarnings.filter(x => x.severity === 'BLOCKING');
     const q = (f.ptSearch || '').toLowerCase();
     const scopeAll = ptScopeAll();
-    const meId = (A.currentAccount() || {}).id;
     // Lọc khu + Bản đồ thu chỉ bật cho chợ thu theo phần (cấu hình D.MARKETS[].receivableGrouping 'TRADER',
     // hiện là Chợ Cao Lãnh) — đọc cấu hình chợ, không hard-code mã chợ.
     const zoneMode = (U.market(ui.market) || {}).receivableGrouping === 'TRADER';
-    const myZones = scopeAll ? null : new Set(A.db.stalls.filter(st => st.market === ui.market && st.collectorId === meId).map(st => st.section));
     const canMap = zoneMode && A.canDo('phai-thu.ban-do-thu', ui.market);
-    const zones = zoneMode ? ptZones().filter(z => !myZones || myZones.has(z.id)) : [], zone = zones.some(z => z.id === f.ptZone) ? f.ptZone : '', view = canMap && f.ptView === 'map' ? 'map' : 'list';
+    const zones = zoneMode ? ptZones() : [], zone = zones.some(z => z.id === f.ptZone) ? f.ptZone : '', view = canMap && f.ptView === 'map' ? 'map' : 'list';
     const inZone = id => !zone || (A.idx.stall.get(id) || {}).section === zone;
-    const inv = A.db.invoices.filter(i => i.period === p && ptInScope(i, scopeAll)).map(i => {
-      if (!A.invPartMode(i)) return U.invStallIds(i).some(inZone) ? i : null;
-      // NV thu phí: chỉ phần của mình; lọc khu: chỉ số tiền của các điểm thuộc khu đó.
-      const mine = scopeAll ? null : (A.invMyPart(i, meId) || { stallIds: [] }).stallIds;
-      return (!zone && scopeAll) ? i : ptPortion(i, id => inZone(id) && (!mine || mine.indexOf(id) !== -1));
-    }).filter(Boolean);
+    const inv = A.db.invoices.filter(i => i.period === p && ptInScope(i, scopeAll) && U.invStallIds(i).some(inZone));
     const sessionReceivables = sessionCashReceivables(true);
     const rows = ptGroups(inv).filter(g => (!f.ptStatus || (f.ptStatus === 'over' ? g.over : g.status === f.ptStatus))
       && (!q || g.t.name.toLowerCase().includes(q) || g.t.id.toLowerCase().includes(q) || g.list.some(i => i.id.toLowerCase().includes(q) || U.invPoints(i).toLowerCase().includes(q))))
@@ -921,19 +889,15 @@
     ui.pay = { traderId: tid, sel: el.dataset.inv ? [el.dataset.inv] : invs.map(i => i.id), method: 'tm', amount: null };
     renderPay();
   };
-  // ---------- THU_THEO_PHAN_NHAN_VIEN: NV thu đúng phần của mình (tiền mặt hoặc QR đưa tại sạp) ----------
-  // Kiểm tra lại trong handler: quyền screen thu-tien + action thu-tien.thu + chợ đang chọn (receivable-
-  // CollectAllowedForMarket), kỳ đang thu, và phần phải thuộc CHÍNH tài khoản (stall.collectorId) → Trưởng
-  // Ban/người khác không thu hộ được dù gọi thẳng handler. Số tiền cố định = phần còn lại, không cho nhập.
+  // Adapter của CTA cũ `pay-part-*`: giờ thu phần còn lại của khoản thuộc Market, không còn ownership theo Point.
   function payPartContext(invId) {
     const inv = A.idx.invoice.get(invId), acc = A.currentAccount();
-    if (!inv || !acc || !A.invPartMode(inv) || inv.status === 'paid' || inv.market !== ui.market) return { err: 'Khoản phải thu không còn hợp lệ' };
+    if (!inv || !acc || inv.status === 'paid' || A.receivableMarket(inv) !== ui.market) return { err: 'Khoản phải thu không còn hợp lệ' };
     if (!receivableCollectAllowedForMarket(inv.market)) return { err: 'Không có quyền thu tiền trong phạm vi tài khoản hiện tại' };
     if (A.debtOf(inv)) return { err: 'Khoản đã quá hạn và chuyển sang Công nợ (' + A.debtOf(inv).id + ') — không thu theo luồng thường, chỉ thu theo luồng thu hồi nợ' };
     if (!collectingBusinessStateOk([inv])) return { err: 'Chỉ thu cho kỳ đang ở trạng thái Đang thu' };
-    const part = A.invMyPart(inv, acc.id);
-    if (!part) return { err: 'Bạn không được phân công điểm nào trong khoản này — không thu hộ' };
-    if (part.paid) return { err: 'Phần của bạn trong khoản này đã thu' };
+    const part = { stallIds: U.invStallIds(inv), due: U.due(inv), paid: inv.status === 'paid' };
+    if (part.paid || part.due <= 0) return { err: 'Khoản này đã thu' };
     return { inv, part, acc, t: A.idx.trader.get(inv.traderId) };
   }
   A.ACT['pay-part-open'] = el => {
@@ -946,9 +910,9 @@
       its.forEach(x => rows.push(`<tr><td style="padding-left:22px">${U.esc(x.name)}</td><td class="num">${U.money(x.amount)}</td></tr>`));
     });
     A.modal(A.mHead('Thu tiền · ' + U.esc(c.t.name)) + `<div class="modal-b">
-      <dl class="kv"><dt>Mã khoản</dt><dd><b>${c.inv.id}</b> · kỳ ${U.per(c.inv.period)}</dd><dt>Tiểu thương</dt><dd>${U.esc(c.t.name)} (${c.t.id})</dd><dt>Phần thu của bạn</dt><dd><b>${U.money(c.part.due)}</b></dd></dl>
-      <div class="divider"></div>${U.table([{ t: 'Nội dung' }, { t: 'Số tiền', num: true }], rows.concat([`<tr><td><b>Cộng phần của bạn</b></td><td class="num"><b>${U.money(c.part.due)}</b></td></tr>`]))}
-      <div class="note info" style="margin-top:12px">Thu đủ đúng số tiền trên. Không thu một phần, không thu hộ phần của nhân viên khác. Tiểu thương có thể trả tiền mặt hoặc quét QR bạn đưa (QR cố định đúng số tiền này).</div>
+      <dl class="kv"><dt>Mã khoản</dt><dd><b>${c.inv.id}</b> · kỳ ${U.per(c.inv.period)}</dd><dt>Tiểu thương</dt><dd>${U.esc(c.t.name)} (${c.t.id})</dd><dt>Còn phải thu</dt><dd><b>${U.money(c.part.due)}</b></dd></dl>
+      <div class="divider"></div>${U.table([{ t: 'Nội dung' }, { t: 'Số tiền', num: true }], rows.concat([`<tr><td><b>Còn phải thu</b></td><td class="num"><b>${U.money(c.part.due)}</b></td></tr>`]))}
+      <div class="note info" style="margin-top:12px">Khoản phải thu thuộc Chợ đang chọn. Người thu được lưu theo giao dịch thực tế.</div>
       </div><div class="modal-f"><button class="btn" data-act="close">Hủy</button>
       <button class="btn" data-act="pay-part-confirm" data-id="${c.inv.id}" data-method="qr">${U.icon('card')}Tiểu thương quét QR tại sạp</button>
       <button class="btn primary" data-act="pay-part-confirm" data-id="${c.inv.id}" data-method="tm">Xác nhận thu tiền mặt & in biên lai</button></div>`, true);
@@ -957,8 +921,8 @@
     const c = payPartContext(el.dataset.id), method = el.dataset.method === 'qr' ? 'qr' : 'tm';
     if (c.err) { U.toast(c.err); A.closeModal(); A.render(); return; }
     const actor = c.acc.code || c.acc.id;
-    const pays = A.applyPayment([c.inv.id], c.part.due, method, actor, { stallIds: c.part.stallIds });
-    U.log('Thu phần ' + c.part.stallIds.map(id => (A.idx.stall.get(id) || {}).code || id).join(', ') + ' của khoản ' + c.inv.id + ' (' + (method === 'tm' ? 'tiền mặt' : 'QR tại sạp') + ')');
+    const pays = A.applyPayment([c.inv.id], c.part.due, method, actor);
+    U.log('Thu khoản ' + c.inv.id + ' (' + (method === 'tm' ? 'tiền mặt' : 'QR tại quầy') + ')');
     A.render(); A.showReceipt(pays, { autoPrint: false }); // in khi tiểu thương cần: nút In biên lai
     U.toast('Đã thu ' + U.money(c.part.due) + (method === 'tm' ? ' tiền mặt' : ' qua QR') + ' · biên lai đã gửi Mini app');
   };
@@ -1095,43 +1059,35 @@
     const elec = U.sum(its.filter(x => /^Tiền điện/.test(x.name)), x => x.amount), water = U.sum(its.filter(x => /^Tiền nước/.test(x.name)), x => x.amount);
     return { rent: U.sum(its, x => x.amount) - elec - water, elec, water };
   }
-  function thuRouteRows(p, scopeAll, meId) {
+  function thuRouteRows(p) {
     const zones = ptZones(), zIdx = id => { const n = zones.findIndex(z => z.id === id); return n === -1 ? 999 : n; };
     const rows = [];
-    A.db.invoices.filter(i => U.inM(i) && A.invPartMode(i) && (i.period === p || (i.period < p && i.status !== 'paid'))).forEach(i => {
-      const pays = A.db.payments.filter(x => x.invoiceId === i.id), parts = A.invParts(i);
-      parts.forEach(pt => {
-        if (!scopeAll && pt.collectorId !== meId) return;
-        if (i.period < p && pt.paid) return;
-        const sts = pt.stallIds.map(id => A.idx.stall.get(id) || {}).sort((a, b) => zIdx(a.section) - zIdx(b.section) || String(a.section).localeCompare(String(b.section)) || (a.num || 0) - (b.num || 0));
-        const first = sts[0] || {};
-        const pay = pt.paid ? (pays.find(x => Array.isArray(x.stallIds) && pt.stallIds.every(id => x.stallIds.indexOf(id) !== -1)) || (i.status === 'paid' ? pays[pays.length - 1] : null)) : null;
-        rows.push({ inv: i, part: pt, sts, first, zone: first.section, zi: zIdx(first.section), t: A.idx.trader.get(i.traderId), pay, debt: pt.paid ? null : A.debtOf(i), old: i.period < p, over: !pt.paid && U.isOver(i), note: thuLastNote(i.id, pt.collectorId), nParts: parts.length });
-      });
+    A.db.invoices.filter(i => A.receivableMarket(i) === ui.market && (i.period === p || (i.period < p && i.status !== 'paid'))).forEach(i => {
+      const sts = U.invStallIds(i).map(id => A.idx.stall.get(id) || {}).sort((a, b) => zIdx(a.section) - zIdx(b.section) || String(a.section).localeCompare(String(b.section)) || (a.num || 0) - (b.num || 0));
+      const first = sts[0] || {}, pays = A.db.payments.filter(x => x.invoiceId === i.id);
+      const part = { stallIds: U.invStallIds(i), amount: i.amount, due: U.due(i), paid: i.status === 'paid' };
+      rows.push({ inv: i, part, sts, first, zone: first.section, zi: zIdx(first.section), t: A.idx.trader.get(i.traderId), pay: i.status === 'paid' ? pays[pays.length - 1] : null, debt: i.status === 'paid' ? null : A.debtOf(i), old: i.period < p, over: i.status !== 'paid' && U.isOver(i), note: thuLastNote(i.id, meId), nParts: 1 });
     });
     return rows.sort((a, b) => a.zi - b.zi || (a.first.num || 0) - (b.first.num || 0) || a.inv.period.localeCompare(b.inv.period));
   }
   function thuRouteHtml(p, payDate) {
     const acc = A.currentAccount() || {}, meId = acc.id, meCode = acc.code || acc.id;
     const canCollect = receivableCollectAllowedForMarket(ui.market);
-    const mine = A.db.stalls.some(st => st.market === ui.market && st.collectorId === meId);
-    const scopeAll = !mine && ptScopeAll();
-    if (!mine && !scopeAll) return `<div class="card"><div class="card-b"><div class="empty">Bạn chưa được phân công gian nào ở chợ này nên chưa có danh sách đi thu.</div></div></div>`;
+    const scopeAll = ptScopeAll();
+    if (A.allowedMarkets(acc).indexOf(ui.market) === -1) return `<div class="card"><div class="card-b"><div class="empty">Bạn chưa được phân công Chợ này.</div></div></div>`;
     const q = (f.thuSearch || '').toLowerCase();
-    const all = thuRouteRows(p.id, scopeAll, meId);
+    const all = thuRouteRows(p.id);
     const zones = ptZones().filter(z => all.some(r => r.sts.some(st => st.section === z.id)));
     const zone = zones.some(z => z.id === f.thuZone) ? f.thuZone : '';
     const status = ['todo', 'done', 'all', 'debt'].indexOf(f.thuStatus) !== -1 ? f.thuStatus : 'all'; // P chốt: mặc định Tất cả — tích Đã thu dòng vẫn ở tại chỗ (mờ)
-    const collectors = scopeAll ? Array.from(new Set(all.map(r => r.part.collectorId || ''))) : [];
-    const coll = scopeAll && collectors.indexOf(f.thuCollector) !== -1 ? f.thuCollector : 'all';
     // KPI theo khu/người thu đang lọc (không phụ thuộc ô tìm kiếm); bảng theo cả ô tìm kiếm.
-    const scoped = all.filter(r => (!zone || r.sts.some(st => st.section === zone)) && (coll === 'all' || (r.part.collectorId || '') === coll));
+    const scoped = all.filter(r => !zone || r.sts.some(st => st.section === zone));
     const base = scoped.filter(r => !q || [r.t && r.t.name, r.t && r.t.id, r.t && r.t.phone, r.inv.id, r.sts.map(st => st.code).join(' '), r.pay && r.pay.receipt].join(' ').toLowerCase().includes(q));
     const inStatus = (r, k) => k === 'all' || (k === 'done' ? r.part.paid : k === 'debt' ? !!r.debt : !r.part.paid && !r.debt);
     const rows = base.filter(r => inStatus(r, status));
     const cur = scoped.filter(r => !r.old), curDone = cur.filter(r => r.part.paid), debtRows = scoped.filter(r => r.debt), todoRows = scoped.filter(r => !r.part.paid && !r.debt);
     const tot = U.sum(cur, r => r.part.amount), got = U.sum(curDone, r => r.part.amount);
-    const myPays = A.db.payments.filter(x => U.inM(x) && x.date === payDate && (scopeAll || x.by === meCode) && A.idx.invoice.get(x.invoiceId) && A.invPartMode(A.idx.invoice.get(x.invoiceId)));
+    const myPays = A.db.payments.filter(x => U.inM(x) && x.date === payDate && (scopeAll || x.by === meCode) && A.idx.invoice.get(x.invoiceId));
     const cash = U.sum(myPays.filter(x => x.method === 'tm'), x => x.amount), qr = U.sum(myPays.filter(x => x.method !== 'tm'), x => x.amount);
     const kpis = `<div class="kpis">
       <div class="card kpi"><div class="k-label">${scopeAll ? 'Phải thu kỳ ' + p.label + ' (cả chợ)' : 'Phần tôi phải thu kỳ ' + p.label}</div><div class="k-value">${U.moneyShort(tot)}</div><div class="k-sub">${cur.length} tiểu thương · ${U.sum(cur, r => r.part.stallIds.length)} gian</div></div>
@@ -1142,7 +1098,7 @@
     const filters = `<div class="card"><div class="card-b" style="padding-top:12px"><div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
       <div class="seg">${[['all', 'Tất cả'], ['todo', 'Chưa thu'], ['done', 'Đã thu'], ['debt', 'Quá hạn · công nợ']].map(x => `<button class="${status === x[0] ? 'on' : ''}" data-act="thu-status" data-id="${x[0]}">${x[1]} (${cnt(x[0])})</button>`).join('')}</div>
       <span class="label-sm">Khu</span><select class="input" style="width:230px" data-ch="thu-zone"><option value="">${scopeAll ? 'Tất cả khu' : 'Tất cả khu của tôi'}</option>${zones.map(z => `<option value="${z.id}" ${zone === z.id ? 'selected' : ''}>${U.esc(z.name)}</option>`).join('')}</select>
-      ${scopeAll ? `<span class="label-sm">Người thu</span><select class="input" style="width:200px" data-ch="thu-collector"><option value="all">Tất cả</option>${collectors.map(c => { const a = c && A.ACCOUNTS.get(c); return `<option value="${c}" ${coll === c ? 'selected' : ''}>${U.esc(a ? a.fullName : 'Chưa gán')}</option>`; }).join('')}</select><span class="tag">Chỉ xem — Trưởng Ban không thu hộ</span>` : ''}
+      ${scopeAll ? '<span class="tag">Danh sách theo Chợ đang chọn</span>' : ''}
     </div></div></div>`;
     const pg = U.pager('thuRoute', rows.length, 20);
     // THU_TIEN_DANH_DAU (P chốt 29/09): cột Vị trí | Tiểu thương | Mã khoản | Tiền cần thu | Trạng thái | Ghi chú.
@@ -1152,7 +1108,7 @@
     // Tên cột tiền theo bộ lọc (P 29/09): Đã thu → "Tiền đã thu"; Chưa thu → "Tiền cần thu"; Quá hạn → "Tiền nợ";
     // Tất cả → "Số tiền" + nhãn nhỏ đã thu / cần thu / nợ dưới từng dòng.
     const curStatus = status, moneyCol = { done: 'Tiền đã thu', todo: 'Tiền cần thu', debt: 'Tiền nợ', all: 'Số tiền' }[status];
-    const cols = [{ t: 'Vị trí' }, { t: 'Tiểu thương' }, { t: 'Mã khoản' }, { t: moneyCol, num: true }, { t: 'Trạng thái' }].concat(scopeAll ? [{ t: 'Người thu' }] : []).concat([{ t: 'Ghi chú' }]);
+    const cols = [{ t: 'Vị trí' }, { t: 'Tiểu thương' }, { t: 'Mã khoản' }, { t: moneyCol, num: true }, { t: 'Trạng thái' }, { t: 'Ghi chú' }];
     const zAll = ptZones();
     let lastZone = null;
     const body = [];
@@ -1178,7 +1134,6 @@
         <td><b>${U.esc(r.t ? r.t.name : '')}</b><div class="small muted">${r.t ? r.t.id + ' · ' + U.maskPhone(r.t.phone) : ''}</div></td>
         <td>${r.inv.id}<div class="small muted">Kỳ ${U.per(r.inv.period)}${r.old ? ' · <span style="color:#d6453b">nợ kỳ trước</span>' : ''}${r.nParts > 1 ? ' · ' + r.part.stallIds.length + '/' + U.invStallIds(r.inv).length + ' gian' : ''}</div></td>
         <td class="num"><b>${U.money(r.part.amount)}</b>${curStatus === 'all' ? `<div class="small" style="color:${paid ? '#167a3c' : r.debt ? '#d6453b' : '#6b7280'}">${paid ? 'đã thu' : r.debt ? 'nợ' : 'cần thu'}</div>` : ''}</td><td>${status}</td>
-        ${scopeAll ? `<td>${U.esc(ptCollectorName(r.first))}</td>` : ''}
         <td class="small">${!paid && !r.debt && !scopeAll && canCollect
           ? `<input class="input" style="min-width:170px" data-ch="thu-note-inline" data-id="${r.inv.id}" placeholder="Ghi chú…" title="Ghi chú nếu chưa nộp / không gặp (không bắt buộc)" value="${U.esc(r.note ? r.note.text : '')}">${r.note && r.note.text ? `<div class="muted">${U.esc(r.note.at)}</div>` : ''}`
           : r.note && r.note.text && !paid ? U.esc(r.note.text) + `<div class="muted">${U.esc(r.note.at)}</div>` : '<span class="muted">—</span>'}</td></tr>`);
@@ -1227,7 +1182,7 @@
   const hoKindOk = (x, kind) => kind === 'DEBT' ? !!x.debtId : !x.debtId;
   function hoOpenCash(code, market, date, kind) {
     const handed = hoHandedIds();
-    return A.db.payments.filter(x => x.market === market && x.method === 'tm' && x.by === code && x.date === date && !handed.has(x.id) && hoKindOk(x, kind || 'FEE') && A.receiptBusinessStateOk(x) && A.idx.invoice.get(x.invoiceId) && A.invPartMode(A.idx.invoice.get(x.invoiceId)));
+    return A.db.payments.filter(x => x.market === market && x.method === 'tm' && x.by === code && x.date === date && !handed.has(x.id) && hoKindOk(x, kind || 'FEE') && A.receiptBusinessStateOk(x) && A.idx.invoice.get(x.invoiceId));
   }
   function hoCanClose(market) { return U.can('thu-tien') && A.canDo('thu-tien.chot-buoi', market); }
   function hoCanReconcile(market) { return dsCanAction('doi-soat.xac-nhan-phieu-nop', market); }
@@ -1238,7 +1193,7 @@
     kind = kind === 'DEBT' ? 'DEBT' : 'FEE';
     const acc = A.currentAccount() || {}, code = acc.code || acc.id, market = ui.market, q = (f.thuSearch || '').toLowerCase();
     const handedBy = {}; cashHandovers().filter(h => h.market === market && h.collectorCode === code).forEach(h => h.paymentIds.forEach(id => { handedBy[id] = h; }));
-    const pays = A.db.payments.filter(x => x.market === market && x.by === code && x.date >= p.startDate && x.date <= p.endDate && A.receiptBusinessStateOk(x) && A.idx.invoice.get(x.invoiceId) && A.invPartMode(A.idx.invoice.get(x.invoiceId)))
+    const pays = A.db.payments.filter(x => x.market === market && x.by === code && x.date >= p.startDate && x.date <= p.endDate && A.receiptBusinessStateOk(x) && A.idx.invoice.get(x.invoiceId))
       .filter(x => hoKindOk(x, kind)).filter(x => { if (!q || kind === 'DEBT') return true; const t = A.idx.trader.get(x.traderId); return [x.receipt, x.invoiceId, t && t.name, t && t.id, (x.stallIds || []).map(id => (A.idx.stall.get(id) || {}).code).join(' ')].join(' ').toLowerCase().includes(q); })
       .sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
     const open = pays.filter(x => !handedBy[x.id] && x.method === 'tm'), closed = pays.filter(x => handedBy[x.id]);
@@ -1369,7 +1324,8 @@
     output.textContent = diff == null ? '—' : U.money(diff);
     output.classList.toggle('cash-reconcile-diff', diff != null && diff !== 0);
   };
-  // Đối soát › Tiền mặt (chợ thu theo phần): danh sách phiếu nộp theo khoảng ngày + tiền mặt NV chưa chốt buổi.
+  // Đối soát › Tiền mặt: phiếu chốt buổi thu của Chợ đang chọn (phạm vi theo Account.marketScopes) trong khoảng ngày.
+  // h.collectorId/collectorCode là NGƯỜI THỰC TẾ đã chốt/nộp phiếu (lịch sử giao dịch), không phải NV đang phụ trách Chợ.
   function dsHandoverView() {
     const from = dsTxFrom(), to = dsTxTo(), canRec = hoCanReconcile(ui.market);
     const all = cashHandovers().filter(h => h.market === ui.market && h.date >= from && h.date <= to);
@@ -1382,6 +1338,11 @@
     const allowed = new Set(A.allowedMarkets(A.currentAccount()));
     const markets = D.MARKETS.filter(m => allowed.has(m.id));
     const collectors = A.ACCOUNTS.list().filter(a => A.ACCOUNTS.primaryRole(a) === 'collector' && A.allowedMarkets(a).includes(ui.market));
+    // NV đã chuyển khỏi Chợ vẫn phải lọc được phiếu lịch sử của mình — bổ sung từ chính các phiếu, không sửa dữ liệu.
+    all.forEach(h => {
+      if (!h.collectorId || collectors.some(a => a.id === h.collectorId)) return;
+      collectors.push({ id: h.collectorId, fullName: h.collectorName || hoName(h.collectorCode) || h.collectorCode || h.collectorId });
+    });
     const rows = all.filter(h => (collector === 'all' || h.collectorId === collector)
       && (status === 'all' || statusOf(h) === status)
       && (!q || [h.id, h.collectorName, hoName(h.collectorCode), h.collectorCode].join(' ').toLowerCase().includes(q)))
@@ -1395,10 +1356,10 @@
       <input class="input" data-in="ho-search" placeholder="Tìm mã phiếu hoặc tên nhân viên" value="${U.esc(ui.hoSearch || '')}">
     </div></div>`;
     const tableRows = rows.map(h => {
-      const state = hoState(h), areas = h.assignedAreas || hoAssignedRows(h, h.paymentIds.map(id => A.db.payments.find(p => p.id === id)).filter(Boolean)).map(hoAreaLabel);
+      const state = hoState(h);
       const declared = h.declaredAmount == null ? h.amount : h.declaredAmount;
       const difference = h.receivedAmount == null ? null : h.receivedAmount - h.amount;
-      return `<tr><td><b>${U.esc(h.id)}</b>${h.kind === 'DEBT' ? '<div><span class="tag">Thu hồi nợ</span></div>' : ''}</td><td>${hoDateTime(h)}</td><td>${U.esc(U.mShort(h.market))}</td><td>${areas.map(U.esc).join(', ') || '—'}</td><td>${U.esc(h.collectorName || hoName(h.collectorCode))}<div class="small muted">${U.esc(h.collectorCode)}</div></td>
+      return `<tr><td><b>${U.esc(h.id)}</b>${h.kind === 'DEBT' ? '<div><span class="tag">Thu hồi nợ</span></div>' : ''}</td><td>${hoDateTime(h)}</td><td>${U.esc(U.mShort(h.market))}</td><td>${U.esc(h.collectorName || hoName(h.collectorCode))}<div class="small muted">${U.esc(h.collectorCode)}</div></td>
         <td class="num">${h.paymentIds.length}</td><td class="num">${U.money(h.amount)}</td><td class="num">${U.money(declared)}</td><td class="num ${difference && difference !== 0 ? 'cash-reconcile-diff' : ''}">${difference == null ? '—' : U.money(difference)}</td><td><span class="tag ${state.cls}">${state.label}</span></td>
         <td><button class="btn sm ${canOpen(h) ? 'primary' : ''}" data-act="ho-view" data-id="${h.id}">${canOpen(h) ? 'Đối soát' : 'Xem'}</button></td></tr>`;
     });
@@ -1408,7 +1369,7 @@
       <div class="card kpi"><div class="k-label">Chờ giải trình / Có chênh lệch</div><div class="k-value">${explanations.length}</div></div>
       <div class="card kpi"><div class="k-label">Tổng tiền chờ đối soát</div><div class="k-value">${U.moneyShort(pendingAmount)}</div><div class="k-sub">${U.money(pendingAmount)}</div></div>
     </div>${filters}<div class="card cash-reconcile-list"><div class="card-h"><div><h3>Phiếu chốt buổi thu tiền mặt</h3><div class="small muted">Mỗi phiếu thuộc một nhân viên thu phí, một chợ và một ngày/ca thu. Chỉ biên lai tiền mặt trong phiếu được đối chiếu.</div></div>${!canRec ? '<span class="tag">Chỉ xem</span>' : ''}</div>
-      <div class="card-b">${U.table([{ t: 'Mã phiếu chốt buổi thu' }, { t: 'Ngày/giờ chốt' }, { t: 'Chợ' }, { t: 'Khu/Dãy phụ trách' }, { t: 'Nhân viên thu phí' }, { t: 'Số biên lai tiền mặt', num: true }, { t: 'Tổng tiền theo biên lai', num: true }, { t: 'NV kê khai nộp', num: true }, { t: 'Chênh lệch', num: true }, { t: 'Trạng thái' }, { t: 'Thao tác' }], tableRows, { empty: 'Chưa có phiếu chốt buổi thu trong khoảng ngày/kỳ đã chọn' })}</div></div>`;
+      <div class="card-b">${U.table([{ t: 'Mã phiếu chốt buổi thu' }, { t: 'Ngày/giờ chốt' }, { t: 'Chợ' }, { t: 'Nhân viên thu phí' }, { t: 'Số biên lai tiền mặt', num: true }, { t: 'Tổng tiền theo biên lai', num: true }, { t: 'NV kê khai nộp', num: true }, { t: 'Chênh lệch', num: true }, { t: 'Trạng thái' }, { t: 'Thao tác' }], tableRows, { empty: 'Chưa có phiếu chốt buổi thu trong khoảng ngày/kỳ đã chọn' })}</div></div>`;
   }
   A.CH['ho-market-filter'] = el => {
     if (!A.allowedMarkets(A.currentAccount()).includes(el.value)) return;
@@ -1420,14 +1381,13 @@
   // BIEN_LAI_DA_GUI (Thu tiền › Biên lai, chợ thu theo phần): NV thấy biên lai CHÍNH MÌNH đã phát & gửi tiểu
   // thương; Trưởng Ban (xem toàn chợ) thấy mọi biên lai, có cột Người thu. Số biên lai gắn mã khoản.
   function thuReceiptsHtml(p, payDate) {
-    const acc = A.currentAccount() || {}, meId = acc.id, meCode = acc.code || acc.id;
-    const mine = A.db.stalls.some(st => st.market === ui.market && st.collectorId === meId);
-    const scopeAll = !mine && ptScopeAll();
-    if (!mine && !scopeAll) return `<div class="card"><div class="card-b"><div class="empty">Bạn chưa có biên lai nào ở chợ này.</div></div></div>`;
+    const acc = A.currentAccount() || {}, meCode = acc.code || acc.id;
+    const scopeAll = ptScopeAll();
+    if (A.allowedMarkets(acc).indexOf(ui.market) === -1) return `<div class="card"><div class="card-b"><div class="empty">Bạn chưa được phân công Chợ này.</div></div></div>`;
     const q = (f.thuSearch || '').toLowerCase(), onlyDay = f.rcOnlyDay === true;
-    const list = A.db.payments.filter(x => U.inM(x) && A.receiptBusinessStateOk(x) && x.date >= p.startDate && x.date <= p.endDate && (scopeAll || x.by === meCode))
+    const list = A.db.payments.filter(x => U.inM(x) && A.receiptBusinessStateOk(x) && x.date >= p.startDate && x.date <= p.endDate)
       .map(x => ({ p: x, i: A.idx.invoice.get(x.invoiceId), t: A.idx.trader.get(x.traderId) }))
-      .filter(x => x.i && A.invPartMode(x.i) && (!onlyDay || x.p.date === payDate)
+      .filter(x => x.i && (!onlyDay || x.p.date === payDate)
         && (!q || [x.p.receipt, x.i.id, x.t && x.t.name, x.t && x.t.id, (x.p.stallIds || []).map(id => (A.idx.stall.get(id) || {}).code).join(' ')].join(' ').toLowerCase().includes(q)))
       .sort((a, b) => (b.p.date + b.p.time).localeCompare(a.p.date + a.p.time));
     const day = list.filter(x => x.p.date === payDate), cashDay = U.sum(day.filter(x => x.p.method === 'tm'), x => x.p.amount);
@@ -2229,24 +2189,22 @@
     if (!d || d.market !== ui.market || d.status !== 'OPEN') return { err: 'Khoản nợ không còn hợp lệ' };
     if (!acc || !U.can('cong-no') || !A.canDo('cong-no.thu-no', d.market)) return { err: 'Bạn không có quyền thu hồi nợ' };
     const inv = A.idx.invoice.get(d.invoiceId); if (!inv) return { err: 'Không tìm thấy khoản thu gốc' };
-    const cov = A.invCoveredStalls(inv), part = d.parts.find(p => p.collectorId === acc.id);
-    if (!part) return { err: 'Khoản nợ không thuộc gian bạn phụ trách — không thu hộ' };
-    const ids = part.stallIds.filter(id => !cov.has(id));
-    if (!ids.length) return { err: 'Phần nợ của bạn đã thu' };
-    return { d, inv, acc, ids, amount: A.stallsAmount(inv, ids), t: A.idx.trader.get(d.traderId) };
+    if (A.allowedMarkets(acc).indexOf(d.market) === -1) return { err: 'Khoản nợ ngoài phạm vi Chợ được phân công' };
+    const ids = U.invStallIds(inv);
+    return { d, inv, acc, ids, amount: U.due(inv), t: A.idx.trader.get(d.traderId) };
   }
   const cnQrContent = d => 'CHOSO ' + d.id + ' ' + d.invoiceId;
   const cnCyc = () => { const c = (A.SERVICE_CFG && A.SERVICE_CFG.cycle()) || {}; const r1 = Number(c.reminder1Days) || 3; return { r1, r2: Math.max(r1, Number(c.reminder2Days) || 7) }; };
   function cnDebtView() {
-    const me = (A.currentAccount() || {}).id, scopeAll = ptScopeAll();
+    const scopeAll = ptScopeAll();
     const st = ['open', 'cut', 'closed', 'all'].indexOf(f.cnDebtStatus) !== -1 ? f.cnDebtStatus : 'open';
-    const scoped = (A.db.debts || []).filter(d => d.market === ui.market && (scopeAll || d.parts.some(p => p.collectorId === me)))
+    const scoped = (A.db.debts || []).filter(d => d.market === ui.market && A.allowedMarkets(A.currentAccount()).indexOf(d.market) !== -1)
       .map(d => { const i = A.idx.invoice.get(d.invoiceId); return { d, i, t: A.idx.trader.get(d.traderId), remain: i ? U.due(i) : 0, pays: A.db.payments.filter(x => x.debtId === d.id) }; })
       .sort((a, b) => ({ OPEN: 0, UNRECOVERABLE: 1 }[a.d.status] ?? 2) - ({ OPEN: 0, UNRECOVERABLE: 1 }[b.d.status] ?? 2) || a.d.dueDate.localeCompare(b.d.dueDate) || a.d.id.localeCompare(b.d.id));
     const open = scoped.filter(x => x.d.status === 'OPEN'), closed = scoped.filter(x => x.d.status === 'CLOSED'), cut = scoped.filter(x => x.d.status === 'UNRECOVERABLE');
     const list = st === 'open' ? open : st === 'closed' ? closed : st === 'cut' ? cut : scoped;
     const tot = U.sum(open, x => x.remain), maxDays = Math.max.apply(null, open.map(x => U.days(x.d.dueDate, U.today())).concat([0]));
-    const canCollect = !scopeAll && A.canDo('cong-no.thu-no', ui.market);
+    const canCollect = A.canDo('cong-no.thu-no', ui.market);
     const pg = U.pager('cnDebt', list.length, 20);
     const statusCell = x => {
       if (x.d.status === 'UNRECOVERABLE') return `<span class="tag danger">⚡ Không thu hồi · danh sách cắt điện</span><div class="small muted">Đã gửi thông báo cắt điện ${U.esc(x.d.powerCut.noticeSentAt)} · luồng kết thúc</div>`;
@@ -2257,8 +2215,7 @@
         const done = x.pays.length && x.pays.every(p => p.method !== 'tm' || ((hoOf(p) || {}).status === 'RECONCILED'));
         return `<span class="tag ${done ? 'ok' : 'warn'}">${done ? '✓ Đã thu hồi · hoàn tất' : '✓ Đã thu nợ · chờ nộp Kế toán'}</span>${x.pays.map(p => `<div class="small"><button class="link-btn" data-act="receipt" data-id="${p.receipt}">${p.receipt}</button> <span class="muted">${U.esc(D.METHOD[p.method] || p.method)} · ${U.dmy(p.date)} ${p.time || ''}</span><div>${st2(p)}</div></div>`).join('')}`;
       }
-      const mine = x.d.parts.find(p => p.collectorId === me), cov = x.i ? A.invCoveredStalls(x.i) : new Set(), minePaid = mine && mine.stallIds.every(id => cov.has(id));
-      return `<span class="tag danger">Còn nợ</span>${canCollect && mine && !minePaid ? `<div class="row" style="gap:6px;margin-top:6px;flex-wrap:nowrap"><label class="btn sm primary" style="gap:6px;cursor:pointer"><input type="checkbox" data-ch="cn-collect" data-id="${x.d.id}"> Đã thu nợ</label></div>` : ''}`;
+      return `<span class="tag danger">Còn nợ</span>${canCollect ? `<div class="row" style="gap:6px;margin-top:6px;flex-wrap:nowrap"><label class="btn sm primary" style="gap:6px;cursor:pointer"><input type="checkbox" data-ch="cn-collect" data-id="${x.d.id}"> Đã thu nợ</label></div>` : ''}`;
     };
     return `<div class="kpis">
       <div class="card kpi"><div class="k-label">Khoản còn nợ</div><div class="k-value" style="color:#df2225">${open.length}</div><div class="k-sub">${new Set(open.map(x => x.d.traderId)).size} tiểu thương</div></div>
@@ -2267,10 +2224,9 @@
       <div class="card kpi"><div class="k-label">Danh sách cắt điện</div><div class="k-value" style="color:#df2225">${cut.length}</div><div class="k-sub">${U.money(U.sum(cut, x => x.remain))} không thu hồi</div></div></div>
     <div class="card"><div class="card-b" style="padding-top:12px"><div class="seg">${[['open', 'Còn nợ', open.length], ['cut', 'Danh sách cắt điện', cut.length], ['closed', 'Đã thu hồi', closed.length], ['all', 'Tất cả', scoped.length]].map(x => `<button class="${st === x[0] ? 'on' : ''}" data-act="cn-debt-status" data-id="${x[0]}">${x[1]} (${x[2]})</button>`).join('')}</div>${scopeAll ? ' <span class="tag">Chỉ xem — NV thu phí phụ trách gian đi thu nợ</span>' : ''}</div></div>
     <div class="card"><div class="card-h"><div><h3>Khoản nợ chuyển từ Khoản phải thu</h3><div class="small muted">Quá hạn nộp → hệ thống tự chuyển sang đây. Thu nợ: đúng số còn thiếu, không thu một phần. Tiền ghi vào mã khoản thu gốc; biên lai gắn mã nợ. Tiểu thương có thể quét QR thu nợ (nội dung mã nợ, tự khớp về mã khoản thu). Hệ thống tự nhắc lần 1 sau ${cnCyc().r1} ngày, lần 2 sau ${cnCyc().r2} ngày quá hạn; quá ${cnCyc().r2} ngày → không thu hồi, vào danh sách cắt điện và gửi thông báo cắt điện.</div></div></div>
-      <div class="card-b">${U.table([{ t: 'Mã nợ' }, { t: 'Mã khoản thu gốc' }, { t: 'Tiểu thương' }, { t: 'Gian' }, { t: 'NV phụ trách' }, { t: 'Số tiền nợ', num: true }, { t: 'Quá hạn', num: true }, { t: 'Trạng thái' }, { t: 'Nhắc nợ' }],
+      <div class="card-b">${U.table([{ t: 'Mã nợ' }, { t: 'Mã khoản thu gốc' }, { t: 'Tiểu thương' }, { t: 'Gian' }, { t: 'Số tiền nợ', num: true }, { t: 'Quá hạn', num: true }, { t: 'Trạng thái' }, { t: 'Nhắc nợ' }],
         list.slice(pg.start, pg.end).map(x => `<tr style="${x.d.status !== 'OPEN' ? 'opacity:.6' : ''}"><td><b>${x.d.id}</b><div class="small muted">${U.esc(x.d.createdBy)} · ${U.esc(x.d.createdAt)}</div></td><td><button class="link-btn" data-act="inv-open" data-id="${x.d.invoiceId}">${x.d.invoiceId}</button><div class="small muted">Kỳ ${U.per(x.d.period)} · hạn ${U.dmy(x.d.dueDate)}</div></td>
           <td><b>${U.esc(x.t ? x.t.name : '')}</b><div class="small muted">${x.t ? x.t.id + ' · ' + U.maskPhone(x.t.phone) : ''}</div></td><td>${x.d.stallIds.map(id => (A.idx.stall.get(id) || {}).code || id).join(', ')}</td>
-          <td>${U.esc(Array.from(new Set(x.d.parts.map(p => { const a = p.collectorId && A.ACCOUNTS.get(p.collectorId); return a ? a.fullName : 'Chưa gán'; }))).join(', '))}</td>
           <td class="num"><b>${U.money(x.d.status === 'OPEN' ? x.remain : x.d.amount)}</b></td><td class="num">${x.d.status === 'OPEN' ? `<span class="tag danger">${U.days(x.d.dueDate, U.today())} ngày</span>` : '—'}</td><td>${statusCell(x)}</td>
           <td class="small">${(x.d.autoReminders || []).map(r => `<div>Lần ${r.level}: ${U.esc(r.at)} <span class="muted">(tự động)</span></div>`).join('')}${x.d.status === 'OPEN' ? `<div class="nowrap" style="margin-top:4px">${(x.i && x.i.reminders) || 0} lượt ${A.canDo('cong-no.nhac-no', ui.market) ? `<button class="btn sm" data-act="cn-debt-remind" data-id="${x.d.id}">Nhắc nợ</button>` : ''} <button class="btn sm" data-act="cn-debt-qr" data-id="${x.d.id}">QR</button></div>` : (x.d.autoReminders || []).length ? '' : '—'}</td></tr>`),
         { empty: st === 'open' ? 'Không còn khoản nợ 🎉' : 'Không có dòng phù hợp' })}${pg.html}</div></div>${!scopeAll && A.canDo('cong-no.thu-no', ui.market) ? hoCollectorPanel(financePeriod(), U.today(), 'DEBT') : ''}`;
@@ -2297,7 +2253,7 @@
   };
   A.ACT['cn-debt-qr'] = el => {
     const d = (A.db.debts || []).find(x => x.id === el.dataset.id), me = (A.currentAccount() || {}).id;
-    if (!d || d.market !== ui.market || !U.can('cong-no') || (!ptScopeAll() && !d.parts.some(p => p.collectorId === me))) return;
+    if (!d || d.market !== ui.market || !U.can('cong-no') || A.allowedMarkets(A.currentAccount()).indexOf(d.market) === -1) return;
     const i = A.idx.invoice.get(d.invoiceId), bank = (D.BANK_BY_MARKET && D.BANK_BY_MARKET[d.market]) || 'Vietcombank';
     A.modal(A.mHead('QR thu nợ ' + d.id) + `<div class="modal-b" style="text-align:center">
       <div style="display:inline-block;padding:14px;border:1px solid #d9dfeb;border-radius:12px;font-size:64px;line-height:1">▦</div>
@@ -2308,7 +2264,7 @@
   };
   A.ACT['cn-debt-remind'] = el => {
     const d = (A.db.debts || []).find(x => x.id === el.dataset.id), me = (A.currentAccount() || {}).id;
-    if (!d || d.status !== 'OPEN' || d.market !== ui.market || !A.canDo('cong-no.nhac-no', d.market) || (!ptScopeAll() && !d.parts.some(p => p.collectorId === me))) return U.toast('Không thể nhắc khoản nợ này');
+    if (!d || d.status !== 'OPEN' || d.market !== ui.market || !A.canDo('cong-no.nhac-no', d.market) || A.allowedMarkets(A.currentAccount()).indexOf(d.market) === -1) return U.toast('Không thể nhắc khoản nợ này');
     const i = A.idx.invoice.get(d.invoiceId), t = A.idx.trader.get(d.traderId);
     if (i) i.reminders = (i.reminders || 0) + 1;
     A.db.notifications = A.db.notifications || [];

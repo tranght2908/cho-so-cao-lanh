@@ -10,7 +10,7 @@ const manager = A.ACCOUNTS.get('AC-NV01');
 assert(manager);
 assert.strictEqual(manager.phone, '0900000001');
 assert.strictEqual(A.ACCOUNTS.primaryRole(manager), 'market_manager');
-assert.deepStrictEqual(Array.from(manager.marketScopes), ['CL', 'TTD']);
+assert.deepStrictEqual(Array.from(manager.marketScopes), ['ALL']);
 assert.strictEqual(A.ACCOUNTS.byPhone('0900000001').id, 'AC-NV01');
 assert.strictEqual(A.ACCOUNTS.list().filter(a => A.ACCOUNTS.normalizePhone(a.phone) === '0900000001').length, 1);
 
@@ -33,7 +33,6 @@ fresh.act('auth-verify');
 assert.strictEqual(A.ui.sessionAccountId, 'AC-NV01');
 assert.strictEqual(A.currentAccount().fullName, 'Trần Minh Khoa');
 assert.strictEqual(A.ACCOUNTS.primaryRole(A.currentAccount()), 'market_manager');
-assert(A.allowedMarkets(A.currentAccount()).includes('CL'));
-assert(A.allowedMarkets(A.currentAccount()).includes('TTD'));
+assert.strictEqual(A.allowedMarkets(A.currentAccount()).length, A.allowedMarkets({ marketScopes: ['ALL'] }).length);
 
 console.log('manager phone/OTP login regression PASS');

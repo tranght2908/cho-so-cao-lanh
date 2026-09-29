@@ -20,6 +20,7 @@
   service.RANKS = repository.ranks();
   service.STATUS = repository.statuses();
   service.PRICE_CONFIGS = repository.priceConfigs();
+  service.managementUnit = function (market) { return A.MARKET_CATALOG.marketManagementUnit(market); };
 
   // ---- Suy ra từ nguồn sẵn có, KHÔNG lưu bản sao trong danh mục ----
   // Loại diện tích: danh mục dùng chung U.AREA_TYPE_CODES / U.areaTypeLabel (business-points/format.js).
@@ -47,29 +48,18 @@
     return out;
   };
 
-  service.capacityTotals = function (row) {
-    const cap = row && row.capacityByAreaType;
-    if (!cap) return null;
-    return { maxPointCount: cap.reduce((s, x) => s + (x.maxPointCount || 0), 0), maxArea: cap.reduce((s, x) => s + (x.maxArea || 0), 0) };
-  };
-
-  // ---- Validation quy mô & chỉ tiêu ----
-  // input: { totalArea, businessArea, capacity: { [areaTypeId]: { maxPointCount, maxArea } } } — mỗi giá
-  // trị là số, null (bỏ trống) hoặc NaN (không phải số). opts.required: bắt buộc khai báo quy mô.
-  // opts.usage: service.usage(id) — capacity mới không được nhỏ hơn phần đã số hoá tương ứng.
-  // Trả về { ok, errors: { totalArea, businessArea, capacity: {[type]: {maxPointCount, maxArea}}, table }, value }.
+  // ---- Validation quy mô chợ ----
+  // input: { totalArea, businessArea } — mỗi giá trị là số, null (bỏ trống) hoặc NaN (không phải số).
+  // opts.required: bắt buộc khai báo quy mô. Không có quota theo loại diện tích.
+  // Trả về { ok, errors: { totalArea, businessArea }, value: { totalArea, businessArea } }.
   const fmt = n => Number(n || 0).toLocaleString('vi-VN', { maximumFractionDigits: 2 });
   service.validateScale = function (input, opts) {
     opts = opts || {};
-    const usage = opts.usage || {};
-    const errors = { capacity: {} };
-    const types = service.areaTypes();
-    const cap = input.capacity || {};
+    const errors = {};
     const blank = v => v === null || v === undefined;
-    const anyValue = !blank(input.totalArea) || !blank(input.businessArea) || types.some(t => cap[t.id] && (!blank(cap[t.id].maxPointCount) || !blank(cap[t.id].maxArea)));
-    if (!opts.required && !anyValue) {
+    if (!opts.required && blank(input.totalArea) && blank(input.businessArea)) {
       // Chợ chưa từng khai báo quy mô: được phép để "Chưa cập nhật" khi sửa thông tin chung.
-      return { ok: true, errors, value: { totalArea: null, businessArea: null, capacityByAreaType: null } };
+      return { ok: true, errors, value: { totalArea: null, businessArea: null } };
     }
     const total = input.totalArea, biz = input.businessArea;
     if (blank(total)) errors.totalArea = 'Vui lòng nhập tổng diện tích chợ.';
@@ -77,27 +67,19 @@
     if (blank(biz)) errors.businessArea = 'Vui lòng nhập diện tích phục vụ kinh doanh.';
     else if (isNaN(biz) || biz < 0) errors.businessArea = 'Diện tích phục vụ kinh doanh phải là số không âm.';
     else if (!errors.totalArea && biz > total) errors.businessArea = `Diện tích phục vụ kinh doanh (${fmt(biz)} m²) không được lớn hơn tổng diện tích chợ (${fmt(total)} m²).`;
+    return { ok: !errors.totalArea && !errors.businessArea, errors, value: { totalArea: total, businessArea: biz } };
+  };
 
-    const list = [];
-    let sumArea = 0;
-    types.forEach(t => {
-      const c = cap[t.id] || {};
-      const e = {};
-      const cnt = blank(c.maxPointCount) ? 0 : c.maxPointCount;
-      const area = blank(c.maxArea) ? 0 : c.maxArea;
-      const u = usage[t.id] || { count: 0, area: 0 };
-      if (isNaN(cnt) || cnt < 0 || !Number.isInteger(cnt)) e.maxPointCount = 'Số điểm tối đa phải là số nguyên không âm.';
-      else if (cnt < u.count) e.maxPointCount = `Không thể giảm xuống ${fmt(cnt)} điểm vì mặt bằng hiện có ${fmt(u.count)} điểm thuộc loại diện tích này.`;
-      if (isNaN(area) || area < 0) e.maxArea = 'Diện tích tối đa phải là số không âm.';
-      else if (area + 1e-9 < u.area) e.maxArea = `Không thể giảm xuống ${fmt(area)} m² vì mặt bằng hiện có ${fmt(u.area)} m² thuộc loại diện tích này.`;
-      if (e.maxPointCount || e.maxArea) errors.capacity[t.id] = e;
-      if (!isNaN(area) && area >= 0) sumArea += area;
-      list.push({ areaTypeId: t.id, maxPointCount: cnt, maxArea: area });
-    });
-    if (!errors.businessArea && !blank(biz) && sumArea > biz + 1e-9) {
-      errors.table = `Tổng diện tích chỉ tiêu đang vượt ${fmt(sumArea - biz)} m² so với diện tích phục vụ kinh doanh.`;
-    }
-    const ok = !errors.totalArea && !errors.businessArea && !errors.table && !Object.keys(errors.capacity).length;
-    return { ok, errors, value: { totalArea: total, businessArea: biz, capacityByAreaType: list } };
+  // ---- Loại diện tích kinh doanh áp dụng ----
+  // selected: [areaTypeId] Admin chọn; previous: allowedAreaTypeIds đang lưu (null = chưa cấu hình);
+  // usage: service.usage(id). Không cho BỎ một loại đang được điểm kinh doanh thật sử dụng — không xoá
+  // điểm, không đổi loại của điểm, không đụng mặt bằng. Trả về { ok, error, value } với value là danh
+  // sách theo thứ tự U.AREA_TYPE_CODES, hoặc null khi không chọn loại nào.
+  service.validateAreaTypes = function (selected, previous, usage) {
+    const codes = service.areaTypes().map(t => t.id);
+    const next = codes.filter(k => (selected || []).indexOf(k) !== -1);
+    const removedInUse = (previous || []).filter(k => next.indexOf(k) === -1 && usage && usage[k] && usage[k].count > 0);
+    const error = removedInUse.map(k => `Không thể bỏ loại '${A.U.areaTypeLabel(k) || k}' vì hiện có điểm kinh doanh đang sử dụng loại diện tích này.`).join(' ');
+    return { ok: !error, error, value: next.length ? next : null };
   };
 })(window.APP);

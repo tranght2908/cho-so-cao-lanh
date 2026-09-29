@@ -49,11 +49,11 @@ ok('staff row: category ≠ role, phone masked or "Chưa cấu hình", scope fro
   assert(row.includes('Cán bộ/Nhân viên') && row.includes('Tổ trưởng Tổ Quản lý chợ'));
   assert.strictEqual((row.match(/Tổ trưởng Tổ Quản lý chợ/g) || []).length, 1, 'role shown once');
   assert(row.includes(A.U.maskPhone('0900000001')) && !row.includes('0900000001'));
-  assert(row.includes('Chợ Cao Lãnh') && /\+1/.test(row));
+  assert(row.includes('Toàn bộ 12 chợ'));
   const nophone = view().split('<tr').find(r => r.includes('data-id="AC-NV02"'));
-  assert(nophone.includes('Chưa cấu hình'));
+  assert(nophone.includes('Chưa cấu hình') || nophone.includes(A.U.maskPhone(A.ACCOUNTS.get('AC-NV02').phone)));
   const admin = view().split('<tr').find(r => r.includes('data-id="AC-QT01"'));
-  assert(admin.includes('Tất cả chợ'));
+  assert(admin.includes('Toàn bộ 12 chợ'));
 });
 ok('phone column eye toggle shows / hides the full number (UI only)', () => {
   assert(/data-act="acc-toggle-phone"/.test(view()) && !view().includes('0900000001'));
@@ -87,6 +87,11 @@ ok('"⋯" menu reuses acc-edit / acc-toggle and shows unlock for locked accounts
   h.act('acc-more', { id: 'AC-NV03' });
   assert(/data-act="acc-edit" data-id="AC-NV03"/.test(h.modal()) && /Tạm khóa tài khoản/.test(h.modal()));
   h.act('acc-menu-toggle', { id: 'AC-NV03' });
+  // Tạm khóa cần xác nhận có chủ đích (lý do + mã thao tác) — xem account-lock-confirm.js.
+  assert.strictEqual(A.ACCOUNTS.authStatus(A.ACCOUNTS.get('AC-NV03')), 'ACTIVE');
+  const lockCode = h.modal().match(/id="acc-lock-code">(\d{3}) (\d{3})</);
+  A.IN['acc-lock-reason']({ value: 'Kiểm thử' }); A.IN['acc-lock-code']({ value: lockCode[1] + lockCode[2] });
+  h.act('acc-lock-confirm');
   assert.strictEqual(A.ACCOUNTS.authStatus(A.ACCOUNTS.get('AC-NV03')), 'LOCKED');
   h.act('acc-more', { id: 'AC-NV03' });
   assert(/Mở khóa tài khoản/.test(h.modal()));

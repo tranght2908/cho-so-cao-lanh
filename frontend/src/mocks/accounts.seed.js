@@ -5,6 +5,7 @@
   'use strict';
   const D = A.D;
   const roleName = id => { const r = A.PERM.role(id); return r ? r.name : id; };
+  const managementUnit = () => (A.MARKET_CATALOG && A.MARKET_CATALOG.MANAGEMENT_UNIT) || 'Tổ Quản lý chợ';
 
   // D.STAFF[].role (text mô tả chức danh, data.js) → role id RBAC tương ứng. Chỉ còn 4 chức danh
   // thật sự tồn tại trong D.STAFF sau khi data.js đã migrate 3 dòng Kế toán/Nhân viên Ban Quản lý
@@ -30,16 +31,19 @@
   function defaultStaffAccounts() {
     return D.STAFF.map(s => {
       const roleId = STAFF_ROLE_MAP[s.role] || 'collector';
+      // Chỉ seed Tổ trưởng canonical dùng chung. Account Tổ trưởng từng chợ đã có trong localStorage
+      // vẫn được giữ bởi store để cleanup ở task riêng, nhưng không được tạo thêm cho dữ liệu mới.
+      if (roleId === 'market_manager' && s.id !== 'NV01') return null;
       return {
         id: 'AC-' + s.id, code: s.id, fullName: s.name, phone: STAFF_DEMO_PHONE_BY_ID[s.id] || '',
         accountType: roleName(roleId),
         title: s.role, roleIds: [roleId],
         // Trưởng Ban Quản lý chợ quản lý cả 02 chợ có dữ liệu nghiệp vụ (demo "1 account, nhiều
         // chợ" — mục 19 yêu cầu); nhân viên gắn với đúng chợ được giao.
-        organization: s.role === 'Trưởng Ban Quản lý chợ' ? 'Ban Quản lý chợ phường Cao Lãnh' : 'Ban Quản lý ' + ((D.MARKETS.find(m => m.id === s.market) || {}).short || s.market),
-        marketScopes: s.role === 'Trưởng Ban Quản lý chợ' ? ['CL', 'TTD'] : [s.market], status: 'active'
+        organization: s.role === 'Trưởng Ban Quản lý chợ' ? managementUnit() : 'Ban Quản lý ' + ((D.MARKETS.find(m => m.id === s.market) || {}).short || s.market),
+        marketScopes: roleId === 'market_manager' ? ['ALL'] : [s.market], status: 'active'
       };
-    });
+    }).filter(Boolean);
   }
 
   // Account demo cho 10 chợ CHƯA có dữ liệu nghiệp vụ (floors:[] — xem data.js) — mỗi chợ có đúng 1
@@ -77,7 +81,6 @@
         accountType: roleName(roleId), title, roleIds: [roleId], organization: org,
         marketScopes: [mid], status: 'active'
       });
-      out.push(mk('QL', 'market_manager', managerName, 'Trưởng Ban Quản lý chợ'));
       out.push(mk('TP', 'collector', collectorName, 'Nhân viên thu phí'));
       out.push(mk('KT', 'technician', technicianName, 'Nhân viên kỹ thuật'));
     });
@@ -92,9 +95,9 @@
       // vào từng market chỉ để thanh demo hoạt động").
       { id: 'AC-LD01', code: 'LD01', fullName: 'Nguyễn Văn Phúc', phone: '0909123456', accountType: roleName('ward_leader'), title: 'Phó Chủ tịch UBND phường', roleIds: ['ward_leader'], organization: 'UBND phường Cao Lãnh', marketScopes: ['ALL'], status: 'active' },
       { id: 'AC-QT01', code: 'QT01', fullName: 'Đặng Thị Thu', phone: '0909234567', accountType: roleName('system_admin'), title: 'Quản trị hệ thống', roleIds: ['system_admin'], organization: 'UBND phường Cao Lãnh', marketScopes: ['ALL'], status: 'active' },
-      // Hai actor kế toán dùng role metadata chưa được cấp permission nghiệp vụ mặc định.
-      // Chỉ cập nhật dữ liệu tài khoản demo; không thay đổi ma trận quyền của các role.
-      { id: 'AC-KTTT01', code: 'KTTT01', fullName: 'Nguyễn Thị Minh Anh', phone: '0909000505', accountType: roleName('central_accountant'), title: 'Kế toán Trung tâm', roleIds: ['central_accountant'], organization: 'Trung tâm Cung ứng dịch vụ công', marketScopes: ['CL'], status: 'active' },
+      // Kế toán Trung tâm (A05) dùng role metadata chưa được cấp permission nghiệp vụ mặc định; phạm vi
+      // ALL theo chuẩn hoá central_accountant ở accounts/store. Kế toán phường không còn account seed.
+      { id: 'AC-KTTT01', code: 'KTTT01', fullName: 'Nguyễn Thị Minh Anh', phone: '0909000505', accountType: roleName('central_accountant'), title: 'Kế toán Trung tâm', roleIds: ['central_accountant'], organization: 'Trung tâm Cung ứng dịch vụ công', marketScopes: ['ALL'], status: 'active' },
       { id: 'AC-CHI-QUYET', code: 'CHI-QUYET', fullName: 'Chí Quyết', phone: '0909000001', accountType: roleName('trader'), title: 'Tiểu thương chợ quê', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'active', linkedTraderId: 'TTD-CQ', traderId: 'TTD-CQ' },
       { id: 'AC-TT-TTD', code: 'TT-TTD', fullName: 'Tiểu thương Chợ quê Tân Thuận Đông', phone: '0909666777', accountType: roleName('trader'), title: 'Tiểu thương chợ quê mẫu', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'active' },
       // TRADER_PROFILE_AND_MINIAPP_WORKFLOW: `traderId` — liên kết account Mini App với ĐÚNG 1

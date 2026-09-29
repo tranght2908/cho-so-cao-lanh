@@ -12,7 +12,8 @@ module.exports = {
   changeHandlers: 116,
   rbacSchema: 4,
   routes: 21,
-  localStorageKeys: 11,
+  // +1: choso-caolanh-action-cooldown (cooldown 30 phút của thao tác "Tạm khóa tài khoản" theo Admin).
+  localStorageKeys: 12,
   sessionStorageKeys: 1,
   replaySteps: 229
 };

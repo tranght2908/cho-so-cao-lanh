@@ -67,11 +67,14 @@
   };
   // Ô điểm kinh doanh của 1 Dãy (1 hàng vật lý): màu theo tình trạng hiển thị suy ra; điểm không khớp
   // chip trạng thái đang chọn (A.mbMatchesFilter) mờ đi. `data-id` là id kỹ thuật, nhãn là mã điểm.
-  A.mbCellsHtml = function (stalls) {
-    return `<div class="plan-row"><div class="cells" style="--n:${Math.max(stalls.length, 1)}">${stalls.map(st => {
+  // opts.detail: ô điểm hiển thị thêm diện tích + tình trạng (sơ đồ cấp Dãy của workspace Mặt bằng).
+  A.mbCellsHtml = function (stalls, opts) {
+    const detail = !!(opts && opts.detail);
+    return `<div class="plan-row"><div class="cells ${detail ? 'cells-detail' : ''}" style="--n:${Math.max(stalls.length, 1)}">${stalls.map(st => {
       const t = st.traderId ? A.idx.trader.get(st.traderId) : null;
-      const dim = !A.mbMatchesFilter(st);
-      return `<button class="cell s-${A.mbStatusAt(st)} ${st.type === 'kiot' ? 'kiot' : ''} ${dim ? 'dim' : ''} ${ui.sel === st.id ? 'sel' : ''}" data-act="stall" data-id="${st.id}" title="${mbPointTitle(st, t)}" aria-label="Điểm ${U.esc(st.code)}">${st.code}${A.WORKFLOW && A.WORKFLOW.isRecentPoint(st.id) ? '<small class="workflow-grid-new">Mới</small>' : ''}</button>`;
+      const dim = !A.mbMatchesFilter(st), s = A.mbStatusAt(st);
+      const extra = detail ? `<small class="cell-meta">${(Number(st.area) || 0).toLocaleString('vi-VN')} m² · ${U.esc(A.mbStatusLabel(s))}</small>` : '';
+      return `<button class="cell s-${s} ${st.type === 'kiot' ? 'kiot' : ''} ${dim ? 'dim' : ''} ${ui.sel === st.id ? 'sel' : ''}" data-act="stall" data-id="${st.id}" title="${mbPointTitle(st, t)}" aria-label="Điểm ${U.esc(st.code)}">${st.code}${extra}${A.WORKFLOW && A.WORKFLOW.isRecentPoint(st.id) ? '<small class="workflow-grid-new">Mới</small>' : ''}</button>`;
     }).join('') || '<span class="small muted">Chưa có điểm kinh doanh</span>'}</div></div>`;
   };
 

@@ -140,7 +140,7 @@ const login = (A, accountId) => { A.ui.sessionAccountId = accountId; A.ui.market
   assert(!Array.from(h.localStorage._m.keys()).some(k => /pending|workitem/i.test(k)), 'no pending-worklist storage key');
   assert(!A.db.traders.some(t => 'collectorId' in t), 'no trader.collectorId');
   const src = require('fs').readFileSync(path.join(root, 'src/features/contracts/create.js'), 'utf8');
-  assert(/collectorCanAccessPoint/.test(src) && /A\.ACT\['wf-contract-save'\][\s\S]*?if \(!collectorCanUse\(s\)\)/.test(src), 'save keeps Row collector validation');
+  assert(!/collectorCanUse|pointCollector|collectorId/.test(src), 'contract workflow has no Row collector dependency');
   assert.strictEqual(JSON.stringify(A.ACCOUNTS.list().map(a => [a.id, a.marketScopes])), scopesBefore, 'marketScopes unchanged');
 }
 

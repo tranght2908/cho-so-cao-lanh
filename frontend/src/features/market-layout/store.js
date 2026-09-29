@@ -1,6 +1,6 @@
 /* Market layout store (v16) — read-model + commands over the SINGLE layout graph in A.db (AGENTS §12):
  *   A.db.buildings (Khối/Nhà chợ) → A.db.floors (Tầng, TUỲ CHỌN) → A.db.rows (Dãy: đúng 1 ngành hàng,
- *   allocatedArea, collectorId) → A.db.stalls (điểm kinh doanh, rowId).
+ *   allocatedArea) → A.db.stalls (điểm kinh doanh, rowId).
  * Persisted with the rest of A.db ('choso-caolanh-state'). The legacy key 'choso-caolanh-layout' is no
  * longer read or written (left untouched in the browser as a backup).
  * The current Mặt bằng UI still consumes a nested view block → floor → zone; that view is DERIVED here on
@@ -58,8 +58,33 @@
   const pointsOfRow = rowId => list('stalls').filter(st => st.rowId === rowId);
   const rowsOfFloor = floorId => list('rows').filter(r => r.floorId === floorId);
 
+  // ---------- ngân sách diện tích theo cấp ----------
+  // Mỗi cấp chỉ so với con TRỰC TIẾP: Chợ (businessArea, Danh mục chợ) → Khối/Nhà (businessArea) → Tầng
+  // (businessArea) hoặc Dãy không chia tầng → Dãy (allocatedArea) → Điểm (area). Không cộng điểm vào tầng
+  // (không double count). Giá trị null = chưa khai báo (dữ liệu cũ) → cấp đó chưa giới hạn con.
+  const areaOf = (x, key) => x[key] == null || x[key] === '' ? null : Number(x[key]);
+  const sumOf = (arr, key) => U.sum(arr, x => Number(x[key]) || 0);
+  const floorsOfBuilding = bid => list('floors').filter(f => f.buildingId === bid);
+  const looseRowsOfBuilding = bid => list('rows').filter(r => r.buildingId === bid && !r.floorId);
+  function budgetOf(total, allocated) { return { total, allocated, remaining: total == null ? null : total - allocated }; }
+  function marketBudget(mid) {
+    const m = marketMeta(mid), bs = byMarket('buildings', mid);
+    return Object.assign(budgetOf(m && m.businessArea != null ? Number(m.businessArea) : null, sumOf(bs, 'businessArea')), { unsetChildren: bs.filter(b => areaOf(b, 'businessArea') == null).length });
+  }
+  function buildingBudget(b) {
+    const floors = floorsOfBuilding(b.id), kids = floors.length ? floors : looseRowsOfBuilding(b.id);
+    return Object.assign(budgetOf(areaOf(b, 'businessArea'), sumOf(kids, floors.length ? 'businessArea' : 'allocatedArea')), { childKind: floors.length ? 'floor' : 'row' });
+  }
+  function floorBudget(f) { return budgetOf(areaOf(f, 'businessArea'), sumOf(rowsOfFloor(f.id), 'allocatedArea')); }
+  function rowBudget(r) { return budgetOf(Number(r.allocatedArea) || 0, sumOf(pointsOfRow(r.id), 'area')); }
+  const over = (sum, cap) => sum > cap + 1e-9;
+  const exceedMsg = (by, what) => `Vượt ${fmt(by)} m² so với diện tích ${what}.`;
+  // phrase: "các Dãy hiện đang được phân bổ tổng cộng" / "các điểm kinh doanh trong Dãy hiện có tổng diện tích".
+  const shrinkMsg = (value, phrase, used) => `Không thể giảm xuống ${fmt(value)} m² vì ${phrase} ${fmt(used)} m².`;
+
   // ---------- validation ----------
-  // SUM(point.area trong Dãy) <= row.allocatedArea; SUM(row.allocatedArea trên Tầng) <= floor.businessArea.
+  // SUM(point.area trong Dãy) <= row.allocatedArea; SUM(row.allocatedArea trên Tầng) <= floor.businessArea;
+  // Dãy không chia tầng: SUM(row.allocatedArea của Khối) <= building.businessArea.
   function rowErrors(row) {
     const errs = [];
     const used = U.sum(pointsOfRow(row.id), st => Number(st.area) || 0);
@@ -68,11 +93,16 @@
     if (!String(row.name || '').trim()) errs.push('Chưa nhập tên dãy.');
     if (!row.industry) errs.push('Mỗi dãy phải có đúng 1 ngành hàng.');
     if (!(Number(row.allocatedArea) >= 0)) errs.push('Diện tích phân bổ của dãy không hợp lệ.');
-    else if (used > Number(row.allocatedArea) + 1e-9) errs.push('Diện tích phân bổ của dãy (' + Number(row.allocatedArea).toLocaleString('vi-VN') + ' m²) nhỏ hơn tổng diện tích các điểm trong dãy (' + used.toLocaleString('vi-VN') + ' m²).');
+    else if (over(used, Number(row.allocatedArea))) errs.push(shrinkMsg(row.allocatedArea, 'các điểm kinh doanh trong Dãy hiện có tổng diện tích', used));
     const f = row.floorId ? list('floors').find(x => x.id === row.floorId) : null;
     if (f && f.businessArea != null) {
       const sum = U.sum(rowsOfFloor(f.id).filter(r => r.id !== row.id), r => Number(r.allocatedArea) || 0) + (Number(row.allocatedArea) || 0);
-      if (sum > Number(f.businessArea) + 1e-9) errs.push('Tổng diện tích phân bổ các dãy trên ' + f.name + ' (' + sum.toLocaleString('vi-VN') + ' m²) vượt diện tích kinh doanh của tầng (' + Number(f.businessArea).toLocaleString('vi-VN') + ' m²).');
+      if (over(sum, Number(f.businessArea))) errs.push(exceedMsg(sum - Number(f.businessArea), 'còn lại của ' + f.name));
+    }
+    const b = !row.floorId ? list('buildings').find(x => x.id === row.buildingId) : null;
+    if (b && areaOf(b, 'businessArea') != null) {
+      const sum = sumOf(looseRowsOfBuilding(b.id).filter(r => r.id !== row.id), 'allocatedArea') + (Number(row.allocatedArea) || 0);
+      if (over(sum, Number(b.businessArea))) errs.push(exceedMsg(sum - Number(b.businessArea), 'còn lại của Khối/Nhà "' + b.name + '"'));
     }
     // A floorless Row still consumes the market's structural business area. This also protects
     // a row adjustment where no Floor capacity exists to enforce the boundary.
@@ -85,11 +115,60 @@
   }
 
   // ---------- commands (in-memory; the caller saves with A.save()) ----------
-  function addBuilding(mid, name) {
-    const b = { id: seqId(mid + '-B-', 'buildings'), market: mid, code: '', name, order: byMarket('buildings', mid).length + 1, status: 'active' };
-    db().buildings = list('buildings').concat([b]); A.reindex(); return b;
+  // Khối/Nhà: businessArea = diện tích kinh doanh được phân bổ từ chợ (null = dữ liệu cũ chưa khai báo).
+  function buildingErrors(b) {
+    const errs = [];
+    if (!String(b.name || '').trim()) errs.push('Chưa nhập tên Khối/Nhà chợ.');
+    else if (byMarket('buildings', b.market).some(x => x.id !== b.id && norm(x.name) === norm(b.name))) errs.push('Tên Khối/Nhà chợ "' + b.name + '" đã tồn tại trong chợ này.');
+    if (String(b.code || '').trim() && byMarket('buildings', b.market).some(x => x.id !== b.id && norm(x.code) === norm(b.code))) errs.push('Mã Khối/Nhà "' + b.code + '" đã tồn tại trong chợ này.');
+    const area = areaOf(b, 'businessArea');
+    if (area == null) return errs;
+    if (!(area > 0)) { errs.push('Diện tích kinh doanh phân bổ cho Khối/Nhà phải lớn hơn 0.'); return errs; }
+    const kids = buildingBudget(b);
+    if (over(kids.allocated, area)) errs.push(shrinkMsg(area, kids.childKind === 'floor' ? 'các Tầng hiện đang được phân bổ tổng cộng' : 'các Dãy hiện đang được phân bổ tổng cộng', kids.allocated));
+    const m = marketMeta(b.market);
+    if (m && m.businessArea != null) {
+      const sum = sumOf(byMarket('buildings', b.market).filter(x => x.id !== b.id), 'businessArea') + area;
+      if (over(sum, Number(m.businessArea))) errs.push(exceedMsg(sum - Number(m.businessArea), 'phục vụ kinh doanh còn lại của chợ'));
+    }
+    return errs;
   }
-  function renameBuilding(id, name) { const b = list('buildings').find(x => x.id === id); if (b) b.name = name; return b; }
+  // Mã gợi ý B1, B2… (cùng quy ước bản thiết lập ban đầu cũ), không trùng mã đã có trong chợ.
+  function nextBuildingCode(mid) {
+    const taken = new Set(byMarket('buildings', mid).map(b => norm(b.code)));
+    let i = byMarket('buildings', mid).length + 1, code;
+    do { code = 'B' + i++; } while (taken.has(norm(code)));
+    return code;
+  }
+  function nextFloorCode(bid) {
+    const taken = new Set(floorsOfBuilding(bid).map(f => norm(f.code)));
+    let i = floorsOfBuilding(bid).length + 1, code;
+    do { code = 'T' + i++; } while (taken.has(norm(code)));
+    return code;
+  }
+  // fields: { name, code, businessArea } — trả về { building } hoặc { errors } (không ghi khi lỗi).
+  function addBuilding(mid, fields) {
+    const f = fields || {};
+    const b = { id: seqId(mid + '-B-', 'buildings'), market: mid, code: String(f.code || '').trim() || nextBuildingCode(mid), name: String(f.name || '').trim(),
+      businessArea: areaOrNull(f.businessArea), order: byMarket('buildings', mid).length + 1, status: 'active' };
+    const errs = buildingErrors(b);
+    if (errs.length) return { errors: errs };
+    db().buildings = list('buildings').concat([b]); A.reindex(); return { building: b };
+  }
+  // patch: name, code, businessArea — trả về lỗi (không ghi) nếu vi phạm.
+  function updateBuilding(id, patch) {
+    const b = list('buildings').find(x => x.id === id);
+    if (!b) return ['Không tìm thấy Khối/Nhà chợ.'];
+    const next = Object.assign({}, b, patch);
+    if ('businessArea' in patch) next.businessArea = areaOrNull(patch.businessArea);
+    if ('name' in patch) next.name = String(patch.name || '').trim();
+    if ('code' in patch) next.code = String(patch.code || '').trim();
+    const errs = buildingErrors(next);
+    if (errs.length) return errs;
+    Object.assign(b, next);
+    return [];
+  }
+  function renameBuilding(id, name) { updateBuilding(id, { name }); return list('buildings').find(x => x.id === id); }
   function removeBuilding(id) {
     if (list('rows').some(r => r.buildingId === id)) return false;
     db().floors = list('floors').filter(f => f.buildingId !== id);
@@ -101,19 +180,27 @@
   function floorErrors(f) {
     const errs = [];
     if (!String(f.name || '').trim()) errs.push('Chưa nhập tên tầng.');
+    else if (floorsOfBuilding(f.buildingId).some(x => x.id !== f.id && norm(x.name) === norm(f.name))) errs.push('Tên tầng "' + f.name + '" đã tồn tại trong Khối/Nhà này.');
     if (f.businessArea != null) {
       const allocated = U.sum(rowsOfFloor(f.id), r => Number(r.allocatedArea) || 0);
       if (!(Number(f.businessArea) >= 0)) errs.push('Diện tích kinh doanh của tầng không hợp lệ.');
-      else if (Number(f.businessArea) + 1e-9 < allocated) errs.push('Diện tích kinh doanh của tầng (' + Number(f.businessArea).toLocaleString('vi-VN') + ' m²) nhỏ hơn tổng diện tích đã phân bổ cho các dãy (' + allocated.toLocaleString('vi-VN') + ' m²).');
+      else if (over(allocated, Number(f.businessArea))) errs.push(shrinkMsg(f.businessArea, 'các Dãy hiện đang được phân bổ tổng cộng', allocated));
+      const b = list('buildings').find(x => x.id === f.buildingId);
+      if (b && areaOf(b, 'businessArea') != null) {
+        const sum = sumOf(floorsOfBuilding(b.id).filter(x => x.id !== f.id), 'businessArea') + Number(f.businessArea);
+        if (over(sum, Number(b.businessArea))) errs.push(exceedMsg(sum - Number(b.businessArea), 'còn lại của Khối/Nhà "' + b.name + '"'));
+      }
     }
     return errs;
   }
   const areaOrNull = v => (v === '' || v == null) ? null : Number(v);
-  function addFloor(buildingId, name, businessArea) {
+  // opts: { code } — mã tầng gợi ý T1, T2… nếu không nhập.
+  function addFloor(buildingId, name, businessArea, opts) {
     const b = list('buildings').find(x => x.id === buildingId);
     if (!b) return { errors: ['Không tìm thấy khối/nhà chợ.'] };
     if (hasLooseRows(buildingId)) return { errors: ['Khối "' + b.name + '" đang có dãy không chia tầng, không thể thêm tầng.'] };
-    const f = { id: seqId(b.market + '-F-', 'floors'), market: b.market, buildingId, code: '', name, businessArea: areaOrNull(businessArea), order: list('floors').filter(x => x.buildingId === buildingId).length + 1 };
+    const code = String((opts && opts.code) || '').trim() || nextFloorCode(buildingId);
+    const f = { id: seqId(b.market + '-F-', 'floors'), market: b.market, buildingId, code, name, businessArea: areaOrNull(businessArea), order: list('floors').filter(x => x.buildingId === buildingId).length + 1 };
     const errs = floorErrors(f);
     if (errs.length) return { errors: errs };
     db().floors = list('floors').concat([f]); A.reindex(); return { floor: f };
@@ -134,11 +221,11 @@
     if (rowsOfFloor(id).length) return false;
     db().floors = list('floors').filter(f => f.id !== id); A.reindex(); return true;
   }
-  // Tạo Dãy mới (chưa có điểm, allocatedArea 0) — bắt buộc đúng 1 ngành hàng ngay khi tạo.
-  function addRow(mid, place, code, name, industry) {
+  // Tạo Dãy mới (chưa có điểm) — bắt buộc đúng 1 ngành hàng ngay khi tạo; allocatedArea tuỳ chọn (mặc định 0).
+  function addRow(mid, place, code, name, industry, allocatedArea) {
     if (!realFloorId(place.floorId) && hasFloors(place.blockId)) return { errors: ['Khối này chia tầng — hãy thêm dãy vào một tầng cụ thể.'] };
     const r = { id: seqId(mid + '-R-', 'rows'), market: mid, buildingId: place.blockId, floorId: realFloorId(place.floorId), code, name,
-      industry: industry || '', allocatedArea: 0, order: byMarket('rows', mid).length + 1, status: 'active', collectorId: null, note: '' };
+      industry: industry || '', allocatedArea: Math.max(0, Number(allocatedArea) || 0), order: byMarket('rows', mid).length + 1, status: 'active', note: '' };
     const errs = rowErrors(r);
     if (errs.length) return { errors: errs };
     db().rows = list('rows').concat([r]); A.reindex(); return { row: r };
@@ -155,12 +242,6 @@
     Object.assign(r, next);
     return [];
   }
-  // NV thu phí phụ trách Dãy (kể cả dãy chưa có điểm).
-  function assignRowCollector(rowId, collectorId) {
-    const r = list('rows').find(x => x.id === rowId);
-    if (r) r.collectorId = collectorId || null;
-    return r;
-  }
   function removeRow(id) {
     if (pointsOfRow(id).length) return false;
     db().rows = list('rows').filter(r => r.id !== id); A.reindex(); return true;
@@ -175,7 +256,9 @@
     A.reindex(); return true;
   }
 
-  // ---------- Thiết lập mặt bằng ban đầu (draft-only) ----------
+  // ---------- Thiết lập mặt bằng ban đầu (draft-only) — DEPRECATED ----------
+  // Màn Mặt bằng không còn mở wizard nhiều bước (thay bằng workspace xây dần từng Khối/Tầng/Dãy/nhóm điểm).
+  // API dưới đây chỉ còn giữ cho tương thích/kiểm thử (nextRowCode dùng chung); không có entry point UI.
   // Wizard sử dụng các bản ghi tạm trong UI. Không command nào dưới đây ghi vào A.db
   // cho đến `commitInitialSetup`, để Hủy/Quay lại không để lại cấu trúc dở dang.
   const norm = v => String(v || '').trim().toLocaleLowerCase('vi-VN');
@@ -187,6 +270,10 @@
   const effectiveMarket = mid => (A.effectiveMarkets ? A.effectiveMarkets() : []).some(m => m.id === mid);
   const marketMeta = mid => A.features && A.features.markets && A.features.markets.service && A.features.markets.service.get(mid);
   const areaTypes = () => U.AREA_TYPE_CODES || [];
+  // Loại diện tích dùng được khi bố trí điểm tại chợ = allowedAreaTypeIds (Danh mục chợ). Chợ chưa cấu hình
+  // (null, dữ liệu cũ) → tạm dùng toàn bộ danh mục để không chặn dữ liệu hiện có (xem areaTypesConfigured).
+  const areaTypesConfigured = mid => { const m = marketMeta(mid); return !!(m && Array.isArray(m.allowedAreaTypeIds)); };
+  const allowedAreaTypes = mid => { const m = marketMeta(mid); return m && Array.isArray(m.allowedAreaTypeIds) ? areaTypes().filter(k => m.allowedAreaTypeIds.indexOf(k) !== -1) : areaTypes(); };
   const areaLabel = id => U.areaTypeLabel ? U.areaTypeLabel(id) : id;
   const cleanCode = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/Đ/g, 'D').replace(/[^A-Z0-9]+/g, ' ').trim();
   const initials = value => cleanCode(value).split(/\s+/).filter(Boolean).map(x => x[0]).join('').slice(0, 4) || 'D';
@@ -231,13 +318,15 @@
     });
     return out;
   }
-  // Shared PointGroup rules. Both the initial setup wizard and the row expansion modal call this
-  // rather than maintaining separate quantity/area validation.
-  function validatePointGroups(groups, rowById, fail) {
+  // Shared PointGroup rules (thêm nhóm điểm vào Dãy + API thiết lập ban đầu cũ). Loại diện tích phải
+  // thuộc các loại chợ áp dụng; KHÔNG còn quota số điểm/m² theo loại.
+  function validatePointGroups(groups, rowById, fail, mid) {
+    const allowed = allowedAreaTypes(mid);
     (groups || []).forEach(g => {
       const row = rowById(g.rowDraftId || g.rowId);
       if (!row) return fail('Nhóm điểm phải thuộc một Dãy hợp lệ.');
       if (!areaTypes().includes(g.areaTypeId)) fail('Loại diện tích của nhóm điểm không hợp lệ.');
+      else if (!allowed.includes(g.areaTypeId)) fail('Loại diện tích "' + areaLabel(g.areaTypeId) + '" không được áp dụng tại chợ này.');
       if (!Number.isInteger(Number(g.quantity)) || Number(g.quantity) < 1) fail('Số điểm trong mỗi nhóm phải là số nguyên từ 1 trở lên.');
       if (!(Number(g.areaPerPoint) > 0)) fail('Diện tích mỗi điểm phải lớn hơn 0.');
     });
@@ -255,23 +344,15 @@
     const row = list('rows').find(r => r.id === rowId && r.market === mid), errors = [];
     const fail = msg => errors.push(msg);
     if (!row) return { ok: false, errors: ['Không tìm thấy Dãy hoặc Dãy không thuộc chợ đang chọn.'] };
-    validatePointGroups((groups || []).map(g => Object.assign({}, g, { rowId })), id => id === rowId ? row : null, fail);
+    validatePointGroups((groups || []).map(g => Object.assign({}, g, { rowId })), id => id === rowId ? row : null, fail, mid);
+    // Σ(điểm hiện có) + Σ(quantity × areaPerPoint) <= row.allocatedArea.
     const current = pointsOfRow(rowId), used = U.sum(current, st => Number(st.area) || 0), addedArea = U.sum(groups || [], g => n(g.quantity) * n(g.areaPerPoint)), remaining = n(row.allocatedArea) - used;
-    if (addedArea > remaining + 1e-9) fail(`Không thể tạo thêm ${fmt(addedArea)} m² điểm kinh doanh. Dãy ${row.code} chỉ còn ${fmt(Math.max(0, remaining))} m² chưa bố trí.`);
-    const market = marketMeta(mid), capacity = market && Array.isArray(market.capacityByAreaType) ? market.capacityByAreaType : null;
+    if (addedArea > remaining + 1e-9) fail(exceedMsg(addedArea - remaining, 'được phân bổ cho Dãy'));
     const added = draftPointUsage({ pointGroups: groups || [] });
-    if (capacity) {
-      const existing = A.features.markets.service.usage(mid);
-      capacity.forEach(c => {
-        const before = existing[c.areaTypeId] || { count: 0, area: 0 }, add = added[c.areaTypeId] || { count: 0, area: 0 }, label = areaLabel(c.areaTypeId);
-        if (before.count + add.count > n(c.maxPointCount)) fail(`Loại ${label} chỉ còn chỉ tiêu ${Math.max(0, n(c.maxPointCount) - before.count)} điểm / ${fmt(Math.max(0, n(c.maxArea) - before.area))} m².`);
-        if (before.area + add.area > n(c.maxArea) + 1e-9) fail(`Diện tích ${label} sau khi tạo là ${fmt(before.area + add.area)}/${fmt(c.maxArea)} m², vượt ${fmt(before.area + add.area - n(c.maxArea))} m².`);
-      });
-    }
     const pointCodes = pointCodesForGroups(mid, row.code, groups, current.map(x => x.code));
     const all = Object.values(pointCodes).flat();
     if (all.some(code => list('stalls').some(st => st.market === mid && norm(st.code) === norm(code)))) fail('Mã điểm kinh doanh tự sinh bị trùng với dữ liệu hiện có.');
-    return { ok: !errors.length, errors, row, used, remaining, addedArea, capacity, pointCodes, added };
+    return { ok: !errors.length, errors, row, used, remaining, addedArea, pointCodes, added };
   }
   function commitRowPoints(mid, rowId, groups) {
     const check = validateRowPointGroups(mid, rowId, groups);
@@ -333,25 +414,15 @@
     const market = marketMeta(draft && draft.marketId);
     const totalStructural = rows.reduce((s, r) => s + n(r.allocatedArea), 0);
     if (market && market.businessArea != null && totalStructural > n(market.businessArea) + 1e-9) fail(3, `Tổng diện tích phân bổ cho Dãy là ${fmt(totalStructural)} m², vượt diện tích phục vụ kinh doanh của chợ (${fmt(market.businessArea)} m²).`);
-    validatePointGroups(groups, id => rows.find(r => r.id === id), msg => fail(4, msg));
+    validatePointGroups(groups, id => rows.find(r => r.id === id), msg => fail(4, msg), draft && draft.marketId);
     rows.forEach(r => {
       const used = groups.filter(g => g.rowDraftId === r.id).reduce((s, g) => s + n(g.quantity) * n(g.areaPerPoint), 0);
       if (used > n(r.allocatedArea) + 1e-9) fail(4, `Tổng diện tích điểm của Dãy "${r.name || 'chưa đặt tên'}" là ${fmt(used)} m², vượt diện tích phân bổ ${fmt(r.allocatedArea)} m².`);
     });
-    const capacity = market && Array.isArray(market.capacityByAreaType) ? market.capacityByAreaType : null;
-    if (capacity) {
-      const existing = A.features.markets.service.usage(draft.marketId), added = draftPointUsage(draft);
-      capacity.forEach(c => {
-        const before = existing[c.areaTypeId] || { count: 0, area: 0 }, add = added[c.areaTypeId] || { count: 0, area: 0 };
-        const afterCount = before.count + add.count, afterArea = before.area + add.area, label = areaLabel(c.areaTypeId);
-        if (afterCount > n(c.maxPointCount)) fail(4, `Không thể tạo thêm ${add.count} điểm ${label}. Sau thiết lập sẽ có ${afterCount}/${n(c.maxPointCount)} điểm, vượt chỉ tiêu ${afterCount - n(c.maxPointCount)} điểm.`);
-        if (afterArea > n(c.maxArea) + 1e-9) fail(4, `Diện tích ${label} sau thiết lập là ${fmt(afterArea)}/${fmt(c.maxArea)} m², vượt ${fmt(afterArea - n(c.maxArea))} m².`);
-      });
-    }
     const preview = draft ? setupPreview(draft) : { rowCodes: {}, pointCodes: {}, usage: {} };
     const codes = Object.values(preview.rowCodes).filter(Boolean); if (new Set(codes.map(norm)).size !== codes.length) fail(3, 'Mã Dãy tự sinh bị trùng. Vui lòng kiểm tra tên/ngành hàng.');
     const allPointCodes = Object.values(preview.pointCodes).flat(); if (new Set(allPointCodes.map(norm)).size !== allPointCodes.length || allPointCodes.some(code => list('stalls').some(st => st.market === draft.marketId && norm(st.code) === norm(code)))) fail(4, 'Mã điểm kinh doanh tự sinh bị trùng với dữ liệu hiện có.');
-    return { ok: !errors.length, errors, byStep, preview, capacity, market, totalStructural };
+    return { ok: !errors.length, errors, byStep, preview, market, totalStructural };
   }
   function commitInitialSetup(draft) {
     const check = validateInitialSetup(draft);
@@ -362,7 +433,7 @@
     const bIds = new Set(list('buildings').map(x => x.id)), fIds = new Set(list('floors').map(x => x.id)), rIds = new Set(list('rows').map(x => x.id));
     const newBuildings = draft.buildings.map((b, i) => { const code = 'B' + (byMarket('buildings', mid).length + i + 1), id = uniqueId(mid + '-B-' + code, bIds); buildingId[b.id] = id; buildingCode[b.id] = code; return { id, market: mid, code, name: String(b.name).trim(), order: byMarket('buildings', mid).length + i + 1, status: 'active' }; });
     const newFloors = draft.floors.map((f, i) => { const code = 'F' + (i + 1), id = uniqueId(mid + '-F-' + buildingCode[f.buildingDraftId] + '-' + code, fIds); floorId[f.id] = id; return { id, market: mid, buildingId: buildingId[f.buildingDraftId], code, name: String(f.name).trim(), businessArea: n(f.businessArea), order: i + 1 }; });
-    const newRows = draft.rows.map((r, i) => { const code = p.rowCodes[r.id], id = uniqueId(mid + '-R-' + code, rIds); rowId[r.id] = id; return { id, market: mid, buildingId: buildingId[r.buildingDraftId], floorId: r.floorDraftId ? floorId[r.floorDraftId] : null, code, name: String(r.name).trim(), industry: r.industry, allocatedArea: n(r.allocatedArea), order: byMarket('rows', mid).length + i + 1, status: 'active', collectorId: null, note: '' }; });
+    const newRows = draft.rows.map((r, i) => { const code = p.rowCodes[r.id], id = uniqueId(mid + '-R-' + code, rIds); rowId[r.id] = id; return { id, market: mid, buildingId: buildingId[r.buildingDraftId], floorId: r.floorDraftId ? floorId[r.floorDraftId] : null, code, name: String(r.name).trim(), industry: r.industry, allocatedArea: n(r.allocatedArea), order: byMarket('rows', mid).length + i + 1, status: 'active', note: '' }; });
     const newStalls = [];
     draft.pointGroups.forEach(g => (p.pointCodes[g.id] || []).forEach((code, i) => newStalls.push({ id: mid + '-' + code, code, market: mid, rowId: rowId[g.rowDraftId], num: i + 1, area: n(g.areaPerPoint), areaTypeId: g.areaTypeId, status: 'active', hasMeter: false, type: '', note: '', history: [] })));
     // All final records exist before the first assignment. One state save follows one graph swap.
@@ -382,9 +453,11 @@
     CATS: D.INDUSTRIES, NO_FLOOR, nextRowCode, suggestRowName, save: () => A.save(),
     of: mid => ({ blocks: blocksOf(mid) }),
     buildingsOf: mid => byMarket('buildings', mid), floorsOf: mid => byMarket('floors', mid), rowsOf: mid => byMarket('rows', mid),
-    pointsOfRow, rowErrors, floorErrors, hasFloors, hasLooseRows,
+    pointsOfRow, rowErrors, floorErrors, buildingErrors, hasFloors, hasLooseRows,
+    budget: { market: marketBudget, building: buildingBudget, floor: floorBudget, row: rowBudget },
+    allowedAreaTypes, areaTypesConfigured, nextBuildingCode, nextFloorCode,
     blocksOf, findBlock, floorsOfBlock, findFloor, firstFloorKey, firstZonePlace, findFloorOfZone, findZone, flatZones, codeTaken, marketLayoutStats,
-    addBuilding, renameBuilding, removeBuilding, addFloor, updateFloor, renameFloor, removeFloor, addRow, updateRow, assignRowCollector, removeRow, resetMarket,
+    addBuilding, updateBuilding, renameBuilding, removeBuilding, addFloor, updateFloor, renameFloor, removeFloor, addRow, updateRow, removeRow, resetMarket,
     initialSetup: { graphExists, createDraft: createInitialDraft, preview: setupPreview, validate: validateInitialSetup, commit: commitInitialSetup },
     pointGroups: { validate: validateRowPointGroups, commit: commitRowPoints, preview: pointCodesForGroups }
   };

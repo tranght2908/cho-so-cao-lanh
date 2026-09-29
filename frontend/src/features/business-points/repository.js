@@ -25,6 +25,7 @@
   getter('section', function () { const r = svc().row(this); return r ? r.code : ''; });
   getter('sectionName', function () { const r = svc().row(this); return r ? r.name : ''; });
   getter('floor', function () { const r = svc().row(this); return r ? r.floorId : null; });
+  // Deprecated compatibility getter. New access/display code uses Account.marketScopes, never this value.
   getter('collectorId', function () { const r = svc().row(this); return r ? r.collectorId || null : null; });
   getter('traderId', function () { return svc().occupantId(this); });
   getter('contractId', function () { const c = svc().contractOn(this.id, A.U.today()); return c ? c.id : null; });
@@ -44,12 +45,5 @@
     point.history = point.history || [];
     point.history.unshift(entry);
     return point;
-  };
-  // One active fee collector per point (AGENTS §17), nay phân công theo Dãy: ghi collectorId lên các
-  // Row chứa các điểm được chọn. Lịch sử thu (payments.by) không bị viết lại.
-  repository.assignCollector = function (points, collectorId) {
-    const rowIds = new Set(points.map(st => st.rowId).filter(Boolean));
-    (A.db.rows || []).forEach(r => { if (rowIds.has(r.id)) r.collectorId = collectorId || null; });
-    return points;
   };
 })(window.APP);

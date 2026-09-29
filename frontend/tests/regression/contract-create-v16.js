@@ -1,4 +1,4 @@
-/* Contract-create v16: hierarchy IDs, multiple contracts per Trader and Row collector scope. */
+/* Contract-create v16: hierarchy IDs, multiple contracts per Trader and manager-only creation. */
 const assert = require('assert');
 const path = require('path');
 const { createApp } = require('./harness');
@@ -68,21 +68,12 @@ ok('derived presentation lifecycle is date-aware without persisting expired stat
   assert.strictEqual(CS.presentationStatus({ status: 'chamdut', start: today, end: today }), 'terminated');
 });
 
-const originalCollector = row.collectorId;
-ok('collector can only open/use points in Rows assigned to that collector', () => {
-  row.collectorId = collector.id; A.reindex();
+ok('collector cannot open or save a contract, regardless of legacy Row assignment', () => {
   login(A, collector.id, 'CL');
-  h.act('wf-contract-open', { id: trader.id });
-  h.input('#wf-ct-start', A.U.today()); h.input('#wf-ct-end', addDays(A.U.today(), 30));
-  mirrorPointSelection(point);
-  assert(h.modal().includes(point.code));
   const before = A.db.contracts.length;
-  // Simulate a concurrent reassignment after the UI selection: handler must reject it.
-  row.collectorId = null; A.reindex();
+  h.act('wf-contract-open', { id: trader.id });
   h.act('wf-contract-save');
   assert.strictEqual(A.db.contracts.length, before);
-  assert(h.trace.toasts.at(-1).includes('không thuộc Dãy được phân công'), h.trace.toasts.at(-1));
 });
-row.collectorId = originalCollector; A.reindex();
 
 console.log(`contract-create-v16 regression PASS (${passed} checks)`);

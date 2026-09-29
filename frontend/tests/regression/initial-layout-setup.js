@@ -36,13 +36,13 @@ ok('blocks row/floor and point-area violations before save', () => {
   assert(!S.initialSetup.validate(bad).ok);
   ['buildings', 'floors', 'rows', 'stalls'].forEach(k => assert.strictEqual(before(k), 0, 'no partial record: ' + k));
 });
-ok('capacity checks count and area independently when the catalog has targets', () => {
+ok('legacy per-type quota no longer applies; area types must be applied by the market', () => {
   const MC = A.features.markets.service;
-  MC.update('HA', { totalArea: 1000, businessArea: 500, capacityByAreaType: [{ areaTypeId: 'covered', maxPointCount: 3, maxArea: 1000 }, { areaTypeId: 'uncovered', maxPointCount: 10, maxArea: 1000 }] }, 'test');
-  assert(!S.initialSetup.validate(d).ok, '4 covered points must exceed count capacity');
-  MC.update('HA', { totalArea: 1000, businessArea: 500, capacityByAreaType: [{ areaTypeId: 'covered', maxPointCount: 10, maxArea: 30 }, { areaTypeId: 'uncovered', maxPointCount: 10, maxArea: 1000 }] }, 'test');
-  assert(!S.initialSetup.validate(d).ok, '40m² covered must exceed area capacity');
-  MC.update('HA', { totalArea: 1000, businessArea: 500, capacityByAreaType: [{ areaTypeId: 'covered', maxPointCount: 10, maxArea: 1000 }, { areaTypeId: 'uncovered', maxPointCount: 10, maxArea: 1000 }] }, 'test');
+  MC.update('HA', { totalArea: 1000, businessArea: 500, capacityByAreaType: [{ areaTypeId: 'covered', maxPointCount: 3, maxArea: 30 }, { areaTypeId: 'uncovered', maxPointCount: 1, maxArea: 1 }] }, 'test');
+  assert(S.initialSetup.validate(d).ok, 'old quota (count/area per type) is ignored');
+  MC.update('HA', { allowedAreaTypeIds: ['covered'] }, 'test');
+  assert(S.initialSetup.validate(d).errors.some(e => /không được áp dụng tại chợ này/.test(e)), 'uncovered not applied');
+  MC.update('HA', { allowedAreaTypeIds: ['covered', 'uncovered'] }, 'test');
   assert(S.initialSetup.validate(d).ok);
 });
 ok('atomic commit creates graph only after final validation, and persists', () => {
