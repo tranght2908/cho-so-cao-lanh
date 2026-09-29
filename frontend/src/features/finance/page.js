@@ -56,7 +56,7 @@
       </div>
       ${periodStatusBadge(p)}<span class="spacer"></span>
       ${p.status === 'CLOSED' ? `<span class="small muted">Người chốt: <b>${U.esc(p.closedBy)}</b> · ${U.esc(p.closedAt)}</span>` : `<span class="small muted">Ngày chốt dự kiến: <b>${U.dmy(p.closeDate)}</b></span>`}
-    </div></div>`;
+    </div>${p.status === 'CLOSED' && idx === list.length - 1 && A.canDo('dien-nuoc.ghi-chi-so', ui.market) ? '<div class="card-b" style="padding-top:0"><div class="note info">Kỳ ghi chỉ số này đã chốt, chỉ xem. Kỳ ghi chỉ số mới tự mở (kèm danh sách đồng hồ khu của bạn) khi mở kỳ thu tháng sau.</div></div>' : ''}</div>`;
   }
   function photoBadge(r, kind, editable) {
     const att = kind === 'elec' ? r.elecPhoto : r.waterPhoto;
@@ -337,6 +337,8 @@
     if (mrServiceMode()) return `<div class="card meter-title"><div class="card-b"><h2>GHI CHỈ SỐ ĐIỆN, NƯỚC</h2><p>${U.esc(U.market(ui.market).name)} đang thu điện, nước theo hình thức <b>chia đều – thu như dịch vụ chợ</b>, nên không ghi chỉ số công tơ.</p>
       <div class="note info">Tiền điện, nước chia đều được Tổ trưởng nhập hằng tháng ở Tài chính › Chính sách thu và biểu phí › Điện & nước và tự vào khoản phải thu khi Trưởng Ban tính/phát hành. Hình thức thu do Tổ trưởng Tổ Quản lý chợ chọn (tab Điện & nước).</div></div></div>`;
     const p=currentPeriod(), q=(f.mrSearch||'').toLowerCase(), filter=f.mrStatus||'all';
+    // KY_GHI_CHI_SO_MOI: kỳ đang ghi mà chưa có dòng chỉ số (vd. chợ vừa chuyển sang thu theo công tơ) → tạo danh sách đồng hồ.
+    if (p && p.status === 'RECORDING' && A.ensureMeterReadings && A.ensureMeterReadings(p.id)) A.save();
     const groups=A.db.readings.filter(r=>r.period===p.id&&U.inM(A.idx.stall.get(r.stallId))).map(r=>({r,st:A.idx.stall.get(r.stallId),elec:mrItem(r,'elec'),water:mrItem(r,'water')}));
     const match=g=>!q||[g.st.code,g.st.traderId&&A.idx.trader.get(g.st.traderId)&&A.idx.trader.get(g.st.traderId).name,g.st.traderId,mrCode(g.st,'elec'),mrCode(g.st,'water')].join(' ').toLowerCase().includes(q);
     const cOpts=mrCollectorOptions(groups), meId=(mrMe()||{}).id;

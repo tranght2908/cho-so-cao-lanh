@@ -110,6 +110,27 @@
   }
   function drafts(m, p) { return (Array.isArray(A.db.billingDrafts) ? A.db.billingDrafts : []).filter(x => x.market === m && x.period === p); }
   function warnings(m, p) { return (Array.isArray(A.db.billingWarnings) ? A.db.billingWarnings : []).filter(x => x.market === m && x.period === p); }
+  // KY_GHI_CHI_SO_MOI (P 29/09/2026): mở kỳ ghi chỉ số mới phải có sẵn danh sách đồng hồ để NV thu phí đi ghi + chụp ảnh.
+  // Tạo dòng chỉ số cho mọi điểm KD có công tơ (hasMeter), đang hoạt động, có hợp đồng hiệu lực, ở chợ thu THEO CÔNG TƠ;
+  // chỉ số cũ = chỉ số mới gần nhất của điểm đó. Idempotent (không tạo trùng); không đổi quyền — ghi vẫn qua mrCanRecord.
+  A.ensureMeterReadings = function (periodId) {
+    const mp = (A.db.meterPeriods || []).find(x => x.id === periodId);
+    if (!mp || mp.status !== 'RECORDING') return 0;
+    const has = new Set(A.db.readings.filter(r => r.period === periodId).map(r => r.stallId));
+    const withContract = new Set(A.db.contracts.filter(c => c.status === 'hieuluc').map(c => c.businessPointId || c.stallId));
+    let n = 0;
+    A.db.stalls.filter(st => st.hasMeter && st.status === 'active' && withContract.has(st.id) && !has.has(st.id)
+      && !(A.SERVICE_CFG && A.SERVICE_CFG.utilityMode && A.SERVICE_CFG.utilityMode(st.market) === 'SERVICE')).forEach(st => {
+      const last = A.db.readings.filter(r => r.stallId === st.id && r.period < periodId).sort((a, b) => b.period.localeCompare(a.period))[0] || {};
+      const pick = (cur, prev) => cur != null ? cur : (prev != null ? prev : 0);
+      A.db.readings.push({ stallId: st.id, period: periodId,
+        elecPrev: pick(last.elecCur, last.elecPrev), elecCur: null, elecAvg: last.elecAvg || 0,
+        waterPrev: pick(last.waterCur, last.waterPrev), waterCur: null, waterAvg: last.waterAvg || 0,
+        status: 'PENDING', recordedBy: null, recordedAt: null, elecPhoto: null, waterPhoto: null });
+      n++;
+    });
+    return n;
+  };
   function openNextPeriod() {
     const all = A.db.billingPeriods.slice().sort((a, b) => String(a.id).localeCompare(String(b.id)));
     const last = all[all.length - 1];
@@ -122,6 +143,7 @@
     const next = { id, label: m + '/' + y, startDate: y + '-' + m + '-01', endDate: y + '-' + m + '-' + lastDay, dueDate: y + '-' + m + '-15', status: 'OPEN', calculationStatus: 'DATA_ENTRY' };
     A.db.billingPeriods.push(next);
     if (!(A.db.meterPeriods || []).some(x => x.id === id)) A.db.meterPeriods.push({ id, month: Number(m), year: y, status: 'RECORDING', closeDate: y + '-' + m + '-' + lastDay });
+    A.ensureMeterReadings(id);
     A.save(); return next;
   }
   // PHAT_HANH_KHOAN_THU: phát hành = (1) sinh mã PT-…, (2) gửi thông báo số phải nộp cho TỪNG tiểu thương
