@@ -177,6 +177,42 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 .tbl-wrap { overflow-x: auto; }
 .tbl th { text-align: left; font-size: var(--font-size-sm); color: var(--muted); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--line); background: var(--surface-2); white-space: nowrap; }
 .tbl td { padding: 8px 10px; border-bottom: 1px solid #eef2f7; vertical-align: middle; font-size: var(--font-size-base); }
+.cash-reconcile-kpis .card { min-height: 82px; }
+.cash-reconcile-filters { gap: 8px; flex-wrap: wrap; }
+.cash-reconcile-filters .input { min-width: 180px; flex: 1 1 190px; }
+.cash-reconcile-list .tbl-wrap, .cash-reconcile-receipts .tbl-wrap { width: 100%; overflow-x: auto; }
+.cash-reconcile-list .tbl { min-width: 1540px; }
+.cash-reconcile-receipts .tbl { min-width: 1060px; }
+.cash-reconcile-list .tbl th + th, .cash-reconcile-list .tbl td + td,
+.cash-reconcile-receipts .tbl th + th, .cash-reconcile-receipts .tbl td + td { border-left: 1px solid #f0f3f7; }
+.cash-reconcile-list .tbl td, .cash-reconcile-receipts .tbl td { vertical-align: top; }
+.cash-reconcile-diff { color: #a8493f; font-weight: 650; }
+.period-reconcile-filters { gap: 8px; flex-wrap: wrap; }
+.period-reconcile-filters .input { min-width: 190px; flex: 1 1 210px; }
+.period-reconcile-kpis .card { min-height: 82px; }
+.period-reconcile-page > .card:last-child .tbl-wrap { overflow-x: auto; }
+.period-reconcile-page > .card:last-child .tbl { min-width: 1260px; }
+.period-reconcile-progress { display: grid; gap: 8px; max-width: 720px; }
+.period-reconcile-progress-bar { height: 10px; border-radius: 999px; background: var(--surface-2); overflow: hidden; border: 1px solid var(--line); }
+.period-reconcile-progress-bar i { display: block; height: 100%; background: #4d8bd6; border-radius: inherit; }
+.period-reconcile-detail .tbl-wrap { overflow-x: auto; }
+.period-reconcile-detail .tbl { min-width: 980px; }
+.modal.wide:has(.cash-reconcile-modal) { width: min(1180px, 100%); }
+.cash-reconcile-modal .modal-b { display: flex; flex-direction: column; gap: 18px; }
+.cash-reconcile-section { padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.cash-reconcile-section:last-child { padding-bottom: 0; border-bottom: 0; }
+.cash-reconcile-section > h4 { margin: 0 0 12px; font-size: var(--font-size-md); }
+.cash-reconcile-facts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin: 0; }
+.cash-reconcile-facts > div { min-width: 0; }
+.cash-reconcile-facts dt { color: var(--muted); font-size: var(--font-size-sm); }
+.cash-reconcile-facts dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.cash-reconcile-inputs { display: grid; gap: 12px; max-width: 650px; margin-top: 16px; }
+.cash-reconcile-inputs .field { margin: 0; }
+.cash-reconcile-live-diff { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+.cash-reconcile-live-diff output { font-weight: 700; font-variant-numeric: tabular-nums; }
+@media (max-width: 680px) {
+   .cash-reconcile-modal .modal-f { position: sticky; bottom: 0; background: #fff; }
+}
 .tbl tr.click { cursor: pointer; }
 .tbl tr.click:hover td { background: #f3f7fc; }
 .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
