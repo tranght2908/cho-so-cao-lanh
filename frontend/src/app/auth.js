@@ -182,7 +182,7 @@
   A.ACT['auth-change-phone'] = () => { Object.assign(ui.auth, { step: 'phone', otp: '', error: '' }); A.showLogin(); };
   A.ACT['auth-user-menu'] = () => { ui.activeHeaderPopover = ui.activeHeaderPopover === 'account' ? null : 'account'; ui.personalNotificationsExpanded = false; A.render(); };
   // "Thông tin cá nhân": màn hồ sơ của CHÍNH tài khoản đang đăng nhập (accounts/profile.js).
-  A.ACT['auth-profile'] = () => { ui.activeHeaderPopover = null; A.closeModal(); if (A.currentAccount()) { ui.profile = { mode: 'self', accountId: null, tab: 'info' }; A.go('thong-tin-ca-nhan'); } };
+  A.ACT['auth-profile'] = () => { ui.activeHeaderPopover = null; A.closeModal(); if (A.currentAccount()) { ui.profile = { mode: 'self', accountId: null, tab: 'info' }; if (A.openTraderPortalProfile && A.openTraderPortalProfile()) return; A.go('thong-tin-ca-nhan'); } };
   A.ACT['auth-logout'] = () => { ui.activeHeaderPopover = null; ui.sessionAccountId = null; ui.currentDemoAccountId = null; ui.sessionMetadata = null; A.saveUi(); A.closeModal(); document.body.classList.remove('trader-session'); ui.auth = { step: 'phone', phone: '', otp: '', error: '' }; A.showLogin(); };
   A.ACT['mini-logout'] = () => A.ACT['auth-logout']();
 })(window.APP);

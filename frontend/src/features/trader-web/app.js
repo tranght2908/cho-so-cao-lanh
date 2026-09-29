@@ -15,7 +15,7 @@
 
   // ---------- trạng thái giao diện của trang (không phải dữ liệu nghiệp vụ) ----------
   const S = { traderId: null, accountId: null, step: 'phone', phone: '', candidates: [], candidateId: null, otp: '', error: '',
-    paySel: null, paying: false, openInv: null, billFilter: 'all', noticeFilter: 'all', draftImages: [], sessionImages: {}, lastPays: null, feeFilter: '', lookup: '', lookupResult: null };
+    paySel: null, paying: false, openInv: null, contractSel: null, billFilter: 'all', noticeFilter: 'all', headerPopover: null, draftImages: [], sessionImages: {}, lastPays: null, feeFilter: '', lookup: '', lookupResult: null };
   function loadSession() {
     try { const x = JSON.parse(sessionStorage.getItem(SKEY) || 'null'); if (x && x.traderId) { S.traderId = x.traderId; S.accountId = x.accountId; } } catch (e) { /* bỏ qua */ }
   }
@@ -42,7 +42,7 @@
     return t;
   }
   function logout(msg) {
-    Object.assign(S, { traderId: null, accountId: null, step: 'phone', phone: '', candidates: [], candidateId: null, otp: '', error: '', paySel: null, lastPays: null });
+    Object.assign(S, { traderId: null, accountId: null, step: 'phone', phone: '', candidates: [], candidateId: null, otp: '', error: '', paySel: null, lastPays: null, headerPopover: null });
     saveSession();
     location.hash = '#/dang-nhap';
     render();
@@ -133,7 +133,11 @@
   // ==================== CÁC MÀN SAU ĐĂNG NHẬP (góc nhìn của tiểu thương) ====================
   const periodOf = i => U.per(i.period);
   const currentPeriod = t => { const ps = myInvoices(t).map(i => i.period).sort(); return ps.length ? ps[ps.length - 1] : null; };
-  const contractsOf = t => A.db.contracts.filter(c => c.traderId === t.id).sort((a, b) => (a.status === 'hieuluc' ? 0 : 1) - (b.status === 'hieuluc' ? 0 : 1) || b.start.localeCompare(a.start));
+  const contractService = () => A.features.contracts && A.features.contracts.service;
+  const contractPointId = c => c && (c.businessPointId || c.stallId);
+  const contractPhase = c => (contractService() && contractService().presentationStatus(c)) || 'ended';
+  const contractOrder = { current: 0, upcoming: 1, expired: 2, terminated: 3, liquidated: 4, ended: 5 };
+  const contractsOf = t => A.db.contracts.filter(c => c.traderId === t.id).sort((a, b) => (contractOrder[contractPhase(a)] - contractOrder[contractPhase(b)]) || String(b.start || '').localeCompare(String(a.start || '')));
   const daysLeft = c => U.days(String(A.db.today || U.today()), c.end);
   const section = (title, body, action) => `<section class="card tw-sec"><div class="card-h"><h3>${title}</h3>${action || ''}</div><div class="card-b">${body}</div></section>`;
   const empty = txt => `<div class="tw-empty">${txt}</div>`;
@@ -154,6 +158,57 @@
   function allNotices(t) {
     return feeNotices(t).concat(notices(t).map(n => ({ id: n.id, at: n.at, kind: 'bql', title: n.title, body: n.body || n.text || '' })))
       .sort((a, b) => (b.at || '').localeCompare(a.at || ''));
+  }
+  // Projection of the shared notification collections for the signed-in
+  // account/trader. It deliberately does not introduce a trader-web notification store.
+  function headerNotifications(t, acc) {
+    const market = U.market(t.market) || {}, debt = U.traderOverdue(t.id) > 0;
+    const inOperationalScope = n => {
+      if (n.accountId) return n.accountId === acc.id;
+      if (n.traderId) return n.traderId === t.id;
+      const group = String(n.group || '');
+      return group === 'Toàn bộ tiểu thương' || group === market.short || group === 'Ngành hàng: ' + t.cat || (debt && group === 'Danh sách nợ phí');
+    };
+    const personal = (A.db.personalNotifications || []).filter(n => n && n.recipientAccountId === acc.id).map(n => ({
+      source: 'personal', id: n.id, raw: n, title: n.title || 'Thông báo', message: n.message || n.body || '', at: n.createdAt || n.at,
+      read: !!n.readAt, type: n.type || '', targetRoute: n.targetRoute || ''
+    }));
+    const operational = (A.db.notifications || []).filter(n => n && inOperationalScope(n)).map(n => ({
+      source: 'operational', id: n.id, raw: n, title: n.title || 'Thông báo', message: n.body || n.text || n.message || '', at: n.createdAt || n.at,
+      read: !!(n.readByAccount && n.readByAccount[acc.id]), type: n.type || n.kind || '', targetRoute: n.targetRoute || ''
+    }));
+    return personal.concat(operational).sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+  }
+  function headerNotificationTime(value) {
+    const date = String(value || '').slice(0, 10);
+    return date ? U.dmy(date) : '—';
+  }
+  function traderNotificationRoute(n) {
+    const type = String(n.type || '').toLowerCase(), target = String(n.targetRoute || '').toLowerCase();
+    if (type.indexOf('contract') !== -1 || target.indexOf('hop-dong') !== -1) return 'hop-dong';
+    if (type.indexOf('incident') !== -1 || type.indexOf('complaint') !== -1 || target.indexOf('su-co') !== -1 || target.indexOf('phan-anh') !== -1) return 'phan-anh';
+    if (type.indexOf('receivable') !== -1 || type.indexOf('receipt') !== -1 || type.indexOf('payment') !== -1 || ['phai-thu', 'thu-tien', 'cong-no', 'doi-soat', 'hoa-don', 'thanh-toan'].some(x => target.indexOf(x) !== -1)) return 'hoa-don';
+    if (target.indexOf('thong-tin-ca-nhan') !== -1 || target.indexOf('tai-khoan') !== -1) return 'tai-khoan';
+    if (target === 'thong-bao') return 'thong-bao';
+    return 'trang-chu';
+  }
+  function markHeaderNotificationRead(n, accountId) {
+    if (!n || n.read) return;
+    if (n.source === 'personal') n.raw.readAt = new Date().toISOString();
+    else {
+      // `read` of the operational multi-channel record is delivery analytics, not
+      // an inbox state. Keep it intact and retain this account's read receipt only.
+      n.raw.readByAccount = Object.assign({}, n.raw.readByAccount, { [accountId]: new Date().toISOString() });
+    }
+    A.save();
+  }
+  function headerNotificationPopover(t, acc) {
+    const rows = headerNotifications(t, acc), unread = rows.filter(n => !n.read).length;
+    return `<div class="tw-header-popover tw-notification-popover" role="dialog" aria-label="Thông báo"><div class="tw-header-popover-head"><b>Thông báo</b>${unread ? `<span>${unread > 99 ? '99+' : unread} chưa đọc</span>` : ''}</div><div class="tw-notification-list">${rows.length ? rows.map(n => `<button class="tw-notification-item${n.read ? '' : ' unread'}" data-act="tw-header-notification-open" data-source="${n.source}" data-id="${U.esc(n.id)}"><i aria-hidden="true"></i><span><b>${U.esc(n.title)}</b>${n.message ? `<small>${U.esc(n.message)}</small>` : ''}<em>${headerNotificationTime(n.at)}</em></span></button>`).join('') : '<div class="tw-notification-empty">Bạn chưa có thông báo.</div>'}</div></div>`;
+  }
+  function headerAccountPopover(t, acc, initial) {
+    const name = acc.fullName || t.name || '—', phone = acc.phone || t.phone || '—';
+    return `<div class="tw-header-popover tw-account-popover" role="dialog" aria-label="Tài khoản"><div class="tw-account-summary"><span class="tw-avatar tw-avatar-lg">${U.esc(initial)}</span><div><b>${U.esc(name)}</b><small>Tiểu thương</small><small>${U.esc(phone)}</small></div></div><div class="tw-account-actions"><button data-act="tw-header-account-profile">${U.icon('users')}<span>Thông tin tài khoản</span></button><button data-act="tw-logout">${U.icon('close')}<span>Đăng xuất</span></button></div></div>`;
   }
   const noticeItem = n => `<div class="tw-item${n.invoiceId ? ' click' : ''}"${n.invoiceId ? ` data-act="tw-bill-open" data-id="${n.invoiceId}"` : ''}>
       <span class="tw-dot ${n.kind === 'fee' ? 'fee' : ''}" aria-hidden="true">${U.icon(n.kind === 'fee' ? 'receipt' : 'bell')}</span>
@@ -248,27 +303,71 @@
       </div></section>`;
   }
 
-  function contractLeftTag(c) {
-    if (c.status !== 'hieuluc') return '<span class="tag">Đã thanh lý</span>';
-    const d = daysLeft(c);
-    return d < 0 ? '<span class="tag danger">Đã hết hạn</span>' : d <= 30 ? `<span class="tag warn">Còn ${d} ngày</span>` : '<span class="tag ok">Đang hiệu lực</span>';
+  function contractStatus(c) {
+    const phase = contractPhase(c);
+    const labels = { current: 'Đang hiệu lực', upcoming: 'Chưa đến hiệu lực', expired: 'Đã hết hạn', terminated: 'Đã chấm dứt', liquidated: 'Đã thanh lý', ended: 'Đã kết thúc' };
+    const tones = { current: 'ok', upcoming: 'info', expired: 'warn', terminated: '', liquidated: '', ended: '' };
+    return `<span class="tag ${tones[phase] || ''}">${labels[phase] || '—'}</span>`;
+  }
+  const contractLeftTag = contractStatus;
+  const pointOfContract = c => stallOf(contractPointId(c));
+  const formatArea = point => point && Number.isFinite(Number(point.area)) ? `${Number(point.area).toLocaleString('vi-VN')} m²` : '—';
+  function contractPointCard(c) {
+    const point = pointOfContract(c), BP = A.features.businessPoints.service;
+    if (!point) return `<div class="tw-contract-point"><div class="tw-contract-point-h"><b>Chưa xác định được điểm kinh doanh</b>${contractStatus(c)}</div><div class="small muted">Thông tin điểm kinh doanh của hợp đồng này hiện chưa khả dụng.</div></div>`;
+    const loc = BP.location(point);
+    // Cổng tiểu thương cũng được nạp độc lập, nên chỉ dùng pointCollector khi
+    // facade scope đã có mặt; fallback vẫn derive đúng Row → collectorId.
+    const row = BP.row(point);
+    const collector = typeof BP.pointCollector === 'function' ? BP.pointCollector(point.id) : (row && row.collectorId && A.ACCOUNTS.get(row.collectorId));
+    const usage = { current: 'Đang thuê', upcoming: 'Chưa đến hiệu lực', expired: 'Đã hết hạn', terminated: 'Đã chấm dứt', liquidated: 'Đã thanh lý', ended: 'Đã kết thúc' }[contractPhase(c)] || '—';
+    return `<article class="tw-contract-point">
+      <div class="tw-contract-point-h"><b>${U.esc(point.code || '—')}</b><span class="tag ${contractPhase(c) === 'current' ? 'ok' : ''}">${usage}</span></div>
+      <div class="tw-contract-location"><span>Vị trí</span><b>${U.esc(loc.label || '—')}</b></div>
+      <div class="tw-point-meta"><div><span>Ngành hàng</span><b>${U.esc(BP.industry(point) || '—')}</b></div><div><span>Diện tích</span><b>${formatArea(point)}</b></div><div><span>Loại diện tích</span><b>${U.esc(U.areaTypeLabel(point.areaTypeId) || '—')}</b></div></div>
+      ${collector ? `<div class="tw-contract-extra"><span>Nhân viên thu phí phụ trách</span><b>${U.esc(collector.fullName || collector.name || '—')}</b></div>` : ''}
+    </article>`;
+  }
+  function contractChargeSection(c) {
+    const snapshots = Array.isArray(c.feeSnapshot) ? c.feeSnapshot.filter(x => x && x.amount !== undefined && x.amount !== null) : [];
+    if (snapshots.length) return `<section class="tw-contract-section"><h3>Giá và các khoản thu áp dụng</h3><div class="tw-charge-list">${snapshots.map(x => `<div><span>${U.esc(x.name || 'Khoản thu')}</span><b>${U.money(x.amount)}${x.unitLabel ? ' / ' + U.esc(x.unitLabel) : ''}</b></div>`).join('')}</div><p class="small muted">Khoản phải thu thực tế được xác định theo chính sách, biểu phí có hiệu lực tại từng kỳ thu.</p></section>`;
+    const monthly = Number(c.monthly);
+    const policyAmount = c.feePolicy && Number(c.feePolicy.amount);
+    const amount = monthly > 0 ? monthly : (policyAmount > 0 ? policyAmount : null);
+    if (!amount) return `<section class="tw-contract-section"><h3>Giá và các khoản thu áp dụng</h3><div class="small muted">Chưa có thông tin mức thu.</div></section>`;
+    return `<section class="tw-contract-section"><h3>Giá và các khoản thu áp dụng</h3><div class="tw-charge-list"><div><span>Mức giá theo hợp đồng</span><b>${U.money(amount)} / tháng</b></div></div><p class="small muted">Khoản phải thu thực tế được xác định theo chính sách, biểu phí có hiệu lực tại từng kỳ thu.</p></section>`;
   }
   function pageContracts(t) {
     const cons = contractsOf(t);
-    return `<div class="tw-hello"><h2>Hợp đồng của tôi</h2><div class="small muted">Hợp đồng thuê điểm kinh doanh ký với Ban Quản lý chợ.</div></div>
-      ${cons.map(c => { const st = stallOf(c.stallId), d = daysLeft(c);
-        return section(U.esc(c.id), `<dl class="kv">
-          <dt>Loại hợp đồng</dt><dd>${U.esc(c.kind || '—')}</dd>
-          <dt>Điểm kinh doanh</dt><dd><b>${st ? U.esc(st.code) : '—'}</b>${st ? ' · ' + U.esc(st.sectionName || '') : ''}</dd>
-          <dt>Diện tích</dt><dd>${st ? Number(st.area || 0).toLocaleString('vi-VN') + ' m²' : '—'}</dd>
-          <dt>Ngành hàng</dt><dd>${st ? U.esc(st.cat || '—') : '—'}</dd>
-          <dt>Thời hạn</dt><dd>${U.dmy(c.start)} – ${U.dmy(c.end)}${c.status === 'hieuluc' && d >= 0 ? ` <span class="small muted">(còn ${d} ngày)</span>` : ''}</dd>
-          <dt>Đơn giá</dt><dd>${st && U.unitLabel ? U.esc(U.unitLabel(st)) : '—'}</dd>
-          ${c.monthly ? `<dt>Giá dịch vụ/tháng</dt><dd><b>${U.money(c.monthly)}</b></dd>` : ''}
-          ${c.deposit ? `<dt>Tiền đặt cọc</dt><dd>${U.money(c.deposit)}</dd>` : ''}
-          <dt>Trạng thái</dt><dd>${contractLeftTag(c)}</dd></dl>
-          ${c.status === 'hieuluc' && d >= 0 && d <= 30 ? '<div class="note warn" style="margin-top:12px">Hợp đồng sắp hết hạn. Vui lòng liên hệ Ban Quản lý chợ để gia hạn.</div>' : ''}
-          <div class="tw-actions"><button class="btn" data-act="tw-pdf">${U.icon('file')} Xem bản hợp đồng (PDF)</button></div>`, contractLeftTag(c)); }).join('') || '<div class="note info">Bạn chưa có hợp đồng. Vui lòng liên hệ Ban Quản lý chợ.</div>'}`;
+    if (!cons.length) return `<div class="tw-hello"><h2>Hợp đồng & điểm kinh doanh</h2><div class="small muted">Xem hợp đồng và các điểm kinh doanh của bạn.</div></div><section class="card tw-sec"><div class="card-b"><div class="note info">Bạn chưa có hợp đồng kinh doanh.</div></div></section>`;
+    const selected = cons.find(c => c.id === S.contractSel) || cons[0];
+    S.contractSel = selected.id;
+    const point = pointOfContract(selected), points = point ? [point] : [];
+    const files = Array.isArray(selected.signedCopies) ? selected.signedCopies.filter(Boolean) : [];
+    return `<div class="tw-hello"><h2>Hợp đồng & điểm kinh doanh</h2><div class="small muted">Xem hợp đồng và các điểm kinh doanh của bạn.</div></div>
+      <div class="tw-contract-workspace">
+        <aside class="tw-contract-list" aria-label="Danh sách hợp đồng"><div class="tw-contract-list-title">Danh sách hợp đồng</div>${cons.map(c => {
+          const cp = pointOfContract(c);
+          return `<button class="tw-contract-choice${c.id === selected.id ? ' on' : ''}" data-act="tw-contract-select" data-id="${U.esc(c.id)}" aria-pressed="${c.id === selected.id}">
+            <b>${U.esc(c.id)}</b>${contractStatus(c)}
+            <span>${U.dmy(c.start)} – ${U.dmy(c.end)}</span><span>${U.esc(marketName(c.market || t.market))}</span><small>${cp ? '1 điểm kinh doanh' : 'Chưa có điểm kinh doanh'}</small>
+          </button>`;
+        }).join('')}</aside>
+        <section class="card tw-contract-detail">
+          <div class="card-h tw-contract-detail-h"><div><h3>${U.esc(selected.id)}</h3><span class="small muted">Hợp đồng thuê điểm kinh doanh</span></div>${contractStatus(selected)}</div>
+          <div class="card-b">
+            <section class="tw-contract-section"><h3>Thông tin hợp đồng</h3><div class="tw-contract-info-grid">
+              <div><span>Thời hạn</span><b>${U.dmy(selected.start)} – ${U.dmy(selected.end)}</b></div>
+              <div><span>Chợ</span><b>${U.esc(marketName(selected.market || t.market))}</b></div>
+              ${selected.kind ? `<div><span>Loại hợp đồng</span><b>${U.esc(selected.kind)}</b></div>` : ''}
+              ${selected.signedDate ? `<div><span>Ngày ký</span><b>${U.dmy(selected.signedDate)}</b></div>` : ''}
+            </div></section>
+            <section class="tw-contract-section"><h3>Điểm kinh doanh thuộc hợp đồng</h3>${points.map(() => contractPointCard(selected)).join('') || '<div class="small muted">Chưa có thông tin điểm kinh doanh.</div>'}</section>
+            ${contractChargeSection(selected)}
+            ${files.length ? `<section class="tw-contract-section"><h3>Hồ sơ hợp đồng</h3><div class="small muted">Đã lưu ${files.length} tệp hồ sơ hợp đồng.</div></section>` : ''}
+          </div>
+        </section>
+      </div>`;
   }
 
   function pageReport(t) {
@@ -348,10 +447,24 @@
     const due = unpaid(t).length;
     const badge = id => id === 'hoa-don' && due ? `<i class="tw-badge">${due}</i>` : '';
     const initial = (t.name.split(' ').slice(-1)[0] || '?').charAt(0);
+    const acc = traderAccount(t);
+    const headerRows = headerNotifications(t, acc);
+    const unread = headerRows.filter(n => !n.read).length;
+    const notificationOpen = S.headerPopover === 'notifications';
+    const accountOpen = S.headerPopover === 'account';
     return `<header class="tw-top"><div class="tw-top-in">
         <a class="tw-brand" href="#/trang-chu"><span class="brand-logo">${MARK.replace('<svg ', '<svg width="24" height="24" ')}</span><span><b>Chợ số Cao Lãnh</b><small>Cổng tiểu thương · ${U.esc(U.market(t.market).short)}</small></span></a>
         <nav class="tw-nav" aria-label="Điều hướng">${TABS.map(x => `<a href="#/${x[0]}" class="${r === x[0] ? 'on' : ''}">${x[1]}${badge(x[0])}</a>`).join('')}</nav>
-        <a class="tw-me${r === 'tai-khoan' ? ' on' : ''}" href="#/tai-khoan" title="Tài khoản"><span class="tw-avatar">${U.esc(initial)}</span><span class="tw-me-n">${U.esc(t.name)}</span></a>
+        <div class="tw-header-actions">
+          <div class="tw-header-popover-anchor">
+            <button class="tw-header-bell" type="button" data-act="tw-header-notifications" aria-label="Thông báo" aria-expanded="${notificationOpen}">${U.icon('bell')}${unread ? `<i class="tw-header-badge">${unread > 99 ? '99+' : unread}</i>` : ''}</button>
+            ${notificationOpen ? headerNotificationPopover(t, acc) : ''}
+          </div>
+          <div class="tw-header-popover-anchor">
+            <button class="tw-me${accountOpen || r === 'tai-khoan' ? ' on' : ''}" type="button" data-act="tw-header-account" aria-expanded="${accountOpen}" title="Tài khoản"><span class="tw-avatar">${U.esc(initial)}</span><span class="tw-me-copy"><b class="tw-me-n">${U.esc(acc.fullName || t.name)}</b><small class="tw-me-role">Tiểu thương</small></span></button>
+            ${accountOpen ? headerAccountPopover(t, acc, initial) : ''}
+          </div>
+        </div>
       </div></header>
       <main class="tw-main">${PAGES[r](t)}</main>
       <nav class="tw-tabbar" aria-label="Điều hướng nhanh">${TABS.map(x => `<a href="#/${x[0]}" class="${r === x[0] ? 'on' : ''}">${U.icon(x[2])}<span>${x[1]}</span>${badge(x[0])}</a>`).join('')}</nav>`;
@@ -454,7 +567,24 @@
       login(t);
     },
     'tw-logout': () => logout('Đã đăng xuất'),
+    'tw-header-notifications': () => { S.headerPopover = S.headerPopover === 'notifications' ? null : 'notifications'; render(); },
+    'tw-header-account': () => { S.headerPopover = S.headerPopover === 'account' ? null : 'account'; render(); },
+    'tw-header-account-profile': () => {
+      S.headerPopover = null;
+      if (route() === 'tai-khoan') render(); else location.hash = '#/tai-khoan';
+    },
+    'tw-header-notification-open': el => {
+      const t = me(), acc = t && traderAccount(t);
+      if (!t || !acc) return;
+      const notice = headerNotifications(t, acc).find(n => n.source === el.dataset.source && n.id === el.dataset.id);
+      if (!notice) return;
+      markHeaderNotificationRead(notice, acc.id);
+      S.headerPopover = null;
+      const destination = traderNotificationRoute(notice);
+      if (route() === destination) render(); else location.hash = '#/' + destination;
+    },
     'tw-bill': el => { S.openInv = S.openInv === el.dataset.id ? null : el.dataset.id; render(); },
+    'tw-contract-select': el => { const t = me(); if (!t || !contractsOf(t).some(c => c.id === el.dataset.id)) return; S.contractSel = el.dataset.id; render(); },
     'tw-bill-open': el => { S.openInv = el.dataset.id; S.billFilter = 'all'; location.hash = '#/hoa-don'; },
     'tw-bill-filter': el => { S.billFilter = el.dataset.id; render(); },
     'tw-notice-filter': el => { S.noticeFilter = el.dataset.id; render(); },
@@ -526,6 +656,19 @@
       A.save(); render();
       if (inModal) openIncident(t, i.id);
       U.toast('Cảm ơn bạn đã đánh giá ' + i.rating + ' sao');
+    }
+  });
+
+  document.addEventListener('click', e => {
+    if (S.headerPopover && !e.target.closest('.tw-header-popover-anchor')) {
+      S.headerPopover = null;
+      render();
+    }
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && S.headerPopover) {
+      S.headerPopover = null;
+      render();
     }
   });
 
