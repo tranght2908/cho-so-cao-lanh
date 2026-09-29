@@ -2099,7 +2099,7 @@
           <td><b>${U.esc(x.t ? x.t.name : '')}</b><div class="small muted">${x.t ? x.t.id + ' · ' + U.maskPhone(x.t.phone) : ''}</div></td><td>${x.d.stallIds.map(id => (A.idx.stall.get(id) || {}).code || id).join(', ')}</td>
           <td>${U.esc(Array.from(new Set(x.d.parts.map(p => { const a = p.collectorId && A.ACCOUNTS.get(p.collectorId); return a ? a.fullName : 'Chưa gán'; }))).join(', '))}</td>
           <td class="num"><b>${U.money(x.d.status === 'OPEN' ? x.remain : x.d.amount)}</b></td><td class="num">${x.d.status === 'OPEN' ? `<span class="tag danger">${U.days(x.d.dueDate, U.today())} ngày</span>` : '—'}</td><td>${statusCell(x)}</td>
-          <td class="small">${(x.d.autoReminders || []).map(r => `<div>Lần ${r.level}: ${U.esc(r.at)} <span class="muted">(tự động)</span></div>`).join('')}${x.d.status === 'OPEN' ? `<div class="nowrap" style="margin-top:4px">${(x.i && x.i.reminders) || 0} lượt ${A.canDo('cong-no.nhac-no', ui.market) ? `<button class="btn sm" data-act="cn-debt-remind" data-id="${x.d.id}">Nhắc nợ</button>` : ''} <button class="btn sm" data-act="cn-debt-qr" data-id="${x.d.id}">QR</button></div>` : (x.d.autoReminders || []).length ? '' : '—'}</td></tr>`),
+          <td class="small">${(x.d.autoReminders || []).map(r => `<div>Lần ${r.level}: ${U.esc(r.at)} <span class="muted">(tự động)</span></div>`).join('')}${x.d.status === 'OPEN' ? `<div class="nowrap" style="margin-top:4px">${(x.i && x.i.reminders) || 0} lượt ${A.canDo('cong-no.nhac-no', ui.market) ? `<button class="btn sm" data-act="cn-debt-remind" data-id="${x.d.id}">Nhắc nợ</button>` : ''}</div>` : (x.d.autoReminders || []).length ? '' : '—'}</td></tr>`),
         { empty: st === 'open' ? 'Không còn khoản nợ 🎉' : 'Không có dòng phù hợp' })}${pg.html}</div></div>${!scopeAll && A.canDo('cong-no.thu-no', ui.market) ? hoCollectorPanel(financePeriod(), U.today(), 'DEBT') : ''}`;
   }
   A.ACT['cn-debt-status'] = el => { if (!U.can('cong-no')) return; f.cnDebtStatus = el.dataset.id; ui.page.cnDebt = 0; A.render(); };
@@ -2122,6 +2122,8 @@
     A.render(); A.showReceipt(pays, { autoPrint: false });
     U.toast('Đã thu nợ ' + U.money(c.amount) + (c.d.status === 'CLOSED' ? ' · khoản nợ đã tất toán' : ''));
   };
+  // CONG_NO_BO_NUT_QR (P 29/09/2026): màn nhân sự không còn nút "QR" — mã QR thu nợ gửi thẳng tới điện thoại tiểu thương
+  // (Mini app/Zalo) và tiểu thương thanh toán trên đó. Handler giữ lại (không còn nơi gọi) để không đổi bộ đếm registry.
   A.ACT['cn-debt-qr'] = el => {
     const d = (A.db.debts || []).find(x => x.id === el.dataset.id), me = (A.currentAccount() || {}).id;
     if (!d || d.market !== ui.market || !U.can('cong-no') || (!ptScopeAll() && !d.parts.some(p => p.collectorId === me))) return;

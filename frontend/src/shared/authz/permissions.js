@@ -388,8 +388,10 @@
       'doi-soat.xem-truy-vet': ['market_manager'],
       // "Nhắc nợ" — đúng mục 3.D, collector; nhắc hàng loạt vẫn cùng 1 nghiệp vụ (mở rộng số lượng),
       // không phải quyền mới.
-      'cong-no.nhac-no': ['market_manager', 'collector'],
-      'cong-no.nhac-no-hang-loat': ['market_manager', 'collector'],
+      // CONG_NO_TBQL_CHI_XEM (P 29/09/2026, tracking dòng 33): nhắc nợ là việc của NV thu phí; Trưởng Ban chỉ xem
+      // danh sách nợ (hệ thống vẫn tự nhắc lần 1/lần 2). Gỡ market_manager — migrate DEBT_REMIND_PERM_VERSION 1.
+      'cong-no.nhac-no': ['collector'],
+      'cong-no.nhac-no-hang-loat': ['collector'],
       'cong-no.thu-no': ['collector'],
       'su-co.tao-phan-anh': ['market_manager'],
       'su-co.phan-cong': ['market_manager'],
@@ -517,7 +519,7 @@
   //        lệch khiến loadState() đi thẳng nhánh RESEED TOÀN BỘ (freshState(), không qua
   //        mergeIntoCurrentSeed()), nên seedVersion v15 ở đây chỉ còn ý nghĩa tài liệu/đánh dấu, không
   //        phải cơ chế migrate chính cho lần đổi này (xem RBAC_MARKET_SCOPE_MIGRATION_REPORT.md).
-  const PERM_SEED_VERSION = 22; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: action:phai-thu.ban-do-thu; 19: hình thức điện nước → market_manager; 20: quản lý TK ngân hàng → market_manager; 21: quản lý TK ngân hàng → central_accountant; 22: KT Trung tâm xem biên lai (thu-tien)
+  const PERM_SEED_VERSION = 23; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: action:phai-thu.ban-do-thu; 19: hình thức điện nước → market_manager; 20: quản lý TK ngân hàng → market_manager; 21: quản lý TK ngân hàng → central_accountant; 22: KT Trung tâm xem biên lai (thu-tien); 23: nhắc nợ chỉ còn collector
   const RATE_POLICY_PERM_VERSION = 1;
   const BANK_ACCOUNT_PERM_VERSION = 3;
   const PC3A_SESSION_PERM_VERSION = 1;
@@ -534,6 +536,8 @@
   const PHAI_THU_MAP_PERM_VERSION = 1;
   const PHAI_THU_MAP_KEY = 'action:phai-thu.ban-do-thu';
   const RECEIPT_VIEW_PERM_VERSION = 1;
+  const DEBT_REMIND_PERM_VERSION = 1;
+  const DEBT_REMIND_KEYS = ['action:cong-no.nhac-no', 'action:cong-no.nhac-no-hang-loat'];
   const RECEIPT_VIEW_KEYS = new Set(['action:thu-tien.xem-bien-lai']);
   function freshState() {
     return {
@@ -552,6 +556,7 @@
       cashHandoverPermVersion: CASH_HANDOVER_PERM_VERSION,
       phaiThuMapPermVersion: PHAI_THU_MAP_PERM_VERSION,
       receiptViewPermVersion: RECEIPT_VIEW_PERM_VERSION,
+      debtRemindPermVersion: DEBT_REMIND_PERM_VERSION,
       roles: defaultRoles(),
       rolePerms: defaultRolePermissions()
     };
@@ -635,6 +640,14 @@
       if (!stored.rolePerms.some(x => x.roleId === r.roleId && x.permKey === r.permKey)) stored.rolePerms.push(Object.assign({}, r, { grantedAt: 'migrate-receipt-view', grantedBy: 'Hệ thống' }));
     });
     stored.receiptViewPermVersion = RECEIPT_VIEW_PERM_VERSION;
+    return true;
+  }
+  // CONG_NO_TBQL_CHI_XEM v1: gỡ quyền nhắc nợ (từng người + hàng loạt) của market_manager MỘT LẦN (marker
+  // debtRemindPermVersion) — sau đó quản trị cấp lại ở màn Phân quyền thì giữ nguyên.
+  function migrateDebtRemindPerms(stored) {
+    if (stored.debtRemindPermVersion >= DEBT_REMIND_PERM_VERSION) return false;
+    stored.rolePerms = stored.rolePerms.filter(r => !(r.roleId === 'market_manager' && DEBT_REMIND_KEYS.indexOf(r.permKey) !== -1));
+    stored.debtRemindPermVersion = DEBT_REMIND_PERM_VERSION;
     return true;
   }
   function migrateRatePolicyPerms(stored) {
@@ -746,6 +759,7 @@
     migrateCashHandoverPerms(stored);
     migratePhaiThuMapPerms(stored);
     migrateReceiptViewPerms(stored);
+    migrateDebtRemindPerms(stored);
     stored.seedVersion = PERM_SEED_VERSION;
     return stored;
   }
@@ -816,6 +830,7 @@
     if (migrateMeterRecordPerms(s)) needSave = true;
     if (migrateCashHandoverPerms(s)) needSave = true;
     if (migrateReceiptViewPerms(s)) needSave = true;
+    if (migrateDebtRemindPerms(s)) needSave = true;
     {
       const validKeys = new Set(CATALOG.map(p => p.key));
       const before = s.rolePerms.length;
