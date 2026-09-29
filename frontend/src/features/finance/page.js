@@ -1195,16 +1195,39 @@
   function hoHandedIds() { const s = new Set(); (A.db.cashHandovers || []).forEach(h => h.paymentIds.forEach(id => s.add(id))); return s; }
   function hoAccByCode(code) { return A.ACCOUNTS.list().find(a => (a.code || a.id) === code) || null; }
   function hoName(code) { const a = hoAccByCode(code); return a ? a.fullName : U.staffName(code); }
+  function hoAssignedRows(h, pays) {
+    const rows = A.db.rows || [];
+    const ids = Array.isArray(h.assignedRowIds) ? h.assignedRowIds : [];
+    if (ids.length) return ids.map(id => rows.find(r => r.id === id)).filter(Boolean);
+    const pointRowIds = new Set((pays || []).flatMap(p => p.stallIds || []).map(id => (A.idx.stall.get(id) || {}).rowId).filter(Boolean));
+    const assigned = rows.filter(r => r.market === h.market && r.collectorId === h.collectorId);
+    return assigned.length ? assigned : rows.filter(r => pointRowIds.has(r.id));
+  }
+  function hoAreaLabel(row) { return row.name + (ptRowPlace(row) ? ' · ' + ptRowPlace(row) : ''); }
+  function hoReceiptDetails(p) {
+    const inv = A.idx.invoice.get(p.invoiceId), ids = p.stallIds || (inv ? U.invStallIds(inv) : []);
+    const stalls = ids.map(id => A.idx.stall.get(id)).filter(Boolean);
+    const areas = Array.from(new Set(stalls.map(st => {
+      const row = st.rowId && A.idx.row.get(st.rowId);
+      return row ? hoAreaLabel(row) : st.sectionName || st.section || '';
+    }).filter(Boolean)));
+    const items = inv ? inv.items.filter(item => !item.stallId || ids.includes(item.stallId)).map(item => item.name).filter(Boolean) : [];
+    return { inv, trader: A.idx.trader.get(p.traderId), stalls, areas, items };
+  }
+  function hoState(h) {
+    if (h.status === 'MATCHED' || (h.status === 'RECONCILED' && !h.diff)) return { id: 'MATCHED', label: 'Đã khớp', cls: 'ok' };
+    if (h.status === 'RESOLVED') return { id: 'RESOLVED', label: 'Đã xử lý chênh lệch', cls: 'ok' };
+    if (h.status === 'WAITING_EXPLANATION' || (h.status === 'RECONCILED' && h.diff)) return { id: 'WAITING_EXPLANATION', label: 'Chờ giải trình', cls: 'warn' };
+    return { id: 'SUBMITTED', label: 'Chờ đối soát', cls: 'info' };
+  }
+  function hoStatusTag(h) { const s = hoState(h); return `<span class="tag ${s.cls}">${s.label}</span>`; }
+  function hoDateTime(h) { return U.esc(h.submittedAt || (U.dmy(h.date) + ' ' + (h.time || ''))); }
   // THU_HOI_NO_CHOT_BUOI (P chốt 29/09): tiền mặt thu nợ chốt buổi RIÊNG ở màn Công nợ (phiếu PNN-…); tiền mặt thu
   // phí thường chốt ở Thu tiền (phiếu PN-…). Cả 2 loại đều do Kế toán BQL xác nhận nộp đủ → kết thúc luồng.
   const hoKindOk = (x, kind) => kind === 'DEBT' ? !!x.debtId : !x.debtId;
   function hoOpenCash(code, market, date, kind) {
     const handed = hoHandedIds();
     return A.db.payments.filter(x => x.market === market && x.method === 'tm' && x.by === code && x.date === date && !handed.has(x.id) && hoKindOk(x, kind || 'FEE') && A.receiptBusinessStateOk(x) && A.idx.invoice.get(x.invoiceId) && A.invPartMode(A.idx.invoice.get(x.invoiceId)));
-  }
-  function hoStatusTag(h) {
-    if (h.status !== 'RECONCILED') return '<span class="tag warn">● Chờ kế toán xác nhận</span>';
-    return h.diff ? `<span class="tag danger">⚠ Nộp lệch ${U.money(h.diff)}</span>` : '<span class="tag ok">✓ Đã nộp đủ — hoàn tất</span>';
   }
   function hoCanClose(market) { return U.can('thu-tien') && A.canDo('thu-tien.chot-buoi', market); }
   function hoCanReconcile(market) { return dsCanAction('doi-soat.xac-nhan-phieu-nop', market); }
@@ -1219,7 +1242,7 @@
       .filter(x => hoKindOk(x, kind)).filter(x => { if (!q || kind === 'DEBT') return true; const t = A.idx.trader.get(x.traderId); return [x.receipt, x.invoiceId, t && t.name, t && t.id, (x.stallIds || []).map(id => (A.idx.stall.get(id) || {}).code).join(' ')].join(' ').toLowerCase().includes(q); })
       .sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
     const open = pays.filter(x => !handedBy[x.id] && x.method === 'tm'), closed = pays.filter(x => handedBy[x.id]);
-    const waiting = closed.filter(x => handedBy[x.id].status !== 'RECONCILED'), finished = closed.filter(x => handedBy[x.id].status === 'RECONCILED');
+    const waiting = closed.filter(x => ['SUBMITTED', 'WAITING_EXPLANATION'].includes(hoState(handedBy[x.id]).id)), finished = closed.filter(x => ['MATCHED', 'RESOLVED'].includes(hoState(handedBy[x.id]).id));
     const canClose = hoCanClose(market);
     const kpis = `<div class="kpis">
       <div class="card kpi"><div class="k-label">${kind === 'DEBT' ? 'Biên lai thu nợ' : 'Biên lai đã phát'} kỳ ${p.label}</div><div class="k-value">${pays.length}</div><div class="k-sub">${U.money(U.sum(pays, x => x.amount))}</div></div>
@@ -1241,7 +1264,7 @@
       const hs = Array.from(new Set(dayPays.filter(x => handedBy[x.id]).map(x => handedBy[x.id]))).sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
       hs.forEach(h => {
         const hp = dayPays.filter(x => handedBy[x.id] === h);
-        body.push(`<tr style="background:#f0f5ff"><td colspan="${cols.length}"><div class="row" style="align-items:center;gap:10px;flex-wrap:wrap"><button class="link-btn" data-act="ho-view" data-id="${h.id}"><b>${h.id}</b></button><span class="small">Chốt lúc ${U.esc(h.submittedAt)} · ${hp.length} biên lai · <b>${U.money(h.amount)}</b></span><span class="spacer"></span>${hoStatusTag(h)}${h.status === 'RECONCILED' ? `<span class="small muted">${U.esc(h.reconciledBy)} · ${U.esc(h.reconciledAt)}</span>` : ''}</div></td></tr>`);
+        body.push(`<tr style="background:#f0f5ff"><td colspan="${cols.length}"><div class="row" style="align-items:center;gap:10px;flex-wrap:wrap"><button class="link-btn" data-act="ho-view" data-id="${h.id}"><b>${h.id}</b></button><span class="small">Chốt lúc ${U.esc(h.submittedAt)} · ${hp.length} biên lai · <b>${U.money(h.amount)}</b></span><span class="spacer"></span>${hoStatusTag(h)}${hoState(h).id === 'MATCHED' || hoState(h).id === 'RESOLVED' ? `<span class="small muted">${U.esc(h.confirmedBy || h.reconciledBy || '')} · ${U.esc(h.confirmedAt || h.reconciledAt || '')}</span>` : ''}</div></td></tr>`);
         hp.forEach(x => body.push(row(x, true)));
       });
       dayPays.filter(x => !handedBy[x.id] && x.method !== 'tm').forEach(x => body.push(row(x, true)));
@@ -1252,10 +1275,11 @@
       <div class="card-b">${U.table(cols, body, { empty: 'Chưa phát hành biên lai nào trong kỳ này' })}</div></div>`;
   }
   function hoReceiptTable(pays) {
-
-    return U.table([{ t: 'Biên lai' }, { t: 'Mã khoản' }, { t: 'Tiểu thương' }, { t: 'Gian' }, { t: 'Giờ' }, { t: 'Số tiền', num: true }],
-      pays.map(x => { const t = A.idx.trader.get(x.traderId); return `<tr><td>${x.receipt}</td><td>${x.invoiceId}${x.debtId ? ' <span class="tag danger">Thu nợ ' + x.debtId + '</span>' : ''}</td><td>${U.esc(t ? t.name : '')}</td><td>${(x.stallIds || []).map(id => (A.idx.stall.get(id) || {}).code || id).join(', ')}</td><td>${x.time || ''}</td><td class="num">${U.money(x.amount)}</td></tr>`; })
-        .concat([`<tr><td colspan="5"><b>Tổng tiền mặt</b></td><td class="num"><b>${U.money(U.sum(pays, x => x.amount))}</b></td></tr>`]));
+    return `<div class="cash-reconcile-receipts">${U.table([{ t: 'Mã biên lai' }, { t: 'Tiểu thương' }, { t: 'Điểm kinh doanh' }, { t: 'Khu/Dãy' }, { t: 'Khoản thu' }, { t: 'Số tiền', num: true }, { t: 'Thời gian thu' }],
+      pays.map(p => {
+        const d = hoReceiptDetails(p);
+        return `<tr><td><b>${U.esc(p.receipt || p.id)}</b></td><td>${U.esc(d.trader ? d.trader.name : p.traderId || '')}</td><td>${d.stalls.map(st => U.esc(st.code || st.id)).join(', ') || '—'}</td><td>${d.areas.map(U.esc).join(', ') || '—'}</td><td>${p.debtId ? 'Thu hồi công nợ ' + U.esc(p.debtId) : U.esc(d.items.join(', ') || (d.inv && d.inv.id) || '')}</td><td class="num">${U.money(p.amount)}</td><td>${U.dmy(p.date)} ${U.esc(p.time || '')}</td></tr>`;
+      }), { empty: 'Phiếu chưa có biên lai tiền mặt tham chiếu' })}</div>`;
   }
   const hoDateOk = d => /^\d{4}-\d{2}-\d{2}$/.test(d || '') && d <= U.today();
   A.ACT['ho-close-open'] = el => {
@@ -1266,7 +1290,8 @@
     if (!open.length) return U.toast('Chưa có biên lai tiền mặt nào chưa chốt');
     A.modal(A.mHead('Xác nhận chốt buổi thu') + `<div class="modal-b">
       <p style="margin:0 0 10px;font-size:1.05em">Bạn có muốn <b>chốt buổi thu${kind === 'DEBT' ? ' nợ' : ''}</b> ngày <b>${U.dmy(date)}</b> không?</p>
-      <div class="note info" style="margin-bottom:10px">${open.length} biên lai tiền mặt dưới đây sẽ gộp thành 1 phiếu nộp tiền gửi Kế toán Ban Quản lý. Mang đủ <b>${U.money(U.sum(open, x => x.amount))}</b> đi nộp. Sau khi chốt không thêm/bớt biên lai của buổi này; thu tiếp sẽ vào buổi mới.</div>
+      <div class="note info" style="margin-bottom:10px">${open.length} biên lai tiền mặt dưới đây sẽ được khóa trong phiếu riêng của bạn và gửi Kế toán đối soát. Sau khi chốt không thể thêm/bớt biên lai; khoản thu tiếp theo thuộc buổi mới.</div>
+      <div class="field" style="max-width:360px;margin-bottom:12px"><label for="ho-declared-amount">Số tiền kê khai nộp</label><input id="ho-declared-amount" class="input" type="number" min="0" step="1000" value="${U.sum(open, x => x.amount)}"></div>
       ${hoReceiptTable(open)}</div>
       <div class="modal-f"><button class="btn" data-act="close">Không, để sau</button><button class="btn primary" data-act="ho-close-confirm" data-date="${date}" data-kind="${kind}">Có, chốt buổi thu${kind === 'DEBT' ? ' nợ' : ''}</button></div>`, true);
   };
@@ -1276,23 +1301,42 @@
     if (!hoDateOk(date)) { U.toast('Ngày chốt không hợp lệ'); A.closeModal(); return; }
     const open = hoOpenCash(code, ui.market, date, kind);
     if (!open.length) { U.toast('Không còn biên lai tiền mặt chưa chốt'); A.closeModal(); A.render(); return; }
+    const declaredInput = A.$('#ho-declared-amount'), declaredAmount = declaredInput ? Number(declaredInput.value) : U.sum(open, x => x.amount);
+    if (!Number.isFinite(declaredAmount) || declaredAmount < 0) { U.toast('Nhập số tiền kê khai nộp hợp lệ'); return; }
     const d = date.replace(/-/g, '').slice(2), n = cashHandovers().filter(h => h.collectorCode === code && h.date === date && (h.kind || 'FEE') === kind).length + 1;
-    const h = { id: (kind === 'DEBT' ? 'PNN-' : 'PN-') + d + '-' + code + '-' + U.pad(n, 2), kind, market: ui.market, collectorId: acc.id, collectorCode: code, date, paymentIds: open.map(x => x.id), amount: U.sum(open, x => x.amount), submittedAt: U.dmy(U.today()) + ' ' + U.nowTime(), status: 'SUBMITTED' };
+    const assignedRows = (A.db.rows || []).filter(r => r.market === ui.market && r.collectorId === acc.id);
+    const h = { id: (kind === 'DEBT' ? 'PNN-' : 'PN-') + d + '-' + code + '-' + U.pad(n, 2), kind, market: ui.market, marketId: ui.market, periodId: financePeriod().id, collectorId: acc.id, collectorCode: code, collectorName: acc.fullName || hoName(code), date, paymentIds: open.map(x => x.id), amount: U.sum(open, x => x.amount), declaredAmount, assignedRowIds: assignedRows.map(r => r.id), assignedAreas: assignedRows.map(hoAreaLabel), submittedAt: U.dmy(U.today()) + ' ' + U.nowTime(), status: 'SUBMITTED' };
     cashHandovers().push(h);
     U.log('Chốt buổi thu ' + h.id + ': ' + open.length + ' biên lai tiền mặt, ' + U.money(h.amount));
     A.save(); A.closeModal(); A.render(); U.toast('Đã chốt buổi thu ' + h.id + ' · mang ' + U.money(h.amount) + ' tới Kế toán đối soát');
   };
   function hoModal(h) {
     const pays = h.paymentIds.map(id => A.db.payments.find(x => x.id === id)).filter(Boolean);
-    const canRec = h.status !== 'RECONCILED' && hoCanReconcile(h.market);
-    const res = h.status === 'RECONCILED' ? `<dl class="kv" style="margin-top:10px"><dt>Kế toán thực nhận</dt><dd><b>${U.money(h.receivedAmount)}</b></dd><dt>Chênh lệch</dt><dd>${h.diff ? `<b style="color:#d6453b">${U.money(h.diff)}</b>` : '0 đ'}</dd>${h.note ? `<dt>Ghi chú</dt><dd>${U.esc(h.note)}</dd>` : ''}<dt>Người đối soát</dt><dd>${U.esc(h.reconciledBy)} · ${U.esc(h.reconciledAt)}</dd></dl>` : '';
-    A.modal(A.mHead((h.kind === 'DEBT' ? 'Phiếu nộp tiền thu nợ ' : 'Phiếu nộp tiền ') + h.id) + `<div class="modal-b">
-      <dl class="kv"><dt>Nhân viên thu phí</dt><dd><b>${U.esc(hoName(h.collectorCode))}</b> (${h.collectorCode})</dd><dt>Chốt buổi lúc</dt><dd>${U.esc(h.submittedAt)}</dd><dt>Phải nộp</dt><dd><b>${U.money(h.amount)}</b> · ${pays.length} biên lai tiền mặt</dd><dt>Trạng thái</dt><dd>${hoStatusTag(h)}</dd></dl>
-      <div class="divider"></div>${hoReceiptTable(pays)}${res}
-      ${canRec ? `<div class="note info" style="margin-top:10px">Đếm đủ <b>${U.money(h.amount)}</b> tiền mặt của NV ${U.esc(hoName(h.collectorCode))} → bấm <b>Xác nhận đã nộp đủ</b>, phiếu kết thúc.</div>
-        <details style="margin-top:8px"><summary class="small">Tiền nhận không khớp?</summary><div class="form-grid" style="margin-top:8px"><div class="field"><label>Số tiền mặt thực nhận</label><input id="ho-received" class="input" type="number" min="0" value="${h.amount}"></div><div class="field"><label>Lý do chênh lệch *</label><input id="ho-note" class="input" placeholder="VD: thiếu 20.000 đ, NV nộp bổ sung…"></div></div>
-        <button class="btn sm danger" style="margin-top:6px" data-act="ho-reconcile" data-id="${h.id}" data-mode="diff">Ghi nhận nộp lệch</button></details>` : ''}
-      </div><div class="modal-f"><button class="btn" data-act="close">Đóng</button>${canRec ? `<button class="btn primary" data-act="ho-reconcile" data-id="${h.id}" data-mode="full">✓ Xác nhận đã nộp đủ</button>` : ''}</div>`, true);
+    const canRec = h.status === 'SUBMITTED' && hoCanReconcile(h.market);
+    const declared = h.declaredAmount == null ? h.amount : h.declaredAmount;
+    const diff = h.receivedAmount == null ? null : h.receivedAmount - h.amount;
+    const confirmer = h.confirmedBy || h.reconciledBy;
+    const confirmedAt = h.confirmedAt || h.reconciledAt;
+    const areas = h.assignedAreas || hoAssignedRows(h, pays).map(hoAreaLabel);
+    const resultMeta = confirmer ? `<div class="small muted" style="margin-top:8px">${U.esc(h.status === 'MATCHED' || (!h.diff && h.status === 'RECONCILED') ? 'Xác nhận bởi' : 'Ghi nhận bởi')} ${U.esc(confirmer)} · ${U.esc(confirmedAt || '')}</div>` : '';
+    A.modal(`<div class="cash-reconcile-modal">${A.mHead('Đối soát phiếu · ' + U.esc(h.id))}
+      <div class="modal-b">
+        <section class="cash-reconcile-section"><h4>Thông tin phiếu</h4><dl class="cash-reconcile-facts">
+          <div><dt>Mã phiếu</dt><dd><b>${U.esc(h.id)}</b></dd></div><div><dt>Ngày/giờ chốt</dt><dd>${hoDateTime(h)}</dd></div>
+          <div><dt>Chợ</dt><dd>${U.esc(U.market(h.market).name)}</dd></div><div><dt>Nhân viên thu phí</dt><dd><b>${U.esc(h.collectorName || hoName(h.collectorCode))}</b> (${U.esc(h.collectorCode)})</dd></div>
+          <div><dt>Khu/Dãy phụ trách</dt><dd>${areas.map(U.esc).join(', ') || '—'}</dd></div><div><dt>Trạng thái phiếu</dt><dd>${hoStatusTag(h)}</dd></div>
+        </dl></section>
+        <section class="cash-reconcile-section"><h4>Đối chiếu số tiền</h4><dl class="cash-reconcile-facts">
+          <div><dt>Tổng tiền theo biên lai tiền mặt</dt><dd><b>${U.money(h.amount)}</b></dd></div><div><dt>Số tiền NV thu phí kê khai nộp</dt><dd>${U.money(declared)}</dd></div>
+          ${h.receivedAmount == null ? '' : `<div><dt>Số tiền thực nhận</dt><dd>${U.money(h.receivedAmount)}</dd></div><div><dt>Chênh lệch so với biên lai</dt><dd>${U.money(diff)}</dd></div>`}
+        </dl>
+        ${canRec ? `<div class="cash-reconcile-inputs"><div class="field"><label for="ho-received">Số tiền thực nhận</label><input id="ho-received" class="input" data-in="ho-received" data-expected="${h.amount}" type="number" min="0" step="1000" value="${h.amount}"></div>
+          <div class="cash-reconcile-live-diff"><span>Chênh lệch tự tính</span><output id="ho-difference-preview">0 đ</output></div>
+          <div class="field"><label for="ho-note">Lý do chênh lệch (bắt buộc nếu lệch)</label><textarea id="ho-note" class="input" rows="2" placeholder="Nhập lý do hoặc nội dung cần giải trình"></textarea></div></div>` : ''}
+        ${h.note ? `<div class="note warn" style="margin-top:10px"><b>Lý do / ghi chú:</b> ${U.esc(h.note)}</div>` : ''}${resultMeta}</section>
+        <section class="cash-reconcile-section"><h4>Biên lai tiền mặt thuộc buổi thu <span class="tag">${pays.length}</span></h4>${hoReceiptTable(pays)}</section>
+      </div>
+      <div class="modal-f"><button class="btn" data-act="close">Đóng</button>${canRec ? `<button class="btn" data-act="ho-reconcile" data-id="${h.id}" data-mode="diff">Ghi nhận chênh lệch</button><button class="btn primary" data-act="ho-reconcile" data-id="${h.id}" data-mode="match">Xác nhận khớp</button>` : ''}</div></div>`, true);
   }
   A.ACT['ho-view'] = el => {
     const h = cashHandovers().find(x => x.id === el.dataset.id);
@@ -1304,40 +1348,75 @@
   A.ACT['ho-reconcile'] = el => {
     const h = cashHandovers().find(x => x.id === el.dataset.id);
     if (!h || h.market !== ui.market || !hoCanReconcile(h.market)) { U.toast('Bạn không có quyền đối soát phiếu nộp tiền'); A.closeModal(); return; }
-    if (h.status === 'RECONCILED') { U.toast('Phiếu đã được đối soát'); A.closeModal(); A.render(); return; }
-    const full = el.dataset.mode !== 'diff', inp = A.$('#ho-received'), note = full ? '' : ((A.$('#ho-note') || {}).value || '');
-    const received = full ? h.amount : (inp ? Number(inp.value) : NaN);
+    if (h.status !== 'SUBMITTED') { U.toast('Phiếu đã được ghi nhận, không thể sửa kết quả đối soát'); A.closeModal(); A.render(); return; }
+    const matching = el.dataset.mode === 'match', inp = A.$('#ho-received'), note = ((A.$('#ho-note') || {}).value || '').trim();
+    const received = inp ? Number(inp.value) : NaN;
     if (!Number.isFinite(received) || received < 0) return U.toast('Nhập số tiền thực nhận');
     const diff = received - h.amount;
-    if (!full && diff === 0) return U.toast('Số thực nhận bằng số phải nộp — bấm "Xác nhận đã nộp đủ"');
-    if (diff !== 0 && !note.trim()) return U.toast('Có chênh lệch ' + U.money(diff) + ' — bắt buộc ghi lý do');
+    if (matching && diff !== 0) return U.toast('Số thực nhận chưa bằng tổng biên lai — kiểm tra lại hoặc ghi nhận chênh lệch');
+    if (!matching && diff === 0) return U.toast('Số thực nhận đã khớp tổng biên lai — bấm "Xác nhận khớp"');
+    if (!matching && !note) return U.toast('Có chênh lệch ' + U.money(diff) + ' — bắt buộc ghi lý do giải trình');
     const acc = A.currentAccount() || {};
-    Object.assign(h, { status: 'RECONCILED', receivedAmount: received, diff, note: note.trim(), reconciledBy: acc.fullName || '', reconciledByCode: acc.code || acc.id, reconciledAt: U.dmy(U.today()) + ' ' + U.nowTime() });
+    Object.assign(h, { status: matching ? 'MATCHED' : 'WAITING_EXPLANATION', receivedAmount: received, diff, note: matching ? '' : note, confirmedBy: acc.fullName || '', confirmedByCode: acc.code || acc.id, confirmedAt: U.dmy(U.today()) + ' ' + U.nowTime() });
     U.log('Đối soát phiếu nộp ' + h.id + ': thực nhận ' + U.money(received) + (diff ? ' · lệch ' + U.money(diff) : ''));
     A.save(); A.closeModal(); A.render(); U.toast(diff ? 'Đã ghi nhận nộp lệch ' + U.money(diff) : 'Đã xác nhận ' + hoName(h.collectorCode) + ' nộp đủ ' + U.money(h.amount) + ' — phiếu ' + h.id + ' hoàn tất');
+  };
+  A.IN['ho-received'] = el => {
+    const output = A.$('#ho-difference-preview');
+    if (!output) return;
+    const received = el.value === '' ? NaN : Number(el.value), expected = Number(el.dataset.expected);
+    const diff = Number.isFinite(received) ? received - expected : null;
+    output.textContent = diff == null ? '—' : U.money(diff);
+    output.classList.toggle('cash-reconcile-diff', diff != null && diff !== 0);
   };
   // Đối soát › Tiền mặt (chợ thu theo phần): danh sách phiếu nộp theo khoảng ngày + tiền mặt NV chưa chốt buổi.
   function dsHandoverView() {
     const from = dsTxFrom(), to = dsTxTo(), canRec = hoCanReconcile(ui.market);
-    const list = cashHandovers().filter(h => h.market === ui.market && h.date >= from && h.date <= to).sort((a, b) => (a.status === 'RECONCILED') - (b.status === 'RECONCILED') || b.submittedAt.localeCompare(a.submittedAt));
-    const wait = list.filter(h => h.status !== 'RECONCILED'), done = list.filter(h => h.status === 'RECONCILED');
-    const handed = hoHandedIds(), today = U.today();
-    const openBy = {};
-    A.db.payments.filter(x => x.market === ui.market && x.method === 'tm' && x.date === today && !handed.has(x.id) && A.idx.invoice.get(x.invoiceId) && A.invPartMode(A.idx.invoice.get(x.invoiceId))).forEach(x => { (openBy[x.by] = openBy[x.by] || []).push(x); });
-    const openRows = Object.keys(openBy);
-    return `<div class="kpis">
-      <div class="card kpi"><div class="k-label">Phiếu chờ xác nhận</div><div class="k-value" style="color:${wait.length ? '#d6453b' : '#20a04e'}">${wait.length}</div><div class="k-sub">${U.money(U.sum(wait, h => h.amount))}</div></div>
-      <div class="card kpi"><div class="k-label">Đã xác nhận</div><div class="k-value">${done.length}</div><div class="k-sub">Thực nhận ${U.money(U.sum(done, h => h.receivedAmount))}</div></div>
-      <div class="card kpi"><div class="k-label">Chênh lệch</div><div class="k-value" style="color:${U.sum(done, h => Math.abs(h.diff || 0)) ? '#d6453b' : '#20a04e'}">${U.money(U.sum(done, h => h.diff || 0))}</div><div class="k-sub">${done.filter(h => h.diff).length} phiếu lệch</div></div>
-      <div class="card kpi"><div class="k-label">Tiền mặt NV chưa chốt buổi (${U.dmy(today)})</div><div class="k-value">${U.moneyShort(U.sum(openRows, k => U.sum(openBy[k], x => x.amount)))}</div><div class="k-sub">${openRows.length} nhân viên</div></div></div>
-    <div class="card"><div class="card-h"><div><h3>Phiếu nộp tiền theo buổi</h3><div class="small muted">NV thu phí chốt buổi → Kế toán đếm tiền, bấm Xác nhận đã nộp đủ là phiếu hoàn tất.${canRec ? '' : ' Bạn chỉ có quyền xem.'}</div></div></div>
-      <div class="card-b">${U.table([{ t: 'Phiếu nộp' }, { t: 'Nhân viên thu phí' }, { t: 'Chốt lúc' }, { t: 'Số biên lai', num: true }, { t: 'Phải nộp', num: true }, { t: 'Thực nhận', num: true }, { t: 'Chênh lệch', num: true }, { t: 'Trạng thái' }, { t: '' }],
-        list.map(h => `<tr><td><b>${h.id}</b><div class="small">${h.kind === 'DEBT' ? '<span class="tag danger">Thu hồi nợ</span>' : '<span class="tag">Thu phí</span>'}</div></td><td>${U.esc(hoName(h.collectorCode))}<div class="small muted">${h.collectorCode}</div></td><td>${U.esc(h.submittedAt)}</td><td class="num">${h.paymentIds.length}</td><td class="num">${U.money(h.amount)}</td>
-          <td class="num">${h.status === 'RECONCILED' ? U.money(h.receivedAmount) : '—'}</td><td class="num" style="${h.diff ? 'color:#d6453b;font-weight:600' : ''}">${h.status === 'RECONCILED' ? U.money(h.diff || 0) : '—'}</td><td>${hoStatusTag(h)}</td>
-          <td><button class="btn sm ${h.status !== 'RECONCILED' && canRec ? 'primary' : ''}" data-act="ho-view" data-id="${h.id}">${h.status !== 'RECONCILED' && canRec ? 'Xác nhận' : 'Xem'}</button></td></tr>`), { empty: 'Chưa có phiếu nộp tiền trong khoảng ngày này' })}</div></div>
-    ${openRows.length ? `<div class="card"><div class="card-h"><h3>Tiền mặt đã thu nhưng NV chưa chốt buổi · ${U.dmy(today)}</h3></div><div class="card-b">${U.table([{ t: 'Nhân viên thu phí' }, { t: 'Số biên lai', num: true }, { t: 'Tiền mặt', num: true }],
-      openRows.map(k => `<tr><td>${U.esc(hoName(k))}</td><td class="num">${openBy[k].length}</td><td class="num">${U.money(U.sum(openBy[k], x => x.amount))}</td></tr>`))}</div></div>` : ''}`;
+    const all = cashHandovers().filter(h => h.market === ui.market && h.date >= from && h.date <= to);
+    const statusOf = h => hoState(h).id;
+    const waiting = all.filter(h => statusOf(h) === 'SUBMITTED');
+    const matched = all.filter(h => statusOf(h) === 'MATCHED');
+    const explanations = all.filter(h => statusOf(h) === 'WAITING_EXPLANATION');
+    const q = (ui.hoSearch || '').trim().toLowerCase();
+    const collector = ui.hoCollector || 'all', status = ui.hoStatus || 'all';
+    const allowed = new Set(A.allowedMarkets(A.currentAccount()));
+    const markets = D.MARKETS.filter(m => allowed.has(m.id));
+    const collectors = A.ACCOUNTS.list().filter(a => A.ACCOUNTS.primaryRole(a) === 'collector' && A.allowedMarkets(a).includes(ui.market));
+    const rows = all.filter(h => (collector === 'all' || h.collectorId === collector)
+      && (status === 'all' || statusOf(h) === status)
+      && (!q || [h.id, h.collectorName, hoName(h.collectorCode), h.collectorCode].join(' ').toLowerCase().includes(q)))
+      .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+    const pendingAmount = U.sum(all.filter(h => ['SUBMITTED', 'WAITING_EXPLANATION'].includes(statusOf(h))), h => h.amount);
+    const canOpen = h => statusOf(h) === 'SUBMITTED' && canRec;
+    const marketFilter = `<select class="input" data-ch="ho-market-filter" aria-label="Chợ">${markets.map(m => `<option value="${m.id}" ${m.id === ui.market ? 'selected' : ''}>${U.esc(m.name)}</option>`).join('')}</select>`;
+    const filters = `<div class="card"><div class="card-b row cash-reconcile-filters">
+      ${marketFilter}<select class="input" data-ch="ho-collector"><option value="all">Nhân viên thu phí: Tất cả</option>${collectors.map(a => `<option value="${a.id}" ${collector === a.id ? 'selected' : ''}>${U.esc(a.fullName)}</option>`).join('')}</select>
+      <select class="input" data-ch="ho-status"><option value="all" ${status === 'all' ? 'selected' : ''}>Trạng thái: Tất cả</option><option value="SUBMITTED" ${status === 'SUBMITTED' ? 'selected' : ''}>Chờ đối soát</option><option value="MATCHED" ${status === 'MATCHED' ? 'selected' : ''}>Đã khớp</option><option value="WAITING_EXPLANATION" ${status === 'WAITING_EXPLANATION' ? 'selected' : ''}>Chờ giải trình</option><option value="RESOLVED" ${status === 'RESOLVED' ? 'selected' : ''}>Đã xử lý chênh lệch</option></select>
+      <input class="input" data-in="ho-search" placeholder="Tìm mã phiếu hoặc tên nhân viên" value="${U.esc(ui.hoSearch || '')}">
+    </div></div>`;
+    const tableRows = rows.map(h => {
+      const state = hoState(h), areas = h.assignedAreas || hoAssignedRows(h, h.paymentIds.map(id => A.db.payments.find(p => p.id === id)).filter(Boolean)).map(hoAreaLabel);
+      const declared = h.declaredAmount == null ? h.amount : h.declaredAmount;
+      const difference = h.receivedAmount == null ? null : h.receivedAmount - h.amount;
+      return `<tr><td><b>${U.esc(h.id)}</b>${h.kind === 'DEBT' ? '<div><span class="tag">Thu hồi nợ</span></div>' : ''}</td><td>${hoDateTime(h)}</td><td>${U.esc(U.mShort(h.market))}</td><td>${areas.map(U.esc).join(', ') || '—'}</td><td>${U.esc(h.collectorName || hoName(h.collectorCode))}<div class="small muted">${U.esc(h.collectorCode)}</div></td>
+        <td class="num">${h.paymentIds.length}</td><td class="num">${U.money(h.amount)}</td><td class="num">${U.money(declared)}</td><td class="num ${difference && difference !== 0 ? 'cash-reconcile-diff' : ''}">${difference == null ? '—' : U.money(difference)}</td><td><span class="tag ${state.cls}">${state.label}</span></td>
+        <td><button class="btn sm ${canOpen(h) ? 'primary' : ''}" data-act="ho-view" data-id="${h.id}">${canOpen(h) ? 'Đối soát' : 'Xem'}</button></td></tr>`;
+    });
+    return `<div class="kpis cash-reconcile-kpis">
+      <div class="card kpi"><div class="k-label">Chờ đối soát</div><div class="k-value">${waiting.length}</div></div>
+      <div class="card kpi"><div class="k-label">Đã khớp</div><div class="k-value">${matched.length}</div></div>
+      <div class="card kpi"><div class="k-label">Chờ giải trình / Có chênh lệch</div><div class="k-value">${explanations.length}</div></div>
+      <div class="card kpi"><div class="k-label">Tổng tiền chờ đối soát</div><div class="k-value">${U.moneyShort(pendingAmount)}</div><div class="k-sub">${U.money(pendingAmount)}</div></div>
+    </div>${filters}<div class="card cash-reconcile-list"><div class="card-h"><div><h3>Phiếu chốt buổi thu tiền mặt</h3><div class="small muted">Mỗi phiếu thuộc một nhân viên thu phí, một chợ và một ngày/ca thu. Chỉ biên lai tiền mặt trong phiếu được đối chiếu.</div></div>${!canRec ? '<span class="tag">Chỉ xem</span>' : ''}</div>
+      <div class="card-b">${U.table([{ t: 'Mã phiếu chốt buổi thu' }, { t: 'Ngày/giờ chốt' }, { t: 'Chợ' }, { t: 'Khu/Dãy phụ trách' }, { t: 'Nhân viên thu phí' }, { t: 'Số biên lai tiền mặt', num: true }, { t: 'Tổng tiền theo biên lai', num: true }, { t: 'NV kê khai nộp', num: true }, { t: 'Chênh lệch', num: true }, { t: 'Trạng thái' }, { t: 'Thao tác' }], tableRows, { empty: 'Chưa có phiếu chốt buổi thu trong khoảng ngày/kỳ đã chọn' })}</div></div>`;
   }
+  A.CH['ho-market-filter'] = el => {
+    if (!A.allowedMarkets(A.currentAccount()).includes(el.value)) return;
+    ui.market = el.value; ui.page = {}; A.saveUi(); A.route();
+  };
+  A.CH['ho-collector'] = el => { ui.hoCollector = el.value; ui.page['ho-list'] = 0; A.render(); };
+  A.CH['ho-status'] = el => { ui.hoStatus = el.value; ui.page['ho-list'] = 0; A.render(); };
+  A.IN['ho-search'] = el => { ui.hoSearch = el.value; ui.page['ho-list'] = 0; A.render(); };
   // BIEN_LAI_DA_GUI (Thu tiền › Biên lai, chợ thu theo phần): NV thấy biên lai CHÍNH MÌNH đã phát & gửi tiểu
   // thương; Trưởng Ban (xem toàn chợ) thấy mọi biên lai, có cột Người thu. Số biên lai gắn mã khoản.
   function thuReceiptsHtml(p, payDate) {
@@ -1696,7 +1775,7 @@
     const canBank = dsCanBank(), canCash = dsCanCash();
     const tabs = [];
     if (canBank) tabs.push(['ngan-hang', 'Ngân hàng / QR']);
-    if (canCash) tabs.push(['tien-mat', 'Tiền mặt']);
+    if (canCash) tabs.push(['tien-mat', 'Buổi thu tiền mặt']);
     if (!tabs.length) return '<div class="card"><div class="empty">Bạn chưa được cấp quyền xem nghiệp vụ đối soát.</div></div>';
     const tab = tabs.some(t => t[0] === ui.dsTab) ? ui.dsTab : tabs[0][0];
     const tabBar = tabs.length > 1
@@ -1707,6 +1786,102 @@
         <input type="date" class="input" style="width:150px" data-ch="ds-from" value="${dsTxFrom()}"><span class="muted">→</span>
         <input type="date" class="input" style="width:150px" data-ch="ds-to" value="${dsTxTo()}"></div></div></div>`;
     return timeBar + `<div class="card"><div class="card-b" style="padding-top:14px">${tabBar}</div></div>` + (tab === 'ngan-hang' ? dsBankView() : ((U.market(ui.market) || {}).receivableGrouping === 'TRADER' ? dsHandoverView() : dsCashView()));
+  };
+
+  // ---------- THEO DÕI KỲ ĐỐI SOÁT ----------
+  // Kỳ vẫn là A.db.billingPeriods; chỉ bổ sung metadata xác nhận đối soát trên chính kỳ đó.
+  function periodReconRows(period, market) {
+    return cashHandovers().filter(h => {
+      const sameMarket = (h.marketId || h.market) === market;
+      return sameMarket && (h.periodId ? h.periodId === period.id : h.date >= period.startDate && h.date <= period.endDate);
+    });
+  }
+  function periodReconMeta(period, market) {
+    const map = period.cashReconciliationByMarket;
+    return map && map[market] ? map[market] : null;
+  }
+  function periodReconState(period, rows, market) {
+    const pending = rows.filter(h => hoState(h).id === 'SUBMITTED');
+    const explanation = rows.filter(h => hoState(h).id === 'WAITING_EXPLANATION');
+    const processed = rows.filter(h => ['MATCHED', 'RESOLVED'].includes(hoState(h).id));
+    if (period.status === 'CLOSED') return { id: 'CLOSED', label: 'Đã chốt kỳ thu', cls: 'ok' };
+    const meta = periodReconMeta(period, market);
+    if (meta && meta.status === 'COMPLETED') return { id: 'COMPLETED', label: 'Đã hoàn tất đối soát', cls: 'ok' };
+    if (explanation.length) return { id: 'EXPLANATION', label: 'Chờ xử lý chênh lệch', cls: 'warn' };
+    if (rows.length && !pending.length && processed.length === rows.length) return { id: 'READY', label: 'Đủ điều kiện xác nhận', cls: 'info' };
+    if (rows.length) return { id: 'RECONCILING', label: 'Đang đối soát', cls: 'info' };
+    return { id: 'COLLECTING', label: 'Đang thu', cls: 'warn' };
+  }
+  function periodReconSummary(period, market) {
+    const rows = periodReconRows(period, market);
+    const state = periodReconState(period, rows, market);
+    const matched = rows.filter(h => hoState(h).id === 'MATCHED');
+    const unresolved = rows.filter(h => hoState(h).id === 'WAITING_EXPLANATION');
+    const pending = rows.filter(h => hoState(h).id === 'SUBMITTED');
+    const done = rows.filter(h => ['MATCHED', 'RESOLVED'].includes(hoState(h).id));
+    return { period, market, rows, state, meta: periodReconMeta(period, market), matched, unresolved, pending, done, total: U.sum(rows, h => h.amount || 0), reconciled: U.sum(done, h => h.amount || 0) };
+  }
+  function periodReconMarkets() {
+    const allowed = new Set(A.allowedMarkets(A.currentAccount()));
+    return D.MARKETS.filter(m => allowed.has(m.id));
+  }
+  function periodReconSummaries() {
+    const markets = periodReconMarkets(), marketFilter = ui.dsPeriodMarket || 'all';
+    return (A.db.billingPeriods || []).flatMap(p => markets.filter(m => marketFilter === 'all' || m.id === marketFilter).map(m => periodReconSummary(p, m.id)));
+  }
+  function periodReconTag(s) { return `<span class="tag ${s.cls}">${U.esc(s.label)}</span>`; }
+  function periodReconDetailHtml(summary) {
+    const p = summary.period, rows = summary.rows;
+    const ready = summary.rows.length > 0 && summary.pending.length === 0 && summary.unresolved.length === 0 && summary.done.length === summary.rows.length && summary.state.id === 'READY';
+    const pct = rows.length ? Math.round((summary.done.length / rows.length) * 100) : 0;
+    const grouped = rows.slice().sort((a, b) => (a.collectorName || '').localeCompare(b.collectorName || '') || a.date.localeCompare(b.date));
+    const list = U.table([{ t: 'Phiếu chốt buổi thu' }, { t: 'Nhân viên thu phí' }, { t: 'Khu/Dãy phụ trách' }, { t: 'Ngày/giờ chốt' }, { t: 'Số tiền', num: true }, { t: 'Trạng thái' }, { t: '' }], grouped.map(h => {
+      const areas = h.assignedAreas || hoAssignedRows(h, h.paymentIds.map(id => A.db.payments.find(x => x.id === id)).filter(Boolean)).map(hoAreaLabel);
+      return `<tr><td><b>${U.esc(h.id)}</b></td><td>${U.esc(h.collectorName || hoName(h.collectorCode))}</td><td>${areas.map(U.esc).join(', ') || '—'}</td><td>${hoDateTime(h)}</td><td class="num">${U.money(h.amount)}</td><td>${hoStatusTag(h)}</td><td><button class="btn sm" data-act="ds-period-ho-view" data-id="${U.esc(h.id)}">Xem phiếu</button></td></tr>`;
+    }), { empty: 'Chưa có phiếu chốt buổi thu trong kỳ này' });
+    return `<div class="period-reconcile-detail"><section class="cash-reconcile-section"><h4>Thông tin kỳ</h4><dl class="cash-reconcile-facts"><div><dt>Kỳ thu</dt><dd><b>${U.esc(p.label || p.id)}</b></dd></div><div><dt>Chợ</dt><dd>${U.esc(U.market(summary.market).name)}</dd></div><div><dt>Thời gian thu</dt><dd>${U.dmy(p.startDate)} – ${U.dmy(p.endDate)}</dd></div><div><dt>Trạng thái kỳ</dt><dd>${periodReconTag(summary.state)}</dd></div></dl></section>
+      <section class="cash-reconcile-section"><h4>Tiến độ đối soát</h4><div class="period-reconcile-progress"><div><b>${summary.done.length}/${rows.length}</b> phiếu đã xử lý · ${summary.matched.length} phiếu đã khớp${summary.unresolved.length ? ` · ${summary.unresolved.length} phiếu chờ xử lý chênh lệch` : ''}</div><div class="period-reconcile-progress-bar"><i style="width:${pct}%"></i></div></div></section>
+      <section class="cash-reconcile-section"><h4>Phiếu chốt buổi thu</h4>${list}</section>
+      ${summary.meta && summary.meta.completedAt ? `<div class="note info">Kỳ đã được xác nhận hoàn tất bởi <b>${U.esc(summary.meta.completedBy || '')}</b> lúc ${U.esc(summary.meta.completedAt)}. Kỳ đã sẵn sàng để Trưởng Ban Quản lý chốt.</div>` : ''}
+      <div class="modal-f"><button class="btn" data-act="close">Đóng</button>${ready ? `<button class="btn primary" data-act="ds-period-confirm" data-period="${U.esc(p.id)}" data-market="${U.esc(summary.market)}">Xác nhận hoàn tất đối soát kỳ</button>` : ''}</div></div>`;
+  }
+  function periodReconView() {
+    const summaries = periodReconSummaries(), statusFilter = ui.dsPeriodStatus || 'all', periodFilter = ui.dsPeriodFilter || 'all';
+    const rows = summaries.filter(s => (statusFilter === 'all' || s.state.id === statusFilter) && (periodFilter === 'all' || s.period.id === periodFilter));
+    const total = rows.reduce((n, s) => n + s.rows.length, 0), matched = rows.reduce((n, s) => n + s.matched.length, 0), pending = rows.reduce((n, s) => n + s.pending.length, 0), discrepancy = rows.reduce((n, s) => n + s.unresolved.length, 0), reconciled = rows.reduce((n, s) => n + s.reconciled, 0), waiting = rows.reduce((n, s) => n + U.sum(s.pending.concat(s.unresolved), h => h.amount || 0), 0);
+    const marketOptions = periodReconMarkets().map(m => `<option value="${m.id}" ${((ui.dsPeriodMarket || 'all') === m.id) ? 'selected' : ''}>${U.esc(m.name)}</option>`).join('');
+    const periodOptions = (A.db.billingPeriods || []).map(p => `<option value="${p.id}" ${((ui.dsPeriodFilter || 'all') === p.id) ? 'selected' : ''}>${U.esc(p.label || p.id)}</option>`).join('');
+    const table = U.table([{ t: 'Kỳ thu' }, { t: 'Chợ' }, { t: 'Thời gian thu' }, { t: 'Số buổi thu/phiếu' }, { t: 'Đã khớp', num: true }, { t: 'Chờ đối soát', num: true }, { t: 'Chờ giải trình / chênh lệch', num: true }, { t: 'Tổng tiền mặt', num: true }, { t: 'Trạng thái kỳ' }, { t: 'Thao tác' }], rows.map(s => `<tr><td><b>${U.esc(s.period.label || s.period.id)}</b></td><td>${U.esc(U.mShort(s.market))}</td><td>${U.dmy(s.period.startDate)} – ${U.dmy(s.period.endDate)}</td><td class="num">${s.rows.length}</td><td class="num">${s.matched.length}</td><td class="num">${s.pending.length}</td><td class="num">${s.unresolved.length}</td><td class="num">${U.money(s.total)}</td><td>${periodReconTag(s.state)}</td><td><button class="btn sm" data-act="ds-period-detail" data-period="${U.esc(s.period.id)}" data-market="${U.esc(s.market)}">Xem chi tiết</button></td></tr>`), { empty: 'Chưa có kỳ thu trong phạm vi được cấp' });
+    const statusOptions = [['all', 'Trạng thái: Tất cả'], ['COLLECTING', 'Đang thu'], ['RECONCILING', 'Đang đối soát'], ['EXPLANATION', 'Chờ xử lý chênh lệch'], ['READY', 'Đủ điều kiện xác nhận'], ['COMPLETED', 'Đã hoàn tất đối soát'], ['CLOSED', 'Đã chốt kỳ thu']].map(([id, label]) => `<option value="${id}" ${statusFilter === id ? 'selected' : ''}>${label}</option>`).join('');
+    return `<div class="period-reconcile-page"><div class="card"><div class="card-h"><div><h2 style="margin:0">Theo dõi kỳ đối soát</h2><div class="small muted">Tổng hợp từ các phiếu chốt buổi thu tiền mặt; Kế toán Trung tâm không chốt kỳ và không tạo công nợ.</div></div></div><div class="card-b row period-reconcile-filters"><select class="input" data-ch="ds-period-filter"><option value="all">Kỳ thu: Tất cả</option>${periodOptions}</select><select class="input" data-ch="ds-period-market"><option value="all">Chợ: Tất cả trong phạm vi</option>${marketOptions}</select><select class="input" data-ch="ds-period-status">${statusOptions}</select></div></div><div class="kpis period-reconcile-kpis"><div class="card kpi"><div class="k-label">Tổng phiếu chốt buổi thu</div><div class="k-value">${total}</div></div><div class="card kpi"><div class="k-label">Đã đối soát khớp</div><div class="k-value">${matched}</div></div><div class="card kpi"><div class="k-label">Đang chờ đối soát</div><div class="k-value">${pending}</div></div><div class="card kpi"><div class="k-label">Đang có chênh lệch</div><div class="k-value">${discrepancy}</div></div><div class="card kpi"><div class="k-label">Tiền mặt đã đối soát / chờ đối soát</div><div class="k-value">${U.moneyShort(reconciled)} / ${U.moneyShort(waiting)}</div><div class="k-sub">${U.money(reconciled)} / ${U.money(waiting)}</div></div></div><div class="card"><div class="card-b">${table}</div></div></div>`;
+  }
+  A.CH['ds-period-filter'] = el => { ui.dsPeriodFilter = el.value; A.render(); };
+  A.CH['ds-period-market'] = el => { ui.dsPeriodMarket = el.value; A.render(); };
+  A.CH['ds-period-status'] = el => { ui.dsPeriodStatus = el.value; A.render(); };
+  A.ACT['ds-period-detail'] = el => {
+    if (!U.can('theo-doi-ky-doi-soat')) return;
+    const s = periodReconSummaries().find(x => x.period.id === el.dataset.period && x.market === el.dataset.market);
+    if (!s) return;
+    A.modal(A.mHead('Chi tiết kỳ đối soát · ' + U.esc(s.period.label || s.period.id)) + `<div class="modal-b">${periodReconDetailHtml(s)}</div>`, true);
+  };
+  A.ACT['ds-period-ho-view'] = el => {
+    if (!U.can('theo-doi-ky-doi-soat')) return;
+    const h = cashHandovers().find(x => x.id === el.dataset.id);
+    if (h) hoModal(h);
+  };
+  A.ACT['ds-period-confirm'] = el => {
+    if (!U.can('theo-doi-ky-doi-soat') || !A.canDo('theo-doi-ky-doi-soat.xac-nhan-hoan-tat', el.dataset.market)) return U.toast('Bạn chưa được cấp quyền xác nhận hoàn tất đối soát kỳ');
+    const p = (A.db.billingPeriods || []).find(x => x.id === el.dataset.period), s = p && periodReconSummary(p, el.dataset.market);
+    if (!s || s.state.id !== 'READY') return U.toast('Kỳ chưa đủ điều kiện xác nhận hoàn tất đối soát');
+    const acc = A.currentAccount() || {};
+    const byMarket = Object.assign({}, p.cashReconciliationByMarket || {});
+    byMarket[el.dataset.market] = { status: 'COMPLETED', completedAt: nowStamp(), completedBy: acc.fullName || acc.code || acc.id || '' };
+    p.cashReconciliationByMarket = byMarket;
+    A.save(); A.closeModal(); A.render(); U.toast('Kỳ đã hoàn tất đối soát và sẵn sàng để Trưởng Ban Quản lý chốt kỳ thu');
+  };
+  A.VIEWS['theo-doi-ky-doi-soat'] = function () {
+    if (!U.can('theo-doi-ky-doi-soat')) return '<div class="card"><div class="empty">Bạn chưa được cấp quyền xem màn Theo dõi kỳ đối soát.</div></div>';
+    return periodReconView();
   };
   A.ACT['ds-tab'] = el => { ui.dsTab = el.dataset.id; A.render(); };
   A.CH['ds-from'] = el => { ui.dsFrom = el.value || null; A.render(); };

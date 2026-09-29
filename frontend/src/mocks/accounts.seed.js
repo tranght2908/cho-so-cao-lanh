@@ -95,7 +95,6 @@
       // Hai actor kế toán dùng role metadata chưa được cấp permission nghiệp vụ mặc định.
       // Chỉ cập nhật dữ liệu tài khoản demo; không thay đổi ma trận quyền của các role.
       { id: 'AC-KTTT01', code: 'KTTT01', fullName: 'Nguyễn Thị Minh Anh', phone: '0909000505', accountType: roleName('central_accountant'), title: 'Kế toán Trung tâm', roleIds: ['central_accountant'], organization: 'Trung tâm Cung ứng dịch vụ công', marketScopes: ['CL'], status: 'active' },
-      { id: 'AC-KTP01', code: 'KTP01', fullName: 'Trần Thị Thu Hà', phone: '0909000606', accountType: roleName('ward_accountant'), title: 'Kế toán phường', roleIds: ['ward_accountant'], organization: 'UBND phường Cao Lãnh', marketScopes: D.MARKETS.map(m => m.id), status: 'active' },
       { id: 'AC-CHI-QUYET', code: 'CHI-QUYET', fullName: 'Chí Quyết', phone: '0909000001', accountType: roleName('trader'), title: 'Tiểu thương chợ quê', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'active', linkedTraderId: 'TTD-CQ', traderId: 'TTD-CQ' },
       { id: 'AC-TT-TTD', code: 'TT-TTD', fullName: 'Tiểu thương Chợ quê Tân Thuận Đông', phone: '0909666777', accountType: roleName('trader'), title: 'Tiểu thương chợ quê mẫu', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'active' },
       // TRADER_PROFILE_AND_MINIAPP_WORKFLOW: `traderId` — liên kết account Mini App với ĐÚNG 1

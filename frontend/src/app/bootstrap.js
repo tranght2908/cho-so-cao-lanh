@@ -200,7 +200,7 @@
     'tong-quan': 'CROSS', 'bao-cao': 'CROSS', 'danh-muc-cho': 'CROSS',
     'mat-bang': 'BOTH', 'tai-san': 'CL', 'diem-kd': 'BOTH', 'tieu-thuong': 'BOTH', 'hop-dong': 'BOTH',
     'cau-hinh-gia': 'BOTH',
-    'phai-thu': 'BOTH', 'thu-tien': 'BOTH', 'doi-soat': 'BOTH', 'cong-no': 'BOTH',
+    'phai-thu': 'BOTH', 'thu-tien': 'BOTH', 'doi-soat': 'BOTH', 'theo-doi-ky-doi-soat': 'CROSS', 'cong-no': 'BOTH',
     'su-co': 'BOTH', 'thong-bao': 'BOTH',
     'phien-cho': 'TTD',
     'dien-nuoc': 'BOTH',
@@ -447,7 +447,8 @@
       { id: 'dien-nuoc', ico: U.icon('bolt'), label: 'Chỉ số điện, nước' },
       { id: 'phai-thu', ico: U.icon('receipt'), label: 'Khoản phải thu' },
       { id: 'thu-tien', ico: U.icon('card'), label: 'Thu tiền & biên lai' },
-      { id: 'doi-soat', ico: U.icon('refresh'), label: 'Đối soát', badge: () => A.db.bank.filter(b => !b.matched).length },
+      { id: 'doi-soat', ico: U.icon('refresh'), label: 'Đối soát buổi thu', badge: () => (A.db.cashHandovers || []).filter(h => h.market === ui.market && ['SUBMITTED', 'WAITING_EXPLANATION'].includes(h.status)).length },
+      { id: 'theo-doi-ky-doi-soat', ico: U.icon('calendar'), label: 'Theo dõi kỳ đối soát' },
       { id: 'cong-no', ico: '⏰', label: 'Công nợ & nhắc nợ' }
     ] },
     { group: 'Vận hành', items: [
@@ -497,7 +498,7 @@
   const DEMO_ROLE_SHORT = {
     system_admin: 'QTHT', ward_leader: 'Lãnh đạo', market_manager: 'Trưởng BQL',
     collector: 'Thu phí', market_accountant: 'Kế toán', technician: 'Kỹ thuật', central_accountant: 'KT Trung tâm',
-    ward_accountant: 'KT phường', trader: 'Tiểu thương'
+    trader: 'Tiểu thương'
   };
   // DEMO_ACCOUNT_BAR_COMPACT_GROUPING (mục 4/5/6/10 yêu cầu): với 12 chợ, liệt kê phẳng mọi account
   // hợp lệ (bản cũ) làm thanh dài hàng chục nút khi selectedMarket='ALL'. Nhóm lại theo 2 tầng, vẫn

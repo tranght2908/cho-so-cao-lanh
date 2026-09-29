@@ -95,7 +95,6 @@
     const seedById = new Map(defaultAccounts().map(a => [a.id, a]));
     const legacyAccountantSeeds = {
       'AC-KTTT01': { id: 'AC-KTTT01', code: 'KTTT01', fullName: 'Nguyễn Thị Minh Anh', phone: '0900000006', accountType: 'Kế toán Trung tâm', title: 'Kế toán Trung tâm', roleIds: ['central_accountant'], organization: 'Tổ Văn phòng – Trung tâm Cung ứng dịch vụ công', marketScopes: ['CL'], status: 'active' },
-      'AC-KTP01': { id: 'AC-KTP01', code: 'KTP01', fullName: 'Lê Thị Bảo Trâm', phone: '0900000007', accountType: 'Kế toán phường', title: 'Kế toán phường', roleIds: ['ward_accountant'], organization: 'UBND phường Cao Lãnh', marketScopes: ['ALL'], status: 'active' }
     };
     accounts.forEach(a => {
       const legacy = legacyAccountantSeeds[a.id], seed = seedById.get(a.id);
@@ -105,7 +104,7 @@
     });
     accounts.forEach(a => {
       const seed = seedById.get(a.id);
-      if (!seed || !['AC-KTTT01', 'AC-KTP01'].includes(a.id) || (a.roleIds || []).length) return;
+      if (!seed || a.id !== 'AC-KTTT01' || (a.roleIds || []).length) return;
       const fields = ['code', 'fullName', 'phone', 'accountType', 'title', 'organization', 'marketScopes', 'status'];
       if (!fields.every(key => JSON.stringify(a[key]) === JSON.stringify(seed[key]))) return;
       a.roleIds = seed.roleIds;

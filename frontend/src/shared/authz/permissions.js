@@ -69,7 +69,8 @@
     { key: 'screen:dien-nuoc', kind: 'screen', group: 'Tài chính', label: 'Chỉ số điện, nước' },
     { key: 'screen:phai-thu', kind: 'screen', group: 'Tài chính', label: 'Khoản phải thu' },
     { key: 'screen:thu-tien', kind: 'screen', group: 'Tài chính', label: 'Thu tiền & biên lai' },
-    { key: 'screen:doi-soat', kind: 'screen', group: 'Tài chính', label: 'Đối soát' },
+    { key: 'screen:doi-soat', kind: 'screen', group: 'Tài chính', label: 'Đối soát buổi thu' },
+    { key: 'screen:theo-doi-ky-doi-soat', kind: 'screen', group: 'Tài chính', label: 'Theo dõi kỳ đối soát' },
     { key: 'screen:cong-no', kind: 'screen', group: 'Tài chính', label: 'Công nợ & nhắc nợ' },
     { key: 'screen:su-co', kind: 'screen', group: 'Vận hành', label: 'Phản ánh & sự cố' },
     { key: 'screen:thong-bao', kind: 'screen', group: 'Vận hành', label: 'Thông báo đa kênh' },
@@ -148,6 +149,7 @@
     { key: 'action:doi-soat.xac-nhan-phieu-nop', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Đối soát phiếu nộp tiền mặt theo buổi của NV thu phí' },
     { key: 'action:doi-soat.xem-truy-vet', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Xem lịch sử truy vết đối soát' },
     { key: 'action:doi-soat.xuat-excel', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Xuất Excel dữ liệu đối soát' },
+    { key: 'action:theo-doi-ky-doi-soat.xac-nhan-hoan-tat', kind: 'action', group: 'Tài chính', screenId: 'theo-doi-ky-doi-soat', label: 'Xác nhận hoàn tất đối soát kỳ' },
     { key: 'action:cong-no.nhac-no', kind: 'action', group: 'Tài chính', screenId: 'cong-no', label: 'Nhắc nợ 1 tiểu thương' },
     { key: 'action:cong-no.nhac-no-hang-loat', kind: 'action', group: 'Tài chính', screenId: 'cong-no', label: 'Nhắc nợ hàng loạt' },
     // THU_HOI_NO (P chốt 29/09/2026): NV thu phí phụ trách gian thu nợ (không thu một phần).
@@ -256,7 +258,6 @@
       // Hai role kế toán chỉ là container RBAC để quản trị viên tự cấu hình. Cố ý không có
       // dòng nào trong defaultRolePermissions(), nên không được cấp quyền nghiệp vụ mặc định.
       { id: 'central_accountant', name: 'Kế toán Trung tâm', desc: 'Tổ Văn phòng – Trung tâm Cung ứng dịch vụ công', scope: 'all', market: null, selfService: false, builtin: true, active: true },
-      { id: 'ward_accountant', name: 'Kế toán phường', desc: 'UBND phường Cao Lãnh', scope: 'all', market: null, selfService: false, builtin: true, active: true },
       { id: 'trader', name: 'Tiểu thương', desc: 'Tự phục vụ qua mini app: xem hồ sơ/điểm kinh doanh/hợp đồng của chính mình, thanh toán, gửi phản ánh — chỉ dữ liệu thuộc merchantId/traderId của chính tài khoản (ownership)', scope: 'self', market: null, selfService: true, builtin: true, active: true }
     ];
   }
