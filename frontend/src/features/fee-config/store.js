@@ -38,10 +38,32 @@
     //   SERVICE = chia đều, thu như DỊCH VỤ CHỢ (khai báo ở tab Dịch vụ chợ) — không ghi chỉ số, bước
     //             tính/phát hành khoản thu KHÔNG tạo dòng tiền điện/nước theo công tơ.
     cfg.utilityModes = cfg.utilityModes && typeof cfg.utilityModes === 'object' ? cfg.utilityModes : {};
+    // DIEN_NUOC_CHIA_DEU_THEO_THANG: chợ SERVICE — mỗi tháng Tổ trưởng nhập tiền điện, nước chia đều / điểm KD.
+    // Chỉ THÊM dòng (append-only): nhập lại cùng tháng → dòng cũ 'superseded', dòng mới 'active'.
+    cfg.utilityFlat = Array.isArray(cfg.utilityFlat) ? cfg.utilityFlat : [];
+    // v51+: mỗi dòng 1 LOẠI tiền (ELECTRICITY | WATER) × 1 tháng × 1 khu vực (ALL | IND:<ngành> | ROW:<dãy>).
+    // Tách dòng kiểu cũ (điện + nước chung 1 dòng) thành 2 dòng.
+    cfg.utilityFlat = [].concat.apply([], cfg.utilityFlat.map(r => r.kind ? [r] : [['ELECTRICITY', 'elecPerPoint', 'elecTotal', 'E'], ['WATER', 'waterPerPoint', 'waterTotal', 'W']].filter(k => Number(r[k[1]] || 0) > 0).map(k => ({
+      id: r.id + '-' + k[3], marketId: r.marketId, kind: k[0], period: r.period, area: 'ALL', method: r.method === 'SPLIT_TOTAL' ? 'SPLIT_TOTAL' : 'AREA_RATE',
+      total: r[k[2]] == null ? null : Number(r[k[2]]), pointCount: r.pointCount || 0, perPoint: Number(r[k[1]]), basis: r.basis || '', note: '',
+      status: r.status === 'superseded' ? 'inactive' : 'active', createdBy: r.createdBy, createdAt: r.createdAt, inactivatedAt: r.supersededAt || null, inactivatedBy: r.supersededBy || null,
+      history: [{ time: r.createdAt || '', user: r.createdBy || '', action: 'Chuyển dữ liệu', detail: 'Tách từ dòng ' + r.id }] }))));
     cfg.waiverTypes = Array.isArray(cfg.waiverTypes) ? cfg.waiverTypes : clone(D.WAIVER_TYPES || []);
     ['stallPrices', 'utilities', 'extraServices'].forEach(cat => {
       cfg[cat] = Array.isArray(cfg[cat]) ? cfg[cat] : [];
       cfg[cat].forEach(rec => normalizeRecord(cat, rec));
+    });
+    // GIA_DIEN_NUOC_THEO_LOAI (P chốt 29/09/2026): giá điện và giá nước là 2 dòng riêng (kind ELECTRICITY/WATER).
+    // Mỗi loại luôn có đúng 1 giá đang áp dụng; thêm giá mới → giá cũ tự vô hiệu hóa từ ngày giá mới có hiệu lực
+    // (đầu tháng sau trở đi), dữ liệu cũ + nhật ký thay đổi được giữ. Lần đầu: tách từ cấu hình 'utilities' cũ.
+    cfg.utilityPrices = Array.isArray(cfg.utilityPrices) ? cfg.utilityPrices : [];
+    cfg.utilities.filter(u => u.status === 'active').forEach(u => {
+      [['ELECTRICITY', 'E', 'elecPrice', 'elecUnit', 'đ/kWh'], ['WATER', 'W', 'waterPrice', 'waterUnit', 'đ/m³']].forEach(k => {
+        if (cfg.utilityPrices.some(p => p.marketId === u.marketId && p.kind === k[0])) return;
+        cfg.utilityPrices.push({ id: 'GIA-' + u.marketId + '-' + k[1] + '-01', marketId: u.marketId, kind: k[0], price: Number(u[k[2]] || 0), unit: u[k[3]] || k[4],
+          effectiveFrom: u.effectiveFrom || '2026-01-01', effectiveTo: u.effectiveTo || null, status: 'active', legalBasis: clone(u.legalBasis || emptyLegal()), prevId: null,
+          createdBy: 'Dữ liệu chuyển tiếp', createdAt: '01/01/2026 08:00', history: [{ time: '01/01/2026 08:00', user: 'Hệ thống', action: 'Chuyển từ cấu hình điện & nước cũ', detail: 'Tách từ ' + u.id }] });
+      });
     });
     return cfg;
   }
@@ -139,6 +161,50 @@
       CFG.utilityModes[mid] = cur;
       save();
       return cur;
+    },
+    utilityFlatList: mid => (CFG.utilityFlat || []).filter(r => r.marketId === mid),
+    // Các dòng CÓ HIỆU LỰC của 1 loại tiền trong 1 tháng (mọi khu vực).
+    utilityFlatActive: (mid, kind, period) => (CFG.utilityFlat || []).filter(r => r.marketId === mid && r.kind === kind && r.period === period && r.status === 'active'),
+    // Thêm dòng mới: dòng cùng loại + cùng tháng + cùng khu vực đang có hiệu lực → vô hiệu hóa (giữ lại, có nhật ký).
+    addUtilityFlat: (rec, user) => {
+      CFG.utilityFlat = CFG.utilityFlat || [];
+      const now = nowStr(), label = rec.kind === 'ELECTRICITY' ? 'điện' : 'nước';
+      const n = CFG.utilityFlat.filter(r => r.marketId === rec.marketId).length + 1;
+      const row = Object.assign({ id: 'DNCD-' + rec.marketId + '-' + String(n).padStart(3, '0') }, rec, { status: 'active', createdBy: user, createdAt: now, history: [] });
+      CFG.utilityFlat.forEach(r => {
+        if (r.marketId === rec.marketId && r.kind === rec.kind && r.period === rec.period && r.area === rec.area && r.status === 'active') {
+          r.status = 'inactive'; r.inactivatedAt = now; r.inactivatedBy = user;
+          SC.log(r, user, 'Vô hiệu hóa', 'Thay bằng ' + row.id + ' (' + Number(row.perPoint).toLocaleString('vi-VN', { maximumFractionDigits: 2 }) + ' đ/điểm)');
+        }
+      });
+      CFG.utilityFlat.push(row);
+      SC.log(row, user, 'Thêm tiền ' + label + ' tháng ' + rec.period.slice(5) + '/' + rec.period.slice(0, 4), (rec.method === 'SPLIT_TOTAL' ? 'Chia đều ' + Number(rec.total).toLocaleString('vi-VN') + ' đ cho ' + rec.pointCount + ' điểm trên sơ đồ → ' : 'Mức theo khu: ') + Number(rec.perPoint).toLocaleString('vi-VN', { maximumFractionDigits: 2 }) + ' đ/điểm · căn cứ ' + (rec.basis || '—'));
+      save();
+      return row;
+    },
+    utilityPriceList: mid => (CFG.utilityPrices || []).filter(p => p.marketId === mid),
+    // Giá đang có hiệu lực tại ngày `date` (YYYY-MM-DD) của 1 loại (ELECTRICITY | WATER).
+    utilityPriceAt: (mid, kind, date) => (CFG.utilityPrices || []).filter(p => p.marketId === mid && p.kind === kind && p.status === 'active' && p.effectiveFrom <= date && (!p.effectiveTo || p.effectiveTo >= date))
+      .sort((a, b) => String(b.effectiveFrom).localeCompare(String(a.effectiveFrom)))[0] || null,
+    // Thêm giá mới (effectiveFrom = ngày 01 của một tháng). Giá đang áp dụng kết thúc vào ngày trước đó (tự vô hiệu
+    // hóa); giá "sắp áp dụng" trùng/sau mốc mới bị hủy. Không xóa bản ghi nào.
+    addUtilityPrice: (mid, kind, rec, user) => {
+      CFG.utilityPrices = CFG.utilityPrices || [];
+      const from = rec.effectiveFrom, d = new Date(from + 'T00:00:00'); d.setDate(d.getDate() - 1);
+      const prevEnd = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      const same = (CFG.utilityPrices || []).filter(p => p.marketId === mid && p.kind === kind && p.status === 'active');
+      const prev = same.filter(p => p.effectiveFrom < from).sort((a, b) => String(b.effectiveFrom).localeCompare(String(a.effectiveFrom)))[0] || null;
+      const unitName = kind === 'ELECTRICITY' ? 'điện' : 'nước';
+      same.filter(p => p.effectiveFrom >= from).forEach(p => { p.status = 'cancelled'; p.cancelledAt = nowStr(); p.cancelledBy = user; SC.log(p, user, 'Hủy giá sắp áp dụng', 'Có giá ' + unitName + ' mới từ ' + A.U.dmy(from)); });
+      const n = CFG.utilityPrices.filter(p => p.marketId === mid && p.kind === kind).length + 1;
+      const row = Object.assign({ id: 'GIA-' + mid + '-' + (kind === 'ELECTRICITY' ? 'E' : 'W') + '-' + String(n).padStart(2, '0'), marketId: mid, kind }, rec,
+        { effectiveTo: null, status: 'active', prevId: prev ? prev.id : null, createdBy: user, createdAt: nowStr(), history: [] });
+      if (prev) { prev.effectiveTo = prevEnd; // có thể rút ngắn/giữ nguyên nếu đã được đặt bởi giá sắp áp dụng vừa hủy
+        SC.log(prev, user, 'Vô hiệu hóa', 'Hết hiệu lực sau ' + A.U.dmy(prevEnd) + ' · thay bằng ' + row.id + ' (' + Number(row.price).toLocaleString('vi-VN') + ' ' + row.unit + ')'); }
+      CFG.utilityPrices.push(row);
+      SC.log(row, user, 'Thêm giá ' + unitName + ' mới', (prev ? Number(prev.price).toLocaleString('vi-VN') + ' → ' : '') + Number(row.price).toLocaleString('vi-VN') + ' ' + row.unit + ' · hiệu lực từ ' + A.U.dmy(from) + ' · căn cứ ' + ((row.legalBasis || {}).docNo || '—'));
+      save();
+      return row;
     },
     cycle: () => CFG.billingCycle,
     updateCycle: (patch, user, detail) => { Object.assign(CFG.billingCycle, patch); SC.log(CFG.billingCycle, user, 'Cập nhật kỳ thu', detail || ''); },

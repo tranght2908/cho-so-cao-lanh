@@ -407,7 +407,9 @@
       // các quyền này cố ý không gắn selectedMarket hay marketScopes.
       'cau-hinh-gia.chinh-sach-chung.them-muc': ['system_admin'],
       // Người dùng xác nhận 28/09/2026: cấu hình hình thức thu điện, nước do Quản trị hệ thống thực hiện.
-      'cau-hinh-gia.hinh-thuc-dien-nuoc': ['system_admin'],
+      // P chốt 29/09/2026: hình thức thu điện, nước là cấu hình RIÊNG của chợ → Tổ trưởng Tổ Quản lý chợ tự chọn
+      // (theo chợ trong marketScopes). Quản trị hệ thống chỉ giữ cấu hình chung, không còn quyền này.
+      'cau-hinh-gia.hinh-thuc-dien-nuoc': ['market_manager'],
       'cau-hinh-gia.chinh-sach-chung.ap-dung': ['system_admin'],
       'cau-hinh-gia.chinh-sach-chung.khoa-mo': ['system_admin'],
       // Thêm/sửa/xoá/đổi trạng thái tài khoản ngân hàng: chỉ Quản trị hệ thống (yêu cầu gốc, không
@@ -504,7 +506,7 @@
   //        lệch khiến loadState() đi thẳng nhánh RESEED TOÀN BỘ (freshState(), không qua
   //        mergeIntoCurrentSeed()), nên seedVersion v15 ở đây chỉ còn ý nghĩa tài liệu/đánh dấu, không
   //        phải cơ chế migrate chính cho lần đổi này (xem RBAC_MARKET_SCOPE_MIGRATION_REPORT.md).
-  const PERM_SEED_VERSION = 18; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: action:phai-thu.ban-do-thu
+  const PERM_SEED_VERSION = 19; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: action:phai-thu.ban-do-thu; 19: hình thức điện nước → market_manager
   const RATE_POLICY_PERM_VERSION = 1;
   const BANK_ACCOUNT_PERM_VERSION = 1;
   const PC3A_SESSION_PERM_VERSION = 1;
@@ -514,7 +516,7 @@
   const FEE_LIFECYCLE_PERM_VERSION = 1;
   const PHAI_THU_SCOPE_PERM_VERSION = 1;
   const PHAI_THU_SCOPE_KEY = 'action:phai-thu.xem-toan-cho';
-  const UTILITY_MODE_PERM_VERSION = 1;
+  const UTILITY_MODE_PERM_VERSION = 2;
   const UTILITY_MODE_KEY = 'action:cau-hinh-gia.hinh-thuc-dien-nuoc';
   const METER_RECORD_PERM_VERSION = 1;
   const CASH_HANDOVER_PERM_VERSION = 1;
@@ -571,11 +573,14 @@
   }
   // v1 (HINH_THUC_THU_DIEN_NUOC): cấp action:cau-hinh-gia.hinh-thuc-dien-nuoc theo default seed cho state
   // đã lưu, đúng 1 lần (marker) — sau đó cấp/thu hồi ở màn Phân quyền không bị ghi đè.
+  // v2 (P chốt 29/09/2026): chuyển quyền từ system_admin sang market_manager, đúng 1 lần (marker) — sau đó
+  // chỉnh ở màn Phân quyền thì không bị ghi đè.
   function migrateUtilityModePerms(stored) {
     if (stored.utilityModePermVersion >= UTILITY_MODE_PERM_VERSION) return false;
-    if (!stored.rolePerms.some(r => r.permKey === UTILITY_MODE_KEY)) {
-      defaultRolePermissions().filter(r => r.permKey === UTILITY_MODE_KEY).forEach(r => stored.rolePerms.push(r));
-    }
+    if ((stored.utilityModePermVersion || 0) >= 1) stored.rolePerms = stored.rolePerms.filter(r => !(r.roleId === 'system_admin' && r.permKey === UTILITY_MODE_KEY));
+    defaultRolePermissions().filter(r => r.permKey === UTILITY_MODE_KEY).forEach(r => {
+      if (!stored.rolePerms.some(x => x.roleId === r.roleId && x.permKey === r.permKey)) stored.rolePerms.push(Object.assign({}, r, { grantedAt: 'migrate-utility-mode-v2', grantedBy: 'Hệ thống' }));
+    });
     stored.utilityModePermVersion = UTILITY_MODE_PERM_VERSION;
     return true;
   }

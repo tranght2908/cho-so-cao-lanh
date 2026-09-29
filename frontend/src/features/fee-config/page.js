@@ -173,11 +173,11 @@
 
   // ---- sub-tab: Điện & nước ----
   // ---------- HINH_THUC_THU_DIEN_NUOC ----------
-  // Mỗi chợ chọn: theo công tơ (ghi chỉ số) hoặc chia đều như dịch vụ chợ. Chỉ tài khoản có
-  // action:cau-hinh-gia.hinh-thuc-dien-nuoc (mặc định Quản trị hệ thống) được đổi; handler kiểm tra lại.
+  // Mỗi chợ chọn: theo công tơ (ghi chỉ số) hoặc chia đều. Chỉ tài khoản có action:cau-hinh-gia.hinh-thuc-dien-nuoc
+  // ở chợ đang chọn (mặc định Tổ trưởng Tổ Quản lý chợ — P chốt 29/09/2026) được đổi; handler kiểm tra lại.
   const UTILITY_MODE_LABEL = {
     METER: ['Theo công tơ từng điểm kinh doanh', 'Nhân viên ghi chỉ số điện, nước hằng tháng; khoản phải thu tính theo chỉ số × đơn giá bên dưới.'],
-    SERVICE: ['Chia đều – thu như dịch vụ chợ', 'Không ghi chỉ số. Tiền điện, nước khai báo ở tab "Dịch vụ chợ" (số tiền cố định/tháng); tính/phát hành khoản thu không tạo dòng điện, nước theo công tơ.']
+    SERVICE: ['Chia đều – thu như dịch vụ chợ', 'Không ghi chỉ số. Mỗi tháng Tổ trưởng nhập tiền điện, nước chia đều cho mỗi điểm kinh doanh ngay tại tab này; mọi điểm nộp cùng một mức.']
   };
   const cfgCanUtilityMode = () => U.can('cau-hinh-gia') && A.canDo('cau-hinh-gia.hinh-thuc-dien-nuoc', ui.market);
   function utilityModeCardHtml() {
@@ -185,12 +185,13 @@
     const opt = k => `<label style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1.5px solid ${mode === k ? '#1d4ed8' : 'var(--line)'};border-radius:10px;flex:1;min-width:260px;cursor:${can ? 'pointer' : 'default'};background:${mode === k ? '#f3f7ff' : 'transparent'}">
         <input type="radio" name="util-mode" ${mode === k ? 'checked' : ''} ${can ? `data-act="cfg-utility-mode" data-id="${k}"` : 'disabled'}><span><b>${UTILITY_MODE_LABEL[k][0]}</b><div class="small muted">${UTILITY_MODE_LABEL[k][1]}</div></span></label>`;
     return `<div class="card"><div class="card-h"><div><h3 style="margin:0">Hình thức thu điện, nước · ${U.esc(U.market(ui.market).name)}</h3>
-      <div class="small muted">${can ? 'Chọn hình thức áp dụng cho chợ này.' : 'Chỉ Quản trị hệ thống thay đổi được hình thức thu.'}${info.updatedAt ? ' · Cập nhật ' + U.esc(info.updatedAt) + ' bởi ' + U.esc(info.updatedBy || '') : ''}</div></div></div>
+      <div class="small muted">${can ? 'Tổ trưởng chọn hình thức áp dụng cho chợ mình.' : 'Chỉ Tổ trưởng Tổ Quản lý chợ phụ trách chợ này thay đổi được hình thức thu.'}${info.updatedAt ? ' · Cập nhật ' + U.esc(info.updatedAt) + ' bởi ' + U.esc(info.updatedBy || '') : ''}</div></div></div>
       <div class="card-b"><div class="row" style="gap:10px;flex-wrap:wrap">${opt('METER')}${opt('SERVICE')}</div>
-      ${mode === 'SERVICE' ? '<div class="note info" style="margin-top:10px">Chợ đang thu điện, nước chia đều. Khai báo khoản "Tiền điện/nước chia đều" ở tab <b>Dịch vụ chợ</b>. Bảng đơn giá theo công tơ bên dưới không được dùng khi tính khoản thu.</div>' : ''}</div></div>`;
+      </div></div>`;
   }
   A.ACT['cfg-utility-mode'] = el => {
-    if (!cfgCanUtilityMode()) { U.toast('Chỉ Quản trị hệ thống được đổi hình thức thu điện, nước'); A.render(); return; }
+    A.render(); // radio chỉ đổi thật khi xác nhận (Hủy → giữ lựa chọn cũ)
+    if (!cfgCanUtilityMode()) { U.toast('Bạn không có quyền đổi hình thức thu điện, nước của chợ này'); A.render(); return; }
     const next = el.dataset.id === 'SERVICE' ? 'SERVICE' : 'METER';
     if (next === A.SERVICE_CFG.utilityMode(ui.market)) return;
     A.modal(A.mHead('Đổi hình thức thu điện, nước') + `<div class="modal-b"><p>Chuyển <b>${U.esc(U.market(ui.market).name)}</b> sang: <b>${UTILITY_MODE_LABEL[next][0]}</b>.</p><div class="small muted">${UTILITY_MODE_LABEL[next][1]}</div>
@@ -199,25 +200,223 @@
       <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="cfg-utility-mode-save" data-id="${next}">Xác nhận đổi</button></div>`);
   };
   A.ACT['cfg-utility-mode-save'] = el => {
-    if (!cfgCanUtilityMode()) { U.toast('Chỉ Quản trị hệ thống được đổi hình thức thu điện, nước'); A.closeModal(); A.render(); return; }
+    if (!cfgCanUtilityMode()) { U.toast('Bạn không có quyền đổi hình thức thu điện, nước của chợ này'); A.closeModal(); A.render(); return; }
     const reason = ((A.$('#util-mode-reason') || {}).value || '').trim();
     if (!reason) return U.toast('Vui lòng nhập lý do / căn cứ');
+    // Thu theo công tơ bắt buộc luôn có giá điện và giá nước đang áp dụng.
+    if (el.dataset.id === 'METER') { const miss = ['ELECTRICITY', 'WATER'].filter(k => !A.SERVICE_CFG.utilityPriceAt(ui.market, k, U.today())); if (miss.length) return U.toast('Chưa có ' + miss.map(k => k === 'ELECTRICITY' ? 'giá điện' : 'giá nước').join(', ') + ' đang áp dụng — không chuyển sang thu theo công tơ được'); }
     A.SERVICE_CFG.setUtilityMode(ui.market, el.dataset.id, cfgActor(), reason);
     U.log('Đổi hình thức thu điện, nước ' + ui.market + ' → ' + el.dataset.id + ' (' + reason + ')');
     A.closeModal(); A.render(); U.toast('Đã cập nhật hình thức thu điện, nước');
   };
+  // ---------- DIEN_NUOC_CHIA_DEU_THEO_THANG (chợ hình thức SERVICE, P chốt 29/09/2026) ----------
+  // Mỗi dòng = 1 loại tiền (điện | nước) × 1 tháng × 1 khu vực (toàn chợ | khu theo ngành hàng | dãy, lấy từ sơ đồ
+  // mặt bằng). Đơn giá: chia đều hóa đơn tổng cho số điểm KD của khu vực, hoặc chợ tự đặt mức / điểm theo khu.
+  // Thêm dòng cùng loại + tháng + khu vực → dòng cũ "Vô hiệu hóa" (giữ lại, có nhật ký). Tháng đã phát hành khoản
+  // thu → khóa. Quyền: action:cau-hinh-gia.them-phi (sẵn có, market_manager) theo chợ đang chọn; handler kiểm tra lại.
+  const FLAT_KIND = { ELECTRICITY: 'Tiền điện', WATER: 'Tiền nước' };
+  const FLAT_METHOD = { SPLIT_TOTAL: 'Chia đều hóa đơn tổng', AREA_RATE: 'Chợ đặt mức theo khu' };
+  const flatIssued = (mid, p) => A.db.invoices.some(i => i.market === mid && i.period === p);
+  const flatMonthRange = p => { const [y, m] = p.split('-').map(Number); return [p + '-01', p + '-' + String(new Date(y, m, 0).getDate()).padStart(2, '0')]; };
+  const flatMonths = mid => { const out = [], d = new Date(U.today().slice(0, 7) + '-01T00:00:00'); for (let k = 0; k < 4; k++) { const p = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); if (!flatIssued(mid, p)) out.push(p); d.setMonth(d.getMonth() + 1); } return out; };
+  const flatRows = mid => (A.db.rows || []).filter(r => r.market === mid && r.status !== 'inactive');
+  const flatAreaOptions = mid => {
+    const rows = flatRows(mid), inds = [];
+    rows.forEach(r => { if (r.industry && inds.indexOf(r.industry) === -1) inds.push(r.industry); });
+    return [{ id: 'ALL', label: 'Toàn chợ' }]
+      .concat(inds.map(x => ({ id: 'IND:' + x, label: 'Khu ' + x + ' (' + rows.filter(r => r.industry === x).map(r => r.code).join(', ') + ')', group: 'Khu theo ngành hàng' })))
+      .concat(rows.map(r => ({ id: 'ROW:' + r.id, label: 'Dãy ' + r.code + ' · ' + r.name, group: 'Theo dãy' })));
+  };
+  const flatAreaLabel = (mid, area) => { const o = flatAreaOptions(mid).find(x => x.id === area); return o ? o.label : area; };
+  const flatInArea = (st, area) => { if (area === 'ALL') return true; const r = st && A.idx.row ? A.idx.row.get(st.rowId) : null; if (!r) return false; return area.indexOf('ROW:') === 0 ? r.id === area.slice(4) : area.indexOf('IND:') === 0 ? r.industry === area.slice(4) : false; };
+  // Số chia khi chia đều hóa đơn tổng: số điểm KD trên SƠ ĐỒ MẶT BẰNG của khu vực (A.db.stalls theo Dãy), không phụ thuộc hợp đồng.
+  const flatMapPoints = (mid, area) => A.db.stalls.filter(st => st.market === mid && flatInArea(st, area)).length;
+  // Đơn giá = tổng ÷ số điểm, làm tròn LÊN tới 2 chữ số thập phân (P chốt 29/09/2026).
+  const flatSplit = (total, n) => n ? Math.ceil(Number(total) / n * 100 - 1e-9) / 100 : 0;
+  const flatMoney = n => Number(n || 0).toLocaleString('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' đ';
+  const flatPoints = (mid, p, area) => { const [from, to] = flatMonthRange(p); const ids = new Set(A.db.contracts.filter(c => c.market === mid && c.status === 'hieuluc' && c.start <= to && (!c.end || c.end >= from)).map(c => c.businessPointId || c.stallId)); return Array.from(ids).filter(id => flatInArea(A.idx.stall.get(id), area)).length; };
+  const cfgCanFlat = () => U.can('cau-hinh-gia') && A.SERVICE_CFG.utilityMode(ui.market) === 'SERVICE' && cfgFeeAddAllowed('utilities', null);
+  const flatState = r => r.status !== 'active' ? ['Vô hiệu hóa', 'tag'] : flatIssued(r.marketId, r.period) ? ['Có hiệu lực · đã phát hành, khóa', 'tag purple'] : ['Có hiệu lực', 'tag ok'];
+  function utilityFlatCardHtml() {
+    const mid = ui.market, can = cfgCanFlat(), months = flatMonths(mid);
+    const all = A.SERVICE_CFG.utilityFlatList(mid).slice().sort((a, b) => Number(a.status !== 'active') - Number(b.status !== 'active') || String(b.period).localeCompare(String(a.period)) || String(a.kind).localeCompare(String(b.kind)) || String(b.createdAt).localeCompare(String(a.createdAt)));
+    const act = all.filter(r => r.status === 'active'), old = all.filter(r => r.status !== 'active');
+    const cols = [{ t: 'STT' }, { t: 'Loại tiền' }, { t: 'Tháng' }, { t: 'Khu vực' }, { t: 'Đơn giá (đ/điểm)', num: true }, { t: 'Căn cứ' }, { t: 'Ghi chú' }, { t: 'Trạng thái' }, { t: '' }];
+    const tr = (r, n, faded) => { const st = flatState(r); return `<tr style="${faded ? 'color:#8a93a3' : ''}"><td>${n}</td><td><b>${FLAT_KIND[r.kind] || r.kind}</b></td><td>${U.per(r.period)}</td>
+      <td class="small">${U.esc(flatAreaLabel(r.marketId, r.area))}</td>
+      <td class="num"><b>${flatMoney(r.perPoint)}</b></td>
+      <td class="small">${U.esc(r.basis || '')}</td><td class="small">${U.esc(r.note || '')}</td><td><span class="${st[1]}">${st[0]}</span></td>
+      <td><button class="btn sm" data-act="cfg-flat-view" data-id="${r.id}">Xem</button></td></tr>`; };
+    return `<div class="card"><div class="card-h"><div><h3 style="margin:0">Tiền điện, nước chia đều theo tháng · ${U.esc(U.market(mid).name)}</h3>
+        <div class="small muted">Mỗi dòng là tiền điện hoặc tiền nước của một tháng cho một khu vực. Thêm dòng mới cùng loại, cùng tháng, cùng khu vực thì dòng cũ tự vô hiệu hóa. Mức theo dãy/khu được ưu tiên hơn mức toàn chợ. Tháng đã phát hành khoản thu thì khóa.</div></div><span class="spacer"></span>
+        ${can ? (months.length ? '<button class="btn sm primary" data-act="cfg-flat-new">+ Thêm tiền điện, nước</button>' : '<span class="small muted">Không còn tháng nào chưa phát hành để nhập.</span>') : ''}</div>
+      <div class="card-b">${U.table(cols, act.map((r, n) => tr(r, n + 1)), { empty: 'Chưa có dòng tiền điện, nước nào. Tháng chưa nhập sẽ bị chặn khi tính/phát hành khoản thu.' })}
+        ${old.length ? `<div style="margin-top:10px"><button class="link-btn" data-act="cfg-flat-old">${ui.cfgFlatOld ? '▾ Ẩn' : '▸ Xem'} dòng đã vô hiệu hóa (${old.length})</button></div>${ui.cfgFlatOld ? '<div style="margin-top:6px">' + U.table(cols, old.map((r, n) => tr(r, n + 1, true))) + '</div>' : ''}` : ''}</div></div>`;
+  }
+  A.ACT['cfg-flat-old'] = () => { if (!U.can('cau-hinh-gia')) return; ui.cfgFlatOld = !ui.cfgFlatOld; A.render(); };
+  A.ACT['cfg-flat-view'] = el => {
+    if (!U.can('cau-hinh-gia')) return;
+    const r = A.SERVICE_CFG.utilityFlatList(ui.market).find(x => x.id === el.dataset.id);
+    if (!r) return;
+    const st = flatState(r);
+    A.$('#modal-root').innerHTML = `<div class="drawer-overlay" data-act="close"></div><div class="drawer"><div class="drawer-h"><div><h3>${FLAT_KIND[r.kind]} tháng ${U.per(r.period)}</h3><div class="small muted">${r.id} · <span class="${st[1]}">${st[0]}</span></div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
+      <div class="drawer-b"><dl class="kv"><dt>Khu vực</dt><dd>${U.esc(flatAreaLabel(r.marketId, r.area))}</dd><dt>Cách tính</dt><dd>${FLAT_METHOD[r.method] || ''}</dd>
+        ${r.method === 'SPLIT_TOTAL' ? `<dt>Hóa đơn tổng</dt><dd>${flatMoney(r.total)}</dd><dt>Số điểm trên sơ đồ</dt><dd>${r.pointCount}</dd>` : ''}<dt>Đơn giá</dt><dd><b>${flatMoney(r.perPoint)} / điểm</b></dd>
+        <dt>Căn cứ</dt><dd>${U.esc(r.basis || '—')}</dd><dt>Ghi chú</dt><dd>${U.esc(r.note || '—')}</dd><dt>Người nhập</dt><dd>${U.esc(r.createdBy || '')} · ${U.esc(r.createdAt || '')}</dd>
+        ${r.status !== 'active' ? `<dt>Vô hiệu hóa</dt><dd>${U.esc(r.inactivatedBy || '')} · ${U.esc(r.inactivatedAt || '')}</dd>` : ''}</dl>
+        <div class="divider"></div><b class="small">NHẬT KÝ THAY ĐỔI</b><div style="margin-top:6px">${cfgHistoryHtml(r)}</div></div>
+      <div class="drawer-f"><button class="btn" data-act="close">Đóng</button></div></div>`;
+  };
+  function flatPreview(d) {
+    const n = flatMapPoints(ui.market, d.area);
+    if (d.method !== 'SPLIT_TOTAL') return `Khu vực có <b>${n}</b> điểm kinh doanh trên sơ đồ mặt bằng. Đơn giá lưu đúng số đã nhập.`;
+    return `Hệ thống chia cho <b>${n}</b> điểm kinh doanh trên sơ đồ mặt bằng của khu vực → đơn giá <b>${flatMoney(flatSplit(Number(d.total) || 0, n))}</b> / điểm (làm tròn lên 2 chữ số thập phân).`;
+  }
+  function renderFlatForm() {
+    const d = ui.cfgFlat, months = flatMonths(ui.market), areas = flatAreaOptions(ui.market);
+    const cur = A.SERVICE_CFG.utilityFlatActive(ui.market, d.kind, d.period).find(r => r.area === d.area);
+    let lastGroup = '';
+    const areaOpts = areas.map(o => { const g = o.group && o.group !== lastGroup ? (lastGroup ? '</optgroup>' : '') + `<optgroup label="${U.esc(o.group)}">` : ''; if (o.group) lastGroup = o.group; return g + `<option value="${U.esc(o.id)}" ${d.area === o.id ? 'selected' : ''}>${U.esc(o.label)}</option>`; }).join('') + (lastGroup ? '</optgroup>' : '');
+    const num = (k, v) => `<input class="input" type="number" min="0" step="any" data-ch="cfg-flat" data-k="${k}" value="${U.esc(v == null ? '' : v)}">`;
+    A.modal(A.mHead('Thêm tiền điện, nước · ' + U.esc(U.market(ui.market).short)) + `<div class="modal-b">
+      <div class="grid g2"><div class="field"><label>Loại tiền</label><div class="row" style="gap:16px;padding-top:6px">${Object.keys(FLAT_KIND).map(k => `<label class="row" style="gap:6px"><input type="radio" name="flat-kind" data-ch="cfg-flat" data-k="kind" value="${k}" ${d.kind === k ? 'checked' : ''}> ${FLAT_KIND[k]}</label>`).join('')}</div></div>
+        <div class="field"><label>Tháng</label><select class="input" data-ch="cfg-flat" data-k="period">${months.map(p => `<option value="${p}" ${p === d.period ? 'selected' : ''}>Tháng ${U.per(p)}</option>`).join('')}</select></div></div>
+      <div class="field" style="margin-top:10px"><label>Khu vực áp dụng (theo sơ đồ chợ)</label><select class="input" data-ch="cfg-flat" data-k="area">${areaOpts}</select></div>
+      ${cur ? `<div class="note warn" style="margin-top:8px">Đang có dòng ${FLAT_KIND[d.kind].toLowerCase()} tháng ${U.per(d.period)} cho khu vực này (${flatMoney(cur.perPoint)} / điểm, ${U.esc(cur.createdBy)} ${U.esc(cur.createdAt)}). Lưu dòng mới thì dòng cũ tự vô hiệu hóa.</div>` : ''}
+      <div class="field" style="margin-top:10px"><label>Đơn giá</label><div class="row" style="gap:16px;padding-top:6px">${Object.keys(FLAT_METHOD).map(k => `<label class="row" style="gap:6px"><input type="radio" name="flat-method" data-ch="cfg-flat" data-k="method" value="${k}" ${d.method === k ? 'checked' : ''}> ${FLAT_METHOD[k]}</label>`).join('')}</div></div>
+      <div class="grid g2" style="margin-top:8px">${d.method === 'SPLIT_TOTAL' ? `<div class="field"><label>${FLAT_KIND[d.kind]} theo hóa đơn tổng của khu vực (đ) *</label>${num('total', d.total)}</div>` : `<div class="field"><label>Mức ${FLAT_KIND[d.kind].toLowerCase()} mỗi điểm KD (đ) *</label>${num('perPoint', d.perPoint)}</div>`}
+        <div class="field"><label>Căn cứ *</label><input class="input" data-ch="cfg-flat" data-k="basis" value="${U.esc(d.basis || '')}" placeholder="VD: Hóa đơn điện lực số … tháng ${U.per(d.period)}"></div></div>
+      <div class="note info" style="margin-top:8px" id="flat-preview">${flatPreview(d)}</div>
+      <div class="field" style="margin-top:10px"><label>Ghi chú</label><input class="input" data-ch="cfg-flat" data-k="note" value="${U.esc(d.note || '')}" placeholder="VD: Khu cá dùng máy bơm, sục khí nên mức cao hơn"></div>
+      <div class="small muted" style="margin-top:8px">Sau khi Trưởng Ban phát hành khoản thu của tháng này, các dòng của tháng bị khóa — không sửa được.</div></div>
+      <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="cfg-flat-save">Lưu</button></div>`);
+  }
+  A.ACT['cfg-flat-new'] = () => {
+    if (!cfgCanFlat()) { U.toast('Không có quyền nhập tiền điện, nước chia đều cho chợ này'); return; }
+    const months = flatMonths(ui.market);
+    if (!months.length) { U.toast('Không còn tháng nào chưa phát hành khoản thu'); return; }
+    ui.cfgFlat = { kind: 'ELECTRICITY', period: months[0], area: 'ALL', method: 'SPLIT_TOTAL', total: '', perPoint: '', basis: '', note: '' };
+    renderFlatForm();
+  };
+  A.CH['cfg-flat'] = el => {
+    const d = ui.cfgFlat; if (!d) return;
+    const k = el.dataset.k;
+    d[k] = el.value;
+    if (k === 'kind' || k === 'period' || k === 'area' || k === 'method') renderFlatForm();
+    else if ((k === 'total' || k === 'perPoint') && A.$('#flat-preview')) A.$('#flat-preview').innerHTML = flatPreview(d);
+  };
+  A.ACT['cfg-flat-save'] = () => {
+    const d = ui.cfgFlat;
+    if (!d || !cfgCanFlat()) { U.toast('Không có quyền nhập tiền điện, nước chia đều cho chợ này'); A.closeModal(); A.render(); return; }
+    if (!FLAT_KIND[d.kind] || !FLAT_METHOD[d.method]) return;
+    if (flatMonths(ui.market).indexOf(d.period) === -1) { U.toast('Tháng ' + U.per(d.period) + ' đã phát hành khoản thu hoặc không hợp lệ — không được nhập'); return; }
+    if (!flatAreaOptions(ui.market).some(o => o.id === d.area)) return U.toast('Khu vực không thuộc sơ đồ chợ đang chọn');
+    const basis = String(d.basis || '').trim();
+    if (!basis) return U.toast('Vui lòng nhập căn cứ');
+    let rec;
+    if (d.method === 'SPLIT_TOTAL') {
+      const total = Number(d.total);
+      if (d.total === '' || !(total > 0)) return U.toast('Nhập số tiền theo hóa đơn tổng (> 0)');
+      const n = flatMapPoints(ui.market, d.area);
+      if (!n) return U.toast('Khu vực này chưa có điểm kinh doanh trên sơ đồ mặt bằng để chia');
+      rec = { method: 'SPLIT_TOTAL', total, pointCount: n, perPoint: flatSplit(total, n) };
+    } else {
+      const per = Number(d.perPoint);
+      if (d.perPoint === '' || !(per > 0)) return U.toast('Nhập mức mỗi điểm KD (> 0)');
+      rec = { method: 'AREA_RATE', total: null, pointCount: flatMapPoints(ui.market, d.area), perPoint: per };
+    }
+    const row = A.SERVICE_CFG.addUtilityFlat(Object.assign({ marketId: ui.market, kind: d.kind, period: d.period, area: d.area, basis, note: String(d.note || '').trim() }, rec), cfgActor());
+    U.log('Thêm ' + FLAT_KIND[d.kind].toLowerCase() + ' chia đều ' + ui.market + ' tháng ' + U.per(d.period) + ' · ' + flatAreaLabel(ui.market, d.area) + ': ' + row.perPoint + ' đ/điểm (' + basis + ')');
+    ui.cfgFlat = null; A.closeModal(); A.render(); U.toast('Đã lưu ' + FLAT_KIND[d.kind].toLowerCase() + ' tháng ' + U.per(d.period));
+  };
+  // ---------- GIA_DIEN_NUOC_THEO_LOAI (chợ hình thức METER, P chốt 29/09/2026) ----------
+  // 2 dòng: giá điện, giá nước — mỗi loại luôn có đúng 1 giá đang áp dụng (không có nút Khóa). Thêm giá mới:
+  // hiệu lực từ ngày 01 của tháng sau trở đi (tháng hiện tại vẫn tính giá cũ); giá cũ tự vô hiệu hóa, dữ liệu cũ và
+  // nhật ký giữ nguyên. Quyền: action:cau-hinh-gia.them-phi + action:cau-hinh-gia.ap-dung-phi (sẵn có, market_manager)
+  // theo chợ đang chọn — kiểm tra lại trong handler lưu.
+  const UP_KIND = { ELECTRICITY: ['Giá điện', 'đ/kWh', 'điện'], WATER: ['Giá nước', 'đ/m³', 'nước'] };
+  const upToday = () => U.today();
+  const upMonthStart = (iso, add) => { const d = new Date(iso.slice(0, 7) + '-01T00:00:00'); d.setMonth(d.getMonth() + add); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-01'; };
+  const cfgCanUtilPrice = () => U.can('cau-hinh-gia') && A.SERVICE_CFG.utilityMode(ui.market) === 'METER' && cfgFeeActionAllowed('cau-hinh-gia.them-phi', null) && cfgFeeActionAllowed('cau-hinh-gia.ap-dung-phi', null);
+  function upState(r) {
+    const t = upToday();
+    if (r.status === 'cancelled') return ['Đã hủy', 'tag', 3];
+    if (r.effectiveTo && r.effectiveTo < t) return ['Vô hiệu hóa', 'tag', 2];
+    if (r.effectiveFrom > t) return ['Sắp áp dụng từ ' + U.dmy(r.effectiveFrom), 'tag warn', 1];
+    return ['Đang áp dụng', 'tag ok', 0];
+  }
+  function upRowHtml(r, faded) {
+    const st = upState(r), lb = r.legalBasis || {};
+    return `<tr style="${faded ? 'color:#8a93a3' : ''}"><td><b>${UP_KIND[r.kind][0]}</b></td><td class="num"><b>${Number(r.price).toLocaleString('vi-VN')}</b><div class="small muted">${U.esc(r.unit)}</div></td>
+      <td class="nowrap">Từ ${U.dmy(r.effectiveFrom)}${r.effectiveTo ? `<div class="small muted">đến ${U.dmy(r.effectiveTo)}</div>` : ''}</td>
+      <td class="small">${lb.docNo ? U.esc(lb.docNo) : '<span class="muted">—</span>'}${lb.docDate ? `<div class="muted">${U.dmy(lb.docDate)}</div>` : ''}</td>
+      <td class="small">${U.esc(r.createdBy || '')}<div class="muted">${U.esc(r.createdAt || '')}</div></td>
+      <td><span class="${st[1]}">${st[0]}</span></td><td><button class="btn sm" data-act="cfg-up-view" data-id="${r.id}">Xem</button></td></tr>`;
+  }
+  function utilityPriceCardHtml() {
+    const mid = ui.market, all = A.SERVICE_CFG.utilityPriceList(mid), t = upToday(), can = cfgCanUtilPrice();
+    const rows = [], old = [];
+    ['ELECTRICITY', 'WATER'].forEach(k => {
+      const cur = A.SERVICE_CFG.utilityPriceAt(mid, k, t);
+      rows.push(cur ? upRowHtml(cur) : `<tr><td><b>${UP_KIND[k][0]}</b></td><td colspan="5"><span class="tag danger">Chưa có giá ${UP_KIND[k][2]} đang áp dụng</span> <span class="small muted">— bắt buộc khi thu theo công tơ</span></td><td></td></tr>`);
+      all.filter(r => r.kind === k && r.status === 'active' && r.effectiveFrom > t).sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom)).forEach(r => rows.push(upRowHtml(r)));
+      all.filter(r => r.kind === k && upState(r)[2] >= 2).sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom)).forEach(r => old.push(upRowHtml(r, true)));
+    });
+    const cols = [{ t: 'Loại' }, { t: 'Mức giá', num: true }, { t: 'Hiệu lực' }, { t: 'Căn cứ (quyết định)' }, { t: 'Người cập nhật' }, { t: 'Trạng thái' }, { t: '' }];
+    return `<div class="card"><div class="card-h"><div><h3 style="margin:0">Giá điện, nước theo công tơ · ${U.esc(U.market(mid).name)}</h3>
+        <div class="small muted">Mỗi loại luôn có 1 giá đang áp dụng. Thêm giá mới thì giá cũ tự vô hiệu hóa; giá mới tính từ tháng sau, tháng này vẫn tính giá cũ.</div></div><span class="spacer"></span>
+        ${can ? '<button class="btn sm primary" data-act="cfg-up-new">+ Thêm giá mới</button>' : ''}</div>
+      <div class="card-b">${U.table(cols, rows)}
+        ${old.length ? `<div style="margin-top:10px"><button class="link-btn" data-act="cfg-up-old">${ui.cfgUpOld ? '▾ Ẩn' : '▸ Xem'} giá cũ đã vô hiệu hóa (${old.length})</button></div>${ui.cfgUpOld ? '<div style="margin-top:6px">' + U.table(cols, old) + '</div>' : ''}` : ''}</div></div>`;
+  }
+  A.ACT['cfg-up-old'] = () => { if (!U.can('cau-hinh-gia')) return; ui.cfgUpOld = !ui.cfgUpOld; A.render(); };
+  A.ACT['cfg-up-view'] = el => {
+    if (!U.can('cau-hinh-gia')) return;
+    const r = A.SERVICE_CFG.utilityPriceList(ui.market).find(x => x.id === el.dataset.id);
+    if (!r) return;
+    const prev = r.prevId ? A.SERVICE_CFG.utilityPriceList(ui.market).find(x => x.id === r.prevId) : null, st = upState(r);
+    A.$('#modal-root').innerHTML = `<div class="drawer-overlay" data-act="close"></div><div class="drawer"><div class="drawer-h"><div><h3>${UP_KIND[r.kind][0]} · ${U.esc(U.market(r.marketId).short)}</h3><div class="small muted">${r.id} · <span class="${st[1]}">${st[0]}</span></div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
+      <div class="drawer-b"><dl class="kv"><dt>Mức giá</dt><dd><b>${Number(r.price).toLocaleString('vi-VN')} ${U.esc(r.unit)}</b></dd><dt>Hiệu lực từ</dt><dd>${U.dmy(r.effectiveFrom)}</dd>${r.effectiveTo ? `<dt>Hết hiệu lực</dt><dd>${U.dmy(r.effectiveTo)}</dd>` : ''}
+        <dt>Giá trước đó</dt><dd>${prev ? Number(prev.price).toLocaleString('vi-VN') + ' ' + U.esc(prev.unit) + ` <span class="small muted">(${prev.id}, từ ${U.dmy(prev.effectiveFrom)})</span>` : '<span class="muted">—</span>'}</dd>
+        <dt>Người cập nhật</dt><dd>${U.esc(r.createdBy || '')} · ${U.esc(r.createdAt || '')}</dd></dl>
+        <div class="divider"></div><b class="small">CĂN CỨ</b><div style="margin-top:6px">${cfgLegalHtml(r.legalBasis)}</div>
+        <div class="divider"></div><b class="small">NHẬT KÝ THAY ĐỔI</b><div style="margin-top:6px">${cfgHistoryHtml(r)}</div></div>
+      <div class="drawer-f"><button class="btn" data-act="close">Đóng</button></div></div>`;
+  };
+  function renderUpForm() {
+    const d = ui.cfgUp, cur = A.SERVICE_CFG.utilityPriceAt(ui.market, d.kind, upToday()), months = [1, 2, 3, 4, 5, 6].map(n => upMonthStart(upToday(), n));
+    A.modal(A.mHead('Thêm giá mới · ' + U.esc(U.market(ui.market).short)) + `<div class="modal-b">
+      <div class="row" style="gap:16px;margin-bottom:10px">${Object.keys(UP_KIND).map(k => `<label class="row" style="gap:6px"><input type="radio" name="up-kind" data-ch="cfg-up" data-k="kind" value="${k}" ${d.kind === k ? 'checked' : ''}> ${UP_KIND[k][0]}</label>`).join('')}</div>
+      <div class="note" style="margin-bottom:10px">Giá ${UP_KIND[d.kind][2]} đang áp dụng: <b>${cur ? Number(cur.price).toLocaleString('vi-VN') + ' ' + U.esc(cur.unit) : 'chưa có'}</b>${cur ? ' (từ ' + U.dmy(cur.effectiveFrom) + ')' : ''}. Tháng này vẫn tính giá cũ; giá mới chỉ tính từ tháng sau.</div>
+      <div class="grid g2"><div class="field"><label>Mức giá mới (${UP_KIND[d.kind][1]}) *</label><input class="input" type="number" min="1" data-ch="cfg-up" data-k="price" value="${U.esc(d.price || '')}"></div>
+        <div class="field"><label>Áp dụng từ *</label><select class="input" data-ch="cfg-up" data-k="effectiveFrom">${months.map(m => `<option value="${m}" ${d.effectiveFrom === m ? 'selected' : ''}>01/${m.slice(5, 7)}/${m.slice(0, 4)}</option>`).join('')}</select></div></div>
+      <div class="grid g2" style="margin-top:10px"><div class="field"><label>Số quyết định *</label><input class="input" data-ch="cfg-up" data-k="docNo" value="${U.esc(d.docNo || '')}" placeholder="VD: 15/QĐ-BQLC"></div>
+        <div class="field"><label>Ngày quyết định *</label><input class="input" type="date" data-ch="cfg-up" data-k="docDate" value="${U.esc(d.docDate || '')}"></div></div>
+      <div class="field" style="margin-top:10px"><label>Trích yếu / ghi chú</label><input class="input" data-ch="cfg-up" data-k="summary" value="${U.esc(d.summary || '')}" placeholder="VD: Điều chỉnh giá điện theo thông báo của Điện lực"></div></div>
+      <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="cfg-up-save">Lưu giá mới</button></div>`);
+  }
+  A.ACT['cfg-up-new'] = () => {
+    if (!cfgCanUtilPrice()) { U.toast('Không có quyền thêm giá điện, nước cho chợ này'); return; }
+    ui.cfgUp = { kind: 'ELECTRICITY', price: '', effectiveFrom: upMonthStart(upToday(), 1), docNo: '', docDate: '', summary: '' };
+    renderUpForm();
+  };
+  A.CH['cfg-up'] = el => { const d = ui.cfgUp; if (!d) return; d[el.dataset.k] = el.value; if (el.dataset.k === 'kind') renderUpForm(); };
+  A.ACT['cfg-up-save'] = () => {
+    const d = ui.cfgUp;
+    if (!d || !cfgCanUtilPrice()) { U.toast('Không có quyền thêm giá điện, nước cho chợ này'); A.closeModal(); A.render(); return; }
+    if (!UP_KIND[d.kind]) return;
+    const price = Number(d.price);
+    if (!(price > 0)) return U.toast('Nhập mức giá mới lớn hơn 0');
+    if (!/^\d{4}-\d{2}-01$/.test(d.effectiveFrom || '') || d.effectiveFrom < upMonthStart(upToday(), 1)) return U.toast('Giá mới chỉ áp dụng từ ngày 01 của tháng sau trở đi');
+    if (!String(d.docNo || '').trim() || !d.docDate) return U.toast('Nhập số và ngày quyết định làm căn cứ');
+    const row = A.SERVICE_CFG.addUtilityPrice(ui.market, d.kind, { price, unit: UP_KIND[d.kind][1], effectiveFrom: d.effectiveFrom,
+      legalBasis: { docNo: String(d.docNo).trim(), docDate: d.docDate, issuer: 'Ban Quản lý ' + (U.market(ui.market) || {}).short, summary: String(d.summary || '').trim(), effectiveDate: d.effectiveFrom, note: '' } }, cfgActor());
+    U.log('Thêm ' + UP_KIND[d.kind][0].toLowerCase() + ' mới ' + ui.market + ': ' + price + ' ' + row.unit + ' từ ' + U.dmy(d.effectiveFrom) + ' (' + d.docNo + ')');
+    ui.cfgUp = null; A.closeModal(); A.render(); U.toast('Đã lưu ' + UP_KIND[d.kind][0].toLowerCase() + ' mới, áp dụng từ ' + U.dmy(d.effectiveFrom));
+  };
   function settingsDienNuocHtml() {
-    const canNew = cfgFeeAddAllowed('utilities', null);
-    const rows = A.SERVICE_CFG.list('utilities').filter(r => r.marketId === ui.market);
-    return utilityModeCardHtml() + `<div class="card"><div class="card-h"><h3>Điện & nước · ${U.esc(U.market(ui.market).name)}</h3>${canNew ? '<button class="btn sm primary" data-act="cfg-util-new">Thiết lập mức mới</button>' : ''}</div>
-      <div class="card-b">${U.table([{ t: 'Chợ / mô hình' }, { t: 'Mức giá điện', num: true }, { t: 'Mức giá nước', num: true }, { t: 'Chu kỳ thu' }, { t: 'Phân loại thuế' }, { t: 'Hiệu lực / căn cứ' }, { t: 'Miễn giảm' }, { t: 'Trạng thái' }, { t: '' }],
-        rows.map(r => { const canApply = cfgFeeApplyAllowed('utilities', r), canLock = cfgFeeLockAllowed('utilities', r); return `<tr>
-          <td>${U.mShort(r.marketId)}<div class="small muted">${U.esc(CFG_MARKET_MODEL_LABELS[r.marketModel] || '—')}</div></td><td class="num">${r.elecPrice.toLocaleString('vi-VN')}<div class="small muted">${U.esc(r.elecUnit || 'đ/kWh')}</div></td><td class="num">${r.waterPrice.toLocaleString('vi-VN')}<div class="small muted">${U.esc(r.waterUnit || 'đ/m³')}</div></td>
-          <td class="small">${U.esc(CFG_CYCLE_LABELS[r.collectionCycle] || '—')}</td><td class="small">${U.esc(CFG_TAX_LABELS[r.taxClass] || '—')}</td><td class="nowrap">${U.dmy(r.effectiveFrom)}${r.effectiveTo ? `<div class="small muted">đến ${U.dmy(r.effectiveTo)}</div>` : ''}<div class="small">${r.legalBasis && r.legalBasis.docNo ? U.esc(r.legalBasis.docNo) : '<span class="muted">—</span>'}</div></td><td class="small">${U.esc(cfgWaiverName(r.waiverTypeId))}</td>
-          <td>${cfgStatusTag(r.status)}</td>
-          <td class="nowrap"><button class="btn sm" data-act="cfg-util-view" data-id="${r.id}">Xem</button>
-            ${cfgLifecycleButtons('utilities', r.id, r.status, canApply, canLock)}
-          </td></tr>`; }), { empty: 'Chưa có cấu hình điện nước cho ' + U.market(ui.market).short })}</div></div>`;
+    if (A.SERVICE_CFG.utilityMode(ui.market) === 'SERVICE') return utilityModeCardHtml() + utilityFlatCardHtml();
+    return utilityModeCardHtml() + utilityPriceCardHtml();
   }
   function cfgUtilDrawerHtml(r) {
     const canManage = cfgFeeDraftMutateAllowed('utilities', r), canApply = cfgFeeApplyAllowed('utilities', r), canLock = cfgFeeLockAllowed('utilities', r);

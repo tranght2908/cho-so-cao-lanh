@@ -335,7 +335,7 @@
   const mrServiceMode = () => A.SERVICE_CFG && A.SERVICE_CFG.utilityMode(ui.market) === 'SERVICE';
   A.VIEWS['dien-nuoc'] = function () {
     if (mrServiceMode()) return `<div class="card meter-title"><div class="card-b"><h2>GHI CHỈ SỐ ĐIỆN, NƯỚC</h2><p>${U.esc(U.market(ui.market).name)} đang thu điện, nước theo hình thức <b>chia đều – thu như dịch vụ chợ</b>, nên không ghi chỉ số công tơ.</p>
-      <div class="note info">Tiền điện, nước được khai báo ở Tài chính › Chính sách thu và biểu phí › Dịch vụ chợ và tự vào khoản phải thu khi Trưởng Ban tính/phát hành. Hình thức thu do Quản trị hệ thống cấu hình (tab Điện & nước).</div></div></div>`;
+      <div class="note info">Tiền điện, nước chia đều được Tổ trưởng nhập hằng tháng ở Tài chính › Chính sách thu và biểu phí › Điện & nước và tự vào khoản phải thu khi Trưởng Ban tính/phát hành. Hình thức thu do Tổ trưởng Tổ Quản lý chợ chọn (tab Điện & nước).</div></div></div>`;
     const p=currentPeriod(), q=(f.mrSearch||'').toLowerCase(), filter=f.mrStatus||'all';
     const groups=A.db.readings.filter(r=>r.period===p.id&&U.inM(A.idx.stall.get(r.stallId))).map(r=>({r,st:A.idx.stall.get(r.stallId),elec:mrItem(r,'elec'),water:mrItem(r,'water')}));
     const match=g=>!q||[g.st.code,g.st.traderId&&A.idx.trader.get(g.st.traderId)&&A.idx.trader.get(g.st.traderId).name,g.st.traderId,mrCode(g.st,'elec'),mrCode(g.st,'water')].join(' ').toLowerCase().includes(q);
