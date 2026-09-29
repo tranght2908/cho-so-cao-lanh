@@ -76,7 +76,7 @@
     const coll = A.BANK_ACCOUNTS.collectionAccount(ui.market);
     const collBar = coll
       ? `<div class="card"><div class="card-b small" style="padding-top:12px">Tài khoản thu tiền của chợ (dùng sinh mã QR gửi tiểu thương): <b>${U.esc(A.BANK_ACCOUNTS.bankName(coll.bankCode))} · ${U.esc(coll.accountNumber)} · ${U.esc(coll.accountHolderName)}</b>. Mỗi chợ chỉ có 1 tài khoản thu tiền.</div></div>`
-      : `<div class="card"><div class="card-b" style="padding-top:12px"><span class="tag danger">Chưa có tài khoản thu tiền</span> <span class="small">Chợ chưa chọn tài khoản thu tiền nên chưa sinh được mã QR cho khoản phải thu. ${canManage ? 'Sửa một tài khoản đang hoạt động và tích "Là tài khoản thu tiền".' : 'Liên hệ Tổ trưởng Tổ Quản lý chợ.'}</span></div></div>`;
+      : `<div class="card"><div class="card-b" style="padding-top:12px"><span class="tag danger">Chưa có tài khoản thu tiền</span> <span class="small">Chợ chưa chọn tài khoản thu tiền nên chưa sinh được mã QR cho khoản phải thu. ${canManage ? 'Sửa một tài khoản đang hoạt động và tích "Là tài khoản thu tiền".' : 'Liên hệ Kế toán Trung tâm.'}</span></div></div>`;
     const pg = U.pager('bankAcc', rows.length, 15);
     return `
     <div class="card"><div class="card-b row" style="padding-top:14px">

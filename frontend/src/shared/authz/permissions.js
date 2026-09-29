@@ -296,7 +296,9 @@
       'hop-dong': ['system_admin', 'ward_leader', 'market_manager', 'collector'],
       'cau-hinh-gia': ['system_admin', 'market_manager', 'ward_leader'],
       // Cùng bộ role xem với 'cau-hinh-gia' — màn liền kề trong cùng nhóm con 'Quản lý khai báo'.
-      'tai-khoan-ngan-hang': ['system_admin', 'market_manager', 'ward_leader'],
+      // P chốt 29/09/2026 (quy trình thực tế: Kế toán Trung tâm – Tổ Văn phòng giữ sổ quỹ, nộp ngân hàng/Kho bạc):
+      // Kế toán Trung tâm quản lý tài khoản ngân hàng của chợ được phân công (marketScopes) → cần xem màn này.
+      'tai-khoan-ngan-hang': ['system_admin', 'market_manager', 'ward_leader', 'central_accountant'],
       'dien-nuoc': ['market_manager', 'collector'],
       'phai-thu': ['ward_leader', 'market_manager', 'collector'],
       'thu-tien': ['market_manager', 'collector'],
@@ -416,7 +418,9 @@
       // có sắc thái khác nhau giữa 4 hành động nên dùng 1 action key duy nhất).
       // P chốt 29/09/2026: tài khoản ngân hàng là cấu hình riêng của chợ → Tổ trưởng Tổ Quản lý chợ thêm/sửa cho chợ
       // mình (theo marketScopes). Quản trị hệ thống không còn quyền này.
-      'tai-khoan-ngan-hang.quan-ly': ['market_manager'],
+      // P chốt 29/09/2026 (lần 2): chuyển cho Kế toán Trung tâm (central_accountant), KHÔNG cần bước duyệt.
+      // Tổ trưởng Tổ Quản lý chợ và Quản trị hệ thống chỉ xem. market_accountant: DENY (chưa xác nhận).
+      'tai-khoan-ngan-hang.quan-ly': ['central_accountant'],
       'cai-dat.ky-thu': ['system_admin'],
       'cai-dat.quy-tac-thu-phi': ['system_admin'],
       'cai-dat.vai-tro.tao': ['system_admin'],
@@ -508,9 +512,9 @@
   //        lệch khiến loadState() đi thẳng nhánh RESEED TOÀN BỘ (freshState(), không qua
   //        mergeIntoCurrentSeed()), nên seedVersion v15 ở đây chỉ còn ý nghĩa tài liệu/đánh dấu, không
   //        phải cơ chế migrate chính cho lần đổi này (xem RBAC_MARKET_SCOPE_MIGRATION_REPORT.md).
-  const PERM_SEED_VERSION = 20; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: action:phai-thu.ban-do-thu; 19: hình thức điện nước → market_manager; 20: quản lý TK ngân hàng → market_manager
+  const PERM_SEED_VERSION = 21; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: action:phai-thu.ban-do-thu; 19: hình thức điện nước → market_manager; 20: quản lý TK ngân hàng → market_manager; 21: quản lý TK ngân hàng → central_accountant
   const RATE_POLICY_PERM_VERSION = 1;
-  const BANK_ACCOUNT_PERM_VERSION = 2;
+  const BANK_ACCOUNT_PERM_VERSION = 3;
   const PC3A_SESSION_PERM_VERSION = 1;
   const PC3B_REGISTRATION_PERM_VERSION = 1;
   const PC3C_ATTENDANCE_PERM_VERSION = 1;
@@ -627,9 +631,12 @@
     if (stored.bankAccountPermVersion >= BANK_ACCOUNT_PERM_VERSION) return false;
     const bankKeys = new Set(['screen:tai-khoan-ngan-hang', 'action:tai-khoan-ngan-hang.quan-ly']);
     // v2 (P chốt 29/09/2026): quyền quản lý chuyển từ system_admin sang market_manager — 1 lần (marker).
-    if ((stored.bankAccountPermVersion || 0) >= 1) stored.rolePerms = stored.rolePerms.filter(r => !(r.roleId === 'system_admin' && r.permKey === 'action:tai-khoan-ngan-hang.quan-ly'));
+    // v3 (P chốt 29/09/2026, lần 2): chuyển tiếp từ market_manager sang central_accountant — 1 lần (marker).
+    const from = stored.bankAccountPermVersion || 0, qk = 'action:tai-khoan-ngan-hang.quan-ly';
+    if (from >= 1) stored.rolePerms = stored.rolePerms.filter(r => !(r.roleId === 'system_admin' && r.permKey === qk));
+    if (from >= 2) stored.rolePerms = stored.rolePerms.filter(r => !(r.roleId === 'market_manager' && r.permKey === qk));
     defaultRolePermissions().filter(r => bankKeys.has(r.permKey)).forEach(r => {
-      if (!stored.rolePerms.some(x => x.roleId === r.roleId && x.permKey === r.permKey)) stored.rolePerms.push(Object.assign({}, r, { grantedAt: 'migrate-bank-account-v2', grantedBy: 'Hệ thống' }));
+      if (!stored.rolePerms.some(x => x.roleId === r.roleId && x.permKey === r.permKey)) stored.rolePerms.push(Object.assign({}, r, { grantedAt: 'migrate-bank-account-v3', grantedBy: 'Hệ thống' }));
     });
     stored.bankAccountPermVersion = BANK_ACCOUNT_PERM_VERSION;
     return true;
