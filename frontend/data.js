@@ -234,7 +234,7 @@ window.DATA = (function () {
   const METHOD = { tm: 'Tiền mặt', qr: 'Quét mã QR', ck: 'Chuyển khoản' };
 
   const INCIDENT_STATES = [
-    { id: 'tiepnhan', label: 'Tiếp nhận' },
+    { id: 'tiepnhan', label: 'Chưa phân công' },
     { id: 'phancong', label: 'Phân công' },
     { id: 'dangxuly', label: 'Đang xử lý' },
     { id: 'hoanthanh', label: 'Hoàn thành' },

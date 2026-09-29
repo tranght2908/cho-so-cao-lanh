@@ -150,26 +150,34 @@
     if (due > max) return 'Hạn xử lý vượt quy định nghiệp vụ (' + incDeadlineRuleText(cat) + ', tối đa ' + incFmt(max) + ').';
     return '';
   };
-  const incIsTechnician = () => ui.role === 'technician';
+  const incCanAssignMarket = market => A.canDo('su-co.phan-cong', market);
+  const incCanUpdateMarket = market => A.canDo('su-co.cap-nhat-xu-ly', market);
+  const incCanAssignedQueue = () =>
+    A.canDo('su-co.cap-nhat-xu-ly', ui.market) &&
+    !A.canDo('su-co.phan-cong', ui.market) &&
+    !A.canDo('su-co.tao-phan-anh', ui.market);
   const incCurrentStaffId = () => {
     const acc = A.currentAccount && A.currentAccount();
     return acc && acc.code;
   };
   const incAssignedToCurrentTech = i => !!i && i.assignee && i.assignee === incCurrentStaffId();
-  const incCanView = i => !!i && U.can('su-co') && i.market === ui.market && (!incIsTechnician() || incAssignedToCurrentTech(i));
+  const incCanView = i => !!i && U.can('su-co') && i.market === ui.market && (!incCanAssignedQueue() || incAssignedToCurrentTech(i));
   const incAction = i => {
-    if (incIsTechnician()) {
+    if (incCanAssignedQueue()) {
       return ({ phancong:['inc-inspect-open','Nhận xử lý'], dangxuly:['inc-work-open','Cập nhật tiến độ'], hoanthanh:['inc-open','Xem kết quả'], dong:['inc-open','Xem hồ sơ'] }[i.state]);
     }
-    return ({ tiepnhan:['inc-assign-open','Tiếp nhận & phân công'], phancong:['inc-inspect-open','Kiểm tra hiện trường'], dangxuly:['inc-work-open','Cập nhật xử lý'], hoanthanh:['inc-close-open','Đóng sự cố'], dong:['inc-open','Xem hồ sơ'] }[i.state]);
+    if (incCanAssignMarket(i.market)) {
+      return ({ tiepnhan:['inc-assign-open','Tiếp nhận & phân công'], phancong:['inc-inspect-open','Kiểm tra hiện trường'], dangxuly:['inc-work-open','Cập nhật xử lý'], hoanthanh:['inc-close-open','Đóng sự cố'], dong:['inc-open','Xem hồ sơ'] }[i.state]);
+    }
+    return ['inc-open', i.state === 'dong' ? 'Xem hồ sơ' : 'Xem'];
   };
   const incCan = (i, action) => {
     if (!incCanView(i)) return false;
     if (action === 'assign' || action === 'close') {
-      return !incIsTechnician() && A.canDo('su-co.phan-cong', i.market);
+      return incCanAssignMarket(i.market);
     }
-    if (!A.canDo('su-co.cap-nhat-xu-ly', i.market)) return false;
-    if (!incIsTechnician()) return true;
+    if (!incCanUpdateMarket(i.market)) return false;
+    if (!incCanAssignedQueue()) return true;
     return incAssignedToCurrentTech(i) && (i.state === 'phancong' || i.state === 'dangxuly');
   };
   function incHistory(i, action, detail) {
@@ -285,7 +293,7 @@
   function incFlowTabs(all) {
     const mk = (id, label, states, predicate) => ({ id, label, states, predicate, count: 0 });
     let tabs;
-    if (incIsTechnician()) {
+    if (incCanAssignedQueue()) {
       tabs = [
         mk('assigned', 'Việc mới', ['phancong']),
         mk('doing', 'Đang xử lý', ['dangxuly']),
@@ -300,21 +308,11 @@
         mk('overdue', 'Theo dõi phản ánh quá hạn', null, late),
         mk('results', 'Xem kết quả phản ánh', null, i => !!i.work || i.state === 'hoanthanh' || i.state === 'dong')
       ];
-    } else if (A.canDo('su-co.chi-dao', ui.market)) {
-      tabs = [
-        mk('overdue', 'Quá hạn', null, late),
-        mk('escalated', 'Vượt cấp', null, i => !!i.escalated),
-        mk('open', 'Đang mở', ['tiepnhan', 'phancong', 'dangxuly', 'hoanthanh']),
-        mk('done', 'Đã đóng', ['dong']),
-        mk('all', 'Tất cả', null)
-      ];
     } else {
       tabs = [
-        mk('intake', 'Tiếp nhận', ['tiepnhan']),
-        mk('assign', 'Đã phân công', ['phancong']),
-        mk('processing', 'Đang xử lý', ['dangxuly']),
-        mk('completed', 'Hoàn thành / Đóng', ['hoanthanh', 'dong']),
-        mk('all', 'Tất cả', null)
+        mk('overdue', 'Theo dõi phản ánh quá hạn', null, late),
+        mk('list', 'Xem danh sách phản ánh', null),
+        mk('results', 'Xem kết quả phản ánh', null, i => !!i.work || i.state === 'hoanthanh' || i.state === 'dong')
       ];
     }
     tabs.forEach(t => { t.count = all.filter(i => incTabMatch(i, t)).length; });
@@ -335,9 +333,8 @@
   }
   function incWorkflowHint() {
     if (incCanManageComplaints()) return '';
-    const steps = incIsTechnician()
-      ? ['Xem việc được giao', 'Nhận xử lý', 'Cập nhật tiến độ', 'Cập nhật kết quả']
-      : ['Tiếp nhận', 'Phân công kỹ thuật', 'Theo dõi xử lý', 'Hoàn thành / Đóng'];
+    if (!incCanAssignedQueue()) return '';
+    const steps = ['Xem việc được giao', 'Nhận xử lý', 'Cập nhật tiến độ', 'Cập nhật kết quả'];
     return `<div class="inc-flow-steps">${steps.map((s,n)=>`<span>${n+1}. ${s}</span>`).join('')}</div>`;
   }
   function incRows(rows, options) {
@@ -453,7 +450,7 @@
     if (tab.id === 'proxy-intake') {
       return '<div class="note info" style="margin-bottom:12px"><b>Nhập phản ánh hộ:</b> dùng khi tiểu thương/người dân phản ánh trực tiếp tại Ban Quản lý. Phản ánh được tạo trong phạm vi chợ đang chọn và đi vào bước tiếp nhận.</div>';
     }
-    if (tab.id === 'assign') return '<div class="note info" style="margin-bottom:12px"><b>Phân công xử lý phản ánh:</b> chỉ hiển thị phản ánh đang chờ tiếp nhận. Nút phân công vẫn kiểm tra quyền và phạm vi chợ khi lưu.</div>';
+    if (tab.id === 'assign') return '<div class="note info" style="margin-bottom:12px"><b>Phân công xử lý phản ánh:</b> chỉ hiển thị phản ánh chưa phân công. Nút phân công vẫn kiểm tra quyền và phạm vi chợ khi lưu.</div>';
     if (tab.id === 'overdue') return '<div class="note warn" style="margin-bottom:12px"><b>Theo dõi phản ánh quá hạn:</b> danh sách các phản ánh còn mở đã vượt hạn xử lý theo nhóm vấn đề.</div>';
     if (tab.id === 'results') return '<div class="note info" style="margin-bottom:12px"><b>Xem kết quả phản ánh:</b> theo dõi hồ sơ đã có kết quả xử lý, đánh giá của tiểu thương hoặc đã đóng.</div>';
     return `<div class="note info" style="margin-bottom:12px"><b>Xem danh sách phản ánh:</b> ${rows.length} phản ánh thuộc phạm vi chợ đang chọn.</div>`;
@@ -462,13 +459,15 @@
     ensureIncidentV2();
     const marketName = U.mShort(ui.market);
     const all = A.db.incidents.filter(i => incCanView(i) && (!ui.incCat || i.cat === ui.incCat));
-    const tech = incIsTechnician();
+    const tech = incCanAssignedQueue();
     const overdue = all.filter(late);
     const reminded = overdue.filter(i => i.leaderReminder);
     const title = tech ? 'Công việc kỹ thuật được giao' : 'Phản ánh & sự cố';
     const desc = tech
       ? 'Nhận xử lý, cập nhật tiến độ và gửi kết quả cho phản ánh đã được phân công tại ' + marketName + '.'
-      : 'Tiếp nhận, phân công và theo dõi xử lý phản ánh tại ' + marketName + '.';
+      : (incCanManageComplaints()
+        ? 'Tiếp nhận, phân công và theo dõi xử lý phản ánh tại ' + marketName + '.'
+        : 'Theo dõi tình hình phản ánh, quá hạn và kết quả xử lý tại ' + marketName + '.');
     const tabs = incFlowTabs(all);
     if (!tabs.some(t => t.id === ui.incFlowTab)) ui.incFlowTab = tabs[0] && tabs[0].id;
     const tab = tabs.find(t => t.id === ui.incFlowTab) || tabs[0];
@@ -479,7 +478,7 @@
     const managerIntro = incManagerIntro(tab, rows);
     const showGlobalCreate = !tech && !incCanManageComplaints() && A.canDo('su-co.tao-phan-anh', ui.market);
     const head = `<div class="page-head"><div><h2>${title}</h2><p class="muted">${desc}</p></div>${showGlobalCreate ? '<button class="btn primary" data-act="inc-new-v2">+ Tạo phản ánh</button>' : ''}</div>
-      <div class="kpis"><div class="card kpi"><div class="k-label">${tech ? 'Được giao' : 'Đang mở'}</div><div class="k-value">${all.filter(isOpen).length}</div></div><div class="card kpi"><div class="k-label">Quá hạn</div><div class="k-value" style="color:#df2225">${overdue.length}</div><div class="k-sub">Điện/PCCC 1 ngày · nhóm khác 3 ngày</div></div><div class="card kpi"><div class="k-label">${tech ? 'Đã nhắc BQL' : 'Nhắc Trưởng BQL'}</div><div class="k-value">${reminded.length}</div></div><div class="card kpi"><div class="k-label">${tech ? 'Cần thao tác' : 'Chờ tiếp nhận'}</div><div class="k-value">${all.filter(i=>tech?(i.state==='phancong'||i.state==='dangxuly'):i.state==='tiepnhan').length}</div></div></div>`;
+      <div class="kpis"><div class="card kpi"><div class="k-label">${tech ? 'Được giao' : 'Đang mở'}</div><div class="k-value">${all.filter(isOpen).length}</div></div><div class="card kpi"><div class="k-label">Quá hạn</div><div class="k-value" style="color:#df2225">${overdue.length}</div><div class="k-sub">Điện/PCCC 1 ngày · nhóm khác 3 ngày</div></div><div class="card kpi"><div class="k-label">Đã nhắc Trưởng BQL</div><div class="k-value">${reminded.length}</div></div><div class="card kpi"><div class="k-label">${tech ? 'Cần thao tác' : 'Chưa phân công'}</div><div class="k-value">${all.filter(i=>tech?(i.state==='phancong'||i.state==='dangxuly'):i.state==='tiepnhan').length}</div></div></div>`;
     if (tech) {
       if (!rows.some(i => i.id === ui.incTechSelectedId)) ui.incTechSelectedId = rows[0] && rows[0].id;
       const selected = all.find(i => i.id === ui.incTechSelectedId && rows.indexOf(i) !== -1) || rows[0];
@@ -498,6 +497,15 @@
         <section class="card inc-manager-content"><div class="card-h"><h3>${tab.label}</h3>${tab.id === 'proxy-intake' ? '' : (useListFilters ? incListFiltersHtml() : `<select class="input" data-ch="inc-cat"><option value="">Mọi nhóm</option>${incCats().map(c=>`<option ${ui.incCat===c?'selected':''}>${c}</option>`).join('')}</select>`)}</div>
           <div class="card-b">${reminderHtml}${managerIntro}
             ${tab.id === 'proxy-intake' ? incProxyIntakeForm() : U.table([{t:'Mã / thời gian'}, {t:'Nội dung'}, {t:'Vị trí / tài sản'}, {t:'Trạng thái'}, {t:'Người xử lý / hạn'}, {t:''}], incRows(rows, { readOnly: tab.id === 'list', viewReadOnly: tab.id === 'list' || tab.id === 'assign', showView: tab.id !== 'assign' }), { empty: 'Không có phản ánh phù hợp với chức năng này.' })}
+          </div></section>
+      </div>`;
+    }
+    if (!tech) {
+      return `${head}<div class="inc-manager-layout">
+        <aside class="card inc-manager-menu"><div class="card-h"><h3>Chức năng</h3></div><div class="card-b">${incFunctionNav(tabs, tab.id)}</div></aside>
+        <section class="card inc-manager-content"><div class="card-h"><h3>${tab.label}</h3>${useListFilters ? incListFiltersHtml() : `<select class="input" data-ch="inc-cat"><option value="">Mọi nhóm</option>${incCats().map(c=>`<option ${ui.incCat===c?'selected':''}>${c}</option>`).join('')}</select>`}</div>
+          <div class="card-b">${reminderHtml}${managerIntro}
+            ${U.table([{t:'Mã / thời gian'}, {t:'Nội dung'}, {t:'Vị trí / tài sản'}, {t:'Trạng thái'}, {t:'Người xử lý / hạn'}, {t:''}], incRows(rows, { readOnly: true, viewReadOnly: true }), { empty: 'Không có phản ánh phù hợp với chức năng này.' })}
           </div></section>
       </div>`;
     }
