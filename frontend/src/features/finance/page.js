@@ -1343,7 +1343,8 @@
   function thuReceiptsHtml(p, payDate) {
     const acc = A.currentAccount() || {}, meId = acc.id, meCode = acc.code || acc.id;
     const mine = A.db.stalls.some(st => st.market === ui.market && st.collectorId === meId);
-    const scopeAll = !mine && ptScopeAll();
+    // BIEN_LAI_KE_TOAN_TT: Kế toán Trung tâm (action thu-tien.xem-bien-lai theo chợ) xem toàn bộ biên lai của chợ — chỉ xem.
+    const scopeAll = !mine && (ptScopeAll() || A.canDo('thu-tien.xem-bien-lai', ui.market));
     if (!mine && !scopeAll) return `<div class="card"><div class="card-b"><div class="empty">Bạn chưa có biên lai nào ở chợ này.</div></div></div>`;
     const q = (f.thuSearch || '').toLowerCase(), onlyDay = f.rcOnlyDay === true;
     const list = A.db.payments.filter(x => U.inM(x) && A.receiptBusinessStateOk(x) && x.date >= p.startDate && x.date <= p.endDate && (scopeAll || x.by === meCode))
@@ -1423,8 +1424,9 @@
     const non = U.sum(today.filter(p => p.method !== 'tm'), p => p.amount);
     const sessionAmt = U.sum(sessionList, x => x.amount), fixedAmt = U.sum(list, x => x.amt);
     const done = receipts.filter(x => x.complete).length;
-    const tabs = [['thu-tien', 'Thu tiền'], ['bien-lai', (U.market(ui.market) || {}).receivableGrouping === 'TRADER' ? 'Biên lai đã gửi' : 'Biên lai']];
-    const tab = tabs.some(t => t[0] === f.thuTab) ? f.thuTab : 'thu-tien';
+    // BIEN_LAI_KE_TOAN_TT: tab "Thu tiền" chỉ cho người có quyền thu (thu-tien.thu) — vào được màn ≠ được thu tiền.
+    const tabs = (A.canDo('thu-tien.thu', ui.market) ? [['thu-tien', 'Thu tiền']] : []).concat([['bien-lai', (U.market(ui.market) || {}).receivableGrouping === 'TRADER' ? 'Biên lai đã gửi' : 'Biên lai']]);
+    const tab = tabs.some(t => t[0] === f.thuTab) ? f.thuTab : tabs[0][0];
     const pg = U.pager('thuCashFixed', list.length, 12);
     const spg = U.pager('thuCashSession', sessionList.length, 12);
     const rpg = U.pager('thuReceipt', receipts.length, 12);

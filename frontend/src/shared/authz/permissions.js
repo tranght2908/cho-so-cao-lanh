@@ -145,6 +145,8 @@
     // và bấm "Đã đối soát" từng phiếu (chợ thu theo phần). Tách action riêng, không đổi action nộp quỹ cũ
     // (đang dùng cho đối soát tiền mặt phiên chợ quê TTĐ).
     { key: 'action:thu-tien.chot-buoi', kind: 'action', group: 'Tài chính', screenId: 'thu-tien', label: 'Chốt buổi thu — lập phiếu nộp tiền mặt của chính mình' },
+    // BIEN_LAI_KE_TOAN_TT (P 29/09/2026): Kế toán Trung tâm xem danh sách biên lai đã phát của chợ được phân công (chỉ xem).
+    { key: 'action:thu-tien.xem-bien-lai', kind: 'action', group: 'Tài chính', screenId: 'thu-tien', label: 'Xem danh sách biên lai đã phát toàn chợ (chỉ xem, không thu tiền)' },
     { key: 'action:doi-soat.xac-nhan-phieu-nop', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Đối soát phiếu nộp tiền mặt theo buổi của NV thu phí' },
     { key: 'action:doi-soat.xem-truy-vet', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Xem lịch sử truy vết đối soát' },
     { key: 'action:doi-soat.xuat-excel', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Xuất Excel dữ liệu đối soát' },
@@ -301,7 +303,8 @@
       'tai-khoan-ngan-hang': ['system_admin', 'market_manager', 'ward_leader', 'central_accountant'],
       'dien-nuoc': ['market_manager', 'collector'],
       'phai-thu': ['ward_leader', 'market_manager', 'collector'],
-      'thu-tien': ['market_manager', 'collector'],
+      // + central_accountant (BIEN_LAI_KE_TOAN_TT): chỉ để xem tab Biên lai; không có thu-tien.thu nên không thấy tab Thu tiền.
+      'thu-tien': ['market_manager', 'collector', 'central_accountant'],
       'doi-soat': ['ward_leader', 'market_manager', 'market_accountant'],
       'cong-no': ['ward_leader', 'market_manager', 'collector'],
       'su-co': ['ward_leader', 'market_manager', 'technician'],
@@ -377,6 +380,8 @@
       'doi-soat.gan-thu-cong': ['market_manager'],
       'doi-soat.xem-tien-mat': ['ward_leader', 'market_manager', 'market_accountant'],
       'thu-tien.chot-buoi': ['collector'],
+      // Tracking dòng 30 còn ghi Kế toán phường: NEED_CONFIRMATION → chưa cấp (DENY). Trưởng Ban xem qua phai-thu.xem-toan-cho.
+      'thu-tien.xem-bien-lai': ['central_accountant'],
       'doi-soat.xac-nhan-phieu-nop': ['market_accountant'],
       // "Xác nhận tiền nhân viên thu phí nộp về" — đúng mục 3.C, chỉ market_manager.
       'doi-soat.xac-nhan-nop-quy': ['market_manager'],
@@ -512,7 +517,7 @@
   //        lệch khiến loadState() đi thẳng nhánh RESEED TOÀN BỘ (freshState(), không qua
   //        mergeIntoCurrentSeed()), nên seedVersion v15 ở đây chỉ còn ý nghĩa tài liệu/đánh dấu, không
   //        phải cơ chế migrate chính cho lần đổi này (xem RBAC_MARKET_SCOPE_MIGRATION_REPORT.md).
-  const PERM_SEED_VERSION = 21; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: action:phai-thu.ban-do-thu; 19: hình thức điện nước → market_manager; 20: quản lý TK ngân hàng → market_manager; 21: quản lý TK ngân hàng → central_accountant
+  const PERM_SEED_VERSION = 22; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: action:phai-thu.ban-do-thu; 19: hình thức điện nước → market_manager; 20: quản lý TK ngân hàng → market_manager; 21: quản lý TK ngân hàng → central_accountant; 22: KT Trung tâm xem biên lai (thu-tien)
   const RATE_POLICY_PERM_VERSION = 1;
   const BANK_ACCOUNT_PERM_VERSION = 3;
   const PC3A_SESSION_PERM_VERSION = 1;
@@ -528,6 +533,8 @@
   const CASH_HANDOVER_PERM_VERSION = 1;
   const PHAI_THU_MAP_PERM_VERSION = 1;
   const PHAI_THU_MAP_KEY = 'action:phai-thu.ban-do-thu';
+  const RECEIPT_VIEW_PERM_VERSION = 1;
+  const RECEIPT_VIEW_KEYS = new Set(['action:thu-tien.xem-bien-lai']);
   function freshState() {
     return {
       schemaVersion: A.RBAC_SCHEMA,
@@ -544,6 +551,7 @@
       meterRecordPermVersion: METER_RECORD_PERM_VERSION,
       cashHandoverPermVersion: CASH_HANDOVER_PERM_VERSION,
       phaiThuMapPermVersion: PHAI_THU_MAP_PERM_VERSION,
+      receiptViewPermVersion: RECEIPT_VIEW_PERM_VERSION,
       roles: defaultRoles(),
       rolePerms: defaultRolePermissions()
     };
@@ -617,6 +625,16 @@
       if (!stored.rolePerms.some(x => x.roleId === r.roleId && x.permKey === r.permKey)) stored.rolePerms.push(Object.assign({}, r, { grantedAt: 'migrate-phai-thu-map', grantedBy: 'Hệ thống' }));
     });
     stored.phaiThuMapPermVersion = PHAI_THU_MAP_PERM_VERSION;
+    return true;
+  }
+  // BIEN_LAI_KE_TOAN_TT v1: cấp MỘT LẦN (marker receiptViewPermVersion) cho central_accountant screen:thu-tien +
+  // action:thu-tien.xem-bien-lai theo default seed — sau đó chỉnh ở màn Phân quyền thì giữ nguyên.
+  function migrateReceiptViewPerms(stored) {
+    if (stored.receiptViewPermVersion >= RECEIPT_VIEW_PERM_VERSION) return false;
+    defaultRolePermissions().filter(r => RECEIPT_VIEW_KEYS.has(r.permKey) || (r.permKey === 'screen:thu-tien' && r.roleId === 'central_accountant')).forEach(r => {
+      if (!stored.rolePerms.some(x => x.roleId === r.roleId && x.permKey === r.permKey)) stored.rolePerms.push(Object.assign({}, r, { grantedAt: 'migrate-receipt-view', grantedBy: 'Hệ thống' }));
+    });
+    stored.receiptViewPermVersion = RECEIPT_VIEW_PERM_VERSION;
     return true;
   }
   function migrateRatePolicyPerms(stored) {
@@ -715,6 +733,7 @@
       if (stored.phaiThuScopePermVersion >= PHAI_THU_SCOPE_PERM_VERSION && d.permKey === PHAI_THU_SCOPE_KEY) return;
       if (stored.utilityModePermVersion >= UTILITY_MODE_PERM_VERSION && d.permKey === UTILITY_MODE_KEY) return;
       if (d.permKey === PHAI_THU_MAP_KEY) return; // cấp qua migratePhaiThuMapPerms (một lần)
+      if (RECEIPT_VIEW_KEYS.has(d.permKey)) return; // cấp qua migrateReceiptViewPerms (một lần)
       if (!knownKeys.has(d.permKey)) stored.rolePerms.push(d);
     });
     migratePc3aSessionPerms(stored);
@@ -726,6 +745,7 @@
     migrateMeterRecordPerms(stored);
     migrateCashHandoverPerms(stored);
     migratePhaiThuMapPerms(stored);
+    migrateReceiptViewPerms(stored);
     stored.seedVersion = PERM_SEED_VERSION;
     return stored;
   }
@@ -781,6 +801,7 @@
       if (s.pc3aSessionPermVersion >= PC3A_SESSION_PERM_VERSION && d.permKey.indexOf('action:phien-cho.') === 0) return;
       if (s.phaiThuScopePermVersion >= PHAI_THU_SCOPE_PERM_VERSION && d.permKey === PHAI_THU_SCOPE_KEY) return;
       if (s.utilityModePermVersion >= UTILITY_MODE_PERM_VERSION && d.permKey === UTILITY_MODE_KEY) return;
+      if (RECEIPT_VIEW_KEYS.has(d.permKey)) return; // cấp qua migrateReceiptViewPerms (một lần)
       if (!known.has(d.permKey)) s.rolePerms.push(d);
     });
     if (migratePc3aSessionPerms(s)) needSave = true;
@@ -794,6 +815,7 @@
     if (migrateUtilityModePerms(s)) needSave = true;
     if (migrateMeterRecordPerms(s)) needSave = true;
     if (migrateCashHandoverPerms(s)) needSave = true;
+    if (migrateReceiptViewPerms(s)) needSave = true;
     {
       const validKeys = new Set(CATALOG.map(p => p.key));
       const before = s.rolePerms.length;
