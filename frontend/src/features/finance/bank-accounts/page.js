@@ -34,6 +34,14 @@
     const f = ui.bankAcc, on = f.sortKey === key;
     return `<button class="btn sm ${on ? 'primary' : ''}" data-act="ba-sort" data-key="${key}" style="padding:2px 8px">${label}${on ? (f.sortDir === 'desc' ? ' ▼' : ' ▲') : ''}</button>`;
   }
+  // Mỗi chợ chỉ 1 TK thu tiền (nguồn sinh mã QR) — báo trước khi lưu nếu sẽ thay TK thu tiền hiện tại.
+  function baCollectNote(d) {
+    if (!d.isCollectionAccount || d.status === 'inactive') return '';
+    const mid = d.id ? (A.BANK_ACCOUNTS.get(d.id) || {}).marketId : ui.market;
+    const cur = A.BANK_ACCOUNTS.collectionAccount(mid);
+    if (!cur || cur.id === d.id) return '';
+    return `<div class="note" style="margin-top:8px">Mỗi chợ chỉ có 1 tài khoản thu tiền. Hiện tại là <b>${U.esc(A.BANK_ACCOUNTS.bankName(cur.bankCode))} · ${U.esc(cur.accountNumber)}</b> — khi lưu, tài khoản đó sẽ bỏ vai trò thu tiền và mã QR thu tiền sẽ dùng tài khoản này.</div>`;
+  }
   function renderBankAcctForm() {
     const d = ui.baForm, isNew = !d.id;
     const banks = A.BANK_ACCOUNTS.BANKS;
@@ -51,16 +59,24 @@
     </div>
     <div class="field" style="margin-top:10px"><label>Ghi chú</label><textarea class="input" data-ch="baf-note" rows="2">${U.esc(d.note || '')}</textarea></div>
     <label class="small" style="display:flex;align-items:center;gap:6px;margin-top:12px;cursor:${d.status === 'inactive' ? 'not-allowed' : 'pointer'}">
-      <input type="checkbox" data-ch="baf-collect" ${d.isCollectionAccount ? 'checked' : ''} ${d.status === 'inactive' ? 'disabled' : ''}> Là tài khoản thu tiền
+      <input type="checkbox" data-ch="baf-collect" ${d.isCollectionAccount ? 'checked' : ''} ${d.status === 'inactive' ? 'disabled' : ''}> Là tài khoản thu tiền (nhận tiền QR/chuyển khoản của tiểu thương)
     </label>
+    <div id="baf-collect-note">${baCollectNote(d)}</div>
     ${d.status === 'inactive' ? '<div class="note" style="margin-top:8px">Tài khoản "Ngừng hoạt động" không thể chọn làm tài khoản thu tiền.</div>' : ''}
     ${isNew ? `<label class="small" style="display:flex;align-items:center;gap:6px;margin-top:12px;cursor:pointer"><input type="checkbox" data-ch="baf-continue" ${d.saveAndContinue ? 'checked' : ''}> Lưu và thêm tiếp</label>` : ''}
     </div>
     <div class="modal-f"><button class="btn" data-act="close">Hủy bỏ</button><button class="btn primary" data-act="ba-form-save">Lưu</button></div>`);
   }
+  function baLogReplaced(newNo) {
+    (A.BANK_ACCOUNTS.lastReplaced || []).forEach(o => U.log('Đổi tài khoản thu tiền: ' + o.accountNumber + ' → ' + newNo));
+  }
   A.VIEWS['tai-khoan-ngan-hang'] = function () {
     const canManage = baCan();
     const rows = baRows(), f = ui.bankAcc;
+    const coll = A.BANK_ACCOUNTS.collectionAccount(ui.market);
+    const collBar = coll
+      ? `<div class="card"><div class="card-b small" style="padding-top:12px">Tài khoản thu tiền của chợ (dùng sinh mã QR gửi tiểu thương): <b>${U.esc(A.BANK_ACCOUNTS.bankName(coll.bankCode))} · ${U.esc(coll.accountNumber)} · ${U.esc(coll.accountHolderName)}</b>. Mỗi chợ chỉ có 1 tài khoản thu tiền.</div></div>`
+      : `<div class="card"><div class="card-b" style="padding-top:12px"><span class="tag danger">Chưa có tài khoản thu tiền</span> <span class="small">Chợ chưa chọn tài khoản thu tiền nên chưa sinh được mã QR cho khoản phải thu. ${canManage ? 'Sửa một tài khoản đang hoạt động và tích "Là tài khoản thu tiền".' : 'Liên hệ Tổ trưởng Tổ Quản lý chợ.'}</span></div></div>`;
     const pg = U.pager('bankAcc', rows.length, 15);
     return `
     <div class="card"><div class="card-b row" style="padding-top:14px">
@@ -69,6 +85,7 @@
       <button class="btn" data-act="ba-csv">⬇ Xuất excel</button>
       ${canManage ? '<button class="btn primary" data-act="ba-new">+ Thêm mới</button>' : ''}
     </div></div>
+    ${collBar}
     <div class="card"><div class="card-b row" style="padding-top:14px;flex-wrap:wrap">
       <input class="input" style="min-width:220px;flex:1" placeholder="Tìm theo tên chủ tài khoản..." data-in="ba-search" value="${U.esc(f.search || '')}">
       <select class="input" data-ch="ba-status"><option value="">Chọn trạng thái: Tất cả</option>
@@ -78,20 +95,18 @@
       <button class="btn" data-act="ba-clear">Đặt lại</button>
     </div></div>
     <div class="card"><div class="card-b">
-      ${U.table([{ t: '<input type="checkbox" data-ch="ba-select-all">' }, { t: 'STT' }, { t: baSortHead('Số tài khoản', 'accountNumber') }, { t: baSortHead('Tên chủ tài khoản', 'accountHolderName') }, { t: 'Ngân hàng' }, { t: 'Ghi chú' }, { t: 'Tài khoản thu tiền' }, { t: 'Trạng thái' }, { t: '' }],
+      ${U.table([{ t: 'STT' }, { t: baSortHead('Số tài khoản', 'accountNumber') }, { t: baSortHead('Tên chủ tài khoản', 'accountHolderName') }, { t: 'Ngân hàng' }, { t: 'Ghi chú' }, { t: 'Trạng thái' }].concat(canManage ? [{ t: '' }] : []),
         rows.slice(pg.start, pg.end).map((a, i) => `<tr>
-          <td><input type="checkbox" data-ch="ba-select" data-id="${a.id}" ${(ui.baSel || []).includes(a.id) ? 'checked' : ''}></td>
           <td>${pg.start + i + 1}</td>
           <td>${U.esc(a.accountNumber)}</td>
           <td>${U.esc(a.accountHolderName)}</td>
           <td><span class="tag info">${U.esc(A.BANK_ACCOUNTS.bankName(a.bankCode))}</span></td>
-          <td class="small">${U.esc(a.note || '')}</td>
-          <td>${a.isCollectionAccount ? '<span class="tag ok">✓</span>' : ''}</td>
+          <td class="small">${U.esc(a.note || '')}${a.isCollectionAccount ? ' <span class="tag ok" title="Tài khoản thu tiền duy nhất của chợ — mã QR gửi tiểu thương sinh từ tài khoản này">Tài khoản thu tiền</span>' : ''}</td>
           <td>${baStatusTag(a.status)}</td>
-          <td class="nowrap">
+          ${canManage ? `<td class="nowrap">
             ${baCan(a) ? `<button class="btn sm" data-act="ba-edit" data-id="${a.id}">Sửa</button>` : ''}
             ${baCan(a) ? `<button class="btn sm danger" data-act="ba-del" data-id="${a.id}">Xoá</button>` : ''}
-          </td></tr>`), { empty: 'Không tìm thấy tài khoản ngân hàng phù hợp' })}${pg.html}</div></div>`;
+          </td>` : ''}</tr>`), { empty: 'Không tìm thấy tài khoản ngân hàng phù hợp' })}${pg.html}</div></div>`;
   };
   A.IN['ba-search'] = el => { ui.bankAcc.search = el.value; ui.page.bankAcc = 0; A.render(); };
   A.CH['ba-status'] = el => { ui.bankAcc.status = el.value; ui.page.bankAcc = 0; A.render(); };
@@ -110,8 +125,7 @@
     A.render();
   };
   A.ACT['ba-csv'] = () => {
-    const sel = new Set(ui.baSel || []);
-    const rows = baRows().filter(a => !sel.size || sel.has(a.id));
+    const rows = baRows();
     U.csv('tai-khoan-ngan-hang', ['Số tài khoản', 'Tên chủ tài khoản', 'Ngân hàng', 'Ghi chú', 'Tài khoản thu tiền', 'Trạng thái'],
       rows.map(a => [a.accountNumber, a.accountHolderName, A.BANK_ACCOUNTS.bankName(a.bankCode), a.note || '', a.isCollectionAccount ? 'Có' : '', a.status === 'active' ? 'Hoạt động' : 'Ngừng hoạt động']));
   };
@@ -140,8 +154,12 @@
     if (el.value === 'inactive') ui.baForm.isCollectionAccount = false;
     const cb = A.$('input[data-ch="baf-collect"]');
     if (cb) { cb.checked = ui.baForm.isCollectionAccount; cb.disabled = el.value === 'inactive'; }
+    { const n = document.getElementById('baf-collect-note'); if (n) n.innerHTML = baCollectNote(ui.baForm); }
   };
-  A.CH['baf-collect'] = el => { if (ui.baForm.status !== 'inactive') ui.baForm.isCollectionAccount = el.checked; };
+  A.CH['baf-collect'] = el => {
+    if (ui.baForm.status !== 'inactive') ui.baForm.isCollectionAccount = el.checked;
+    const n = document.getElementById('baf-collect-note'); if (n) n.innerHTML = baCollectNote(ui.baForm);
+  };
   A.CH['baf-continue'] = el => { ui.baForm.saveAndContinue = el.checked; };
   A.ACT['ba-form-save'] = () => {
     const d = ui.baForm, isNew = !d.id;
@@ -164,6 +182,7 @@
     if (isNew) {
       A.BANK_ACCOUNTS.add(patch, baActor());
       U.log('Thêm tài khoản ngân hàng mới "' + patch.accountHolderName + '" (' + patch.accountNumber + ')');
+      baLogReplaced(patch.accountNumber);
       U.toast('Đã thêm tài khoản ' + patch.accountNumber);
       if (d.saveAndContinue) {
         ui.baForm = { id: null, bankCode: '', accountHolderName: '', accountNumber: '', isCollectionAccount: false, note: '', status: 'active', saveAndContinue: true };
@@ -173,6 +192,7 @@
     } else {
       A.BANK_ACCOUNTS.update(d.id, patch, baActor());
       U.log('Cập nhật tài khoản ngân hàng "' + patch.accountHolderName + '" (' + patch.accountNumber + ')');
+      baLogReplaced(patch.accountNumber);
       U.toast('Đã cập nhật tài khoản ' + patch.accountNumber);
     }
     A.closeModal(); A.render();

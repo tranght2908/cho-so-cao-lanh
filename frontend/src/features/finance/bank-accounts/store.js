@@ -11,6 +11,10 @@
  *    handler phải tự chuyển sang "Ngừng hoạt động" (setStatus) thay thế.
  *  - "Ngừng hoạt động" không được là tài khoản thu tiền — setStatus() tự ép isCollectionAccount=false
  *    khi chuyển sang inactive, để enforcement không chỉ nằm ở UI/form.
+ *  - MỖI CHỢ CHỈ CÓ 1 TÀI KHOẢN THU TIỀN (P chốt 29/09/2026, swimlane cài đặt thu phí): mã QR gửi
+ *    tiểu thương sinh từ đúng tài khoản này. Đặt 1 TK làm TK thu tiền → TK thu tiền cũ CÙNG CHỢ tự bỏ
+ *    cờ (ensureSingle). Dữ liệu localStorage cũ có >1 TK thu tiền/chợ được chuẩn hoá khi nạp: giữ TK
+ *    đã có giao dịch (hoặc TK đầu tiên), các TK còn lại bỏ cờ.
  */
 (function (A) {
   'use strict';
@@ -30,14 +34,32 @@
     } catch (e) { /* bỏ qua */ }
     return defaultAccounts();
   }
+  // Giữ đúng 1 TK thu tiền / chợ. keepId: TK vừa được chọn (ưu tiên); không có thì giữ TK đang có
+  // giao dịch, rồi TK đầu tiên. Trả về danh sách TK bị bỏ cờ để handler ghi nhật ký.
+  function ensureSingle(mid, keepId) {
+    const cur = LIST.filter(a => a.marketId === mid && a.isCollectionAccount && a.status === 'active');
+    if (cur.length <= 1) return [];
+    const keep = cur.find(a => a.id === keepId) || cur.find(a => a.hasTransactions) || cur[0];
+    const dropped = cur.filter(a => a.id !== keep.id);
+    dropped.forEach(a => { a.isCollectionAccount = false; });
+    return dropped;
+  }
   let LIST = loadAccounts();
+  (function normalize() {
+    let changed = false;
+    Array.from(new Set(LIST.map(a => a.marketId))).forEach(mid => { if (ensureSingle(mid).length) changed = true; });
+    if (changed) { try { localStorage.setItem(BKEY, JSON.stringify(LIST)); } catch (e) { /* bỏ qua */ } }
+  })();
   function save() { try { localStorage.setItem(BKEY, JSON.stringify(LIST)); } catch (e) { /* bỏ qua */ } }
 
   const BA = A.BANK_ACCOUNTS = {
     KEY: BKEY,
+    lastReplaced: [], // TK bị bỏ cờ thu tiền ở lần add/update gần nhất (không lưu vào dữ liệu)
     BANKS: (D.BANKS || []),
     list: () => LIST,
     listByMarket: mid => LIST.filter(a => a.marketId === mid),
+    // TK thu tiền đang dùng của chợ (nguồn sinh mã QR). null = chợ chưa có TK thu tiền.
+    collectionAccount: mid => LIST.find(a => a.marketId === mid && a.isCollectionAccount && a.status === 'active') || null,
     get: id => LIST.find(a => a.id === id),
     bankName: code => { const b = BA.BANKS.find(x => x.code === code); return b ? b.name : (code || ''); },
     // unique TOÀN HỆ THỐNG — cố ý KHÔNG lọc theo marketId khi kiểm tra trùng số tài khoản.
@@ -53,6 +75,7 @@
       rec.updatedBy = user; rec.updatedAt = rec.createdAt;
       if (rec.status === 'inactive') rec.isCollectionAccount = false;
       LIST.push(rec);
+      BA.lastReplaced = rec.isCollectionAccount ? ensureSingle(rec.marketId, rec.id) : [];
       save();
       return rec;
     },
@@ -61,6 +84,7 @@
       if (!r) return null;
       Object.assign(r, patch);
       if (r.status === 'inactive') r.isCollectionAccount = false;
+      BA.lastReplaced = r.isCollectionAccount ? ensureSingle(r.marketId, r.id) : [];
       r.updatedBy = user;
       r.updatedAt = nowStr();
       save();

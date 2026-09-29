@@ -414,7 +414,9 @@
       'cau-hinh-gia.chinh-sach-chung.khoa-mo': ['system_admin'],
       // Thêm/sửa/xoá/đổi trạng thái tài khoản ngân hàng: chỉ Quản trị hệ thống (yêu cầu gốc, không
       // có sắc thái khác nhau giữa 4 hành động nên dùng 1 action key duy nhất).
-      'tai-khoan-ngan-hang.quan-ly': ['system_admin'],
+      // P chốt 29/09/2026: tài khoản ngân hàng là cấu hình riêng của chợ → Tổ trưởng Tổ Quản lý chợ thêm/sửa cho chợ
+      // mình (theo marketScopes). Quản trị hệ thống không còn quyền này.
+      'tai-khoan-ngan-hang.quan-ly': ['market_manager'],
       'cai-dat.ky-thu': ['system_admin'],
       'cai-dat.quy-tac-thu-phi': ['system_admin'],
       'cai-dat.vai-tro.tao': ['system_admin'],
@@ -506,9 +508,9 @@
   //        lệch khiến loadState() đi thẳng nhánh RESEED TOÀN BỘ (freshState(), không qua
   //        mergeIntoCurrentSeed()), nên seedVersion v15 ở đây chỉ còn ý nghĩa tài liệu/đánh dấu, không
   //        phải cơ chế migrate chính cho lần đổi này (xem RBAC_MARKET_SCOPE_MIGRATION_REPORT.md).
-  const PERM_SEED_VERSION = 19; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: action:phai-thu.ban-do-thu; 19: hình thức điện nước → market_manager
+  const PERM_SEED_VERSION = 20; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: action:phai-thu.ban-do-thu; 19: hình thức điện nước → market_manager; 20: quản lý TK ngân hàng → market_manager
   const RATE_POLICY_PERM_VERSION = 1;
-  const BANK_ACCOUNT_PERM_VERSION = 1;
+  const BANK_ACCOUNT_PERM_VERSION = 2;
   const PC3A_SESSION_PERM_VERSION = 1;
   const PC3B_REGISTRATION_PERM_VERSION = 1;
   const PC3C_ATTENDANCE_PERM_VERSION = 1;
@@ -624,9 +626,10 @@
   function migrateBankAccountPerms(stored) {
     if (stored.bankAccountPermVersion >= BANK_ACCOUNT_PERM_VERSION) return false;
     const bankKeys = new Set(['screen:tai-khoan-ngan-hang', 'action:tai-khoan-ngan-hang.quan-ly']);
-    const known = new Set(stored.rolePerms.map(r => r.permKey));
+    // v2 (P chốt 29/09/2026): quyền quản lý chuyển từ system_admin sang market_manager — 1 lần (marker).
+    if ((stored.bankAccountPermVersion || 0) >= 1) stored.rolePerms = stored.rolePerms.filter(r => !(r.roleId === 'system_admin' && r.permKey === 'action:tai-khoan-ngan-hang.quan-ly'));
     defaultRolePermissions().filter(r => bankKeys.has(r.permKey)).forEach(r => {
-      if (!known.has(r.permKey)) stored.rolePerms.push(r);
+      if (!stored.rolePerms.some(x => x.roleId === r.roleId && x.permKey === r.permKey)) stored.rolePerms.push(Object.assign({}, r, { grantedAt: 'migrate-bank-account-v2', grantedBy: 'Hệ thống' }));
     });
     stored.bankAccountPermVersion = BANK_ACCOUNT_PERM_VERSION;
     return true;
