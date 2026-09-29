@@ -305,7 +305,8 @@
       'phai-thu': ['ward_leader', 'market_manager', 'collector'],
       // + central_accountant (BIEN_LAI_KE_TOAN_TT): chỉ để xem tab Biên lai; không có thu-tien.thu nên không thấy tab Thu tiền.
       'thu-tien': ['market_manager', 'collector', 'central_accountant'],
-      'doi-soat': ['ward_leader', 'market_manager', 'market_accountant'],
+      // NOP_TIEN_KE_TOAN_TT (P 29/09/2026, tracking dòng 31/38): Kế toán Trung tâm nhận tiền mặt NV nộp (phiếu PN-/PNN-) → cần màn Đối soát.
+      'doi-soat': ['ward_leader', 'market_manager', 'market_accountant', 'central_accountant'],
       'cong-no': ['ward_leader', 'market_manager', 'collector'],
       'su-co': ['ward_leader', 'market_manager', 'technician'],
       'thong-bao': ['market_manager'],
@@ -378,11 +379,13 @@
       'thu-tien.thu': ['market_manager', 'collector'],
       'doi-soat.xem-ngan-hang': ['ward_leader', 'market_manager'],
       'doi-soat.gan-thu-cong': ['market_manager'],
-      'doi-soat.xem-tien-mat': ['ward_leader', 'market_manager', 'market_accountant'],
+      'doi-soat.xem-tien-mat': ['ward_leader', 'market_manager', 'market_accountant', 'central_accountant'],
       'thu-tien.chot-buoi': ['collector'],
       // Tracking dòng 30 còn ghi Kế toán phường: NEED_CONFIRMATION → chưa cấp (DENY). Trưởng Ban xem qua phai-thu.xem-toan-cho.
       'thu-tien.xem-bien-lai': ['central_accountant'],
-      'doi-soat.xac-nhan-phieu-nop': ['market_accountant'],
+      // NOP_TIEN_KE_TOAN_TT: người duyệt phiếu nộp tiền (thu phí PN-… và thu nợ PNN-…) là Kế toán Trung tâm.
+      // market_accountant chỉ còn xem — chờ gộp vào central_accountant khi merge nhánh Đối soát buổi thu.
+      'doi-soat.xac-nhan-phieu-nop': ['central_accountant'],
       // "Xác nhận tiền nhân viên thu phí nộp về" — đúng mục 3.C, chỉ market_manager.
       'doi-soat.xac-nhan-nop-quy': ['market_manager'],
       'doi-soat.xem-truy-vet': ['market_manager'],
@@ -519,7 +522,7 @@
   //        lệch khiến loadState() đi thẳng nhánh RESEED TOÀN BỘ (freshState(), không qua
   //        mergeIntoCurrentSeed()), nên seedVersion v15 ở đây chỉ còn ý nghĩa tài liệu/đánh dấu, không
   //        phải cơ chế migrate chính cho lần đổi này (xem RBAC_MARKET_SCOPE_MIGRATION_REPORT.md).
-  const PERM_SEED_VERSION = 23; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: action:phai-thu.ban-do-thu; 19: hình thức điện nước → market_manager; 20: quản lý TK ngân hàng → market_manager; 21: quản lý TK ngân hàng → central_accountant; 22: KT Trung tâm xem biên lai (thu-tien); 23: nhắc nợ chỉ còn collector
+  const PERM_SEED_VERSION = 24; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: action:phai-thu.ban-do-thu; 19: hình thức điện nước → market_manager; 20: quản lý TK ngân hàng → market_manager; 21: quản lý TK ngân hàng → central_accountant; 22: KT Trung tâm xem biên lai (thu-tien); 23: nhắc nợ chỉ còn collector; 24: KT Trung tâm duyệt phiếu nộp tiền
   const RATE_POLICY_PERM_VERSION = 1;
   const BANK_ACCOUNT_PERM_VERSION = 3;
   const PC3A_SESSION_PERM_VERSION = 1;
@@ -537,6 +540,8 @@
   const PHAI_THU_MAP_KEY = 'action:phai-thu.ban-do-thu';
   const RECEIPT_VIEW_PERM_VERSION = 1;
   const DEBT_REMIND_PERM_VERSION = 1;
+  const HANDOVER_KTTT_PERM_VERSION = 1;
+  const HANDOVER_KTTT_KEYS = ['screen:doi-soat', 'action:doi-soat.xem-tien-mat', 'action:doi-soat.xac-nhan-phieu-nop'];
   const DEBT_REMIND_KEYS = ['action:cong-no.nhac-no', 'action:cong-no.nhac-no-hang-loat'];
   const RECEIPT_VIEW_KEYS = new Set(['action:thu-tien.xem-bien-lai']);
   function freshState() {
@@ -557,6 +562,7 @@
       phaiThuMapPermVersion: PHAI_THU_MAP_PERM_VERSION,
       receiptViewPermVersion: RECEIPT_VIEW_PERM_VERSION,
       debtRemindPermVersion: DEBT_REMIND_PERM_VERSION,
+      handoverKtttPermVersion: HANDOVER_KTTT_PERM_VERSION,
       roles: defaultRoles(),
       rolePerms: defaultRolePermissions()
     };
@@ -648,6 +654,17 @@
     if (stored.debtRemindPermVersion >= DEBT_REMIND_PERM_VERSION) return false;
     stored.rolePerms = stored.rolePerms.filter(r => !(r.roleId === 'market_manager' && DEBT_REMIND_KEYS.indexOf(r.permKey) !== -1));
     stored.debtRemindPermVersion = DEBT_REMIND_PERM_VERSION;
+    return true;
+  }
+  // NOP_TIEN_KE_TOAN_TT v1 (một lần, marker handoverKtttPermVersion): chuyển quyền duyệt phiếu nộp tiền từ
+  // market_accountant sang central_accountant, cấp cho central_accountant màn Đối soát + xem tiền mặt.
+  function migrateHandoverKtttPerms(stored) {
+    if (stored.handoverKtttPermVersion >= HANDOVER_KTTT_PERM_VERSION) return false;
+    stored.rolePerms = stored.rolePerms.filter(r => !(r.roleId === 'market_accountant' && r.permKey === 'action:doi-soat.xac-nhan-phieu-nop'));
+    HANDOVER_KTTT_KEYS.forEach(permKey => {
+      if (!stored.rolePerms.some(x => x.roleId === 'central_accountant' && x.permKey === permKey)) stored.rolePerms.push({ roleId: 'central_accountant', permKey, grantedAt: 'migrate-handover-kttt', grantedBy: 'Hệ thống' });
+    });
+    stored.handoverKtttPermVersion = HANDOVER_KTTT_PERM_VERSION;
     return true;
   }
   function migrateRatePolicyPerms(stored) {
@@ -760,6 +777,7 @@
     migratePhaiThuMapPerms(stored);
     migrateReceiptViewPerms(stored);
     migrateDebtRemindPerms(stored);
+    migrateHandoverKtttPerms(stored);
     stored.seedVersion = PERM_SEED_VERSION;
     return stored;
   }
@@ -831,6 +849,7 @@
     if (migrateCashHandoverPerms(s)) needSave = true;
     if (migrateReceiptViewPerms(s)) needSave = true;
     if (migrateDebtRemindPerms(s)) needSave = true;
+    if (migrateHandoverKtttPerms(s)) needSave = true;
     {
       const validKeys = new Set(CATALOG.map(p => p.key));
       const before = s.rolePerms.length;

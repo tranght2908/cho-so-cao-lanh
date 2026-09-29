@@ -1190,7 +1190,7 @@
   // NV thu phí bấm "Chốt buổi thu" → 1 PHIẾU NỘP TIỀN gồm các biên lai tiền mặt CỦA MÌNH trong ngày chưa thuộc phiếu
   // nào (thu tiếp sau đó → buổi mới, phiếu mới). Kế toán BQL nhận tiền, nhập số thực nhận, bấm "Đã đối soát"; lệch
   // thì bắt buộc ghi lý do. Quyền: action:thu-tien.chot-buoi (collector), action:doi-soat.xac-nhan-phieu-nop
-  // (market_accountant) — kiểm tra lại trong handler; Trưởng Ban / lãnh đạo chỉ xem (doi-soat.xem-tien-mat).
+  // (central_accountant — Kế toán Trung tâm, NOP_TIEN_KE_TOAN_TT) — kiểm tra lại trong handler; Trưởng Ban / lãnh đạo chỉ xem (doi-soat.xem-tien-mat).
   function cashHandovers() { A.db.cashHandovers = Array.isArray(A.db.cashHandovers) ? A.db.cashHandovers : []; return A.db.cashHandovers; }
   function hoHandedIds() { const s = new Set(); (A.db.cashHandovers || []).forEach(h => h.paymentIds.forEach(id => s.add(id))); return s; }
   function hoAccByCode(code) { return A.ACCOUNTS.list().find(a => (a.code || a.id) === code) || null; }
@@ -1203,7 +1203,7 @@
     return A.db.payments.filter(x => x.market === market && x.method === 'tm' && x.by === code && x.date === date && !handed.has(x.id) && hoKindOk(x, kind || 'FEE') && A.receiptBusinessStateOk(x) && A.idx.invoice.get(x.invoiceId) && A.invPartMode(A.idx.invoice.get(x.invoiceId)));
   }
   function hoStatusTag(h) {
-    if (h.status !== 'RECONCILED') return '<span class="tag warn">● Chờ kế toán xác nhận</span>';
+    if (h.status !== 'RECONCILED') return '<span class="tag warn">● Chờ Kế toán Trung tâm xác nhận</span>';
     return h.diff ? `<span class="tag danger">⚠ Nộp lệch ${U.money(h.diff)}</span>` : '<span class="tag ok">✓ Đã nộp đủ — hoàn tất</span>';
   }
   function hoCanClose(market) { return U.can('thu-tien') && A.canDo('thu-tien.chot-buoi', market); }
@@ -1246,7 +1246,7 @@
       });
       dayPays.filter(x => !handedBy[x.id] && x.method !== 'tm').forEach(x => body.push(row(x, true)));
     });
-    if (kind === 'DEBT') return `<div class="card"><div class="card-h"><div><h3>Tiền mặt thu nợ · chốt buổi nộp Kế toán</h3><div class="small muted">Biên lai thu nợ tiền mặt <b>nhạt</b> = chưa chốt buổi; bấm <b>Chốt buổi thu nợ</b> → mang tiền tới Kế toán Ban Quản lý; Kế toán xác nhận nộp đủ thì luồng thu nợ mới kết thúc. Nợ trả qua QR không cần chốt buổi.</div></div></div>
+    if (kind === 'DEBT') return `<div class="card"><div class="card-h"><div><h3>Tiền mặt thu nợ · chốt buổi nộp Kế toán Trung tâm</h3><div class="small muted">Biên lai thu nợ tiền mặt <b>nhạt</b> = chưa chốt buổi; bấm <b>Chốt buổi thu nợ</b> → mang tiền tới Kế toán Trung tâm; Kế toán xác nhận nộp đủ thì luồng thu nợ mới kết thúc. Nợ trả qua QR không cần chốt buổi.</div></div></div>
       <div class="card-b">${kpis}${U.table(cols, body, { empty: 'Chưa có biên lai thu nợ trong kỳ này' })}</div></div>`;
     return kpis + `<div class="card"><div class="card-h"><div><h3>Biên lai đã gửi của tôi · kỳ ${p.label}</h3><div class="small muted">Gom theo ngày. Biên lai <b>nhạt</b> = chưa chốt buổi; bấm <b>Chốt buổi thu</b> để gom thành phiếu nộp tiền (hiện <b>đậm</b>) rồi mang tiền tới Kế toán. Bấm vào biên lai để xem lại / in.</div></div></div>
       <div class="card-b">${U.table(cols, body, { empty: 'Chưa phát hành biên lai nào trong kỳ này' })}</div></div>`;
@@ -1266,7 +1266,7 @@
     if (!open.length) return U.toast('Chưa có biên lai tiền mặt nào chưa chốt');
     A.modal(A.mHead('Xác nhận chốt buổi thu') + `<div class="modal-b">
       <p style="margin:0 0 10px;font-size:1.05em">Bạn có muốn <b>chốt buổi thu${kind === 'DEBT' ? ' nợ' : ''}</b> ngày <b>${U.dmy(date)}</b> không?</p>
-      <div class="note info" style="margin-bottom:10px">${open.length} biên lai tiền mặt dưới đây sẽ gộp thành 1 phiếu nộp tiền gửi Kế toán Ban Quản lý. Mang đủ <b>${U.money(U.sum(open, x => x.amount))}</b> đi nộp. Sau khi chốt không thêm/bớt biên lai của buổi này; thu tiếp sẽ vào buổi mới.</div>
+      <div class="note info" style="margin-bottom:10px">${open.length} biên lai tiền mặt dưới đây sẽ gộp thành 1 phiếu nộp tiền gửi Kế toán Trung tâm. Mang đủ <b>${U.money(U.sum(open, x => x.amount))}</b> đi nộp. Sau khi chốt không thêm/bớt biên lai của buổi này; thu tiếp sẽ vào buổi mới.</div>
       ${hoReceiptTable(open)}</div>
       <div class="modal-f"><button class="btn" data-act="close">Không, để sau</button><button class="btn primary" data-act="ho-close-confirm" data-date="${date}" data-kind="${kind}">Có, chốt buổi thu${kind === 'DEBT' ? ' nợ' : ''}</button></div>`, true);
   };
@@ -1280,7 +1280,7 @@
     const h = { id: (kind === 'DEBT' ? 'PNN-' : 'PN-') + d + '-' + code + '-' + U.pad(n, 2), kind, market: ui.market, collectorId: acc.id, collectorCode: code, date, paymentIds: open.map(x => x.id), amount: U.sum(open, x => x.amount), submittedAt: U.dmy(U.today()) + ' ' + U.nowTime(), status: 'SUBMITTED' };
     cashHandovers().push(h);
     U.log('Chốt buổi thu ' + h.id + ': ' + open.length + ' biên lai tiền mặt, ' + U.money(h.amount));
-    A.save(); A.closeModal(); A.render(); U.toast('Đã chốt buổi thu ' + h.id + ' · mang ' + U.money(h.amount) + ' tới Kế toán đối soát');
+    A.save(); A.closeModal(); A.render(); U.toast('Đã chốt buổi thu ' + h.id + ' · mang ' + U.money(h.amount) + ' tới Kế toán Trung tâm đối soát');
   };
   function hoModal(h) {
     const pays = h.paymentIds.map(id => A.db.payments.find(x => x.id === id)).filter(Boolean);
@@ -2082,7 +2082,7 @@
         const hoOf = p => (A.db.cashHandovers || []).find(h => h.paymentIds.indexOf(p.id) !== -1);
         const st2 = p => { if (p.method !== 'tm') return '<span class="tag ok">QR · hoàn tất</span>'; const h = hoOf(p); return !h ? '<span class="tag warn">Tiền mặt · chưa chốt buổi</span>' : h.status !== 'RECONCILED' ? `<span class="tag warn">Đã chốt ${h.id} · chờ Kế toán</span>` : h.diff ? `<span class="tag danger">Kế toán: nộp lệch ${U.money(h.diff)}</span>` : '<span class="tag ok">Kế toán xác nhận nộp đủ · hoàn tất</span>'; };
         const done = x.pays.length && x.pays.every(p => p.method !== 'tm' || ((hoOf(p) || {}).status === 'RECONCILED'));
-        return `<span class="tag ${done ? 'ok' : 'warn'}">${done ? '✓ Đã thu hồi · hoàn tất' : '✓ Đã thu nợ · chờ nộp Kế toán'}</span>${x.pays.map(p => `<div class="small"><button class="link-btn" data-act="receipt" data-id="${p.receipt}">${p.receipt}</button> <span class="muted">${U.esc(D.METHOD[p.method] || p.method)} · ${U.dmy(p.date)} ${p.time || ''}</span><div>${st2(p)}</div></div>`).join('')}`;
+        return `<span class="tag ${done ? 'ok' : 'warn'}">${done ? '✓ Đã thu hồi · hoàn tất' : '✓ Đã thu nợ · chờ nộp Kế toán Trung tâm'}</span>${x.pays.map(p => `<div class="small"><button class="link-btn" data-act="receipt" data-id="${p.receipt}">${p.receipt}</button> <span class="muted">${U.esc(D.METHOD[p.method] || p.method)} · ${U.dmy(p.date)} ${p.time || ''}</span><div>${st2(p)}</div></div>`).join('')}`;
       }
       const mine = x.d.parts.find(p => p.collectorId === me), cov = x.i ? A.invCoveredStalls(x.i) : new Set(), minePaid = mine && mine.stallIds.every(id => cov.has(id));
       return `<span class="tag danger">Còn nợ</span>${canCollect && mine && !minePaid ? `<div class="row" style="gap:6px;margin-top:6px;flex-wrap:nowrap"><label class="btn sm primary" style="gap:6px;cursor:pointer"><input type="checkbox" data-ch="cn-collect" data-id="${x.d.id}"> Đã thu nợ</label></div>` : ''}`;
