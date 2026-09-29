@@ -779,18 +779,27 @@
   function settingsPeriodsHtml(canManage) {
     const bps = (A.db.billingPeriods || []).slice().sort((a, b) => b.id.localeCompare(a.id));
     const mp = id => (A.db.meterPeriods || []).find(x => x.id === id);
-    const last = bps[0], lastMp = last && mp(last.id);
+    const last = bps[0], lastMp = last && meterGateMp(last.id);
     const blocked = !last ? '' : !A.db.issuedPeriods.includes(last.id) ? 'Kỳ ' + last.label + ' chưa phát hành khoản thu' : lastMp && lastMp.status !== 'CLOSED' ? 'Kỳ ghi chỉ số ' + last.label + ' chưa chốt' : '';
     return `<div class="row" style="align-items:center"><b class="small">KỲ THU ĐÃ MỞ</b><span class="spacer"></span>${canManage ? `<button class="btn sm primary" data-act="cfg-open-period" ${blocked ? `disabled title="${U.esc(blocked)}"` : ''}>Mở kỳ thu tháng mới</button>` : ''}</div>
       ${blocked && canManage ? `<div class="small muted" style="margin-top:4px">Chưa mở được kỳ mới: ${U.esc(blocked)}.</div>` : ''}
       <div style="margin-top:6px">${U.table([{ t: 'Kỳ' }, { t: 'Từ – đến' }, { t: 'Hạn nộp' }, { t: 'Kỳ ghi chỉ số' }, { t: 'Khoản thu' }],
         bps.map(b => { const m = mp(b.id); return `<tr><td><b>${b.label}</b></td><td>${U.dmy(b.startDate)} – ${U.dmy(b.endDate)}</td><td>${U.dmy(b.dueDate)}</td><td>${m ? (m.status === 'CLOSED' ? 'Đã chốt' : 'Đang ghi') : '—'}</td><td>${A.db.issuedPeriods.includes(b.id) ? '<span class="tag ok">Đã phát hành</span>' : '<span class="tag">' + U.esc(BP_STATUS[b.status] || b.status) + '</span>'}</td></tr>`; }))}</div>`;
   }
+  // SCREEN_BUSINESS_STATE: chợ thu điện, nước chia đều không có màn ghi chỉ số → kỳ ghi chỉ số chỉ chặn mở kỳ mới khi
+  // còn ÍT NHẤT 1 chợ có chỉ số kỳ đó đang thu theo công tơ (tránh kẹt vì không ai chốt được kỳ ghi chỉ số).
+  function meterGateMp(periodId) {
+    const m = (A.db.meterPeriods || []).find(x => x.id === periodId);
+    if (!m) return null;
+    const meterMarket = (A.db.readings || []).some(r => { if (r.period !== periodId) return false; const st = A.idx.stall.get(r.stallId);
+      return st && !(A.SERVICE_CFG && A.SERVICE_CFG.utilityMode(st.market) === 'SERVICE'); });
+    return meterMarket ? m : null;
+  }
   A.ACT['cfg-open-period'] = () => {
     if (!cfgCan('ky-thu')) return U.toast('Bạn không có quyền cấu hình kỳ thu');
     const billing = A.features.finance && A.features.finance.billing;
     const bps = (A.db.billingPeriods || []).slice().sort((a, b) => b.id.localeCompare(a.id)), last = bps[0];
-    const lastMp = last && (A.db.meterPeriods || []).find(x => x.id === last.id);
+    const lastMp = last && meterGateMp(last.id);
     if (!billing || !last) return;
     if (!A.db.issuedPeriods.includes(last.id)) return U.toast('Kỳ ' + last.label + ' chưa phát hành khoản thu');
     if (lastMp && lastMp.status !== 'CLOSED') return U.toast('Kỳ ghi chỉ số ' + last.label + ' chưa chốt');

@@ -189,7 +189,7 @@
     if (!p || p.status !== 'RECORDING') { A.closeModal(); A.render(); return; }
     const rows = A.db.readings.filter(r => r.period === p.id && U.inM(A.idx.stall.get(r.stallId)));
     if (rows.some(r => r.status !== 'RECORDED')) { U.toast('Còn điểm kinh doanh chưa ghi chỉ số, chưa thể chốt kỳ'); return; }
-    p.status = 'CLOSED'; p.closedBy = 'Trần Minh Khoa'; p.closedAt = nowStamp();
+    p.status = 'CLOSED'; p.closedBy = (A.currentAccount() || {}).fullName || ''; p.closedAt = nowStamp();
     U.log('Chốt kỳ ghi chỉ số điện, nước ' + U.per(p.id));
     A.save(); A.closeModal(); A.render();
     U.toast('Đã chốt kỳ ' + U.per(p.id));

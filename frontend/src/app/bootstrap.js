@@ -231,11 +231,19 @@
   // "truy cập được" (không biến mất khỏi menu, route không bị bật lại về màn khác) — nhưng renderer
   // thật của màn đó KHÔNG được gọi với ui.market='ALL' (xem A.render()/A.marketRequiredHtml()), tự
   // hiện thông báo "chọn 1 chợ cụ thể" thay vì render sai dữ liệu hoặc crash.
+  // SCREEN_BUSINESS_STATE (P chốt 29/09/2026): market applicability theo CẤU HÌNH NGHIỆP VỤ của chợ đang chọn
+  // (không phải permission). 'dien-nuoc' chỉ áp dụng khi chợ thu điện, nước THEO CÔNG TƠ; chợ chọn chia đều
+  // (SERVICE) thì màn "Chỉ số điện, nước" biến khỏi menu và route — mọi role, cùng 1 điểm kiểm tra.
+  A.SCREEN_BUSINESS_STATE = {
+    'dien-nuoc': market => !(A.SERVICE_CFG && A.SERVICE_CFG.utilityMode && A.SERVICE_CFG.utilityMode(market) === 'SERVICE')
+  };
   A.screenMarketOk = function (screenId, account) {
     const kind = A.SCREEN_MARKET[screenId];
     if (!kind || kind === 'CROSS' || kind === 'SYSTEM') return true;
     if (ui.market === 'ALL') return true;
     if (A.allowedMarkets(account).indexOf(ui.market) === -1) return false; // ngoài phạm vi account
+    const bizOk = A.SCREEN_BUSINESS_STATE[screenId];
+    if (bizOk && !bizOk(ui.market)) return false;
     if (kind === 'BOTH') return true;
     return kind === ui.market; // 'CL' hoặc 'TTD' cụ thể
   };

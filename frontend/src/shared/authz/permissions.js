@@ -364,7 +364,9 @@
       // stall.collectorId ở handler). Trưởng Ban xem/chốt kỳ, không ghi thay.
       'dien-nuoc.ghi-chi-so': ['collector'],
       'dien-nuoc.chot-ky': ['market_manager'],
-      'dien-nuoc.yeu-cau-dieu-chinh': ['market_manager', 'collector'],
+      // DIEN_NUOC_TBQL_CHI_XEM (P 29/09/2026): ghi & chỉnh sửa chỉ số là việc của NV thu phí; Trưởng Ban chỉ xem.
+      // Gỡ market_manager — migrate METER_ADJUST_PERM_VERSION 1. (dien-nuoc.chot-ky giữ nguyên: NEED_CONFIRMATION.)
+      'dien-nuoc.yeu-cau-dieu-chinh': ['collector'],
       // accountant cũ không có role kế thừa 1:1 — "phát hành khoản phải thu tự động" thuộc "mở/chốt
       // kỳ thu" (mục 3.C) nên gộp về market_manager, KHÔNG tái lập accountant dưới tên khác.
       'phai-thu.phat-hanh': ['market_manager'],
@@ -522,7 +524,7 @@
   //        lệch khiến loadState() đi thẳng nhánh RESEED TOÀN BỘ (freshState(), không qua
   //        mergeIntoCurrentSeed()), nên seedVersion v15 ở đây chỉ còn ý nghĩa tài liệu/đánh dấu, không
   //        phải cơ chế migrate chính cho lần đổi này (xem RBAC_MARKET_SCOPE_MIGRATION_REPORT.md).
-  const PERM_SEED_VERSION = 24; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: action:phai-thu.ban-do-thu; 19: hình thức điện nước → market_manager; 20: quản lý TK ngân hàng → market_manager; 21: quản lý TK ngân hàng → central_accountant; 22: KT Trung tâm xem biên lai (thu-tien); 23: nhắc nợ chỉ còn collector; 24: KT Trung tâm duyệt phiếu nộp tiền
+  const PERM_SEED_VERSION = 25; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: action:phai-thu.ban-do-thu; 19: hình thức điện nước → market_manager; 20: quản lý TK ngân hàng → market_manager; 21: quản lý TK ngân hàng → central_accountant; 22: KT Trung tâm xem biên lai (thu-tien); 23: nhắc nợ chỉ còn collector; 24: KT Trung tâm duyệt phiếu nộp tiền; 25: điều chỉnh chỉ số chỉ còn collector
   const RATE_POLICY_PERM_VERSION = 1;
   const BANK_ACCOUNT_PERM_VERSION = 3;
   const PC3A_SESSION_PERM_VERSION = 1;
@@ -541,6 +543,7 @@
   const RECEIPT_VIEW_PERM_VERSION = 1;
   const DEBT_REMIND_PERM_VERSION = 1;
   const HANDOVER_KTTT_PERM_VERSION = 1;
+  const METER_ADJUST_PERM_VERSION = 1;
   const HANDOVER_KTTT_KEYS = ['screen:doi-soat', 'action:doi-soat.xem-tien-mat', 'action:doi-soat.xac-nhan-phieu-nop'];
   const DEBT_REMIND_KEYS = ['action:cong-no.nhac-no', 'action:cong-no.nhac-no-hang-loat'];
   const RECEIPT_VIEW_KEYS = new Set(['action:thu-tien.xem-bien-lai']);
@@ -563,6 +566,7 @@
       receiptViewPermVersion: RECEIPT_VIEW_PERM_VERSION,
       debtRemindPermVersion: DEBT_REMIND_PERM_VERSION,
       handoverKtttPermVersion: HANDOVER_KTTT_PERM_VERSION,
+      meterAdjustPermVersion: METER_ADJUST_PERM_VERSION,
       roles: defaultRoles(),
       rolePerms: defaultRolePermissions()
     };
@@ -665,6 +669,13 @@
       if (!stored.rolePerms.some(x => x.roleId === 'central_accountant' && x.permKey === permKey)) stored.rolePerms.push({ roleId: 'central_accountant', permKey, grantedAt: 'migrate-handover-kttt', grantedBy: 'Hệ thống' });
     });
     stored.handoverKtttPermVersion = HANDOVER_KTTT_PERM_VERSION;
+    return true;
+  }
+  // DIEN_NUOC_TBQL_CHI_XEM v1 (một lần, marker meterAdjustPermVersion): gỡ dien-nuoc.yeu-cau-dieu-chinh của market_manager.
+  function migrateMeterAdjustPerms(stored) {
+    if (stored.meterAdjustPermVersion >= METER_ADJUST_PERM_VERSION) return false;
+    stored.rolePerms = stored.rolePerms.filter(r => !(r.roleId === 'market_manager' && r.permKey === 'action:dien-nuoc.yeu-cau-dieu-chinh'));
+    stored.meterAdjustPermVersion = METER_ADJUST_PERM_VERSION;
     return true;
   }
   function migrateRatePolicyPerms(stored) {
@@ -778,6 +789,7 @@
     migrateReceiptViewPerms(stored);
     migrateDebtRemindPerms(stored);
     migrateHandoverKtttPerms(stored);
+    migrateMeterAdjustPerms(stored);
     stored.seedVersion = PERM_SEED_VERSION;
     return stored;
   }
@@ -850,6 +862,7 @@
     if (migrateReceiptViewPerms(s)) needSave = true;
     if (migrateDebtRemindPerms(s)) needSave = true;
     if (migrateHandoverKtttPerms(s)) needSave = true;
+    if (migrateMeterAdjustPerms(s)) needSave = true;
     {
       const validKeys = new Set(CATALOG.map(p => p.key));
       const before = s.rolePerms.length;
