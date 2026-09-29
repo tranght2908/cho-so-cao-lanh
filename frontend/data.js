@@ -64,7 +64,8 @@ window.DATA = (function () {
   // (row.collectorId), TT0003 thuê 3 điểm ở 3 Dãy của 3 NV, kỳ 09 phát hành đủ + hạn 30/09, 10 khoản quá hạn
   // (hạn 28/25/22/20 tháng 9) để demo công nợ / thu hồi nợ, số biên lai gắn mã khoản, ngày dữ liệu 29/09/2026.
   // (Nhánh Tài chính trước đó dùng VERSION 17–27 trên mô hình khu cũ — lấy 28 để mọi cache cũ đều dựng lại.)
-  const VERSION = 29;
+  // 29 → 30: TT0048 (4 sạp 4 khu) chuyển sang 4 điểm mới cuối Dãy, trả lại 8 điểm trống của seed.
+  const VERSION = 30;
   const TODAY = new Date(2026, 8, 13); // 13/09/2026
 
   // Giá dịch vụ sử dụng diện tích bán hàng – QĐ 480/QĐ-UBND ngày 14/02/2026 (đ/m²/ngày, đã gồm VAT)
@@ -1205,15 +1206,29 @@ window.DATA = (function () {
     // phí; mọi khoản chưa thu khác của kỳ 05–08 coi như đã thu tiền mặt đúng kỳ (1 biên lai / khoản, người thu =
     // NV phụ trách gian). Không dùng RNG; không đụng ngày hôm nay nên sao kê / nộp quỹ không đổi.
     // ---- TIEU_THUONG_4_SAP_4_KHU (v29, P 29/09/2026): 1 tiểu thương ký hợp đồng 4 sạp ở 4 khu khác nhau ----
-    // Nguyễn Thị Thanh Trúc (TT0048) thuê từ 01/07/2026 4 điểm đang trống có công tơ: KA-A06 (ki-ốt mặt tiền, NV
-    // Diễm), HS-A06 (thủy hải sản, NV Hân), KB-A03 (ki-ốt tầng 2, NV Lợi), AU-A03 (ăn uống, NV Hân). Chỉ số điện,
+    // Nguyễn Thị Thanh Trúc (TT0048) thuê từ 01/07/2026 4 điểm có công tơ (thêm mới cuối Dãy): KA-A07 (ki-ốt mặt
+    // tiền, NV Diễm), HS-A07 (thủy hải sản, NV Hân), KB-A05 (ki-ốt tầng 2, NV Lợi), AU-A05 (ăn uống, NV Hân). Chỉ số điện,
     // nước ghi THEO MÃ ĐIỂM KD cho kỳ 07, 08, 09/2026 — người ghi là NV thu phí phụ trách Dãy của từng điểm.
     // Khoản phải thu gộp theo tiểu thương (1 mã PT-/kỳ) có tiền điện, nước theo đúng chỉ số. Không dùng RNG
     // (chạy sau mọi phần sinh ngẫu nhiên nên không làm lệch dữ liệu khác).
     (function seedTraderFourStalls() {
-      const ids = ['CL-KA-A06', 'CL-HS-A06', 'CL-KB-A03', 'CL-AU-A03'];
-      const pts = ids.map(id => stalls.find(x => x.id === id)).filter(Boolean);
-      if (pts.length !== 4 || traders.some(t => t.id === 'TT0048')) return;
+      // v30: 4 điểm MỚI thêm cuối Dãy (không lấy 8 điểm đang trống của seed — test hồi quy dùng làm điểm trống).
+      // Diện tích nằm trong phần diện tích phân bổ còn lại của từng Dãy.
+      const NEW_PTS = [['KA-A', 12], ['HS-A', 4], ['KB-A', 7], ['AU-A', 6]];
+      if (traders.some(t => t.id === 'TT0048')) return;
+      const pts = NEW_PTS.map(([rc, area]) => {
+        const row = rows.find(r => r.market === 'CL' && r.code === rc);
+        if (!row) return null;
+        const sib = stalls.filter(x => x.rowId === row.id), num = sib.reduce((m, x) => Math.max(m, x.num), 0) + 1;
+        const used = sib.reduce((a, x) => a + x.area, 0);
+        if (!sib.length || used + area > row.allocatedArea) return null;
+        const code = rc + pad(num);
+        const st = { id: 'CL-' + code, code, market: 'CL', rowId: row.id, num, area, areaTypeId: sib[0].areaTypeId,
+          status: 'active', hasMeter: true, type: sib[0].type, note: '', history: [] };
+        stalls.push(st); return st;
+      });
+      if (pts.some(x => !x)) return;
+      const ids = pts.map(st => st.id);
       const t = { id: 'TT0048', name: 'Nguyễn Thị Thanh Trúc', gender: 'Nữ', phone: '0934567812', idNo: '087186004812', birth: 1986,
         address: 'Khóm 3, phường Cao Lãnh', market: 'CL', cat: 'Ki-ốt tổng hợp', hkd: true, since: '2026-07-01', app: true, bank: true,
         stalls: ids.slice(), profileStatus: 'ACTIVE', source: 'STAFF', supplementNote: '', licenseNo: null, licenseDate: null };
