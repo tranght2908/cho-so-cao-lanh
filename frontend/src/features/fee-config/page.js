@@ -172,10 +172,44 @@
   };
 
   // ---- sub-tab: Điện & nước ----
+  // ---------- HINH_THUC_THU_DIEN_NUOC ----------
+  // Mỗi chợ chọn: theo công tơ (ghi chỉ số) hoặc chia đều như dịch vụ chợ. Chỉ tài khoản có
+  // action:cau-hinh-gia.hinh-thuc-dien-nuoc (mặc định Quản trị hệ thống) được đổi; handler kiểm tra lại.
+  const UTILITY_MODE_LABEL = {
+    METER: ['Theo công tơ từng điểm kinh doanh', 'Nhân viên ghi chỉ số điện, nước hằng tháng; khoản phải thu tính theo chỉ số × đơn giá bên dưới.'],
+    SERVICE: ['Chia đều – thu như dịch vụ chợ', 'Không ghi chỉ số. Tiền điện, nước khai báo ở tab "Dịch vụ chợ" (số tiền cố định/tháng); tính/phát hành khoản thu không tạo dòng điện, nước theo công tơ.']
+  };
+  const cfgCanUtilityMode = () => U.can('cau-hinh-gia') && A.canDo('cau-hinh-gia.hinh-thuc-dien-nuoc', ui.market);
+  function utilityModeCardHtml() {
+    const info = A.SERVICE_CFG.utilityModeInfo(ui.market), mode = A.SERVICE_CFG.utilityMode(ui.market), can = cfgCanUtilityMode();
+    const opt = k => `<label style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1.5px solid ${mode === k ? '#1d4ed8' : 'var(--line)'};border-radius:10px;flex:1;min-width:260px;cursor:${can ? 'pointer' : 'default'};background:${mode === k ? '#f3f7ff' : 'transparent'}">
+        <input type="radio" name="util-mode" ${mode === k ? 'checked' : ''} ${can ? `data-act="cfg-utility-mode" data-id="${k}"` : 'disabled'}><span><b>${UTILITY_MODE_LABEL[k][0]}</b><div class="small muted">${UTILITY_MODE_LABEL[k][1]}</div></span></label>`;
+    return `<div class="card"><div class="card-h"><div><h3 style="margin:0">Hình thức thu điện, nước · ${U.esc(U.market(ui.market).name)}</h3>
+      <div class="small muted">${can ? 'Chọn hình thức áp dụng cho chợ này.' : 'Chỉ Quản trị hệ thống thay đổi được hình thức thu.'}${info.updatedAt ? ' · Cập nhật ' + U.esc(info.updatedAt) + ' bởi ' + U.esc(info.updatedBy || '') : ''}</div></div></div>
+      <div class="card-b"><div class="row" style="gap:10px;flex-wrap:wrap">${opt('METER')}${opt('SERVICE')}</div>
+      ${mode === 'SERVICE' ? '<div class="note info" style="margin-top:10px">Chợ đang thu điện, nước chia đều. Khai báo khoản "Tiền điện/nước chia đều" ở tab <b>Dịch vụ chợ</b>. Bảng đơn giá theo công tơ bên dưới không được dùng khi tính khoản thu.</div>' : ''}</div></div>`;
+  }
+  A.ACT['cfg-utility-mode'] = el => {
+    if (!cfgCanUtilityMode()) { U.toast('Chỉ Quản trị hệ thống được đổi hình thức thu điện, nước'); A.render(); return; }
+    const next = el.dataset.id === 'SERVICE' ? 'SERVICE' : 'METER';
+    if (next === A.SERVICE_CFG.utilityMode(ui.market)) return;
+    A.modal(A.mHead('Đổi hình thức thu điện, nước') + `<div class="modal-b"><p>Chuyển <b>${U.esc(U.market(ui.market).name)}</b> sang: <b>${UTILITY_MODE_LABEL[next][0]}</b>.</p><div class="small muted">${UTILITY_MODE_LABEL[next][1]}</div>
+      <div class="note" style="margin-top:10px">Áp dụng cho các lần <b>tính khoản thu</b> từ nay. Khoản phải thu đã phát hành không thay đổi.</div>
+      <div class="field" style="margin-top:10px"><label>Lý do / căn cứ *</label><input class="input" id="util-mode-reason" placeholder="VD: Ban Quản lý đề nghị chia đều theo hóa đơn điện lực"></div></div>
+      <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="cfg-utility-mode-save" data-id="${next}">Xác nhận đổi</button></div>`);
+  };
+  A.ACT['cfg-utility-mode-save'] = el => {
+    if (!cfgCanUtilityMode()) { U.toast('Chỉ Quản trị hệ thống được đổi hình thức thu điện, nước'); A.closeModal(); A.render(); return; }
+    const reason = ((A.$('#util-mode-reason') || {}).value || '').trim();
+    if (!reason) return U.toast('Vui lòng nhập lý do / căn cứ');
+    A.SERVICE_CFG.setUtilityMode(ui.market, el.dataset.id, cfgActor(), reason);
+    U.log('Đổi hình thức thu điện, nước ' + ui.market + ' → ' + el.dataset.id + ' (' + reason + ')');
+    A.closeModal(); A.render(); U.toast('Đã cập nhật hình thức thu điện, nước');
+  };
   function settingsDienNuocHtml() {
     const canNew = cfgFeeAddAllowed('utilities', null);
     const rows = A.SERVICE_CFG.list('utilities').filter(r => r.marketId === ui.market);
-    return `<div class="card"><div class="card-h"><h3>Điện & nước · ${U.esc(U.market(ui.market).name)}</h3>${canNew ? '<button class="btn sm primary" data-act="cfg-util-new">Thiết lập mức mới</button>' : ''}</div>
+    return utilityModeCardHtml() + `<div class="card"><div class="card-h"><h3>Điện & nước · ${U.esc(U.market(ui.market).name)}</h3>${canNew ? '<button class="btn sm primary" data-act="cfg-util-new">Thiết lập mức mới</button>' : ''}</div>
       <div class="card-b">${U.table([{ t: 'Chợ / mô hình' }, { t: 'Mức giá điện', num: true }, { t: 'Mức giá nước', num: true }, { t: 'Chu kỳ thu' }, { t: 'Phân loại thuế' }, { t: 'Hiệu lực / căn cứ' }, { t: 'Miễn giảm' }, { t: 'Trạng thái' }, { t: '' }],
         rows.map(r => { const canApply = cfgFeeApplyAllowed('utilities', r), canLock = cfgFeeLockAllowed('utilities', r); return `<tr>
           <td>${U.mShort(r.marketId)}<div class="small muted">${U.esc(CFG_MARKET_MODEL_LABELS[r.marketModel] || '—')}</div></td><td class="num">${r.elecPrice.toLocaleString('vi-VN')}<div class="small muted">${U.esc(r.elecUnit || 'đ/kWh')}</div></td><td class="num">${r.waterPrice.toLocaleString('vi-VN')}<div class="small muted">${U.esc(r.waterUnit || 'đ/m³')}</div></td>
@@ -527,24 +561,54 @@
         <div class="field"><label>Nhắc nợ lần 1 (sau X ngày quá hạn)</label><input class="input" type="number" min="0" data-ch="bc-r1" value="${c.reminder1Days}" ${dis}></div>
         <div class="field"><label>Nhắc nợ lần 2 (sau X ngày quá hạn)</label><input class="input" type="number" min="0" data-ch="bc-r2" value="${c.reminder2Days}" ${dis}></div>
       </div>
+      <div class="small muted" style="margin-top:6px">Quá mốc nhắc lần 2 mà chưa nộp: công nợ chuyển thành <b>không thu hồi</b>, vào <b>danh sách cắt điện</b> và hệ thống gửi thông báo cắt điện (luồng kết thúc) — Chợ thu theo phần.</div>
       <div class="row" style="margin-top:12px;gap:20px;flex-wrap:wrap">
         <label class="row" style="gap:8px"><input type="checkbox" data-ch="bc-autoissue" ${c.autoIssue ? 'checked' : ''} ${dis}> Tự động phát hành khoản phải thu</label>
         <label class="row" style="gap:8px"><input type="checkbox" data-ch="bc-autoremind" ${c.autoRemind ? 'checked' : ''} ${dis}> Tự động nhắc nợ</label>
       </div>
+      <div class="divider"></div>${settingsPeriodsHtml(canManage)}
       <div class="divider"></div><b class="small">CĂN CỨ</b><div style="margin-top:6px">${cfgLegalHtml(c.legalBasis)}</div>
       ${canManage ? `<button class="btn sm" style="margin-top:8px" data-act="cfg-editlegal" data-cat="billingCycle" data-id="cycle">Sửa căn cứ</button>` : ''}
       <div class="divider"></div><b class="small">TÀI LIỆU</b><div style="margin-top:6px">${cfgAttachHtml(c, 'billingCycle', 'cycle', canManage)}</div>
       <div class="divider"></div><b class="small">LỊCH SỬ</b><div style="margin-top:6px">${cfgHistoryHtml(c)}</div>
     </div></div>`;
   }
-  A.CH['bc-cycle'] = el => { A.SERVICE_CFG.updateCycle({ cycle: el.value }, cfgActor(), 'Đổi chu kỳ thu'); A.render(); };
-  A.CH['bc-cutoff'] = el => { A.SERVICE_CFG.updateCycle({ meterCutoffDay: Number(el.value) || 1 }, cfgActor(), 'Đổi ngày chốt chỉ số'); A.render(); };
-  A.CH['bc-issue'] = el => { A.SERVICE_CFG.updateCycle({ issueDay: Number(el.value) || 1 }, cfgActor(), 'Đổi ngày phát hành'); A.render(); };
-  A.CH['bc-due'] = el => { A.SERVICE_CFG.updateCycle({ dueDay: Number(el.value) || 1 }, cfgActor(), 'Đổi hạn nộp'); A.render(); };
-  A.CH['bc-r1'] = el => { A.SERVICE_CFG.updateCycle({ reminder1Days: Number(el.value) || 0 }, cfgActor(), 'Đổi mốc nhắc nợ lần 1'); A.render(); };
-  A.CH['bc-r2'] = el => { A.SERVICE_CFG.updateCycle({ reminder2Days: Number(el.value) || 0 }, cfgActor(), 'Đổi mốc nhắc nợ lần 2'); A.render(); };
-  A.CH['bc-autoissue'] = el => { A.SERVICE_CFG.updateCycle({ autoIssue: el.checked }, cfgActor(), el.checked ? 'Bật tự động phát hành' : 'Tắt tự động phát hành'); A.render(); };
-  A.CH['bc-autoremind'] = el => { A.SERVICE_CFG.updateCycle({ autoRemind: el.checked }, cfgActor(), el.checked ? 'Bật tự động nhắc nợ' : 'Tắt tự động nhắc nợ'); A.render(); };
+  // MO_KY_THU_THANG_MOI: bắt đầu tính tiền tháng mới là việc thiết lập hệ thống (Quản trị hệ thống), không đặt
+  // ở màn Khoản phải thu. Dùng lại quyền sẵn có action:cai-dat.ky-thu (không phát sinh permission mới); kỳ thu
+  // dùng chung cho mọi chợ. Mở kỳ = tạo kỳ thu + kỳ ghi chỉ số tháng kế tiếp; phát hành vẫn do Trưởng Ban.
+  const BP_STATUS = { OPEN: 'Đang mở · chờ ghi chỉ số / tính khoản', COLLECTING: 'Đang thu', PAST: 'Đã qua' };
+  function settingsPeriodsHtml(canManage) {
+    const bps = (A.db.billingPeriods || []).slice().sort((a, b) => b.id.localeCompare(a.id));
+    const mp = id => (A.db.meterPeriods || []).find(x => x.id === id);
+    const last = bps[0], lastMp = last && mp(last.id);
+    const blocked = !last ? '' : !A.db.issuedPeriods.includes(last.id) ? 'Kỳ ' + last.label + ' chưa phát hành khoản thu' : lastMp && lastMp.status !== 'CLOSED' ? 'Kỳ ghi chỉ số ' + last.label + ' chưa chốt' : '';
+    return `<div class="row" style="align-items:center"><b class="small">KỲ THU ĐÃ MỞ</b><span class="spacer"></span>${canManage ? `<button class="btn sm primary" data-act="cfg-open-period" ${blocked ? `disabled title="${U.esc(blocked)}"` : ''}>Mở kỳ thu tháng mới</button>` : ''}</div>
+      ${blocked && canManage ? `<div class="small muted" style="margin-top:4px">Chưa mở được kỳ mới: ${U.esc(blocked)}.</div>` : ''}
+      <div style="margin-top:6px">${U.table([{ t: 'Kỳ' }, { t: 'Từ – đến' }, { t: 'Hạn nộp' }, { t: 'Kỳ ghi chỉ số' }, { t: 'Khoản thu' }],
+        bps.map(b => { const m = mp(b.id); return `<tr><td><b>${b.label}</b></td><td>${U.dmy(b.startDate)} – ${U.dmy(b.endDate)}</td><td>${U.dmy(b.dueDate)}</td><td>${m ? (m.status === 'CLOSED' ? 'Đã chốt' : 'Đang ghi') : '—'}</td><td>${A.db.issuedPeriods.includes(b.id) ? '<span class="tag ok">Đã phát hành</span>' : '<span class="tag">' + U.esc(BP_STATUS[b.status] || b.status) + '</span>'}</td></tr>`; }))}</div>`;
+  }
+  A.ACT['cfg-open-period'] = () => {
+    if (!cfgCan('ky-thu')) return U.toast('Bạn không có quyền cấu hình kỳ thu');
+    const billing = A.features.finance && A.features.finance.billing;
+    const bps = (A.db.billingPeriods || []).slice().sort((a, b) => b.id.localeCompare(a.id)), last = bps[0];
+    const lastMp = last && (A.db.meterPeriods || []).find(x => x.id === last.id);
+    if (!billing || !last) return;
+    if (!A.db.issuedPeriods.includes(last.id)) return U.toast('Kỳ ' + last.label + ' chưa phát hành khoản thu');
+    if (lastMp && lastMp.status !== 'CLOSED') return U.toast('Kỳ ghi chỉ số ' + last.label + ' chưa chốt');
+    const bp = billing.openNextPeriod();
+    if (!bp) return U.toast('Không thể mở kỳ thu mới');
+    A.SERVICE_CFG.updateCycle({}, cfgActor(), 'Mở kỳ thu ' + bp.label);
+    A.render(); U.toast('Đã mở kỳ thu ' + bp.label + ' cho các chợ. NV thu phí ghi chỉ số, Trưởng Ban tính và phát hành khoản thu.');
+  };
+  const bcGuard = fn => el => { if (!cfgCan('ky-thu')) { U.toast('Bạn không có quyền cấu hình kỳ thu'); A.render(); return; } fn(el); };
+  A.CH['bc-cycle'] = bcGuard(el => { A.SERVICE_CFG.updateCycle({ cycle: el.value }, cfgActor(), 'Đổi chu kỳ thu'); A.render(); });
+  A.CH['bc-cutoff'] = bcGuard(el => { A.SERVICE_CFG.updateCycle({ meterCutoffDay: Number(el.value) || 1 }, cfgActor(), 'Đổi ngày chốt chỉ số'); A.render(); });
+  A.CH['bc-issue'] = bcGuard(el => { A.SERVICE_CFG.updateCycle({ issueDay: Number(el.value) || 1 }, cfgActor(), 'Đổi ngày phát hành'); A.render(); });
+  A.CH['bc-due'] = bcGuard(el => { A.SERVICE_CFG.updateCycle({ dueDay: Number(el.value) || 1 }, cfgActor(), 'Đổi hạn nộp'); A.render(); });
+  A.CH['bc-r1'] = bcGuard(el => { A.SERVICE_CFG.updateCycle({ reminder1Days: Number(el.value) || 0 }, cfgActor(), 'Đổi mốc nhắc nợ lần 1'); A.render(); });
+  A.CH['bc-r2'] = bcGuard(el => { A.SERVICE_CFG.updateCycle({ reminder2Days: Number(el.value) || 0 }, cfgActor(), 'Đổi mốc nhắc nợ lần 2'); A.render(); });
+  A.CH['bc-autoissue'] = bcGuard(el => { A.SERVICE_CFG.updateCycle({ autoIssue: el.checked }, cfgActor(), el.checked ? 'Bật tự động phát hành' : 'Tắt tự động phát hành'); A.render(); });
+  A.CH['bc-autoremind'] = bcGuard(el => { A.SERVICE_CFG.updateCycle({ autoRemind: el.checked }, cfgActor(), el.checked ? 'Bật tự động nhắc nợ' : 'Tắt tự động nhắc nợ'); A.render(); });
 
   // ---- sub-tab: Quy tắc thu phí ----
   function settingsQuyTacHtml() {

@@ -5,3 +5,4 @@ node_modules/
 
 # Local prototype backups
 backups/
+frontend/*.local.html

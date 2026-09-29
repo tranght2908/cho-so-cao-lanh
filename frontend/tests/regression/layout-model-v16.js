@@ -20,7 +20,7 @@ const B = byId(db.buildings), F = byId(db.floors), R = byId(db.rows);
 const sum = (xs, f) => xs.reduce((a, x) => a + f(x), 0);
 
 ok('1 version bump reseeds; old v15 state backed up once; legacy layout key ignored and untouched', () => {
-  assert.strictEqual(D.VERSION, 16); assert.strictEqual(db.version, 16);
+  assert(D.VERSION >= 16); assert.strictEqual(db.version, D.VERSION); // v28: gộp nhánh Tài chính trên mô hình v16
   assert(!db.stalls.some(s => s.id === 'OLD'));
   const bk = JSON.parse(h.localStorage.getItem('choso-caolanh-state-backup'));
   assert.strictEqual(bk.version, 15); assert.strictEqual(bk.state, J({ version: 15, stalls: [{ id: 'OLD' }] }));
@@ -107,7 +107,7 @@ ok('11 demo coverage: contracts active/expiring/ended, unpaid/partial/paid, cash
   const t = new Set(db.contracts.map(c => c.status));
   assert(t.has('hieuluc') && t.has('chamdut') && t.has('thanhly'));
   assert(db.contracts.some(c => c.status === 'hieuluc' && A.U.days(A.U.today(), c.end) <= 30));
-  const s = new Set(db.invoices.map(i => i.status)); assert(s.has('paid') && s.has('partial') && s.has('unpaid'));
+  const s = new Set(db.invoices.map(i => i.status)); assert(s.has('paid') && s.has('unpaid')); // nhánh Tài chính: không thu một phần (P chốt) → seed không còn khoản 'partial'
   const m = new Set(db.payments.map(p => p.method)); assert(m.has('tm') && m.has('ck') && m.has('qr'));
   assert(db.readings.length > 0 && db.incidents.length > 0);
   assert(db.traders.some(x => x.market === 'CL' && !db.contracts.some(c => c.traderId === x.id)), 'trader without contract');

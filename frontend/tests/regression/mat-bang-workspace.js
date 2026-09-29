@@ -60,6 +60,8 @@ ok('7 Khối/Nhà workspace: breadcrumb, summary, floor list with business area;
   assert(wt.includes('Không chia tầng') && count(w, /mb-rowcard"/g) === 2 && !wt.includes('Tầng 1'));
 });
 ok('8 Tầng workspace: area summary, + Thêm Dãy, row cards with used/allocated and collector', () => {
+  // Seed v28 (nhánh Tài chính) đã phân công NV thu phí theo Dãy; test này kiểm tra trạng thái "Chưa phân công" nên bỏ phân công Dãy HS-A trước.
+  A.idx.row.get('CL-R-HS-A').collectorId = null;
   sel('floor', t1.id); const w = ws(), wt = text(w);
   assert(/Chợ Cao Lãnh \/ Nhà chợ chính \/ Tầng 1/.test(wt));
   ['Diện tích kinh doanh 420 m²', 'Đã phân bổ cho Dãy 224 m²', 'Còn chưa phân bổ 196 m²', 'Số Dãy 5'].forEach(s => assert(wt.includes(s), s));

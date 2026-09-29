@@ -33,6 +33,11 @@
     return rec;
   }
   function normalizeConfig(cfg) {
+    // HINH_THUC_THU_DIEN_NUOC: mỗi chợ chọn 1 trong 2 hình thức (mặc định METER — giữ hành vi cũ):
+    //   METER   = theo công tơ từng điểm KD, ghi chỉ số hằng tháng, khoản phải thu tính theo chỉ số;
+    //   SERVICE = chia đều, thu như DỊCH VỤ CHỢ (khai báo ở tab Dịch vụ chợ) — không ghi chỉ số, bước
+    //             tính/phát hành khoản thu KHÔNG tạo dòng tiền điện/nước theo công tơ.
+    cfg.utilityModes = cfg.utilityModes && typeof cfg.utilityModes === 'object' ? cfg.utilityModes : {};
     cfg.waiverTypes = Array.isArray(cfg.waiverTypes) ? cfg.waiverTypes : clone(D.WAIVER_TYPES || []);
     ['stallPrices', 'utilities', 'extraServices'].forEach(cat => {
       cfg[cat] = Array.isArray(cfg[cat]) ? cfg[cat] : [];
@@ -121,6 +126,19 @@
       r.status = status;
       SC.log(r, user, status === 'active' ? 'Áp dụng phí' : status === 'draft' ? 'Mở khóa phí' : 'Khóa phí', '');
       return true;
+    },
+    utilityMode: mid => ((CFG.utilityModes || {})[mid] || {}).mode === 'SERVICE' ? 'SERVICE' : 'METER',
+    utilityModeInfo: mid => (CFG.utilityModes || {})[mid] || { mode: 'METER', history: [] },
+    setUtilityMode: (mid, mode, user, reason) => {
+      CFG.utilityModes = CFG.utilityModes || {};
+      const cur = CFG.utilityModes[mid] || { mode: 'METER', history: [] };
+      const next = mode === 'SERVICE' ? 'SERVICE' : 'METER';
+      cur.history = cur.history || [];
+      cur.history.unshift({ time: nowStr(), user: user, action: 'Đổi hình thức thu điện, nước', detail: (cur.mode || 'METER') + ' → ' + next + (reason ? ' · ' + reason : '') });
+      cur.mode = next; cur.updatedBy = user; cur.updatedAt = nowStr();
+      CFG.utilityModes[mid] = cur;
+      save();
+      return cur;
     },
     cycle: () => CFG.billingCycle,
     updateCycle: (patch, user, detail) => { Object.assign(CFG.billingCycle, patch); SC.log(CFG.billingCycle, user, 'Cập nhật kỳ thu', detail || ''); },
