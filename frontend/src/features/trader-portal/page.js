@@ -406,7 +406,7 @@
   }
   function miniComplaintStatusClass(i) {
     if (!i) return '';
-    if (i.state === 'dong') return 'ok';
+    if (i.state === 'dong') return 'danger';
     if (i.state === 'hoanthanh') return 'warn';
     return 'info';
   }

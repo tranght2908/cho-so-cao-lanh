@@ -674,6 +674,7 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 .merchant-status.info { background: #f6f8fb; color: #52637a; border: 1px solid #e2e8f0; }
 .merchant-status.warn { background: var(--brand-soft); color: var(--brand); border: 1px solid #cbdcf0; }
 .merchant-status.ok { background: #eef7f2; color: #167a3c; border: 1px solid #d4eadd; }
+.merchant-status.danger { background: #fff7f7; color: var(--danger); border: 1px solid #f0d5d5; }
 .merchant-table .btn.primary { background: #0d2e55; border-color: #0d2e55; }
 .merchant-view-btn .ui-icon { width: 15px; height: 15px; }
 .merchant-table-foot { display: flex; justify-content: space-between; gap: 12px; align-items: center; color: #60728a; margin-top: 12px; }
