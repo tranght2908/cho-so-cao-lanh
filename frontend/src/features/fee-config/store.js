@@ -26,6 +26,9 @@
     rec.taxClass = rec.taxClass || (cat === 'utilities' ? 'PASS_THROUGH_NON_TAX' : 'TAXABLE_REVENUE');
     if (rec.waiverTypeId === undefined) rec.waiverTypeId = null;
     if (rec.effectiveTo === undefined) rec.effectiveTo = null;
+    // Giá mặt bằng mới được định danh bằng mã loại diện tích. Các bản ghi cũ
+    // chưa có mã này được giữ nguyên để xem lịch sử, không suy đoán/migrate từ nhãn text.
+    if (cat === 'stallPrices' && rec.areaTypeId === undefined) rec.areaTypeId = null;
     if (cat === 'utilities') {
       rec.elecUnit = rec.elecUnit || 'đ/kWh';
       rec.waterUnit = rec.waterUnit || 'đ/m³';
@@ -50,6 +53,17 @@
       cfg[cat] = Array.isArray(cfg[cat]) ? cfg[cat] : [];
       cfg[cat].forEach(rec => normalizeRecord(cat, rec));
     });
+    // Lịch kỳ thu mới giữ các field cũ để dữ liệu localStorage đã có tiếp tục dùng được.
+    // Các mốc mới chỉ là cấu hình lịch mặc định; không kích hoạt phát hành khoản phải thu.
+    const cycle = cfg.billingCycle || {};
+    cycle.preparationDay = Number(cycle.preparationDay) || Number(cycle.meterCutoffDay) || 25;
+    cycle.meterReadDay = Number(cycle.meterReadDay) || Number(cycle.meterCutoffDay) || 25;
+    cycle.collectionStartDay = Number(cycle.collectionStartDay) || 29;
+    cycle.dueMonth = cycle.dueMonth === 'current' ? 'current' : 'next';
+    if (cycle.prepareNotification === undefined) cycle.prepareNotification = true;
+    // autoIssue là field legacy không còn được UI/handler dùng; luôn vô hiệu theo luồng mới.
+    cycle.autoIssue = false;
+    cfg.billingCycle = cycle;
     return cfg;
   }
 
@@ -60,8 +74,9 @@
     return normalizeConfig(Object.assign(rateSeed, {
       waiverTypes: clone(D.WAIVER_TYPES || []),
       billingCycle: {
-        cycle: 'monthly', meterCutoffDay: 28, issueDay: 1, dueDay: 15, reminder1Days: 3, reminder2Days: 7,
-        autoIssue: true, autoRemind: true,
+        cycle: 'monthly', preparationDay: 25, meterReadDay: 25, meterCutoffDay: 25, issueDay: 28, collectionStartDay: 29, dueDay: 3, dueMonth: 'next', prepareNotification: true,
+        // Field legacy: giữ nguyên để không làm mất dữ liệu/policy đang được module khác đọc.
+        reminder1Days: 3, reminder2Days: 7, autoIssue: false, autoRemind: true,
         legalBasis: { docNo: '', docDate: '', issuer: 'Ban Quản lý chợ', summary: 'Quy định kỳ thu, ngày phát hành và hạn nộp', effectiveDate: '2026-01-01', note: '' },
         attachments: [], history: [{ time: '01/01/2026 08:00', user: 'Trần Minh Khoa', action: 'Tạo cấu hình', detail: 'Kỳ thu hằng tháng · phát hành ngày 01 · hạn nộp ngày 15' }]
       },
@@ -171,6 +186,36 @@
     },
     resetDefault: () => { CFG = defaultConfig(); save(); }
   };
+
+  // Kỳ demo 10/2026 thuộc đúng nguồn dữ liệu Kỳ thu. Chỉ bổ sung khi thiếu,
+  // lấy các mốc từ cấu hình lịch hiện tại và tuyệt đối không được finance tạo thay.
+  function ensureOctoberCollectionPeriod() {
+    if (!A.db || !Array.isArray(A.db.billingPeriods) || A.db.billingPeriods.some(p => p.id === '2026-10')) return;
+    const c = SC.cycle(), day = (year, monthIndex, value) => {
+      const max = new Date(year, monthIndex + 1, 0).getDate();
+      const d = Math.min(Math.max(Number(value) || 1, 1), max);
+      return year + '-' + String(monthIndex + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    };
+    // `2026-10` là kỳ thu tháng 10: các mốc chuẩn bị/ghi/phát hành thuộc tháng 09;
+    // hạn nộp theo dueMonth của lịch cấu hình.
+    const year = 2026, month = 9;
+    const p = {
+      id: '2026-10', label: '10/2026', marketId: 'CL',
+      preparationDate: day(year, month - 1, c.preparationDay),
+      meterReadDate: day(year, month - 1, c.meterReadDay),
+      expectedIssueDate: day(year, month - 1, c.issueDay),
+      startDate: day(year, month - 1, c.collectionStartDay),
+      dueDate: day(year, c.dueMonth === 'current' ? month - 1 : month, c.dueDay),
+      endDate: day(year, month, 0), status: 'PREPARING', prototypeDemo: true
+    };
+    A.db.billingPeriods.push(p);
+    A.save();
+  }
+  SC.ensureDemoBillingPeriod = ensureOctoberCollectionPeriod;
+  ensureOctoberCollectionPeriod();
+  // bootstrap loads A.db on DOMContentLoaded after feature scripts are parsed.
+  // Run once more then so persisted state receives only this missing demo period.
+  document.addEventListener('DOMContentLoaded', ensureOctoberCollectionPeriod, { once: true });
 
   // Applied price helpers (from js/core.js, Phase 15.6).
   // Đơn giá hiện hành của điểm KD lấy từ "Chính sách thu và biểu phí", không phải

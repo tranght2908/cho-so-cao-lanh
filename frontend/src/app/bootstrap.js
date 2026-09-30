@@ -456,7 +456,8 @@
       { id: 'phai-thu', ico: U.icon('receipt'), label: 'Khoản phải thu' },
       { id: 'thu-tien', ico: U.icon('card'), label: 'Thu tiền & biên lai' },
       { id: 'doi-soat', ico: U.icon('refresh'), label: 'Đối soát buổi thu', badge: () => (A.db.cashHandovers || []).filter(h => h.market === ui.market && ['SUBMITTED', 'WAITING_EXPLANATION'].includes(h.status)).length },
-      { id: 'theo-doi-ky-doi-soat', ico: U.icon('calendar'), label: 'Theo dõi kỳ đối soát' },
+      // Màn nghiệp vụ Đối soát thu tiền của Kế toán Trung tâm (12 chợ) — giữ route id cũ để không phải cấp quyền lại.
+      { id: 'theo-doi-ky-doi-soat', ico: U.icon('calendar'), label: 'Đối soát thu tiền' },
       { id: 'cong-no', ico: '⏰', label: 'Công nợ & nhắc nợ' }
     ] },
     { group: 'Vận hành', items: [

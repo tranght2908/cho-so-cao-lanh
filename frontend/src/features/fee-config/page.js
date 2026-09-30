@@ -575,63 +575,89 @@
   // ---- sub-tab: Kỳ thu ----
   function settingsKyThuHtml() {
     const c = A.SERVICE_CFG.cycle(), canManage = cfgCan('ky-thu'), dis = canManage ? '' : 'disabled';
-    return `<div class="card"><div class="card-h"><h3>Kỳ thu</h3></div><div class="card-b">
+    return `<div class="card"><div class="card-h"><div><h3>Cấu hình lịch kỳ thu</h3><div class="small muted">Thiết lập các mốc thời gian mặc định cho kỳ thu hàng tháng.</div></div></div><div class="card-b">
       <div class="form-grid">
         <div class="field"><label>Chu kỳ thu</label><select class="input" data-ch="bc-cycle" ${dis}><option value="monthly" ${c.cycle === 'monthly' ? 'selected' : ''}>Hàng tháng</option></select></div>
-        <div class="field"><label>Ngày chốt chỉ số điện nước</label><input class="input" type="number" min="1" max="31" data-ch="bc-cutoff" value="${c.meterCutoffDay}" ${dis}></div>
-        <div class="field"><label>Ngày phát hành khoản phải thu</label><input class="input" type="number" min="1" max="31" data-ch="bc-issue" value="${c.issueDay}" ${dis}></div>
-        <div class="field"><label>Hạn nộp</label><input class="input" type="number" min="1" max="31" data-ch="bc-due" value="${c.dueDay}" ${dis}></div>
-        <div class="field"><label>Nhắc nợ lần 1 (sau X ngày quá hạn)</label><input class="input" type="number" min="0" data-ch="bc-r1" value="${c.reminder1Days}" ${dis}></div>
-        <div class="field"><label>Nhắc nợ lần 2 (sau X ngày quá hạn)</label><input class="input" type="number" min="0" data-ch="bc-r2" value="${c.reminder2Days}" ${dis}></div>
+        <div class="field"><label>Ngày bắt đầu chuẩn bị kỳ</label><input class="input" type="number" min="1" max="31" data-ch="bc-preparation" value="${c.preparationDay}" ${dis}><div class="small muted">Hệ thống bắt đầu nhắc BQL chuẩn bị dữ liệu cho kỳ thu.</div></div>
+        <div class="field"><label>Ngày ghi/chốt chỉ số điện, nước</label><input class="input" type="number" min="1" max="31" data-ch="bc-meter-read" value="${c.meterReadDay}" ${dis}><div class="small muted">Nhân viên thu phí ghi chỉ số điện, nước của các điểm kinh doanh.</div></div>
+        <div class="field"><label>Ngày dự kiến phát hành khoản phải thu</label><input class="input" type="number" min="1" max="31" data-ch="bc-issue" value="${c.issueDay}" ${dis}><div class="small muted">Tổ trưởng kiểm tra và phát hành khoản phải thu sau khi dữ liệu đã đầy đủ.</div></div>
+        <div class="field"><label>Ngày bắt đầu thu</label><input class="input" type="number" min="1" max="31" data-ch="bc-collection-start" value="${c.collectionStartDay}" ${dis}><div class="small muted">Từ ngày này nhân viên thu phí bắt đầu theo dõi và thực hiện thu.</div></div>
+        <div class="field"><label>Hạn thanh toán</label><div class="row" style="gap:8px"><input class="input" style="width:92px" type="number" min="1" max="31" data-ch="bc-due" value="${c.dueDay}" ${dis}><select class="input" data-ch="bc-due-month" ${dis}><option value="next" ${c.dueMonth !== 'current' ? 'selected' : ''}>Tháng kế tiếp</option><option value="current" ${c.dueMonth === 'current' ? 'selected' : ''}>Cùng tháng</option></select></div><div class="small muted">Ngày ${U.pad(c.dueDay, 2)} của ${c.dueMonth === 'current' ? 'cùng tháng' : 'tháng kế tiếp'}.</div></div>
       </div>
-      <div class="small muted" style="margin-top:6px">Quá mốc nhắc lần 2 mà chưa nộp: công nợ chuyển thành <b>không thu hồi</b>, vào <b>danh sách cắt điện</b> và hệ thống gửi thông báo cắt điện (luồng kết thúc) — Chợ thu theo phần.</div>
-      <div class="row" style="margin-top:12px;gap:20px;flex-wrap:wrap">
-        <label class="row" style="gap:8px"><input type="checkbox" data-ch="bc-autoissue" ${c.autoIssue ? 'checked' : ''} ${dis}> Tự động phát hành khoản phải thu</label>
-        <label class="row" style="gap:8px"><input type="checkbox" data-ch="bc-autoremind" ${c.autoRemind ? 'checked' : ''} ${dis}> Tự động nhắc nợ</label>
-      </div>
+      <div class="note info" style="margin-top:14px"><label class="row" style="gap:8px"><input type="checkbox" data-ch="bc-prepare-notification" ${c.prepareNotification ? 'checked' : ''} ${dis}> <b>Tự động gửi thông báo chuẩn bị kỳ thu</b></label><div class="small muted" style="margin-top:7px">Đến ngày bắt đầu chuẩn bị, hệ thống gửi thông báo cho Tổ trưởng BQL, Nhân viên thu phí và Tiểu thương.</div><div class="row" style="margin-top:8px;gap:6px;flex-wrap:wrap"><span class="tag">Tổ trưởng BQL</span><span class="tag">Nhân viên thu phí</span><span class="tag">Tiểu thương</span></div></div>
+      <div class="small muted" style="margin-top:8px">Ngày phát hành là ngày dự kiến; khoản phải thu luôn chờ Tổ trưởng kiểm tra và phát hành tại module Khoản phải thu.</div>
       <div class="divider"></div>${settingsPeriodsHtml(canManage)}
-      <div class="divider"></div><b class="small">CĂN CỨ</b><div style="margin-top:6px">${cfgLegalHtml(c.legalBasis)}</div>
-      ${canManage ? `<button class="btn sm" style="margin-top:8px" data-act="cfg-editlegal" data-cat="billingCycle" data-id="cycle">Sửa căn cứ</button>` : ''}
-      <div class="divider"></div><b class="small">TÀI LIỆU</b><div style="margin-top:6px">${cfgAttachHtml(c, 'billingCycle', 'cycle', canManage)}</div>
-      <div class="divider"></div><b class="small">LỊCH SỬ</b><div style="margin-top:6px">${cfgHistoryHtml(c)}</div>
+      <div style="margin-top:14px"><details><summary><b>Căn cứ &amp; tài liệu</b></summary><div style="margin-top:10px"><b class="small">CĂN CỨ</b><div style="margin-top:6px">${cfgLegalHtml(c.legalBasis)}</div>${canManage ? `<button class="btn sm" style="margin-top:8px" data-act="cfg-editlegal" data-cat="billingCycle" data-id="cycle">Sửa căn cứ</button>` : ''}<div class="divider"></div><b class="small">TÀI LIỆU</b><div style="margin-top:6px">${cfgAttachHtml(c, 'billingCycle', 'cycle', canManage)}</div></div></details></div>
+      <div style="margin-top:10px"><details><summary><b>Lịch sử thay đổi</b></summary><div style="margin-top:10px">${cfgHistoryHtml(c)}</div></details></div>
     </div></div>`;
   }
-  // MO_KY_THU_THANG_MOI: bắt đầu tính tiền tháng mới là việc thiết lập hệ thống (Quản trị hệ thống), không đặt
-  // ở màn Khoản phải thu. Dùng lại quyền sẵn có action:cai-dat.ky-thu (không phát sinh permission mới); kỳ thu
-  // dùng chung cho mọi chợ. Mở kỳ = tạo kỳ thu + kỳ ghi chỉ số tháng kế tiếp; phát hành vẫn do Trưởng Ban.
-  const BP_STATUS = { OPEN: 'Đang mở · chờ ghi chỉ số / tính khoản', COLLECTING: 'Đang thu', PAST: 'Đã qua' };
+  const PERIOD_STATUS = { UPCOMING: ['Sắp tới', ''], PREPARING: ['Đang chuẩn bị', 'info'], COLLECTING: ['Đang thu', 'warn'], RECONCILING: ['Chờ đối soát', 'info'], CLOSED: ['Đã chốt', 'ok'] };
+  function cfgDate(year, monthIndex, day) {
+    const max = new Date(year, monthIndex + 1, 0).getDate(), normalizedDay = Number(day) <= 0 ? max : Math.min(Math.max(Number(day) || 1, 1), max), date = new Date(year, monthIndex, normalizedDay);
+    return date.getFullYear() + '-' + U.pad(date.getMonth() + 1) + '-' + U.pad(date.getDate());
+  }
+  function cfgPeriodDates(monthValue, c) {
+    const [year, month] = monthValue.split('-').map(Number), previous = month - 2;
+    const prep = cfgDate(year, previous, c.preparationDay), meter = cfgDate(year, previous, c.meterReadDay), expectedIssue = cfgDate(year, previous, c.issueDay), start = cfgDate(year, previous, c.collectionStartDay);
+    const due = cfgDate(year, c.dueMonth === 'current' ? previous : month - 1, c.dueDay);
+    return { preparationDate: prep, meterReadDate: meter, expectedIssueDate: expectedIssue, startDate: start, dueDate: due, endDate: cfgDate(year, month, 0) };
+  }
+  function cfgPeriodStatus(p) {
+    if (p.status === 'CLOSED') return 'CLOSED';
+    if (PERIOD_STATUS[p.status]) return p.status;
+    if (p.status === 'COLLECTING') return 'COLLECTING';
+    const today = U.today(), prep = p.preparationDate || p.startDate;
+    if (today < prep) return 'UPCOMING';
+    if (today < p.startDate) return 'PREPARING';
+    if (today <= p.dueDate) return 'COLLECTING';
+    return 'RECONCILING';
+  }
+  function cfgPeriodTag(p) { const s = cfgPeriodStatus(p), meta = PERIOD_STATUS[s]; return `<span class="tag ${meta[1]}">${meta[0]}</span>`; }
+  function cfgPeriodScope(p) { const m = p.marketId && U.market(p.marketId); return m ? m.name : (p.scopeLabel || 'Toàn bộ chợ trong phạm vi'); }
+  function cfgMeterState(p) { const m = (A.db.meterPeriods || []).find(x => x.id === p.id); return m && m.status === 'CLOSED' ? 'Đã hoàn tất' : 'Chưa hoàn tất'; }
+  function cfgReceivableState(p) { return A.db.issuedPeriods.includes(p.id) ? '<span class="tag ok">Đã phát hành</span>' : '<span class="tag">Chưa phát hành</span>'; }
   function settingsPeriodsHtml(canManage) {
     const bps = (A.db.billingPeriods || []).slice().sort((a, b) => b.id.localeCompare(a.id));
-    const mp = id => (A.db.meterPeriods || []).find(x => x.id === id);
-    const last = bps[0], lastMp = last && mp(last.id);
-    const blocked = !last ? '' : !A.db.issuedPeriods.includes(last.id) ? 'Kỳ ' + last.label + ' chưa phát hành khoản thu' : lastMp && lastMp.status !== 'CLOSED' ? 'Kỳ ghi chỉ số ' + last.label + ' chưa chốt' : '';
-    return `<div class="row" style="align-items:center"><b class="small">KỲ THU ĐÃ MỞ</b><span class="spacer"></span>${canManage ? `<button class="btn sm primary" data-act="cfg-open-period" ${blocked ? `disabled title="${U.esc(blocked)}"` : ''}>Mở kỳ thu tháng mới</button>` : ''}</div>
-      ${blocked && canManage ? `<div class="small muted" style="margin-top:4px">Chưa mở được kỳ mới: ${U.esc(blocked)}.</div>` : ''}
-      <div style="margin-top:6px">${U.table([{ t: 'Kỳ' }, { t: 'Từ – đến' }, { t: 'Hạn nộp' }, { t: 'Kỳ ghi chỉ số' }, { t: 'Khoản thu' }],
-        bps.map(b => { const m = mp(b.id); return `<tr><td><b>${b.label}</b></td><td>${U.dmy(b.startDate)} – ${U.dmy(b.endDate)}</td><td>${U.dmy(b.dueDate)}</td><td>${m ? (m.status === 'CLOSED' ? 'Đã chốt' : 'Đang ghi') : '—'}</td><td>${A.db.issuedPeriods.includes(b.id) ? '<span class="tag ok">Đã phát hành</span>' : '<span class="tag">' + U.esc(BP_STATUS[b.status] || b.status) + '</span>'}</td></tr>`; }))}</div>`;
+    return `<div class="row" style="align-items:center"><div><h3 style="margin:0">Danh sách kỳ thu</h3><div class="small muted" style="margin-top:3px">Mỗi kỳ thu có thể chứa nhiều khoản phải thu.</div></div><span class="spacer"></span>${canManage ? '<button class="btn sm primary" data-act="cfg-create-period-open">+ Tạo kỳ thu</button>' : ''}</div>
+      <div style="margin-top:10px">${U.table([{ t: 'Kỳ thu' }, { t: 'Phạm vi/Chợ' }, { t: 'Ngày chuẩn bị' }, { t: 'Ghi chỉ số' }, { t: 'Khoản phải thu' }, { t: 'Thời gian thu' }, { t: 'Trạng thái' }, { t: 'Thao tác' }],
+        bps.map(p => `<tr><td><b>${U.esc(p.label || p.id)}</b></td><td>${U.esc(cfgPeriodScope(p))}</td><td>${U.dmy(p.preparationDate || p.startDate)}</td><td>${cfgMeterState(p)}</td><td>${cfgReceivableState(p)}</td><td>${U.dmy(p.startDate)} – ${U.dmy(p.dueDate)}</td><td>${cfgPeriodTag(p)}</td><td><button class="btn sm" data-act="cfg-period-detail" data-id="${U.esc(p.id)}">Xem chi tiết</button></td></tr>`), { empty: 'Chưa có kỳ thu.' })}</div>`;
   }
-  A.ACT['cfg-open-period'] = () => {
+  function cfgCreatePeriodModal(monthValue) {
+    const c = A.SERVICE_CFG.cycle(), month = monthValue || (() => { const last = (A.db.billingPeriods || []).slice().sort((a, b) => b.id.localeCompare(a.id))[0]; if (last) { const [y, m] = last.id.split('-').map(Number), d = new Date(y, m, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); } return U.today().slice(0, 7); })(), dates = cfgPeriodDates(month, c), allowed = A.allowedMarkets(A.currentAccount());
+    const scopeOptions = ['<option value="">Toàn bộ chợ trong phạm vi được cấp</option>'].concat(D.MARKETS.filter(m => allowed.includes(m.id)).map(m => `<option value="${m.id}">${U.esc(m.name)}</option>`)).join('');
+    A.modal(A.mHead('Tạo kỳ thu') + `<div class="modal-b"><div class="small muted" style="margin-bottom:12px">Các mốc mặc định lấy từ cấu hình lịch kỳ thu. Việc tạo kỳ không phát hành khoản phải thu.</div><div class="form-grid"><div class="field"><label>Kỳ thu</label><input class="input" type="month" data-ch="cfg-period-month" value="${month}"></div><div class="field"><label>Chợ/phạm vi áp dụng</label><select class="input" id="cfg-period-market">${scopeOptions}</select></div><div class="field"><label>Ngày bắt đầu chuẩn bị</label><input class="input" id="cfg-period-prep" type="date" value="${dates.preparationDate}"></div><div class="field"><label>Ngày ghi chỉ số</label><input class="input" id="cfg-period-meter" type="date" value="${dates.meterReadDate}"></div><div class="field"><label>Ngày dự kiến phát hành khoản phải thu</label><input class="input" id="cfg-period-issue" type="date" value="${dates.expectedIssueDate}"></div><div class="field"><label>Ngày bắt đầu thu</label><input class="input" id="cfg-period-start" type="date" value="${dates.startDate}"></div><div class="field"><label>Hạn thanh toán</label><input class="input" id="cfg-period-due" type="date" value="${dates.dueDate}"></div></div></div><div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="cfg-period-create">Tạo kỳ thu</button></div>`);
+  }
+  A.ACT['cfg-create-period-open'] = () => { if (!cfgCan('ky-thu')) return U.toast('Bạn không có quyền cấu hình kỳ thu'); cfgCreatePeriodModal(); };
+  A.CH['cfg-period-month'] = el => { if (/^\d{4}-\d{2}$/.test(el.value)) cfgCreatePeriodModal(el.value); };
+  A.ACT['cfg-period-create'] = () => {
     if (!cfgCan('ky-thu')) return U.toast('Bạn không có quyền cấu hình kỳ thu');
-    const billing = A.features.finance && A.features.finance.billing;
-    const bps = (A.db.billingPeriods || []).slice().sort((a, b) => b.id.localeCompare(a.id)), last = bps[0];
-    const lastMp = last && (A.db.meterPeriods || []).find(x => x.id === last.id);
-    if (!billing || !last) return;
-    if (!A.db.issuedPeriods.includes(last.id)) return U.toast('Kỳ ' + last.label + ' chưa phát hành khoản thu');
-    if (lastMp && lastMp.status !== 'CLOSED') return U.toast('Kỳ ghi chỉ số ' + last.label + ' chưa chốt');
-    const bp = billing.openNextPeriod();
-    if (!bp) return U.toast('Không thể mở kỳ thu mới');
-    A.SERVICE_CFG.updateCycle({}, cfgActor(), 'Mở kỳ thu ' + bp.label);
-    A.render(); U.toast('Đã mở kỳ thu ' + bp.label + ' cho các chợ. NV thu phí ghi chỉ số, Trưởng Ban tính và phát hành khoản thu.');
+    const month = A.$('[data-ch="cfg-period-month"]').value, dates = { preparationDate: A.$('#cfg-period-prep').value, meterReadDate: A.$('#cfg-period-meter').value, expectedIssueDate: A.$('#cfg-period-issue').value, startDate: A.$('#cfg-period-start').value, dueDate: A.$('#cfg-period-due').value };
+    if (!/^\d{4}-\d{2}$/.test(month) || Object.keys(dates).some(k => !dates[k])) return U.toast('Vui lòng nhập đầy đủ kỳ thu và các mốc thời gian.');
+    if (A.db.billingPeriods.some(p => p.id === month)) return U.toast('Kỳ thu ' + month.slice(5) + '/' + month.slice(0, 4) + ' đã tồn tại.');
+    if (dates.preparationDate > dates.meterReadDate || dates.meterReadDate > dates.expectedIssueDate || dates.expectedIssueDate > dates.startDate || dates.startDate > dates.dueDate) return U.toast('Các mốc thời gian của kỳ thu chưa theo đúng thứ tự.');
+    const [year, mon] = month.split('-').map(Number), marketId = A.$('#cfg-period-market').value, p = { id: month, label: mon + '/' + year, preparationDate: dates.preparationDate, meterReadDate: dates.meterReadDate, expectedIssueDate: dates.expectedIssueDate, startDate: dates.startDate, dueDate: dates.dueDate, endDate: cfgDate(year, mon, 0), status: dates.preparationDate <= U.today() ? 'PREPARING' : 'UPCOMING', marketId: marketId || null };
+    A.db.billingPeriods.push(p);
+    // Chỉ khởi tạo record kỳ ghi chỉ số ở trạng thái chưa bắt đầu; không ghi/chốt chỉ số thay cho module chuyên trách.
+    A.db.meterPeriods = A.db.meterPeriods || [];
+    if (!A.db.meterPeriods.some(x => x.id === p.id)) A.db.meterPeriods.push({ id: p.id, month: mon, year, status: 'PENDING', closeDate: p.endDate });
+    A.SERVICE_CFG.updateCycle({}, cfgActor(), 'Tạo kỳ thu ' + p.label);
+    A.save(); A.closeModal(); A.render(); U.toast('Đã tạo kỳ thu ' + p.label + '. Khoản phải thu vẫn chưa được phát hành.');
+  };
+  A.ACT['cfg-period-detail'] = el => {
+    const p = (A.db.billingPeriods || []).find(x => x.id === el.dataset.id); if (!p) return;
+    const state = cfgPeriodStatus(p), issued = A.db.issuedPeriods.includes(p.id), notified = state !== 'UPCOMING' && A.SERVICE_CFG.cycle().prepareNotification;
+    const step = (done, text) => `<div style="padding:4px 0">${done ? '✓' : '○'} ${text}</div>`;
+    A.modal(A.mHead('Chi tiết kỳ thu · ' + U.esc(p.label || p.id)) + `<div class="modal-b"><dl class="kv"><dt>Kỳ thu</dt><dd><b>${U.esc(p.label || p.id)}</b></dd><dt>Chợ/phạm vi</dt><dd>${U.esc(cfgPeriodScope(p))}</dd><dt>Ngày chuẩn bị</dt><dd>${U.dmy(p.preparationDate || p.startDate)}</dd><dt>Ngày ghi chỉ số</dt><dd>${U.dmy(p.meterReadDate || p.startDate)}</dd><dt>Ngày dự kiến phát hành khoản phải thu</dt><dd>${U.dmy(p.expectedIssueDate || p.startDate)}</dd><dt>Ngày bắt đầu thu</dt><dd>${U.dmy(p.startDate)}</dd><dt>Hạn thanh toán</dt><dd>${U.dmy(p.dueDate)}</dd><dt>Trạng thái kỳ</dt><dd>${cfgPeriodTag(p)}</dd></dl><section style="margin-top:16px"><h4>Tiến độ kỳ thu</h4>${step(true, 'Đã tạo kỳ')}${step(notified, 'Đã gửi thông báo chuẩn bị')}${step(cfgMeterState(p) === 'Đã hoàn tất', 'Chờ ghi chỉ số')}${step((A.db.billingDrafts || []).some(x => x.period === p.id), 'Chờ lập khoản phải thu')}${step(issued, 'Chờ phát hành')}${step(['COLLECTING', 'RECONCILING', 'CLOSED'].includes(state), 'Chờ bắt đầu thu')}${step(['RECONCILING', 'CLOSED'].includes(state), 'Chờ đối soát')}${step(state === 'CLOSED', 'Chờ chốt kỳ')}</section></div><div class="modal-f"><button class="btn" data-act="close">Đóng</button></div>`, true);
   };
   const bcGuard = fn => el => { if (!cfgCan('ky-thu')) { U.toast('Bạn không có quyền cấu hình kỳ thu'); A.render(); return; } fn(el); };
   A.CH['bc-cycle'] = bcGuard(el => { A.SERVICE_CFG.updateCycle({ cycle: el.value }, cfgActor(), 'Đổi chu kỳ thu'); A.render(); });
-  A.CH['bc-cutoff'] = bcGuard(el => { A.SERVICE_CFG.updateCycle({ meterCutoffDay: Number(el.value) || 1 }, cfgActor(), 'Đổi ngày chốt chỉ số'); A.render(); });
-  A.CH['bc-issue'] = bcGuard(el => { A.SERVICE_CFG.updateCycle({ issueDay: Number(el.value) || 1 }, cfgActor(), 'Đổi ngày phát hành'); A.render(); });
+  A.CH['bc-preparation'] = bcGuard(el => { A.SERVICE_CFG.updateCycle({ preparationDay: Number(el.value) || 1 }, cfgActor(), 'Đổi ngày bắt đầu chuẩn bị kỳ'); A.render(); });
+  A.CH['bc-meter-read'] = bcGuard(el => { const day = Number(el.value) || 1; A.SERVICE_CFG.updateCycle({ meterReadDay: day, meterCutoffDay: day }, cfgActor(), 'Đổi ngày ghi/chốt chỉ số'); A.render(); });
+  A.CH['bc-issue'] = bcGuard(el => { A.SERVICE_CFG.updateCycle({ issueDay: Number(el.value) || 1 }, cfgActor(), 'Đổi ngày dự kiến phát hành'); A.render(); });
+  A.CH['bc-collection-start'] = bcGuard(el => { A.SERVICE_CFG.updateCycle({ collectionStartDay: Number(el.value) || 1 }, cfgActor(), 'Đổi ngày bắt đầu thu'); A.render(); });
   A.CH['bc-due'] = bcGuard(el => { A.SERVICE_CFG.updateCycle({ dueDay: Number(el.value) || 1 }, cfgActor(), 'Đổi hạn nộp'); A.render(); });
-  A.CH['bc-r1'] = bcGuard(el => { A.SERVICE_CFG.updateCycle({ reminder1Days: Number(el.value) || 0 }, cfgActor(), 'Đổi mốc nhắc nợ lần 1'); A.render(); });
-  A.CH['bc-r2'] = bcGuard(el => { A.SERVICE_CFG.updateCycle({ reminder2Days: Number(el.value) || 0 }, cfgActor(), 'Đổi mốc nhắc nợ lần 2'); A.render(); });
-  A.CH['bc-autoissue'] = bcGuard(el => { A.SERVICE_CFG.updateCycle({ autoIssue: el.checked }, cfgActor(), el.checked ? 'Bật tự động phát hành' : 'Tắt tự động phát hành'); A.render(); });
-  A.CH['bc-autoremind'] = bcGuard(el => { A.SERVICE_CFG.updateCycle({ autoRemind: el.checked }, cfgActor(), el.checked ? 'Bật tự động nhắc nợ' : 'Tắt tự động nhắc nợ'); A.render(); });
+  A.CH['bc-due-month'] = bcGuard(el => { A.SERVICE_CFG.updateCycle({ dueMonth: el.value === 'current' ? 'current' : 'next' }, cfgActor(), 'Đổi tháng hạn thanh toán'); A.render(); });
+  A.CH['bc-prepare-notification'] = bcGuard(el => { A.SERVICE_CFG.updateCycle({ prepareNotification: el.checked }, cfgActor(), el.checked ? 'Bật thông báo chuẩn bị kỳ' : 'Tắt thông báo chuẩn bị kỳ'); A.render(); });
 
   // ---- sub-tab: Quy tắc thu phí ----
   function settingsQuyTacHtml() {
@@ -674,10 +700,65 @@
     return common + local;
   };
   A.ACT['cfg-tab'] = el => { ui.cfgTab = el.dataset.id === 'gia' ? 'dien-nuoc' : el.dataset.id; A.render(); };
+  // Bieu phi theo cho: chi presentation/configuration, khong goi engine lap khoan phai thu.
+  const POLICY_TABS = [['land', 'Mặt bằng'], ['electricity', 'Điện'], ['water', 'Nước'], ['service', 'Dịch vụ']];
+  const policyToday = () => A.db.today || U.today();
+  const policyState = r => r.status === 'expired' || (r.effectiveTo && r.effectiveTo < policyToday()) ? '<span class="tag">Hết hiệu lực</span>' : r.status !== 'active' || (r.effectiveFrom && r.effectiveFrom > policyToday()) ? '<span class="tag warn">Sắp áp dụng</span>' : '<span class="tag ok">Đang áp dụng</span>';
+  const policyEffective = r => U.dmy(r.effectiveFrom) + (r.effectiveTo ? '<div class="small muted">đến ' + U.dmy(r.effectiveTo) + '</div>' : '');
+  const policyNote = r => U.esc((r.legalBasis || {}).docNo || (r.legalBasis || {}).note || '—');
+  const policyActive = rows => rows.filter(r => r.status === 'active' && (!r.effectiveFrom || r.effectiveFrom <= policyToday()) && (!r.effectiveTo || r.effectiveTo >= policyToday()));
+  const policyLandRows = () => A.SERVICE_CFG.list('stallPrices').filter(r => r.marketId === ui.market);
+  const policyUtilityRows = () => A.SERVICE_CFG.list('utilities').filter(r => r.marketId === ui.market);
+  const policyServiceRows = () => A.SERVICE_CFG.list('extraServices').filter(r => r.marketId === ui.market && r.category !== 'VEHICLE' && !/gửi xe/i.test(r.name || ''));
+  function policyAreaTypes() { return Array.from(new Set((A.db.stalls || []).filter(s => s.market === ui.market && s.areaTypeId).map(s => s.areaTypeId))).map(id => ({ id, label: U.areaTypeLabel(id) || id })); }
+  function policyHistoryModal(cat, id, key) {
+    const r = A.SERVICE_CFG.get(cat, id); if (!r) return;
+    const rows = A.SERVICE_CFG.list(cat).filter(x => x.marketId === r.marketId && (!key || x[key] === r[key])).sort((a, b) => String(b.effectiveFrom || '').localeCompare(String(a.effectiveFrom || '')));
+    const val = x => cat === 'utilities' ? (key === 'elecPrice' ? x.elecPrice : x.waterPrice) : x.amount;
+    const unit = x => cat === 'utilities' ? (key === 'elecPrice' ? x.elecUnit : x.waterUnit) : x.unit;
+    A.modal(A.mHead('Lịch sử mức phí') + `<div class="modal-b">${U.table([{t:'Hiệu lực'},{t:'Mức thu',num:true},{t:'Trạng thái'},{t:'Căn cứ/Ghi chú'}], rows.map(x => `<tr><td>${policyEffective(x)}</td><td class="num">${Number(val(x) || 0).toLocaleString('vi-VN')}<div class="small muted">${U.esc(unit(x) || '')}</div></td><td>${policyState(x)}</td><td class="small">${policyNote(x)}</td></tr>`), {empty:'Chưa có lịch sử mức phí'})}</div><div class="modal-f"><button class="btn" data-act="close">Đóng</button></div>`);
+  }
+  function policyLandHtml() {
+    const rows = policyLandRows(), legacy = rows.filter(r => !r.areaTypeId), can = cfgFeeAddAllowed('stallPrices', null);
+    return `<div class="card"><div class="card-h"><div><h3>Phí sử dụng mặt bằng</h3><div class="small muted">Thu trước cho tháng tiếp theo. Mức phí theo loại diện tích của điểm kinh doanh.</div></div>${can ? '<button class="btn sm primary" data-act="policy-land-new">+ Cấu hình mức phí</button>' : ''}</div><div class="card-b">${U.table([{t:'Loại diện tích'},{t:'Đơn giá',num:true},{t:'Đơn vị'},{t:'Hiệu lực từ'},{t:'Căn cứ/Ghi chú'},{t:'Trạng thái'},{t:'Thao tác'}], rows.filter(r => r.areaTypeId).map(r => `<tr><td><b>${U.esc(U.areaTypeLabel(r.areaTypeId) || r.areaTypeId)}</b></td><td class="num">${Number(r.amount || 0).toLocaleString('vi-VN')}</td><td>${U.esc(r.unit || 'đ/m²/ngày')}</td><td>${policyEffective(r)}</td><td class="small">${policyNote(r)}</td><td>${policyState(r)}</td><td><button class="btn sm" data-act="policy-history" data-cat="stallPrices" data-id="${r.id}" data-key="areaTypeId">Lịch sử</button></td></tr>`), {empty:'Chưa có mức phí mặt bằng theo loại diện tích cho chợ này.'})}${legacy.length ? `<div class="note" style="margin-top:12px">Có ${legacy.length} bản ghi mặt bằng cũ chưa có mã loại diện tích. Dữ liệu được giữ để tham chiếu, không dùng làm cấu hình mới.</div>` : ''}<div class="note info" style="margin-top:12px"><b>Cách tính</b><br>Phí mặt bằng = Đơn giá loại diện tích × Diện tích điểm KD × Số ngày của tháng được thu.</div></div></div>`;
+  }
+  function policyUtilityHtml(kind) {
+    const elec = kind === 'electricity', field = elec ? 'elecPrice' : 'waterPrice', unitField = elec ? 'elecUnit' : 'waterUnit', label = elec ? 'điện' : 'nước', title = elec ? 'Tiền điện' : 'Tiền nước', unit = elec ? 'đ/kWh' : 'đ/m³';
+    const current = policyActive(policyUtilityRows()).sort((a,b) => String(b.effectiveFrom || '').localeCompare(String(a.effectiveFrom || '')))[0], can = cfgFeeAddAllowed('utilities', null);
+    return `<div class="card"><div class="card-h"><div><h3>${title}</h3><div class="small muted">Thu theo sản lượng ${label} đã sử dụng trong kỳ vừa chốt chỉ số.</div></div>${can ? `<button class="btn sm primary" data-act="policy-utility-new" data-kind="${kind}">Thay đổi mức giá</button>` : ''}</div><div class="card-b">${current ? `<dl class="kv"><dt>Đơn giá đang áp dụng</dt><dd><b>${Number(current[field] || 0).toLocaleString('vi-VN')} ${U.esc(current[unitField] || unit)}</b></dd><dt>Hiệu lực từ</dt><dd>${U.dmy(current.effectiveFrom)}</dd><dt>Căn cứ/Ghi chú</dt><dd>${policyNote(current)}</dd></dl><button class="btn sm" style="margin-top:10px" data-act="policy-history" data-cat="utilities" data-id="${current.id}" data-key="${field}">Lịch sử</button>` : '<div class="note">Chưa có mức giá đang áp dụng cho chợ này.</div>'}<div class="note info" style="margin-top:12px"><b>Sản lượng ${label}</b> = Chỉ số ${label} kỳ này - Chỉ số ${label} kỳ trước<br><b>${title}</b> = Sản lượng ${label} × Đơn giá ${label}</div></div></div>`;
+  }
+  function policyServiceHtml() {
+    const rows = policyServiceRows(), total = policyActive(rows).reduce((s,r) => s + Number(r.amount || 0), 0), can = cfgFeeAddAllowed('extraServices', null);
+    return `<div class="card"><div class="card-h"><div><h3>Gói dịch vụ</h3><div class="small muted">Thu cho dịch vụ đã sử dụng trong tháng vừa qua. Hợp đồng đăng ký Dịch vụ áp dụng toàn bộ gói đang có hiệu lực.</div></div>${can ? '<button class="btn sm primary" data-act="policy-service-new">+ Thêm dịch vụ</button>' : ''}</div><div class="card-b"><div class="note info" style="margin-bottom:12px"><b>Tổng gói dịch vụ đang áp dụng: ${total.toLocaleString('vi-VN')} đ/tháng</b><br>Hợp đồng có chọn Dịch vụ sẽ áp dụng toàn bộ tổng gói; không chọn thì phí dịch vụ bằng 0.</div>${U.table([{t:'Tên dịch vụ'},{t:'Mức thu',num:true},{t:'Đơn vị'},{t:'Hiệu lực từ'},{t:'Căn cứ/Ghi chú'},{t:'Trạng thái'},{t:'Thao tác'}], rows.map(r => `<tr><td><b>${U.esc(r.name)}</b></td><td class="num">${Number(r.amount || 0).toLocaleString('vi-VN')}</td><td>${U.esc(r.unit || 'đ/tháng')}</td><td>${policyEffective(r)}</td><td class="small">${policyNote(r)}</td><td>${policyState(r)}</td><td><button class="btn sm" data-act="policy-history" data-cat="extraServices" data-id="${r.id}" data-key="name">Lịch sử</button></td></tr>`), {empty:'Chưa có thành phần dịch vụ cho chợ này.'})}</div></div>`;
+  }
+  function policyUseHtml() { return `<div class="card" style="margin-top:14px"><div class="card-h"><h3>Cách hệ thống sử dụng biểu phí</h3></div><div class="card-b"><div class="small">Mỗi hợp đồng / điểm KD: <b>Mặt bằng tháng tiếp theo + Điện tháng vừa sử dụng + Nước tháng vừa sử dụng + Gói dịch vụ tháng vừa sử dụng</b> = Tổng của HĐ/Điểm KD.</div><div class="small muted" style="margin-top:6px">Chỉ nhóm phí được chọn trong hợp đồng mới được tính. Tiểu thương có nhiều HĐ được tính riêng từng HĐ/Điểm KD rồi cộng thành tổng khoản phải thu.</div></div></div>`; }
+  function policyFormHtml(f) {
+    const land = f.type === 'land', service = f.type === 'service', elec = f.type === 'electricity', title = land ? 'Cấu hình mức phí mặt bằng' : service ? 'Thêm dịch vụ' : 'Cấu hình mức giá ' + (elec ? 'điện' : 'nước');
+    const fields = land ? `<div class="field"><label>Loại diện tích</label><select class="input" data-ch="policy-area-type"><option value="">Chọn loại diện tích</option>${policyAreaTypes().map(x => `<option value="${U.esc(x.id)}">${U.esc(x.label)}</option>`).join('')}</select></div><div class="field"><label>Đơn giá</label><input class="input" type="number" min="0" data-ch="policy-amount" value="${f.amount || 0}"></div><div class="field"><label>Đơn vị</label><input class="input" value="đ/m²/ngày" disabled></div>` : service ? `<div class="field"><label>Tên dịch vụ</label><input class="input" data-ch="policy-name"></div><div class="field"><label>Mức thu</label><input class="input" type="number" min="0" data-ch="policy-amount" value="${f.amount || 0}"></div><div class="field"><label>Đơn vị tính</label><input class="input" data-ch="policy-unit" value="đ/tháng"></div>` : `<div class="field"><label>Đơn giá ${elec ? 'điện' : 'nước'}</label><input class="input" type="number" min="0" data-ch="policy-amount" value="${f.amount || 0}"></div><div class="field"><label>Đơn vị</label><input class="input" value="${elec ? 'đ/kWh' : 'đ/m³'}" disabled></div>`;
+    A.modal(A.mHead(title) + `<div class="modal-b"><div class="form-grid"><div class="field"><label>Chợ</label><input class="input" value="${U.esc(U.market(ui.market).name)}" disabled></div>${fields}<div class="field"><label>Hiệu lực từ</label><input class="input" type="date" data-ch="policy-effective" value="${f.effectiveFrom}"></div></div><div class="field" style="margin-top:10px"><label>Căn cứ/Ghi chú</label><textarea class="input" rows="3" data-ch="policy-note"></textarea></div></div><div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="policy-save">Lưu mức phí</button></div>`);
+  }
+  function policyStart(type) { const cat = type === 'land' ? 'stallPrices' : type === 'service' ? 'extraServices' : 'utilities'; if (!cfgFeeAddAllowed(cat, null)) return; ui.policyForm = {type,amount:0,name:'',unit:'đ/tháng',areaTypeId:'',effectiveFrom:policyToday(),legalBasis:{note:''}}; policyFormHtml(ui.policyForm); }
+  A.ACT['policy-land-new'] = () => policyStart('land'); A.ACT['policy-service-new'] = () => policyStart('service'); A.ACT['policy-utility-new'] = el => policyStart(el.dataset.kind === 'water' ? 'water' : 'electricity'); A.ACT['policy-history'] = el => policyHistoryModal(el.dataset.cat, el.dataset.id, el.dataset.key);
+  A.CH['policy-area-type'] = el => { ui.policyForm.areaTypeId = el.value; }; A.CH['policy-amount'] = el => { ui.policyForm.amount = Math.max(0, Number(el.value) || 0); }; A.CH['policy-name'] = el => { ui.policyForm.name = el.value; }; A.CH['policy-unit'] = el => { ui.policyForm.unit = el.value; }; A.CH['policy-effective'] = el => { ui.policyForm.effectiveFrom = el.value; }; A.CH['policy-note'] = el => { ui.policyForm.legalBasis.note = el.value; };
+  A.ACT['policy-save'] = () => {
+    const f = ui.policyForm; if (!f || !f.effectiveFrom) return U.toast('Vui lòng nhập ngày hiệu lực'); const cat = f.type === 'land' ? 'stallPrices' : f.type === 'service' ? 'extraServices' : 'utilities'; if (!cfgFeeAddAllowed(cat, null)) return;
+    if (f.type === 'land' && !f.areaTypeId) return U.toast('Vui lòng chọn loại diện tích'); if (f.type === 'service' && !f.name.trim()) return U.toast('Vui lòng nhập tên dịch vụ');
+    let p; if (f.type === 'land') p = {marketId:ui.market,areaTypeId:f.areaTypeId,amount:f.amount,unit:'đ/m²/ngày',effectiveFrom:f.effectiveFrom,effectiveTo:null,status:'active',legalBasis:f.legalBasis}; else if (f.type === 'service') p = {marketId:ui.market,name:f.name.trim(),category:'GENERAL',calcMethod:'fixed',amount:f.amount,unit:f.unit.trim() || 'đ/tháng',effectiveFrom:f.effectiveFrom,effectiveTo:null,status:'active',legalBasis:f.legalBasis}; else { const cur = policyActive(policyUtilityRows()).sort((a,b)=>String(b.effectiveFrom||'').localeCompare(String(a.effectiveFrom||'')))[0] || {}; p = Object.assign({},cur,{marketId:ui.market,effectiveFrom:f.effectiveFrom,effectiveTo:null,status:'active',legalBasis:f.legalBasis,elecUnit:cur.elecUnit||'đ/kWh',waterUnit:cur.waterUnit||'đ/m³'}); p[f.type === 'electricity' ? 'elecPrice' : 'waterPrice'] = f.amount; }
+    const same = r => f.type === 'land' ? r.areaTypeId === p.areaTypeId : f.type === 'service' ? r.name === p.name : true; const active = A.SERVICE_CFG.list(cat).filter(r => r.marketId === ui.market && r.status === 'active' && same(r)).sort((a,b)=>String(b.effectiveFrom||'').localeCompare(String(a.effectiveFrom||'')))[0];
+    if (active && f.effectiveFrom <= active.effectiveFrom) return U.toast('Ngày hiệu lực mức mới phải sau mức đang áp dụng'); if (active) A.SERVICE_CFG.createVersion(cat, active.id, p, cfgActor(), Number(f.amount).toLocaleString('vi-VN')); else A.SERVICE_CFG.add(cat, p, cfgActor()); ui.policyForm = null; A.closeModal(); A.render(); U.toast(active ? 'Đã tạo phiên bản mới; mức cũ được lưu lịch sử.' : 'Đã lưu mức phí mới.');
+  };
+  A.VIEWS['cau-hinh-gia'] = function () {
+    const tab = POLICY_TABS.some(t => t[0] === ui.cfgTab) ? ui.cfgTab : 'land', configured = [policyLandRows().some(r=>r.areaTypeId),policyUtilityRows().length>0,policyUtilityRows().length>0,policyServiceRows().length>0].filter(Boolean).length;
+    const bar = `<div class="seg" style="margin:14px 0">${POLICY_TABS.map(t => `<button class="${tab === t[0] ? 'on' : ''}" data-act="policy-tab" data-id="${t[0]}">${t[1]}</button>`).join('')}</div>`;
+    const content = tab === 'land' ? policyLandHtml() : tab === 'electricity' || tab === 'water' ? policyUtilityHtml(tab) : policyServiceHtml();
+    return `<section><div class="card-h" style="padding:0 0 8px"><div><h2 style="margin:0">Chính sách thu & biểu phí</h2><div class="small muted">Cấu hình mức thu áp dụng cho từng chợ để lập khoản phải thu.</div></div></div><div class="note info">Chợ đang cấu hình: <b>${U.esc(U.market(ui.market).name)}</b><span class="muted"> · ${configured}/4 nhóm đã có cấu hình theo dữ liệu hiện tại</span></div>${bar}${content}${policyUseHtml()}</section>`;
+  };
+  A.ACT['policy-tab'] = el => { ui.cfgTab = el.dataset.id; A.render(); };
+
   // Panels hosted by the settings screen (cai-dat).
   const feeConfig = A.features.feeConfig || (A.features.feeConfig = {});
   feeConfig.settingsKyThuHtml = settingsKyThuHtml;
   feeConfig.settingsQuyTacHtml = settingsQuyTacHtml;
 
-  if (!ui.cfgTab || ui.cfgTab === 'gia') ui.cfgTab = 'dien-nuoc';
+  if (!ui.cfgTab || ui.cfgTab === 'gia' || ui.cfgTab === 'dien-nuoc') ui.cfgTab = 'land';
 })(window.APP);

@@ -515,7 +515,7 @@
     home: ['Tổng quan', 'Tổng quan của tôi'],
     complaints: ['Phản ánh & xử lý', ''],
     contracts: ['Tổng quan', 'Hợp đồng & điểm kinh doanh'],
-    finance: ['Tổng quan', 'Nghĩa vụ tài chính'],
+    finance: ['Tổng quan', 'Thanh toán'],
     notice: ['Tổng quan', 'Thông báo'],
     help: ['Tiện ích', 'Hướng dẫn'],
     profile: ['Tài khoản', 'Thông tin cá nhân']
@@ -530,7 +530,7 @@
         ${item('home', 'dashboard', 'Tổng quan của tôi')}
         <div class="merchant-nav-group">Kinh doanh của tôi</div>
         ${item('contracts', 'file', 'Hợp đồng & điểm kinh doanh')}
-        ${item('finance', 'receipt', 'Nghĩa vụ tài chính', b.finance)}
+        ${item('finance', 'receipt', 'Thanh toán', b.finance)}
         <div class="merchant-nav-group">Hỗ trợ</div>
         ${item('complaints', 'warning', 'Phản ánh & xử lý', b.complaints)}
         ${item('notice', 'bell', 'Thông báo')}
@@ -950,7 +950,7 @@
   }
 
   // ==================== CỔNG TIỂU THƯƠNG (khung sidebar trong trang quản lý) ====================
-  // Các màn Tổng quan của tôi / Hợp đồng & điểm kinh doanh / Nghĩa vụ tài chính / Thông báo dùng ĐÚNG dữ liệu
+  // Các màn Tổng quan của tôi / Hợp đồng & điểm kinh doanh / Thanh toán / Thông báo dùng ĐÚNG dữ liệu
   // nghiệp vụ đang có (A.db.invoices, contracts, stalls, incidents, notifications) như trang quản lý
   // và cổng /tieu-thuong/ — không tạo nguồn dữ liệu riêng, không tự sinh số liệu.
   const portalStalls = t => t.stalls.map(id => A.idx.stall.get(id)).filter(Boolean);
@@ -990,9 +990,9 @@
             <dt>Hợp đồng</dt><dd>${c ? U.esc(c.id) : 'Chưa có hợp đồng hiệu lực'}</dd>
             <dt>Trạng thái</dt><dd>${D.STATUS[st.status] ? U.esc(D.STATUS[st.status].label) : U.esc(st.status)}</dd></dl></div>`;
       }).join('')}</div>` : portalEmpty('Chưa có điểm kinh doanh nào được giao.'), portalLink('contracts', 'Xem hợp đồng'))}
-      ${portalPanel('receipt', 'Nghĩa vụ tài chính', total ? 'Thanh toán trước hạn để tránh phát sinh nhắc nợ.' : 'Bạn đã nộp đủ các khoản phí.', list.length ? `<div class="tbl-wrap"><table class="tbl merchant-due-tbl"><thead><tr><th>Kỳ</th><th>Khoản thu</th><th class="num">Số tiền</th><th class="num">Còn lại</th><th>Trạng thái</th></tr></thead><tbody>${list.slice(0, 3).map(i => { const st = A.idx.stall.get(i.stallId); return `<tr><td>${U.per(i.period)}</td><td><b>${portalItemsLabel(i)}</b><small>${st ? U.esc(st.code) + ' · ' : ''}Hạn ${U.dmy(i.due)}</small></td><td class="num">${U.money(i.amount)}</td><td class="num"><b>${U.money(U.due(i))}</b></td><td>${U.invTag(i)}</td></tr>`; }).join('')}</tbody></table></div>` : portalEmpty('Không có khoản phí nào cần nộp.'), portalLink('finance', 'Xem tất cả'))}
+      ${portalPanel('receipt', 'Cần thanh toán', total ? 'Thanh toán trước hạn để tránh phát sinh nhắc nợ.' : 'Bạn đã thanh toán đủ các khoản phí.', list.length ? `<div class="tbl-wrap"><table class="tbl merchant-due-tbl"><thead><tr><th>Kỳ</th><th>Khoản thu</th><th class="num">Số tiền</th><th class="num">Còn lại</th><th>Trạng thái</th></tr></thead><tbody>${list.slice(0, 3).map(i => { const st = A.idx.stall.get(i.stallId); return `<tr><td>${U.per(i.period)}</td><td><b>${portalItemsLabel(i)}</b><small>${st ? U.esc(st.code) + ' · ' : ''}Hạn ${U.dmy(i.due)}</small></td><td class="num">${U.money(i.amount)}</td><td class="num"><b>${U.money(U.due(i))}</b></td><td>${U.invTag(i)}</td></tr>`; }).join('')}</tbody></table></div>` : portalEmpty('Không có khoản phí nào cần thanh toán.'), portalLink('finance', 'Xem & thanh toán'))}
       ${portalPanel('warning', 'Phản ánh gần đây', '', incidents.length ? `<div class="merchant-rows is-compact">${incidents.slice(0, 3).map(i => { const st = A.idx.stall.get(i.stallId), at = String(i.created || ''); return `<div class="merchant-row" data-act="mini-complaint-open" data-id="${U.esc(i.id)}"><div><b>${U.esc(i.title)}</b><small>${U.esc(i.id)}${st ? ' · ' + U.esc(st.code) : ''}</small><small>${U.dmy(at)}${at.length > 10 ? ' ' + U.esc(at.slice(11, 16)) : ''}</small></div><span class="tag ${miniComplaintStatusClass(i)}">${U.esc(incidentStateLabel(i.state))}</span></div>`; }).join('')}</div>` : portalEmpty('Bạn chưa gửi phản ánh nào.'), portalLink('complaints', 'Gửi phản ánh'))}
-      ${portalPanel('bell', 'Thông báo mới', '', notices.length ? `<div class="merchant-rows">${notices.map(n => `<div class="merchant-row"><div><b>${U.esc(n.title)}</b><small>${U.dmy(n.at)} · ${U.esc(n.group || 'Ban Quản lý chợ')}</small></div></div>`).join('')}</div>` : portalEmpty('Chưa có thông báo.'), portalLink('notice', 'Tất cả'))}`;
+      ${portalPanel('bell', 'Thông báo mới', '', notices.length ? `<div class="merchant-rows">${notices.map(n => `<div class="merchant-row"><div><b>${U.esc(n.title)}</b><small>${U.dmy(n.at)} · ${U.esc(n.group || 'Ban Quản lý chợ')}</small></div>${payNoticeCta(t, n)}</div>`).join('')}</div>` : portalEmpty('Chưa có thông báo.'), portalLink('notice', 'Tất cả'))}`;
   }
   const portalContractPointId = c => c && (c.businessPointId || c.stallId);
   const portalContractPoint = c => A.idx.stall.get(portalContractPointId(c));
@@ -1058,26 +1058,186 @@
     if (!names.length) return '—';
     return U.esc(names.slice(0, 2).join(', ')) + (names.length > 2 ? ` <span class="muted">+${names.length - 2} khoản</span>` : '');
   }
-  function portalFinance(t) {
-    const invs = portalInvoices(t), pays = portalPayments(t);
-    const debt = U.traderDebt(t.id), over = U.traderOverdue(t.id), paid = U.sum(invs, i => i.paid || 0);
-    // THU_HOI_NO: khoản nợ quá hạn (CN-…) + nút quét QR trả nợ (action:mini-app.tra-no-qr) ở đầu Nghĩa vụ tài chính.
-    return `${miniDebtCard(t)}<div class="merchant-kpis">
-        ${portalKpi('Tổng còn phải nộp', U.money(debt), invs.filter(i => i.status !== 'paid').length + ' khoản', debt ? 'warn' : 'green')}
-        ${portalKpi('Trong đó quá hạn', U.money(over), over ? 'Cần nộp ngay' : 'Không có khoản quá hạn', over ? 'danger' : 'green')}
-        ${portalKpi('Đã nộp', U.money(paid), invs.length + ' kỳ có phát sinh', 'blue')}
-      </div>
-      ${portalPanel('receipt', 'Khoản phải nộp theo kỳ', 'Số liệu lấy từ khoản phải thu do Ban Quản lý chợ phát hành.', invs.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Kỳ thu</th><th>Điểm kinh doanh</th><th>Khoản mục</th><th>Phải nộp</th><th>Còn lại</th><th>Hạn nộp</th><th>Trạng thái</th></tr></thead><tbody>${invs.map(i => `<tr><td>${U.per(i.period)}</td><td>${stallLabel(A.idx.stall.get(i.stallId))}</td><td>${portalItemsLabel(i)}</td><td>${U.money(i.amount)}</td><td><b>${U.money(U.due(i))}</b></td><td>${U.dmy(i.due)}</td><td>${U.invTag(i)}</td></tr>`).join('')}</tbody></table></div>` : portalEmpty('Chưa phát sinh khoản phải nộp.'))}
-      ${portalPanel('file', 'Biên lai đã nộp', '', pays.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Số biên lai</th><th>Ngày nộp</th><th>Hình thức</th><th>Số tiền</th></tr></thead><tbody>${pays.map(p => `<tr><td><b>${U.esc(p.receipt || '')}</b></td><td>${U.dmy(p.date)}</td><td>${U.esc((D.METHOD && D.METHOD[p.method]) || p.method || '')}</td><td>${U.money(p.amount)}</td></tr>`).join('')}</tbody></table></div>` : portalEmpty('Chưa có biên lai nào.'))}`;
+  // ==================== THANH TOÁN (thay màn "Nghĩa vụ tài chính") ====================
+  // Chỉ là góc nhìn Tiểu thương của CÙNG dữ liệu tài chính: khoản thu = A.db.invoices (1 khoản / tiểu thương / kỳ,
+  // breakdown theo items[].stallId), giao dịch + biên lai = A.db.payments (p.receipt). Không tạo bản ghi tài chính
+  // riêng. "Chờ ghi nhận" chỉ là trạng thái giao diện trong phiên (ui.mini.payPending), KHÔNG phải giao dịch: chỉ
+  // A.applyPayment (NV thu phí ghi nhận tiền mặt / ngân hàng báo có) mới đổi trạng thái khoản thu. Thu đủ, không thu một phần.
+  const PAY_SOON_DAYS = 7;
+  const PAY_METHOD_LABEL = { tm: 'Tiền mặt', ck: 'Chuyển khoản', qr: 'Chuyển khoản (QR)' };
+  const payMethodLabel = m => PAY_METHOD_LABEL[m] || (D.METHOD && D.METHOD[m]) || m || '—';
+  const payPending = () => mini().payPending || (mini().payPending = {});
+  const payOwnInvoice = (t, id) => { const i = id ? A.idx.invoice.get(id) : null; return i && t && i.traderId === t.id && inMiniScopeMarket(i.market) && i.billingStatus !== 'DRAFT' ? i : null; };
+  const payOpenList = t => unpaid(t).filter(i => i.billingStatus !== 'DRAFT');
+  const payPaidList = t => portalInvoices(t).filter(i => i.status === 'paid');
+  const payHistory = t => portalPayments(t).filter(A.receiptBusinessStateOk).sort((a, b) => String(b.date + ' ' + (b.time || '')).localeCompare(String(a.date + ' ' + (a.time || ''))));
+  const payLastPayment = i => A.db.payments.filter(p => p.invoiceId === i.id && A.receiptBusinessStateOk(p)).sort((a, b) => String(a.date + ' ' + (a.time || '')).localeCompare(String(b.date + ' ' + (b.time || '')))).pop() || null;
+  const payMarketName = m => (U.market(m) || { name: m }).name;
+  const payReference = i => i.paymentReference || ((i.qrReference || {}).reference) || ('CHOSO ' + i.id);
+  const payBankAccount = market => (A.BANK_ACCOUNTS ? A.BANK_ACCOUNTS.listByMarket(market) : []).find(a => a.status === 'active' && a.isCollectionAccount) || null;
+  function payState(i) {
+    if (i.status === 'paid') return 'paid';
+    if (payPending()[i.id]) return 'pending';
+    if (U.isOver(i)) return 'over';
+    if (U.days(U.today(), i.due) <= PAY_SOON_DAYS) return 'soon';
+    return 'unpaid';
   }
+  function payBadge(i) {
+    const s = payState(i);
+    const map = { paid: ['ok', 'Đã thanh toán'], pending: ['info', 'Chờ ghi nhận'], over: ['danger', 'Quá hạn'], soon: ['warn', 'Sắp đến hạn'], unpaid: ['', 'Chưa thanh toán'] };
+    return `<span class="tag ${map[s][0]}">${map[s][1]}</span>`;
+  }
+  function payPointsCell(i) {
+    const codes = U.invStallIds(i).map(id => (A.idx.stall.get(id) || {}).code || id);
+    if (codes.length > 1) return `<b>${codes.length} điểm</b><small class="muted">${U.esc(codes.join(', '))}</small>`;
+    return codes.length ? `<b>${U.esc(codes[0])}</b>` : '—';
+  }
+  // Breakdown theo điểm KD từ chính items của khoản thu đã phát hành (snapshot) — không tính lại.
+  function payPointGroups(i) {
+    const ids = U.invStallIds(i), groups = new Map();
+    (i.items || []).forEach(x => { const sid = x.stallId || ids[0] || ''; if (!groups.has(sid)) groups.set(sid, []); groups.get(sid).push(x); });
+    return Array.from(groups.entries()).map(([sid, items]) => ({ id: sid, stall: A.idx.stall.get(sid) || null, items, total: U.sum(items, x => Number(x.amount || 0)) }));
+  }
+  function payItemRow(x) {
+    const name = String(x.name || 'Khoản thu'), m = name.match(/^(.*?)\s*\((.*)\)\s*$/);
+    const note = x.explanation || (m ? m[2] : '');
+    return `<div class="tp-pay-line"><span>${U.esc(m ? m[1] : name)}${note ? `<small>${U.esc(note)}</small>` : ''}</span><b>${U.money(x.amount)}</b></div>`;
+  }
+  function payBreakdownHtml(i) {
+    const groups = payPointGroups(i);
+    return groups.map(g => `<details class="tp-pay-point" ${groups.length <= 2 ? 'open' : ''}><summary><span><b>Điểm KD: ${U.esc(g.stall ? g.stall.code : g.id || '—')}</b>${g.stall && g.stall.sectionName ? `<small>${U.esc(g.stall.sectionName)}</small>` : ''}</span><b>${U.money(g.total)}</b></summary>
+      <div class="tp-pay-lines">${g.items.map(payItemRow).join('')}<div class="tp-pay-line is-sum"><span>Cộng</span><b>${U.money(g.total)}</b></div></div></details>`).join('');
+  }
+  function payAmountBox(label, amount, sub) {
+    return `<div class="tp-pay-amount"><span>${U.esc(label)}</span><b>${U.money(amount)}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
+  }
+  function payDueTable(t, list) {
+    if (!list.length) return portalEmpty('Bạn không có khoản nào cần thanh toán.');
+    const focus = mini().payFocus;
+    return `<div class="tbl-wrap"><table class="tbl tp-pay-table"><thead><tr><th>Kỳ thu</th><th>Chợ</th><th>Điểm kinh doanh</th><th class="num">Tổng cần thanh toán</th><th>Hạn thanh toán</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>${list.map(i => `<tr class="${focus === i.id ? 'tp-pay-focus' : ''}">
+      <td><b>${U.per(i.period)}</b></td><td>${U.esc(payMarketName(i.market))}</td><td>${payPointsCell(i)}</td><td class="num"><b>${U.money(U.due(i))}</b></td><td>${U.dmy(i.due)}</td><td>${payBadge(i)}</td>
+      <td><div class="tp-pay-actions">${payState(i) === 'pending' ? `<button class="btn sm primary" data-act="tp-pay-pending" data-id="${U.esc(i.id)}">Xem trạng thái</button>` : `<button class="btn sm primary" data-act="tp-pay-detail" data-id="${U.esc(i.id)}">Thanh toán</button>`}<button class="btn sm" data-act="tp-pay-detail" data-id="${U.esc(i.id)}">Xem chi tiết</button></div></td></tr>`).join('')}</tbody></table></div>`;
+  }
+  function payHistoryHtml(t) {
+    const all = payHistory(t), period = mini().payPeriod || 'all', q = String(mini().paySearch || '').trim().toLowerCase();
+    const periods = Array.from(new Set(all.map(p => (A.idx.invoice.get(p.invoiceId) || {}).period).filter(Boolean))).sort().reverse();
+    const rows = all.filter(p => {
+      const i = A.idx.invoice.get(p.invoiceId) || {};
+      if (period !== 'all' && i.period !== period) return false;
+      return !q || [U.per(i.period || ''), i.period, p.receipt, p.invoiceId, p.id, payMethodLabel(p.method)].join(' ').toLowerCase().indexOf(q) !== -1;
+    });
+    return `<div class="tp-pay-tools"><select class="input" data-ch="tp-pay-period" aria-label="Kỳ thu"><option value="all">Tất cả kỳ</option>${periods.map(x => `<option value="${U.esc(x)}" ${period === x ? 'selected' : ''}>Kỳ ${U.per(x)}</option>`).join('')}</select><input class="input" data-in="tp-pay-search" value="${U.esc(mini().paySearch || '')}" placeholder="Tìm theo kỳ thu, mã biên lai..."></div>
+      ${rows.length ? `<div class="tbl-wrap"><table class="tbl tp-pay-table"><thead><tr><th>Kỳ thu</th><th>Chợ</th><th class="num">Số tiền</th><th>Ngày thanh toán</th><th>Phương thức</th><th>Mã biên lai</th><th>Thao tác</th></tr></thead><tbody>${rows.map(p => { const i = A.idx.invoice.get(p.invoiceId) || {}; return `<tr>
+        <td><b>${i.period ? U.per(i.period) : '—'}</b></td><td>${U.esc(payMarketName(p.market || i.market))}</td><td class="num"><b>${U.money(p.amount)}</b></td><td>${U.dmy(p.date)}${p.time ? ' ' + U.esc(p.time) : ''}</td><td>${U.esc(payMethodLabel(p.method))}</td><td>${U.esc(p.receipt)}</td>
+        <td><button class="btn sm" data-act="tp-pay-receipt" data-id="${U.esc(p.id)}">Xem biên lai</button></td></tr>`; }).join('')}</tbody></table></div>` : portalEmpty(all.length ? 'Không có giao dịch phù hợp.' : 'Chưa có giao dịch thanh toán nào.')}`;
+  }
+  function portalFinance(t) {
+    const open = payOpenList(t), paid = payPaidList(t), over = open.filter(U.isOver), soon = open.filter(i => payState(i) === 'soon');
+    const nextDue = open.filter(i => !U.isOver(i)).map(i => i.due).sort()[0];
+    const tab = mini().payTab === 'history' ? 'history' : 'due';
+    // THU_HOI_NO: khoản đã chuyển nợ quá hạn (CN-…) thanh toán qua QR thu nợ riêng (miniDebtCard), không nằm trong bảng dưới.
+    return `<div class="tp-pay-head"><h1>Thanh toán</h1><p>Theo dõi và thanh toán các khoản phí tại chợ.</p></div>
+      <div class="merchant-kpis">
+        ${portalKpi('Cần thanh toán', U.money(U.sum(open, U.due)), open.length + ' khoản', open.length ? 'warn' : 'green')}
+        ${over.length ? portalKpi('Quá hạn', over.length + ' khoản', 'Tổng: ' + U.money(U.sum(over, U.due)), 'danger') : portalKpi('Sắp đến hạn', soon.length + ' khoản', nextDue ? 'Hạn gần nhất: ' + U.dmy(nextDue) : 'Không có khoản sắp đến hạn', soon.length ? 'warn' : 'green')}
+        ${portalKpi('Đã thanh toán', paid.length + ' khoản', 'Tổng: ' + U.money(U.sum(paid, i => i.amount)), 'blue')}
+      </div>
+      ${miniDebtCard(t)}
+      <section class="merchant-panel merchant-block tp-pay-panel">
+        <div class="merchant-tabs"><button class="${tab === 'due' ? 'active' : ''}" data-act="tp-pay-tab" data-id="due">Cần thanh toán (${open.length})</button><button class="${tab === 'history' ? 'active' : ''}" data-act="tp-pay-tab" data-id="history">Lịch sử thanh toán</button></div>
+        ${tab === 'due' ? payDueTable(t, open) : payHistoryHtml(t)}
+      </section>`;
+  }
+  // ---- Modal: chi tiết → chọn phương thức → QR / tiền mặt → chờ ghi nhận → thành công → biên lai ----
+  function payDetailModal(i) {
+    const paid = i.status === 'paid', p = paid ? payLastPayment(i) : null;
+    A.modal(A.mHead('Chi tiết khoản thu') + `<div class="modal-b tp-pay-modal">
+      <div class="tp-pay-meta"><div><span>Kỳ thu</span><b>${U.per(i.period)}</b></div><div><span>Mã khoản thu</span><b>${U.esc(i.id)}</b></div><div><span>Chợ</span><b>${U.esc(payMarketName(i.market))}</b></div><div><span>Hạn thanh toán</span><b>${U.dmy(i.due)}</b></div><div><span>Trạng thái</span>${payBadge(i)}</div></div>
+      <h4 class="tp-pay-sub">Chi tiết theo điểm kinh doanh</h4>${payBreakdownHtml(i)}
+      ${!paid && Number(i.paid) > 0 ? `<div class="tp-pay-line"><span>Đã ghi nhận trước đó</span><b>− ${U.money(i.paid)}</b></div>` : ''}
+      ${payAmountBox(paid ? 'Đã thanh toán' : 'Tổng cần thanh toán', paid ? i.amount : U.due(i), paid ? '' : 'Hạn thanh toán: ' + U.dmy(i.due))}
+    </div><div class="modal-f"><button class="btn" data-act="close">Đóng</button>${paid ? (p ? `<button class="btn primary" data-act="tp-pay-receipt" data-id="${U.esc(p.id)}">Xem biên lai</button>` : '') : payState(i) === 'pending' ? `<button class="btn primary" data-act="tp-pay-pending" data-id="${U.esc(i.id)}">Xem trạng thái chuyển khoản</button>` : `<button class="btn primary tp-pay-cta" data-act="tp-pay-method" data-id="${U.esc(i.id)}">Thanh toán ${U.money(U.due(i))}</button>`}</div>`, true);
+  }
+  function payMethodModal(i) {
+    const method = (mini().payMethod || {})[i.id] === 'cash' ? 'cash' : 'transfer';
+    const opt = (id, title, desc) => `<button class="tp-pay-option ${method === id ? 'selected' : ''}" data-act="tp-pay-choose" data-id="${U.esc(i.id)}" data-method="${id}" aria-pressed="${method === id}"><i></i><span><b>${title}</b><small>${desc}</small></span></button>`;
+    A.modal(A.mHead('Thanh toán khoản thu') + `<div class="modal-b tp-pay-modal">
+      <div class="small muted">Kỳ ${U.per(i.period)} · ${U.esc(payMarketName(i.market))}</div>
+      ${payAmountBox('Tổng cần thanh toán', U.due(i))}
+      <h4 class="tp-pay-sub">Chọn phương thức</h4>
+      <div class="tp-pay-options">${opt('transfer', 'Chuyển khoản / QR', 'Thanh toán trực tuyến. Hệ thống sẽ tự động ghi nhận giao dịch.')}${opt('cash', 'Tiền mặt', 'Thanh toán trực tiếp cho Nhân viên thu phí tại chợ.')}</div>
+      <div class="note warn">Khoản thu phải được thanh toán đủ. Hệ thống không hỗ trợ thanh toán một phần.</div>
+    </div><div class="modal-f"><button class="btn" data-act="tp-pay-detail" data-id="${U.esc(i.id)}">Quay lại</button><button class="btn primary" data-act="tp-pay-continue" data-id="${U.esc(i.id)}">Tiếp tục</button></div>`);
+  }
+  function payTransferModal(i) {
+    const ref = payReference(i), amount = U.due(i), bank = payBankAccount(i.market);
+    A.modal(A.mHead('Thanh toán qua chuyển khoản') + `<div class="modal-b tp-pay-modal">
+      ${payAmountBox('Số tiền', amount, 'Kỳ ' + U.per(i.period) + ' · ' + U.esc(payMarketName(i.market)))}
+      ${bank ? `<div class="tp-pay-transfer">
+        <div class="tp-pay-qr"><b>Quét mã QR</b>${U.qr(ref + ' ' + amount, 176)}<small>Mã QR minh họa (prototype) — chưa kết nối ngân hàng/VietQR thật.</small></div>
+        <div class="tp-pay-bank"><b>Thông tin chuyển khoản</b>
+          <div><span>Ngân hàng</span><b>${U.esc(bank.bankName || A.BANK_ACCOUNTS.bankName(bank.bankCode))}</b></div>
+          <div><span>Số tài khoản</span><b>${U.esc(bank.accountNumber)}</b></div>
+          <div><span>Chủ tài khoản</span><b>${U.esc(bank.accountHolderName || '')}</b></div>
+          <div><span>Số tiền</span><b>${U.money(amount)}</b></div>
+          <div class="tp-pay-ref"><span>Nội dung chuyển khoản</span><b>${U.esc(ref)}</b><button class="btn sm" data-act="tp-pay-copy" data-id="${U.esc(i.id)}">Sao chép</button></div>
+        </div></div>
+        <div class="note warn">Vui lòng chuyển đúng <b>${U.money(amount)}</b> và giữ nguyên nội dung chuyển khoản để hệ thống có thể nhận diện giao dịch.</div>`
+        : '<div class="note warn">Chợ chưa khai báo tài khoản nhận chuyển khoản. Vui lòng chọn thanh toán tiền mặt hoặc liên hệ Ban Quản lý chợ.</div>'}
+    </div><div class="modal-f"><button class="btn" data-act="tp-pay-method" data-id="${U.esc(i.id)}">Quay lại</button>${bank ? `<button class="btn primary" data-act="tp-pay-transfer-start" data-id="${U.esc(i.id)}">Tôi sẽ chuyển khoản ngay</button>` : ''}</div>`, true);
+  }
+  function payPendingModal(i) {
+    const x = payPending()[i.id] || {};
+    A.modal(A.mHead('Đang chờ ghi nhận giao dịch') + `<div class="modal-b tp-pay-modal">
+      <div class="tp-pay-state is-pending"><b>Đang chờ ghi nhận giao dịch</b><p>Hệ thống đang kiểm tra và ghi nhận giao dịch chuyển khoản của bạn.</p></div>
+      <div class="tp-pay-meta"><div><span>Số tiền</span><b>${U.money(U.due(i))}</b></div><div><span>Nội dung</span><b>${U.esc(x.ref || payReference(i))}</b></div><div><span>Ngân hàng</span><b>${U.esc(x.bankName || '—')}</b></div><div><span>Thời gian khởi tạo</span><b>${x.at ? U.dmy(x.at.slice(0, 10)) + ' ' + U.esc(x.at.slice(11)) : '—'}</b></div></div>
+      <div class="note info">Sau khi giao dịch được ghi nhận thành công, trạng thái khoản thu và biên lai sẽ tự động cập nhật.</div>
+      <div class="tp-pay-demo"><span>Công cụ demo prototype — mô phỏng ngân hàng gửi báo có, không phải tích hợp ngân hàng thật.</span><button class="btn sm" data-act="tp-pay-demo-bank" data-id="${U.esc(i.id)}">Mô phỏng: ngân hàng báo có</button></div>
+    </div><div class="modal-f"><button class="btn" data-act="tp-pay-back-list">Quay về danh sách</button><button class="btn primary" data-act="tp-pay-refresh" data-id="${U.esc(i.id)}">Làm mới trạng thái</button></div>`);
+  }
+  function paySuccessModal(i, p) {
+    A.modal(A.mHead('Thanh toán thành công') + `<div class="modal-b tp-pay-modal">
+      <div class="tp-pay-state is-ok"><b>✓ Thanh toán thành công</b><p>Hệ thống đã ghi nhận giao dịch của bạn.</p></div>
+      <div class="tp-pay-meta"><div><span>Số tiền</span><b>${U.money(p.amount)}</b></div><div><span>Phương thức</span><b>${U.esc(payMethodLabel(p.method))}</b></div><div><span>Mã giao dịch</span><b>${U.esc(p.id)}</b></div><div><span>Mã biên lai</span><b>${U.esc(p.receipt)}</b></div><div><span>Thời gian</span><b>${U.dmy(p.date)} ${U.esc(p.time || '')}</b></div><div><span>Khoản thu</span><b>${U.esc(i.id)} · Kỳ ${U.per(i.period)}</b></div></div>
+    </div><div class="modal-f"><button class="btn" data-act="tp-pay-back-list">Về danh sách thanh toán</button><button class="btn primary" data-act="tp-pay-receipt" data-id="${U.esc(p.id)}">Xem biên lai</button></div>`);
+  }
+  function payCashModal(i) {
+    const c = A.ACCOUNTS && A.ACCOUNTS.getMarketCollector ? A.ACCOUNTS.getMarketCollector(i.market) : null;
+    A.modal(A.mHead('Thanh toán trực tiếp tại chợ') + `<div class="modal-b tp-pay-modal">
+      ${payAmountBox('Số tiền cần thanh toán', U.due(i), 'Kỳ ' + U.per(i.period) + ' · ' + U.esc(payMarketName(i.market)))}
+      <p>Vui lòng thanh toán <b>toàn bộ số tiền</b> cho Nhân viên thu phí phụ trách tại chợ.</p>
+      ${c ? `<div class="tp-pay-meta"><div><span>NV thu phí</span><b>${U.esc(c.fullName || c.name || '—')}</b></div></div>` : ''}
+      <div class="note info">Sau khi Nhân viên thu phí xác nhận đã nhận tiền, trạng thái thanh toán và biên lai của bạn sẽ tự động cập nhật.</div>
+    </div><div class="modal-f"><button class="btn primary" data-act="close">Đã hiểu</button></div>`);
+  }
+  // Biên lai phía Tiểu thương: render từ CHÍNH bản ghi A.db.payments mà NV thu phí/ngân hàng đã tạo.
+  function payReceiptModal(p) {
+    const i = A.idx.invoice.get(p.invoiceId), t = A.idx.trader.get(p.traderId) || {};
+    const lines = i && Number(p.amount) === Number(i.amount) ? payPointGroups(i).map(g => `<div class="tp-pay-line"><span>Điểm ${U.esc(g.stall ? g.stall.code : g.id || '—')}</span><b>${U.money(g.total)}</b></div>`).join('')
+      : `<div class="tp-pay-line"><span>Khoản thu ${U.esc(p.invoiceId)}${p.debtId ? ' · thu hồi nợ ' + U.esc(p.debtId) : ''}</span><b>${U.money(p.amount)}</b></div>`;
+    A.modal(A.mHead('Biên lai thu tiền') + `<div class="modal-b"><div class="tp-receipt">
+      <div class="tp-receipt-org"><b>UBND PHƯỜNG CAO LÃNH</b><span>${U.esc(payMarketName(p.market || (i && i.market)).toUpperCase())}</span></div>
+      <h4>BIÊN LAI THU TIỀN</h4>
+      <div class="tp-pay-meta"><div><span>Số biên lai</span><b>${U.esc(p.receipt)}</b></div><div><span>Tiểu thương</span><b>${U.esc(t.name || '—')}</b></div><div><span>Mã TT</span><b>${U.esc(t.id || p.traderId)}</b></div><div><span>Kỳ thu</span><b>${i ? U.per(i.period) : '—'}</b></div><div><span>Ngày thanh toán</span><b>${U.dmy(p.date)} ${U.esc(p.time || '')}</b></div><div><span>Phương thức</span><b>${U.esc(payMethodLabel(p.method))}</b></div><div><span>Mã giao dịch</span><b>${U.esc(p.id)}</b></div><div><span>Mã tra cứu</span><b>${U.esc(p.lookup || '—')}</b></div><div><span>Người thu</span><b>${U.esc(A.paymentActorLabel(p))}</b></div></div>
+      <h4 class="tp-pay-sub">Nội dung thu</h4><div class="tp-pay-lines">${lines}<div class="tp-pay-line is-sum"><span>Tổng cộng</span><b>${U.money(p.amount)}</b></div></div>
+    </div></div><div class="modal-f"><button class="btn" data-act="close">Đóng</button><button class="btn primary" data-act="print">In biên lai</button></div>`);
+  }
+  // Mọi handler kiểm tra lại: đúng vai trò Tiểu thương + khoản thu thuộc hồ sơ đang đăng nhập + chợ trong scope.
+  function payGuard(el) {
+    const t = trader(), i = isTraderMini() ? payOwnInvoice(t, el && el.dataset.id) : null;
+    if (!i) { U.toast('Không tìm thấy khoản thu của bạn.'); return null; }
+    return i;
+  }
+  const payNoticeInvoice = (t, n) => (n && n.kind === 'RECEIVABLE_ISSUED' && n.traderId === t.id) ? payOwnInvoice(t, n.receivableId || n.referenceId) : null;
+  const payNoticeCta = (t, n) => { const i = payNoticeInvoice(t, n); return i ? `<button class="btn sm primary" data-act="tp-pay-open-notice" data-id="${U.esc(i.id)}">Xem &amp; thanh toán</button>` : ''; };
   function portalNotices(t) {
     const list = notisFor(t);
-    return portalPanel('bell', 'Thông báo từ Ban Quản lý chợ', '', list.length ? `<div class="merchant-rows">${list.map(n => `<div class="merchant-row"><div><b>${U.esc(n.title)}</b>${n.body ? `<p>${U.esc(n.body)}</p>` : ''}<small>${U.dmy(n.at)} · ${U.esc(n.group || 'Ban Quản lý chợ')}${n.channels && n.channels.length ? ' · ' + U.esc(n.channels.join(', ')) : ''}</small></div></div>`).join('')}</div>` : portalEmpty('Chưa có thông báo nào.'));
+    return portalPanel('bell', 'Thông báo từ Ban Quản lý chợ', '', list.length ? `<div class="merchant-rows">${list.map(n => `<div class="merchant-row"><div><b>${U.esc(n.title)}</b>${n.body ? `<p>${U.esc(n.body)}</p>` : ''}<small>${U.dmy(n.at)} · ${U.esc(n.group || 'Ban Quản lý chợ')}${n.channels && n.channels.length ? ' · ' + U.esc(n.channels.join(', ')) : ''}</small></div>${payNoticeCta(t, n)}</div>`).join('')}</div>` : portalEmpty('Chưa có thông báo nào.'));
   }
   function portalHelp() {
     return portalPanel('warning', 'Hướng dẫn sử dụng', 'Các việc tiểu thương thường làm trên hệ thống.', `<ol class="script">
-      <li><div><b>Xem khoản phí</b><div class="small muted">Vào mục Nghĩa vụ tài chính để xem khoản phải nộp theo kỳ, hạn nộp và biên lai đã nộp.</div></div></li>
-      <li><div><b>Nộp phí</b><div class="small muted">Nộp tiền mặt cho nhân viên thu phí hoặc chuyển khoản theo hướng dẫn của Ban Quản lý chợ; biên lai sẽ hiện trong mục Nghĩa vụ tài chính.</div></div></li>
+      <li><div><b>Xem khoản phí</b><div class="small muted">Vào mục Thanh toán để xem khoản cần thanh toán theo kỳ, hạn thanh toán và chi tiết theo điểm kinh doanh.</div></div></li>
+      <li><div><b>Thanh toán</b><div class="small muted">Chuyển khoản/QR hoặc thanh toán tiền mặt cho Nhân viên thu phí; biên lai hiện trong tab Lịch sử thanh toán của mục Thanh toán.</div></div></li>
       <li><div><b>Gửi phản ánh</b><div class="small muted">Vào mục Phản ánh & xử lý, chọn nhóm vấn đề, mô tả và đính kèm ảnh; theo dõi tiến độ tại tab Xem phản ánh.</div></div></li>
       <li><div><b>Tra cứu hợp đồng</b><div class="small muted">Mục Hợp đồng & điểm kinh doanh hiển thị số hợp đồng, thời hạn, giá dịch vụ và thông tin điểm kinh doanh.</div></div></li>
       <li><div><b>Cần hỗ trợ thêm</b><div class="small muted">Liên hệ trực tiếp Ban Quản lý chợ nơi bạn kinh doanh để được hướng dẫn.</div></div></li>
@@ -1175,7 +1335,7 @@
       const haystack = [i.id, i.title, i.desc, i.cat, U.mShort(i.market), st && st.code, st && st.location, st && st.sectionName].join(' ').toLowerCase();
       return statusOk && (!q || haystack.indexOf(q) !== -1);
     });
-    // Các màn còn lại của cổng (Tổng quan của tôi, Hợp đồng & điểm kinh doanh, Nghĩa vụ tài chính, Thông báo,
+    // Các màn còn lại của cổng (Tổng quan của tôi, Hợp đồng & điểm kinh doanh, Thanh toán, Thông báo,
     // Hướng dẫn) dùng chung khung sidebar; chỉ màn Phản ánh giữ nguyên bố cục gửi/xem sẵn có bên dưới.
     const nav = portalNav();
     if (nav !== 'complaints') return merchantShellHtml(t, nav, stats, PORTAL_SCREENS[nav](t));
@@ -1221,6 +1381,8 @@
     const drafts = mini().ratingDrafts || (mini().ratingDrafts = {});
     drafts[el.dataset.id] = Object.assign({}, drafts[el.dataset.id] || {}, { comment: el.value });
   };
+  A.IN['tp-pay-search'] = el => { mini().paySearch = el.value; A.render(); };
+  A.CH['tp-pay-period'] = el => { mini().payPeriod = el.value || 'all'; A.render(); };
   A.CH['mini-complaint-cat'] = el => { mini().complaintCat = el.value; };
   A.CH['mini-complaint-stall'] = el => { mini().complaintStall = el.value; };
   Object.assign(A.ACT, {
@@ -1257,6 +1419,67 @@
       if (!t || !portalContracts(t).some(c => c.id === el.dataset.id)) return;
       mini().portalContractId = el.dataset.id;
       A.render();
+    },
+    // ---- Thanh toán (cổng Tiểu thương) ----
+    'tp-pay-tab': el => { mini().payTab = el.dataset.id === 'history' ? 'history' : 'due'; A.render(); },
+    'tp-pay-detail': el => { const i = payGuard(el); if (i) payDetailModal(i); },
+    'tp-pay-method': el => {
+      const i = payGuard(el); if (!i) return;
+      if (i.status === 'paid') { payDetailModal(i); U.toast('Khoản thu đã được thanh toán.'); return; }
+      if (payPending()[i.id]) { payPendingModal(i); return; }
+      payMethodModal(i);
+    },
+    'tp-pay-choose': el => { const i = payGuard(el); if (!i) return; (mini().payMethod || (mini().payMethod = {}))[i.id] = el.dataset.method === 'cash' ? 'cash' : 'transfer'; payMethodModal(i); },
+    'tp-pay-continue': el => {
+      const i = payGuard(el); if (!i) return;
+      if (i.status === 'paid') { payDetailModal(i); return; }
+      if ((mini().payMethod || {})[i.id] === 'cash') payCashModal(i); else payTransferModal(i);
+    },
+    // Chỉ chuyển giao diện sang "Chờ ghi nhận" (trạng thái UI trong phiên) — KHÔNG tạo payment, KHÔNG đổi khoản thu.
+    'tp-pay-transfer-start': el => {
+      const i = payGuard(el); if (!i) return;
+      if (i.status === 'paid') { payDetailModal(i); return; }
+      const bank = payBankAccount(i.market);
+      if (!bank) { U.toast('Chợ chưa khai báo tài khoản nhận chuyển khoản.'); return; }
+      if (!payPending()[i.id]) payPending()[i.id] = { at: U.today() + ' ' + U.nowTime(), ref: payReference(i), bankName: bank.bankName || A.BANK_ACCOUNTS.bankName(bank.bankCode) };
+      A.render(); payPendingModal(i);
+    },
+    'tp-pay-pending': el => { const i = payGuard(el); if (!i) return; if (i.status === 'paid') { const p = payLastPayment(i); if (p) paySuccessModal(i, p); else payDetailModal(i); return; } payPendingModal(i); },
+    // Làm mới = đọc lại state dùng chung (A.refreshSharedState); không tự biến giao dịch thành công.
+    'tp-pay-refresh': el => {
+      if (A.refreshSharedState) A.refreshSharedState();
+      const i = payGuard(el); if (!i) return;
+      if (i.status === 'paid') { const p = payLastPayment(i); delete payPending()[i.id]; A.render(); if (p) paySuccessModal(i, p); else payDetailModal(i); return; }
+      U.toast('Chưa có giao dịch được ghi nhận. Vui lòng thử lại sau.');
+      payPendingModal(i);
+    },
+    // DEMO PROTOTYPE: mô phỏng ngân hàng báo có qua đúng cơ chế sẵn có A.applyPayment (như 'mini-paid'), thu ĐỦ số còn lại.
+    'tp-pay-demo-bank': el => {
+      const i = payGuard(el); if (!i) return;
+      if (i.status === 'paid') { const p = payLastPayment(i); if (p) paySuccessModal(i, p); return; }
+      if (!payPending()[i.id]) { U.toast('Chưa khởi tạo chuyển khoản cho khoản thu này.'); return; }
+      const pays = A.applyPayment([i.id], U.due(i), 'ck', 'Hệ thống');
+      if (!pays.length || i.status !== 'paid') { U.toast('Không ghi nhận được giao dịch.'); return; }
+      delete payPending()[i.id];
+      A.render(); paySuccessModal(i, pays[pays.length - 1]);
+    },
+    'tp-pay-copy': el => {
+      const i = payGuard(el); if (!i) return;
+      const ref = payReference(i);
+      try { if (navigator.clipboard) navigator.clipboard.writeText(ref); U.toast('Đã sao chép nội dung chuyển khoản: ' + ref); }
+      catch (e) { U.toast('Không sao chép được, vui lòng ghi lại nội dung: ' + ref); }
+    },
+    'tp-pay-receipt': el => {
+      const t = trader(), p = A.db.payments.find(x => x.id === el.dataset.id), i = p ? payOwnInvoice(t, p.invoiceId) : null;
+      if (!isTraderMini() || !p || !i || p.traderId !== t.id || !A.receiptBusinessStateOk(p)) { U.toast('Không tìm thấy biên lai của bạn.'); return; }
+      payReceiptModal(p);
+    },
+    'tp-pay-back-list': () => { A.closeModal(); mini().portalNav = 'finance'; A.render(); },
+    // Thông báo RECEIVABLE_ISSUED → mở màn Thanh toán, highlight + mở chi tiết đúng khoản thu được phát hành.
+    'tp-pay-open-notice': el => {
+      const i = payGuard(el); if (!i) return;
+      Object.assign(mini(), { portalNav: 'finance', payTab: i.status === 'paid' ? 'history' : 'due', payFocus: i.id });
+      A.render(); payDetailModal(i);
     },
     'mini-home': () => { mini().pay = null; mini().tab = 'home'; A.render(); },
     'mini-pay': () => { mini().pay = 'qr'; A.render(); },
