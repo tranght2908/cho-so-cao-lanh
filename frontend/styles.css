@@ -307,6 +307,12 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 .inc-jira-card[draggable="true"]:active { cursor: grabbing; }
 .inc-card-title { padding-right: 22px; color: var(--ink); font-size: var(--font-size-base); font-weight: 650; line-height: 1.35; overflow-wrap: anywhere; }
 .inc-card-tags { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: var(--font-size-xs); font-weight: 600; }
+.inc-chip { display: inline-flex; align-items: center; max-width: 100%; min-height: 22px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 99px; background: var(--surface-2); color: var(--muted); font-weight: 700; line-height: 1.3; white-space: nowrap; }
+.inc-chip.info { background: #e3efff; border-color: #bcd6f5; color: #0b4a9e; }
+.inc-chip.ok { background: #e6f6ec; border-color: #bfe3cb; color: #167a3c; }
+.inc-chip.warn { background: var(--warn-soft); border-color: #f7cfa3; color: #9a4b0c; }
+.inc-chip.danger { background: var(--danger-soft); border-color: #f3c2c2; color: #b01c1e; }
+.inc-chip.purple { background: #eee8fb; border-color: #d5c7f3; color: #5b3aa8; }
 .inc-card-loc { color: var(--muted); font-size: var(--font-size-sm); line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .inc-card-bottom { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
 .inc-code { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-weight: 700; font-size: var(--font-size-xs); }
@@ -322,6 +328,10 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 .inc-card-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
 .inc-card-actions .btn { min-height: 30px; }
 .inc-inline { max-width: 100%; min-height: 24px; border: 0; border-radius: 99px; background: #eef3f8; color: #46576a; padding: 3px 8px; font-size: var(--font-size-xs); font-weight: 700; cursor: default; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inc-inline.info { background: #e3efff; color: #0b4a9e; }
+.inc-inline.ok { background: #e6f6ec; color: #167a3c; }
+.inc-inline.warn { background: var(--warn-soft); color: #9a4b0c; }
+.inc-inline.danger { background: var(--danger-soft); color: #b01c1e; }
 .inc-inline.editable { cursor: pointer; background: var(--brand-soft); color: var(--brand); }
 .inc-inline.editable:hover { background: var(--accent-soft); }
 .inc-due { color: var(--muted); font-size: var(--font-size-xs); font-weight: 700; white-space: nowrap; }

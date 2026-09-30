@@ -201,7 +201,7 @@
     'mat-bang': 'BOTH', 'tai-san': 'CL', 'diem-kd': 'BOTH', 'tieu-thuong': 'BOTH', 'hop-dong': 'BOTH',
     'cau-hinh-gia': 'BOTH',
     'phai-thu': 'BOTH', 'thu-tien': 'BOTH', 'doi-soat': 'BOTH', 'cong-no': 'BOTH',
-    'su-co': 'BOTH', 'thong-bao': 'BOTH',
+    'su-co': 'CROSS', 'thong-bao': 'BOTH',
     'phien-cho': 'TTD',
     'dien-nuoc': 'BOTH',
     'tai-khoan': 'SYSTEM', 'cai-dat': 'SYSTEM', 'mini-app': 'BOTH'
@@ -473,6 +473,10 @@
       const acc = A.currentAccount && A.currentAccount();
       const code = acc && acc.code;
       return code ? A.db.incidents.filter(i => U.inM(i) && i.assignee === code).length : 0;
+    }
+    if (A.canDo('su-co.chi-dao', ui.market)) {
+      const scope = new Set(A.allowedMarkets(A.currentAccount()));
+      return A.db.incidents.filter(i => scope.has(i.market) && i.state === 'tiepnhan').length;
     }
     return A.db.incidents.filter(i => U.inM(i) && i.state === 'tiepnhan').length;
   }

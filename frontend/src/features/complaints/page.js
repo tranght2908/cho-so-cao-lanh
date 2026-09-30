@@ -150,18 +150,29 @@
     if (due > max) return 'Hạn xử lý vượt quy định nghiệp vụ (' + incDeadlineRuleText(cat) + ', tối đa ' + incFmt(max) + ').';
     return '';
   };
-  const incCanAssignMarket = market => A.canDo('su-co.phan-cong', market);
-  const incCanUpdateMarket = market => A.canDo('su-co.cap-nhat-xu-ly', market);
+  const incAllowedMarkets = () => new Set(A.allowedMarkets(A.currentAccount && A.currentAccount()));
+  const incHasAction = actionKey => {
+    const acc = A.currentAccount && A.currentAccount();
+    return !!(acc && acc.status === 'active' && A.PERM.canAction(ui.role, actionKey));
+  };
+  const incMarketAllowed = market => incAllowedMarkets().has(market);
+  const incCanAssignMarket = market => incHasAction('su-co.phan-cong') && incMarketAllowed(market);
+  const incCanUpdateMarket = market => incHasAction('su-co.cap-nhat-xu-ly') && incMarketAllowed(market);
+  const incLeaderScope = () => incHasAction('su-co.chi-dao');
+  const incRecordInScope = i => {
+    if (!i) return false;
+    return incMarketAllowed(i.market);
+  };
   const incCanAssignedQueue = () =>
-    A.canDo('su-co.cap-nhat-xu-ly', ui.market) &&
-    !A.canDo('su-co.phan-cong', ui.market) &&
-    !A.canDo('su-co.tao-phan-anh', ui.market);
+    incHasAction('su-co.cap-nhat-xu-ly') &&
+    !incHasAction('su-co.phan-cong') &&
+    !incHasAction('su-co.tao-phan-anh');
   const incCurrentStaffId = () => {
     const acc = A.currentAccount && A.currentAccount();
     return acc && acc.code;
   };
   const incAssignedToCurrentTech = i => !!i && i.assignee && i.assignee === incCurrentStaffId();
-  const incCanView = i => !!i && U.can('su-co') && i.market === ui.market && (!incCanAssignedQueue() || incAssignedToCurrentTech(i));
+  const incCanView = i => !!i && U.can('su-co') && incRecordInScope(i) && (!incCanAssignedQueue() || incAssignedToCurrentTech(i));
   const incAction = i => {
     if (incCanAssignedQueue()) {
       return ({ phancong:['inc-inspect-open','Nhận xử lý'], dangxuly:['inc-work-open','Cập nhật tiến độ'], chonghiemthu:['inc-open','Xem kết quả'], hoanthanh:['inc-open','Xem kết quả'], dong:['inc-open','Xem hồ sơ'] }[i.state]);
@@ -319,6 +330,11 @@
     if (ctx === 'leader') return 'Theo dõi phản ánh quá hạn, vượt cấp và kết quả xử lý tại ' + marketName + '.';
     return 'Theo dõi tình hình phản ánh, quá hạn và kết quả xử lý tại ' + marketName + '.';
   }
+  function incScopeLabel(ctx) {
+    if (ctx !== 'leader') return U.mShort(ui.market);
+    const count = incAllowedMarkets().size;
+    return ui.market === 'ALL' || count > 1 ? count + ' chợ được phân quyền' : U.mShort(ui.market);
+  }
   function incKpisHtml(all, ctx) {
     const open = all.filter(isOpen);
     const overdue = all.filter(late);
@@ -371,7 +387,7 @@
         const source = i.source === 'Mini app tiểu thương' ? 'Mini app' : (i.source || 'Ban Quản lý');
         return `<div class="kcard inc-jira-card ${late(i) ? 'late' : ''}" data-act="inc-open" data-id="${i.id}" data-readonly="${readOnly ? '1' : '0'}">
           <div class="t">${U.esc(i.title)}</div>
-          <div class="inc-card-loc small muted">${U.esc(i.cat)} · ${U.esc(st.code || '—')}${a ? ' · ' + U.esc(a.code) : ''}</div>
+          <div class="inc-card-loc small muted">${U.esc(i.cat)} · ${U.esc(U.mShort(i.market))} · ${U.esc(st.code || '—')}${a ? ' · ' + U.esc(a.code) : ''}</div>
           <div class="inc-card-foot">
             <span class="inc-code">${incIssueIcon(i)}${U.esc(i.id)}</span>
             ${late(i) ? '<span class="inc-pill danger">Quá hạn</span>' : ''}
@@ -420,7 +436,7 @@
         mk('done', 'Hoàn thành / Đóng', ['hoanthanh', 'dong']),
         mk('all', 'Tất cả', null)
       ];
-    } else if (incCanManageComplaints()) {
+    } else if (incCanManageComplaints() || A.canDo('su-co.chi-dao', ui.market)) {
       tabs = [
         mk('list', 'Bảng xử lý phản ánh', null),
         mk('assign', 'Phân công xử lý phản ánh', ['tiepnhan']),
@@ -477,7 +493,7 @@
       return `<tr>
         <td><b>${i.id}</b><div class="small muted">${incFmt(i.created)}</div></td>
         <td><b>${U.esc(i.title)}</b><div class="small muted">${U.esc(i.cat)} · ${U.esc(i.source || '')}</div></td>
-        <td>${U.esc(st.code || '—')}${a ? `<div class="small muted">${U.esc(a.code)} · ${U.esc(a.name)}</div>` : ''}</td>
+        <td>${U.esc(U.mShort(i.market))} · ${U.esc(st.code || '—')}${a ? `<div class="small muted">${U.esc(a.code)} · ${U.esc(a.name)}</div>` : ''}</td>
         <td><span class="tag info">${stLabel(i.state)}</span>${late(i)?' <span class="tag danger">Quá hạn</span>':''}${i.leaderReminder?' <span class="tag warn">Đã nhắc BQL</span>':''}${i.escalated?' <span class="tag purple">Vượt cấp</span>':''}</td>
         <td>${U.esc(incStaff(i))}<div class="small muted">Hạn: ${incFmt(i.deadline)}</div></td>
         <td class="nowrap">${showView ? `<button class="btn sm" data-act="inc-open" data-id="${i.id}" data-readonly="${viewReadOnly ? '1' : '0'}">Xem</button>` : ''}${!hideActions&&canAct?`${showView ? ' ' : ''}<button class="btn sm primary" data-act="${act[0]}" data-id="${i.id}">${act[1]}</button>`:''}</td>
@@ -568,9 +584,9 @@
   }
   A.VIEWS['su-co'] = function () {
     ensureIncidentV2();
-    const marketName = U.mShort(ui.market);
     const all = A.db.incidents.filter(i => incCanView(i) && (!ui.incCat || i.cat === ui.incCat));
     const ctx = incRoleContext();
+    const marketName = incScopeLabel(ctx);
     const tech = ctx === 'tech';
     const displayTitle = incRoleTitle(ctx);
     const displayDesc = incRoleDesc(ctx, marketName);
@@ -629,6 +645,19 @@
     if (late(i) || incUrgentCats.has(i.cat)) return 'Ưu tiên cao';
     return 'Bình thường';
   }
+  function incCatClass(cat) {
+    if (cat === 'PCCC') return 'danger';
+    if (cat === 'Điện') return 'warn';
+    if (cat === 'Vệ sinh' || cat === 'Hạ tầng') return 'ok';
+    if (cat === 'An ninh trật tự') return 'purple';
+    return 'info';
+  }
+  function incStateClass(state) {
+    if (state === 'dong') return 'danger';
+    if (state === 'hoanthanh') return 'ok';
+    if (state === 'dangxuly' || state === 'chonghiemthu') return 'warn';
+    return 'info';
+  }
   function incDueHtml(i) {
     if (late(i)) return `<span class="inc-due danger">Quá hạn ${incOverdueDays(i)} ngày</span>`;
     if (incUrgentCats.has(i.cat)) return '<span class="inc-due warn">Sắp đến hạn</span>';
@@ -660,45 +689,61 @@
     return `<button class="inc-assignee ${editable ? 'editable' : ''}" ${editable ? `data-act="inc-quick-assign" data-id="${i.id}"` : ''} title="${U.esc(label + role)}">${incAvatar(label)}</button>`;
   }
   function incApplyBoardFilters(rows) {
+    incNormalizeBoardFilters();
     const q = String(ui.incCodeSearch || '').trim().toLowerCase(), mine = incCurrentStaffId();
     return rows.filter(i => {
       const st = A.idx.stall.get(i.stallId) || {};
       if (q && [i.id, i.title, i.desc, i.cat].join(' ').toLowerCase().indexOf(q) === -1) return false;
-      if (ui.incQuickFilter === 'mine' && (!mine || i.assignee !== mine)) return false;
       if (ui.incQuickFilter === 'late' && !late(i)) return false;
-      if (ui.incQuickFilter === 'unassigned' && i.assignee) return false;
-      if (ui.incQuickFilter === 'done' && !['hoanthanh', 'dong'].includes(i.state)) return false;
+      if (ui.incBoardMarket && i.market !== ui.incBoardMarket) return false;
       if (ui.incBoardCat && i.cat !== ui.incBoardCat) return false;
       if (ui.incBoardAssignee && (ui.incBoardAssignee === '__none' ? !!i.assignee : i.assignee !== ui.incBoardAssignee)) return false;
       if (ui.incBoardArea && String(st.code || '').toLowerCase().indexOf(String(ui.incBoardArea).toLowerCase()) === -1) return false;
       if (ui.incBoardSource && i.source !== ui.incBoardSource) return false;
-      if (ui.incBoardState && i.state !== ui.incBoardState) return false;
+      if (ui.incBoardState && (ui.incBoardState === '__done' ? !['hoanthanh', 'dong'].includes(i.state) : i.state !== ui.incBoardState)) return false;
       if (ui.incBoardFrom && String(i.created || '').slice(0, 10) < ui.incBoardFrom) return false;
       if (ui.incBoardTo && String(i.created || '').slice(0, 10) > ui.incBoardTo) return false;
       return true;
     });
   }
+  function incNormalizeBoardFilters() {
+    const mine = incCurrentStaffId();
+    if (ui.incQuickFilter === 'mine') {
+      if (mine) ui.incBoardAssignee = mine;
+      ui.incQuickFilter = '';
+    } else if (ui.incQuickFilter === 'unassigned') {
+      ui.incBoardAssignee = '__none';
+      ui.incQuickFilter = '';
+    } else if (ui.incQuickFilter === 'done') {
+      ui.incBoardState = '__done';
+      ui.incQuickFilter = '';
+    }
+  }
   function incBoardToolbarHtml(rows, options) {
+    incNormalizeBoardFilters();
     const opts = options || {};
+    const markets = Array.from(new Set(rows.map(i => i.market).filter(Boolean)));
     const cats = Array.from(new Set(rows.map(i => i.cat).filter(Boolean)));
     const staffIds = Array.from(new Set(rows.map(i => i.assignee).filter(Boolean)));
     const sources = Array.from(new Set(rows.map(i => i.source).filter(Boolean)));
     const quick = id => ui.incQuickFilter === id ? 'on' : '';
     const compactFilters = !!opts.compactFilters;
+    const quickFilterCount = ui.incQuickFilter ? 1 : 0;
+    const advancedFilterCount = ['incBoardMarket', 'incBoardCat', 'incBoardState', 'incBoardArea', 'incBoardAssignee', 'incBoardSource', 'incBoardFrom', 'incBoardTo']
+      .filter(k => ui[k]).length;
+    const filterCount = quickFilterCount + advancedFilterCount;
     return `<div class="inc-board-top">
       <div class="inc-board-search"><input class="input" data-in="inc-code-search" placeholder="Tìm mã hoặc nội dung..." value="${U.esc(ui.incCodeSearch || '')}"></div>
-      <div class="inc-quick-filters">
-        ${opts.hideMineFilter ? '' : `<button class="${quick('mine')}" data-act="inc-quick-filter" data-id="mine">Của tôi</button>`}
-        <button class="${quick('late')}" data-act="inc-quick-filter" data-id="late">Quá hạn</button>
-        ${opts.hideUnassignedFilter ? '' : `<button class="${quick('unassigned')}" data-act="inc-quick-filter" data-id="unassigned">Chưa phân công</button>`}
-        <button class="${quick('done')}" data-act="inc-quick-filter" data-id="done">${U.icon('check')} Đã hoàn thành</button>
-      </div>
-      <button class="btn sm" data-act="inc-toggle-filters">+ Bộ lọc</button>
+      <button class="btn sm ${filterCount ? 'primary' : ''}" data-act="inc-toggle-filters">+ Bộ lọc${filterCount ? ' (' + filterCount + ')' : ''}</button>
       <span class="spacer"></span>
       <div class="seg inc-view-switch"><button class="${(ui.incViewMode || 'board') === 'board' ? 'on' : ''}" data-act="inc-view-mode" data-id="board">Bảng</button><button class="${ui.incViewMode === 'list' ? 'on' : ''}" data-act="inc-view-mode" data-id="list">Danh sách</button></div>
     </div>${ui.incFilterOpen ? `<div class="inc-filter-panel">
+      <div class="inc-quick-filters">
+        <button class="${quick('late')}" data-act="inc-quick-filter" data-id="late">Quá hạn</button>
+      </div>
+      <select class="input" data-ch="inc-board-market"><option value="">Tất cả chợ</option>${markets.map(m=>`<option value="${m}" ${ui.incBoardMarket===m?'selected':''}>${U.esc(U.mShort(m))}</option>`).join('')}</select>
       <select class="input" data-ch="inc-board-cat"><option value="">Nhóm vấn đề</option>${cats.map(c=>`<option value="${U.esc(c)}" ${ui.incBoardCat===c?'selected':''}>${U.esc(c)}</option>`).join('')}</select>
-      <select class="input" data-ch="inc-board-state"><option value="">Trạng thái</option>${ST.map(s=>`<option value="${s.id}" ${ui.incBoardState===s.id?'selected':''}>${U.esc(s.label)}</option>`).join('')}</select>
+      <select class="input" data-ch="inc-board-state"><option value="">Trạng thái</option><option value="__done" ${ui.incBoardState==='__done'?'selected':''}>Hoàn thành / Đóng</option>${ST.filter(s=>s.id!=='hoanthanh'&&s.id!=='dong').map(s=>`<option value="${s.id}" ${ui.incBoardState===s.id?'selected':''}>${U.esc(s.label)}</option>`).join('')}</select>
       <input class="input" data-in="inc-board-area" placeholder="Điểm/khu vực" value="${U.esc(ui.incBoardArea || '')}">
       ${compactFilters ? '' : `<select class="input" data-ch="inc-board-assignee"><option value="">Người xử lý</option><option value="__none" ${ui.incBoardAssignee==='__none'?'selected':''}>Chưa phân công</option>${staffIds.map(id=>`<option value="${id}" ${ui.incBoardAssignee===id?'selected':''}>${U.esc(U.staffName(id)||id)}</option>`).join('')}</select>`}
       ${compactFilters ? '' : `<select class="input" data-ch="inc-board-source"><option value="">Nguồn phản ánh</option>${sources.map(s=>`<option value="${U.esc(s)}" ${ui.incBoardSource===s?'selected':''}>${U.esc(s)}</option>`).join('')}</select>`}
@@ -713,10 +758,10 @@
     const priorityEditable = !readOnly && incCan(i, i.state === 'tiepnhan' ? 'assign' : 'transition');
     return `<article class="kcard inc-jira-card ${late(i) ? 'late' : ''}" data-act="inc-open" data-id="${i.id}" data-readonly="${readOnly ? '1' : '0'}" ${incCanDrag(i, readOnly) ? 'draggable="true" data-drag-id="' + i.id + '"' : ''}>
       <div class="inc-card-title">${U.esc(i.title)}</div>
-      <div class="inc-card-tags"><span class="inc-code">${U.esc(i.id)}</span><span>${U.esc(i.cat)}</span></div>
-      <div class="inc-card-loc">${U.icon('map')} ${U.esc(st.code || 'Chưa xác định')}${st.rowId ? ' · ' + U.esc(st.rowId) : ''}</div>
+      <div class="inc-card-tags"><span class="inc-code">${U.esc(i.id)}</span><span class="inc-chip ${incCatClass(i.cat)}">${U.esc(i.cat)}</span></div>
+      <div class="inc-card-loc">${U.icon('map')} ${U.esc(U.mShort(i.market))} · ${U.esc(st.code || 'Chưa xác định')}${st.rowId ? ' · ' + U.esc(st.rowId) : ''}</div>
       <div class="inc-card-bottom">
-        <button class="inc-inline ${stateEditable ? 'editable' : ''}" ${stateEditable ? `data-act="inc-quick-status" data-id="${i.id}"` : ''}>${U.esc(stLabel(i.state))}</button>
+        <button class="inc-inline ${incStateClass(i.state)} ${stateEditable ? 'editable' : ''}" ${stateEditable ? `data-act="inc-quick-status" data-id="${i.id}"` : ''}>${U.esc(stLabel(i.state))}</button>
         <button class="inc-inline ${priorityEditable ? 'editable' : ''}" ${priorityEditable ? `data-act="inc-quick-priority" data-id="${i.id}"` : ''}>${U.esc(incPriorityLabel(i))}</button>
         ${incDueHtml(i)}
         <span class="spacer"></span>
@@ -731,7 +776,11 @@
     if (ui.incViewMode === 'list') {
       return `${incBoardToolbarHtml(rows, opts)}${U.table([{t:'Mã / thời gian'}, {t:'Nội dung'}, {t:'Vị trí / tài sản'}, {t:'Trạng thái'}, {t:'Người xử lý / hạn'}, {t:''}], incRows(filtered, { readOnly: true, viewReadOnly: true }), { empty: 'Không có phản ánh phù hợp.' })}`;
     }
-    const groups = opts.groups || (ui.incQuickFilter === 'done' ? [{ id: 'done', label: 'Đã hoàn thành', states: ['hoanthanh', 'dong'] }] : incBoardGroups());
+    const groups = opts.groups || (ui.incBoardState === '__done'
+      ? [{ id: 'done', label: 'Hoàn thành / Đóng', states: ['hoanthanh', 'dong'] }]
+      : (ui.incBoardState && !incBoardGroups().some(g => g.states.indexOf(ui.incBoardState) !== -1)
+        ? [{ id: ui.incBoardState, label: stLabel(ui.incBoardState), states: [ui.incBoardState] }]
+        : incBoardGroups()));
     return `${incBoardToolbarHtml(rows, opts)}<div class="kanban inc-jira-board" role="list">${groups.map(g => {
       const xs = filtered.filter(i => g.states.indexOf(i.state) !== -1);
       return `<section class="kcol inc-jira-col" data-drop-state="${g.states[0]}" role="listitem"><h4><span>${U.esc(g.label)}</span><b>${xs.length}</b></h4>${xs.map(i => incCardHtml(i, readOnly)).join('') || '<div class="empty small">Không có phản ánh.</div>'}</section>`;
@@ -804,8 +853,8 @@
   }
   A.VIEWS['su-co'] = function () {
     ensureIncidentV2();
-    const marketName = U.mShort(ui.market), all = A.db.incidents.filter(i => incCanView(i));
-    const ctx = incRoleContext(), tech = ctx === 'tech', tabs = incFlowTabs(all);
+    const all = A.db.incidents.filter(i => incCanView(i));
+    const ctx = incRoleContext(), marketName = incScopeLabel(ctx), tech = ctx === 'tech', tabs = incFlowTabs(all);
     if (tech) ui.incFlowTab = 'all';
     if (!tabs.some(t => t.id === ui.incFlowTab)) ui.incFlowTab = tabs[0] && tabs[0].id;
     if (tech) {
@@ -818,15 +867,16 @@
     const createBtn = ctx === 'manager' && A.canDo('su-co.tao-phan-anh', ui.market) ? '<button class="btn primary" data-act="inc-new-v2">+ Tạo phản ánh</button>' : '';
     const head = `<div class="page-head inc-page-head"><div><h2>${incRoleTitle(ctx)}</h2>${incShortSummaryHtml(all)}<p class="muted">${incRoleDesc(ctx, marketName)}</p></div>${createBtn}</div>`;
     const readOnly = ctx === 'leader' || (!tech && !incCanManageComplaints());
-    const boardOptions = tech ? { readOnly, groups: incTechBoardGroups(tab), hideMineFilter: true, hideUnassignedFilter: true, compactFilters: true } : { readOnly };
+    const boardOptions = tech ? { readOnly, groups: incTechBoardGroups(tab), hideMineFilter: true, hideUnassignedFilter: true, compactFilters: true } : (ctx === 'leader' ? { readOnly, hideMineFilter: true } : { readOnly });
     const boardTitle = tech ? 'Bảng công việc kỹ thuật' : (tab ? tab.label : 'Bảng xử lý phản ánh');
-    return `${head}<div class="card inc-board-card"><div class="card-h"><h3>${boardTitle}</h3>${incCanManageComplaints() ? incFunctionNav(tabs, tab && tab.id) : ''}</div><div class="card-b">${incWorkflowBoardHtml(rows, boardOptions)}</div></div>`;
+    return `${head}<div class="card inc-board-card"><div class="card-h"><h3>${boardTitle}</h3>${ctx === 'manager' || ctx === 'leader' ? incFunctionNav(tabs, tab && tab.id) : ''}</div><div class="card-b">${incWorkflowBoardHtml(rows, boardOptions)}</div></div>`;
   };
   A.ACT['inc-flow-tab'] = el => { ui.incFlowTab = el.dataset.id; A.render(); };
   A.ACT['inc-tech-select'] = el => { const i=A.db.incidents.find(x=>x.id===el.dataset.id); if(!incCanView(i))return; ui.incTechSelectedId=i.id; A.render(); };
   A.IN['inc-code-search'] = el => { ui.incCodeSearch = el.value || ''; A.render(); };
   A.IN['inc-board-area'] = el => { ui.incBoardArea = el.value || ''; A.render(); };
   A.CH['inc-state'] = el => { ui.incState = el.value || ''; A.render(); };
+  A.CH['inc-board-market'] = el => { ui.incBoardMarket = el.value || ''; A.render(); };
   A.CH['inc-board-cat'] = el => { ui.incBoardCat = el.value || ''; A.render(); };
   A.CH['inc-board-assignee'] = el => { ui.incBoardAssignee = el.value || ''; A.render(); };
   A.CH['inc-board-source'] = el => { ui.incBoardSource = el.value || ''; A.render(); };
@@ -912,24 +962,75 @@
   A.ACT['inc-accept-reject'] = el => {const i=A.db.incidents.find(x=>x.id===el.dataset.id);if(!i||i.state!=='chonghiemthu'||!incCan(i,'accept'))return;const note=(A.$('#ia-note-accept')&&A.$('#ia-note-accept').value.trim())||'';if(!note){U.toast('Vui lòng nhập lý do nghiệm thu không đạt.');return;}i.acceptance={at:incNow(),by:(A.currentAccount&&A.currentAccount()||{}).code||'BQL',note,result:'rejected'};i.acceptanceHistory=Array.isArray(i.acceptanceHistory)?i.acceptanceHistory:[];i.acceptanceHistory.push(i.acceptance);i.state='dangxuly';if(i.work)i.work.mode='rework';incHistory(i,'Nghiệm thu không đạt',note);A.save();A.closeModal();A.render();U.toast('Đã trả hồ sơ về Đang xử lý để nhân viên kỹ thuật cập nhật lại.');};
   A.ACT['inc-close-open'] = el => {const i=A.db.incidents.find(x=>x.id===el.dataset.id);if(!i||i.state!=='hoanthanh'||!incCan(i,'close'))return;incModal('Đóng sự cố',incHeader(i)+`<section class="inc-section"><div class="inc-check">${U.icon('check')} Đã xử lý</div><div class="inc-check">${U.icon('check')} Đã thông báo kết quả cho người phản ánh</div><dl class="kv"><dt>Người xử lý</dt><dd>${U.esc(incStaff(i))}</dd><dt>Hoàn thành</dt><dd>${incFmt((i.work||{}).completedAt)}</dd>${i.rating?`<dt>Đánh giá tiểu thương</dt><dd>${'★'.repeat(i.rating)}${'☆'.repeat(5-i.rating)}${(i.feedback||{}).comment?` · ${U.esc(i.feedback.comment)}`:''}</dd>`:''}</dl><div class="field"><label>Ghi chú khi đóng</label><textarea class="input" id="ic-note" rows="2"></textarea></div></section>`,`<button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="inc-close-save" data-id="${i.id}">Đóng sự cố</button>`);};
   A.ACT['inc-close-save'] = el => {const i=A.db.incidents.find(x=>x.id===el.dataset.id);if(!i||i.state!=='hoanthanh'||!incCan(i,'close'))return;i.closeInfo={at:incNow(),note:A.$('#ic-note').value.trim()};i.state='dong';incHistory(i,'Đóng sự cố',i.closeInfo.note);A.save();A.closeModal();A.render();U.toast('Đã đóng sự cố.');};
+  function incCanCreateMarket(market) {
+    return incHasAction('su-co.tao-phan-anh') && incMarketAllowed(market);
+  }
+  function incCreateMarkets() {
+    return A.allowedMarkets(A.currentAccount && A.currentAccount()).filter(incCanCreateMarket);
+  }
+  function incCreateMarketDefault(markets) {
+    return markets.indexOf(ui.market) !== -1 ? ui.market : markets[0];
+  }
+  function incCreateStallOptions(market) {
+    const stalls = A.db.stalls.filter(s => s.market === market);
+    return '<option value="">Không xác định</option>' + stalls.map(s => {
+      const trader = s.traderId && A.idx.trader.get(s.traderId);
+      return `<option value="${s.id}">${U.esc(s.code)}${trader ? ' · ' + U.esc(trader.name) : ''}</option>`;
+    }).join('');
+  }
+  function incCreateAssetOptions(market) {
+    const assets = (A.db.marketAssets || []).filter(a => a.market === market);
+    return '<option value="">Không xác định / Không liên quan</option>' + assets.map(a => `<option value="${a.id}">${U.esc(a.code)} · ${U.esc(a.name)}</option>`).join('');
+  }
+  function incSyncCreateMarketFields(market) {
+    const stallEl = A.$('#in2-stall'), assetEl = A.$('#in2-asset');
+    if (stallEl) stallEl.innerHTML = incCreateStallOptions(market);
+    if (assetEl) assetEl.innerHTML = incCreateAssetOptions(market);
+  }
   A.ACT['inc-new-v2'] = () => {
-    if (!A.canDo('su-co.tao-phan-anh', ui.market)) return;
+    const markets = incCreateMarkets();
+    if (!markets.length) return;
+    const selectedMarket = incCreateMarketDefault(markets);
     ui.incImageDraft = {};
-    const stalls = A.db.stalls.filter(s => s.market === ui.market);
     incModal('Tạo phản ánh / sự cố', `<section class="inc-section">
       <div class="form-grid">
         <div class="field"><label>Nguồn</label><input class="input" value="Nhập tại Ban Quản lý" disabled></div>
+        <div class="field"><label>Chợ *</label><select class="input" id="in2-market" data-ch="inc-new-market">${markets.map(m=>`<option value="${m}" ${selectedMarket===m?'selected':''}>${U.esc(U.mShort(m))}</option>`).join('')}</select></div>
         <div class="field"><label>Người phản ánh</label><input class="input" id="in2-reporter-name" placeholder="Tên tiểu thương / người dân"></div>
         <div class="field"><label>Số điện thoại</label><input class="input" id="in2-reporter-phone" placeholder="Số điện thoại liên hệ"></div>
         <div class="field"><label>Nhóm *</label><select class="input" id="in2-cat">${incCats().map(c=>`<option>${c}</option>`).join('')}</select></div>
-        <div class="field"><label>Điểm KD</label><select class="input" id="in2-stall"><option value="">Không xác định</option>${stalls.map(s=>`<option value="${s.id}">${s.code}</option>`).join('')}</select></div>
-        <div class="field"><label>Tài sản liên quan</label><select class="input" id="in2-asset"><option value="">Không xác định / Không liên quan</option>${incAssets().map(a=>`<option value="${a.id}">${U.esc(a.code)} · ${U.esc(a.name)}</option>`).join('')}</select></div>
+        <div class="field"><label>Điểm KD</label><select class="input" id="in2-stall">${incCreateStallOptions(selectedMarket)}</select></div>
+        <div class="field"><label>Tài sản liên quan</label><select class="input" id="in2-asset">${incCreateAssetOptions(selectedMarket)}</select></div>
       </div>
       <div class="field"><label>Tiêu đề *</label><input class="input" id="in2-title"></div>
       <div class="field"><label>Nội dung *</label><textarea class="input" id="in2-desc" rows="3"></textarea></div>
     </section><section class="inc-section"><h4>Ảnh <span class="muted small">(không bắt buộc)</span></h4>${incImageInput('report')}</section>`, `<button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="inc-new-v2-save">Tạo phản ánh</button>`);
   };
-  A.ACT['inc-new-v2-save'] = () => {if(!A.canDo('su-co.tao-phan-anh',ui.market))return;const titleEl=A.$('#in2-title'),desc=(A.$('#in2-desc')&&A.$('#in2-desc').value.trim())||'',reporterName=(A.$('#in2-reporter-name')&&A.$('#in2-reporter-name').value.trim())||'',reporterPhone=(A.$('#in2-reporter-phone')&&A.$('#in2-reporter-phone').value.trim())||'',stall=A.idx.stall.get(A.$('#in2-stall').value),cat=A.$('#in2-cat').value,assetEl=A.$('#in2-asset'),assetId=assetEl?(assetEl.value||null):null,title=titleEl?titleEl.value.trim():(desc.length>60?desc.slice(0,57)+'…':desc);if(!desc||(!titleEl&&!reporterName)){U.toast(titleEl?'Vui lòng nhập tiêu đề và nội dung.':'Vui lòng nhập người phản ánh và nội dung phản ánh.');return;}if(titleEl&&!title){U.toast('Vui lòng nhập tiêu đề và nội dung.');return;}if(stall&&stall.market!==ui.market){U.toast('Điểm kinh doanh không thuộc chợ đang chọn.');return;}if(assetId&&!(A.db.marketAssets||[]).some(a=>a.id===assetId&&a.market===ui.market)){U.toast('Tài sản liên quan không thuộc chợ đang chọn.');return;}const id='SC-'+U.pad(101+A.db.incidents.length,4),created=incNow(),due=incDefaultDeadline(cat,created,true);const i={id,market:ui.market,stallId:stall&&stall.id,traderId:stall&&stall.traderId,assetId,cat,title,desc,source:'Nhập tại Ban Quản lý',reporterName,reporterPhone,state:'tiepnhan',created,deadline:due,assignee:null,rating:null,escalated:false,images:{report:incDraftNames('report').slice(0,3),inspection:[],work:[]},history:[{at:created,action:'Tiếp nhận phản ánh',detail:'Nguồn: Nhập tại Ban Quản lý'+(reporterName?' · Người phản ánh: '+reporterName:'')+' · hạn mặc định '+incDeadlineRuleText(cat)}],log:[]};A.db.incidents.push(i);ui.incImageDraft={};A.save();A.closeModal();A.render();U.toast('Đã tạo '+id);};
+  A.CH['inc-new-market'] = el => {
+    if (!incCanCreateMarket(el.value)) return;
+    incSyncCreateMarketFields(el.value);
+  };
+  A.ACT['inc-new-v2-save'] = () => {
+    const marketEl = A.$('#in2-market'), market = marketEl ? marketEl.value : ui.market;
+    if (!incCanCreateMarket(market)) return;
+    const titleEl = A.$('#in2-title');
+    const desc = (A.$('#in2-desc') && A.$('#in2-desc').value.trim()) || '';
+    const reporterName = (A.$('#in2-reporter-name') && A.$('#in2-reporter-name').value.trim()) || '';
+    const reporterPhone = (A.$('#in2-reporter-phone') && A.$('#in2-reporter-phone').value.trim()) || '';
+    const stall = A.idx.stall.get(A.$('#in2-stall').value);
+    const cat = A.$('#in2-cat').value;
+    const assetEl = A.$('#in2-asset'), assetId = assetEl ? (assetEl.value || null) : null;
+    const title = titleEl ? titleEl.value.trim() : (desc.length > 60 ? desc.slice(0, 57) + '…' : desc);
+    if (!desc || (!titleEl && !reporterName)) { U.toast(titleEl ? 'Vui lòng nhập tiêu đề và nội dung.' : 'Vui lòng nhập người phản ánh và nội dung phản ánh.'); return; }
+    if (titleEl && !title) { U.toast('Vui lòng nhập tiêu đề và nội dung.'); return; }
+    if (stall && stall.market !== market) { U.toast('Điểm kinh doanh không thuộc chợ đã chọn.'); return; }
+    if (assetId && !(A.db.marketAssets || []).some(a => a.id === assetId && a.market === market)) { U.toast('Tài sản liên quan không thuộc chợ đã chọn.'); return; }
+    const id = 'SC-' + U.pad(101 + A.db.incidents.length, 4), created = incNow(), due = incDefaultDeadline(cat, created, true);
+    const i = { id, market, stallId: stall && stall.id, traderId: stall && stall.traderId, assetId, cat, title, desc, source: 'Nhập tại Ban Quản lý', reporterName, reporterPhone, state: 'tiepnhan', created, deadline: due, assignee: null, rating: null, escalated: false, images: { report: incDraftNames('report').slice(0, 3), inspection: [], work: [] }, history: [{ at: created, action: 'Tiếp nhận phản ánh', detail: 'Nguồn: Nhập tại Ban Quản lý · Chợ: ' + U.mShort(market) + (reporterName ? ' · Người phản ánh: ' + reporterName : '') + ' · hạn mặc định ' + incDeadlineRuleText(cat) }], log: [] };
+    A.db.incidents.push(i);
+    ui.incImageDraft = {};
+    A.save(); A.closeModal(); A.render(); U.toast('Đã tạo ' + id);
+  };
   document.addEventListener('dragstart', e => {
     const card = e.target.closest && e.target.closest('[data-drag-id]');
     if (!card) return;
