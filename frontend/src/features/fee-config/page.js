@@ -636,6 +636,8 @@
   // ---- sub-tab: Quy tắc thu phí ----
   function settingsQuyTacHtml() {
     const r = A.SERVICE_CFG.rules(), canManage = cfgCan('quy-tac-thu-phi'), dis = canManage ? '' : 'disabled';
+    const cr = A.SERVICE_CFG.complaintRules ? A.SERVICE_CFG.complaintRules() : { ratingAutoCloseDays: null, history: [] };
+    const ratingAutoCloseDays = cr.ratingAutoCloseDays == null ? '' : Number(cr.ratingAutoCloseDays);
     return `<div class="card"><div class="card-h"><h3>Quy tắc thu phí</h3></div><div class="card-b">
       <div class="row" style="flex-direction:column;align-items:flex-start;gap:10px">
         <label class="row" style="gap:8px"><input type="checkbox" data-ch="br-adjust" ${r.allowAdjust ? 'checked' : ''} ${dis}> Cho phép điều chỉnh khoản phải thu</label>
@@ -649,6 +651,11 @@
         <div class="field"><label>Ngưỡng miễn giảm cần phê duyệt (%)</label><input class="input" type="number" min="0" max="100" data-ch="br-threshold" value="${r.waiverApprovalThreshold}" ${dis}></div>
         <div class="field"><label>Vai trò phê duyệt</label><select class="input" data-ch="br-approver" ${dis}>${A.PERM.roles().map(x => `<option value="${x.id}" ${r.approverRoleId === x.id ? 'selected' : ''}>${U.esc(x.name)}</option>`).join('')}</select></div>
       </div>
+      <div class="divider"></div><b class="small">QUY TẮC PHẢN ÁNH</b>
+      <div class="form-grid" style="margin-top:10px">
+        <div class="field"><label>Thời gian chờ tiểu thương đánh giá trước khi tự động đóng phiếu (ngày)</label><input class="input" type="number" min="1" data-ch="br-complaint-rating-wait" value="${ratingAutoCloseDays}" placeholder="CXN" ${dis}></div>
+      </div>
+      <div class="small muted" style="margin-top:6px">Để trống khi chưa có quyết định nghiệp vụ. Khi có cấu hình, phản ánh ở trạng thái Hoàn thành nhưng chưa được đánh giá sẽ tự chuyển sang Đóng sau số ngày chờ.</div>
       <div class="divider"></div><b class="small">CĂN CỨ</b><div style="margin-top:6px">${cfgLegalHtml(r.legalBasis)}</div>
       ${canManage ? `<button class="btn sm" style="margin-top:8px" data-act="cfg-editlegal" data-cat="billingRules" data-id="rules">Sửa căn cứ</button>` : ''}
       <div class="divider"></div><b class="small">TÀI LIỆU</b><div style="margin-top:6px">${cfgAttachHtml(r, 'billingRules', 'rules', canManage)}</div>
@@ -663,6 +670,12 @@
   A.CH['br-noteadjust'] = el => { A.SERVICE_CFG.updateRules({ requireNoteOnAdjust: el.checked }, cfgActor(), el.checked ? 'Bật bắt buộc ghi chú điều chỉnh' : 'Tắt bắt buộc ghi chú điều chỉnh'); A.render(); };
   A.CH['br-threshold'] = el => { A.SERVICE_CFG.updateRules({ waiverApprovalThreshold: Math.max(0, Math.min(100, Number(el.value) || 0)) }, cfgActor(), 'Đổi ngưỡng miễn giảm cần phê duyệt'); A.render(); };
   A.CH['br-approver'] = el => { A.SERVICE_CFG.updateRules({ approverRoleId: el.value }, cfgActor(), 'Đổi vai trò phê duyệt'); A.render(); };
+  A.CH['br-complaint-rating-wait'] = el => {
+    const raw = String(el.value || '').trim();
+    const days = raw === '' ? null : Math.max(1, Number(raw) || 1);
+    A.SERVICE_CFG.updateComplaintRules({ ratingAutoCloseDays: days }, cfgActor(), days == null ? 'Bỏ cấu hình thời gian chờ đánh giá phản ánh' : 'Đổi thời gian chờ đánh giá phản ánh: ' + days + ' ngày');
+    A.render();
+  };
 
   // ---- router "Chính sách thu và biểu phí" (Tài chính > Quản lý khai báo) ----
   const PRICE_TABS = [['dien-nuoc', 'Điện & nước'], ['dich-vu', 'Dịch vụ chợ'], ['phi-gui-xe', 'Phí gửi xe']];

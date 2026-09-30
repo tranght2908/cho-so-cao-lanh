@@ -411,7 +411,8 @@
     return 'info';
   }
   function miniCanRateComplaint(i) {
-    return !!i && i.state === 'hoanthanh';
+    const api = A.features.complaints || {};
+    return api.canRate ? api.canRate(i) : !!i && i.state === 'hoanthanh';
   }
   const MINI_ISSUE_META = [
     { key: 'Điện', label: 'Điện, chiếu sáng', desc: 'Mất điện, chập điện, đèn chiếu sáng...', icon: 'bolt', tone: 'warn' },
@@ -1352,6 +1353,7 @@
           ${i.desc ? `<dt>Nội dung</dt><dd>${U.esc(i.desc)}</dd>` : ''}${i.photo || (i.images && i.images.report && i.images.report.length) ? '<dt>Ảnh</dt><dd><span class="tag info">Có ảnh đính kèm</span></dd>' : ''}
           ${i.work && i.work.result ? `<dt>Kết quả</dt><dd>${U.esc(i.work.result)}</dd>` : ''}${i.rating ? `<dt>Đánh giá</dt><dd>${'★'.repeat(i.rating)}${'☆'.repeat(5 - i.rating)}</dd>` : ''}${i.feedback && i.feedback.comment ? `<dt>Ý kiến</dt><dd>${U.esc(i.feedback.comment)}</dd>` : ''}</dl>
         <div class="divider"></div><b class="small">Nhật ký xử lý</b>${miniComplaintHistory(i)}
+        ${miniComplaintRatingHtml(i)}
       </div><div class="modal-f">
         <button class="btn" data-act="close">Đóng</button>
       </div>`, true);
@@ -1439,15 +1441,13 @@
       const draft = ((mini().ratingDrafts || {})[i.id]) || {};
       const rating = Number(draft.rating || i.rating || 0);
       if (!rating) { U.toast('Vui lòng chọn số sao đánh giá.'); return; }
-      i.rating = rating;
-      i.feedback = { at: U.today(), by: t.id, comment: String(draft.comment || '').trim() };
-      const text = 'Tiểu thương đánh giá ' + i.rating + ' sao' + (i.feedback.comment ? ': ' + i.feedback.comment : '');
-      i.log = Array.isArray(i.log) ? i.log : [];
-      i.history = Array.isArray(i.history) ? i.history : [];
-      i.log.push({ at: U.today(), text });
-      i.history.push({ at: U.today(), action: 'Tiểu thương đánh giá kết quả', detail: i.rating + ' sao' + (i.feedback.comment ? ' · ' + i.feedback.comment : '') });
+      const api = A.features.complaints || {};
+      const ok = api.submitTraderRating
+        ? api.submitTraderRating(i, t, rating, draft.comment || '', 'Mini app tiểu thương')
+        : false;
+      if (!ok) { U.toast('Không thể lưu đánh giá phản ánh này.'); return; }
       if (mini().ratingDrafts) delete mini().ratingDrafts[i.id];
-      A.save(); A.closeModal(); A.render(); U.toast('Cảm ơn bạn đã đánh giá kết quả xử lý.');
+      A.closeModal(); A.render(); U.toast('Cảm ơn bạn đã đánh giá kết quả xử lý. Phản ánh đã được đóng.');
     },
     'mini-rate': el => {
       A.ACT['mini-rate-pick'](el);

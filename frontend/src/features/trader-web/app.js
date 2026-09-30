@@ -19,7 +19,7 @@
   // ---------- trạng thái giao diện của trang (không phải dữ liệu nghiệp vụ) ----------
   // accountId = tài khoản đăng nhập (A07); traderId = HỒ SƠ ĐANG XEM (activeTraderProfile) — thuộc Account.traderIds.
   const S = { traderId: null, accountId: null, step: 'phone', phone: '', loginAccountId: null, otpChallenge: null, otp: '', error: '',
-    paySel: null, paying: false, openInv: null, contractSel: null, billFilter: 'all', noticeFilter: 'all', headerPopover: null, draftImages: [], sessionImages: {}, lastPays: null, feeFilter: '', lookup: '', lookupResult: null };
+    paySel: null, paying: false, openInv: null, contractSel: null, billFilter: 'all', noticeFilter: 'all', headerPopover: null, draftImages: [], sessionImages: {}, ratingDrafts: {}, lastPays: null, feeFilter: '', lookup: '', lookupResult: null };
   function loadSession() {
     try { const x = JSON.parse(sessionStorage.getItem(SKEY) || 'null'); if (x && x.accountId) { S.accountId = x.accountId; S.traderId = x.traderId || null; } } catch (e) { /* bỏ qua */ }
   }
@@ -382,7 +382,7 @@
     return `<div class="tw-hello tw-hello-a"><div><h2>Phản ánh, kiến nghị</h2><div class="small muted">Gửi tới Ban Quản lý chợ và theo dõi kết quả xử lý.</div></div>${t.stalls.length ? '<button class="btn primary" data-act="tw-report-new">+ Gửi phản ánh</button>' : ''}</div>
       <section class="card tw-sec"><div class="card-b">${inc.map(i => `<div class="tw-item click" data-act="tw-inc" data-id="${i.id}"><span class="tw-dot">${U.icon('warning')}</span>
         <div class="tw-item-m"><b>${U.esc(i.title)}</b><span class="small muted">${U.esc(i.id)} · ${U.esc(i.cat)} · ${U.dmy(i.created)}${reportImages(i).length ? ' · ' + reportImages(i).length + ' ảnh' : ''}</span>
-        ${(i.state === 'hoanthanh' || i.state === 'dong') ? `<span class="small">${i.rating ? '★'.repeat(i.rating) + ' Đã đánh giá' : 'Đã xử lý xong · chạm để xem kết quả và đánh giá'}</span>` : ''}</div>${incTag(i)}</div>`).join('') || empty('Bạn chưa gửi phản ánh nào.')}</div></section>`;
+        ${(i.state === 'hoanthanh' || i.state === 'dong') ? `<span class="small">${i.rating ? '★'.repeat(i.rating) + ' Đã đánh giá' : (i.state === 'hoanthanh' ? 'Đã xử lý xong · chạm để xem kết quả và đánh giá' : 'Đã đóng')}</span>` : ''}</div>${incTag(i)}</div>`).join('') || empty('Bạn chưa gửi phản ánh nào.')}</div></section>`;
   }
   const MAX_IMG = 5, MAX_MB = 10;
   const reportImages = i => (i.images && i.images.report) || (i.photo ? ['Ảnh phản ánh'] : []);
@@ -399,6 +399,10 @@
     if (!i || i.traderId !== t.id) { U.toast('Không tìm thấy phản ánh'); return; }
     const hist = i.history && i.history.length ? i.history.map(h => [h.at, h.action + (h.detail ? ' – ' + h.detail : '')]) : (i.log || []).map(h => [h.at, h.text]);
     const done = i.state === 'hoanthanh' || i.state === 'dong';
+    const canRate = i.state === 'hoanthanh';
+    const draft = S.ratingDrafts[i.id] || {};
+    const selectedRating = Number(draft.rating || i.rating || 0);
+    const comment = draft.comment != null ? draft.comment : ((i.feedback || {}).comment || '');
     const when = v => U.esc(String(v || '').replace('T', ' · '));
     A.modal(A.mHead('Phản ánh ' + U.esc(i.id)) + `<div class="modal-b">
       <dl class="kv"><dt>Nội dung</dt><dd><b>${U.esc(i.title)}</b>${i.desc && i.desc !== i.title ? `<div class="small">${U.esc(i.desc)}</div>` : ''}</dd><dt>Nhóm</dt><dd>${U.esc(i.cat)}</dd>
@@ -406,7 +410,9 @@
       <h4 style="margin:16px 0 8px">Ảnh bạn gửi</h4>${thumbs(reportImages(i), S.sessionImages[i.id])}
       ${i.work ? `<h4 style="margin:16px 0 8px">Kết quả xử lý</h4><dl class="kv"><dt>Nội dung xử lý</dt><dd>${U.esc(i.work.content || '—')}</dd><dt>Kết quả</dt><dd>${U.esc(i.work.result || '—')}</dd><dt>Hoàn thành lúc</dt><dd>${when(i.work.completedAt)}</dd></dl><div style="margin-top:8px">${thumbs((i.images && i.images.work) || [])}</div>` : ''}
       <h4 style="margin:16px 0 8px">Tiến độ xử lý</h4>${U.table([{ t: 'Thời gian' }, { t: 'Diễn biến' }], hist.map(h => `<tr><td>${when(h[0])}</td><td>${U.esc(h[1])}</td></tr>`))}
-      ${done ? `<h4 style="margin:16px 0 8px">Đánh giá kết quả</h4><div class="stars">${[1, 2, 3, 4, 5].map(n => `<button class="${i.rating >= n ? 'on' : ''}" data-act="tw-rate" data-id="${i.id}" data-n="${n}" aria-label="${n} sao">★</button>`).join('')}<span class="small muted">${i.rating ? 'Cảm ơn bạn đã đánh giá' : 'Chạm để chấm điểm'}</span></div>` : ''}
+      ${done ? `<h4 style="margin:16px 0 8px">Đánh giá kết quả</h4>${canRate ? `<div class="stars">${[1, 2, 3, 4, 5].map(n => `<button class="${selectedRating >= n ? 'on' : ''}" data-act="tw-rate-pick" data-id="${i.id}" data-n="${n}" aria-label="${n} sao">★</button>`).join('')}<span class="small muted">${selectedRating ? selectedRating + ' sao' : 'Chạm để chấm điểm'}</span></div>
+        <textarea class="input" data-in="tw-rate-comment" data-id="${i.id}" rows="3" maxlength="300" placeholder="Nhập nhận xét về kết quả xử lý..." style="margin-top:8px">${U.esc(comment || '')}</textarea>
+        <div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn primary" data-act="tw-rate-submit" data-id="${i.id}">Gửi đánh giá</button></div>` : `<dl class="kv"><dt>Mức đánh giá</dt><dd>${i.rating ? '★'.repeat(i.rating) + '☆'.repeat(5 - i.rating) : '—'}</dd>${comment ? `<dt>Nhận xét</dt><dd>${U.esc(comment)}</dd>` : ''}</dl>`}` : ''}
       </div><div class="modal-f"><button class="btn" data-act="close">Đóng</button></div>`);
   }
   function openReportForm(t) {
@@ -559,6 +565,10 @@
     saveSession(); render();
   };
   A.IN['tw-lookup'] = el => { S.lookup = el.value; };
+  A.IN['tw-rate-comment'] = el => {
+    const id = el.dataset.id;
+    S.ratingDrafts[id] = Object.assign({}, S.ratingDrafts[id] || {}, { comment: el.value });
+  };
   A.CH['tw-images'] = el => {
     const files = Array.from(el.files || []);
     el.value = '';
@@ -682,17 +692,30 @@
       if (x) URL.revokeObjectURL(x.url);
       const box = $('#tw-image-draft'); if (box) box.innerHTML = draftThumbs();
     },
-    'tw-rate': el => {
+    'tw-rate-pick': el => {
       const t = me(), i = A.db.incidents.find(x => x.id === el.dataset.id);
-      if (!t || !i || i.traderId !== t.id || (i.state !== 'hoanthanh' && i.state !== 'dong')) return;
-      // Giữ đúng hành vi đánh giá hiện có của Mini app: đánh giá xong thì phản ánh chuyển Đóng.
-      i.rating = Number(el.dataset.n);
-      if (i.state === 'hoanthanh') i.state = 'dong';
-      i.log.push({ at: U.today(), text: 'Tiểu thương đánh giá ' + i.rating + ' sao (' + SOURCE + ')' });
+      if (!t || !i || i.traderId !== t.id || i.state !== 'hoanthanh') return;
+      S.ratingDrafts[i.id] = Object.assign({}, S.ratingDrafts[i.id] || {}, { rating: Number(el.dataset.n) });
+      openIncident(t, i.id);
+    },
+    'tw-rate-submit': el => {
+      const t = me(), i = A.db.incidents.find(x => x.id === el.dataset.id);
+      if (!t || !i || i.traderId !== t.id || i.state !== 'hoanthanh') return;
+      const draft = S.ratingDrafts[i.id] || {};
+      const rating = Number(draft.rating || 0);
+      if (!rating) { U.toast('Vui lòng chọn số sao đánh giá.'); return; }
+      const api = A.features.complaints || {};
+      const ok = api.submitTraderRating ? api.submitTraderRating(i, t, rating, draft.comment || '', SOURCE) : false;
+      if (!ok) { U.toast('Không thể lưu đánh giá phản ánh này.'); return; }
+      delete S.ratingDrafts[i.id];
       const inModal = !!document.querySelector('#modal-root .modal');
-      A.save(); render();
+      render();
       if (inModal) openIncident(t, i.id);
-      U.toast('Cảm ơn bạn đã đánh giá ' + i.rating + ' sao');
+      U.toast('Cảm ơn bạn đã đánh giá. Phản ánh đã được đóng.');
+    },
+    'tw-rate': el => {
+      A.ACT['tw-rate-pick'](el);
+      A.ACT['tw-rate-submit'](el);
     }
   });
 
