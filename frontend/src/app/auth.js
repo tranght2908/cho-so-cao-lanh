@@ -3,7 +3,10 @@
   'use strict';
   const U = A.U, ui = A.ui;
   // OTP mô phỏng của prototype (không gửi SMS thật).
-  const DEMO_OTP = '123456';
+  const DEMO_OTP = A.ACCOUNTS.otpDemoCode; // OTP mô phỏng dùng chung (accounts/store.js)
+  // Phiên OTP dùng MỘT LẦN (chỉ trong bộ nhớ ui.auth, không lưu localStorage): gắn với account + SĐT đã yêu cầu,
+  // có hạn dùng; xác thực đúng thì huỷ ngay. Gửi lại mã = phiên mới (phiên cũ vô hiệu). Mã vẫn là DEMO_OTP.
+  function issueOtp(d, acc) { d.otpChallenge = A.ACCOUNTS.issueOtpChallenge(acc); }
   const now = () => new Date().toISOString();
   const initials = name => {
     const words = String(name || '').trim().split(/\s+/).filter(Boolean);
@@ -141,10 +144,35 @@
   };
   function userMenuHtml(acc) {
     const role = A.PERM.role(A.ACCOUNTS.primaryRole(acc));
-    return `<div class="header-popover user-popover">${avatarHtml(acc, 'lg')}<div><b>${U.esc(acc.fullName)}</b><small>${U.esc((role && role.name) || acc.title || '')}</small><small>${U.esc(acc.organization || '')}</small></div><div class="user-popover-actions"><button data-act="auth-profile">Thông tin cá nhân</button><button data-act="auth-logout">Đăng xuất</button></div></div>`;
+    return `<div class="header-popover user-popover">${avatarHtml(acc, 'lg')}<div><b>${U.esc(acc.fullName)}</b><small>${U.esc((role && role.name) || acc.title || '')}</small><small>${U.esc(A.ACCOUNTS.organizationOf(acc))}</small></div><div class="user-popover-actions"><button data-act="auth-profile">Thông tin cá nhân</button><button data-act="auth-logout">Đăng xuất</button></div></div>`;
   }
+  // Chỉ gọi SAU khi OTP xác thực thành công (auth-verify). Kích hoạt lần đầu: Chờ kích hoạt → Đang hoạt động
+  // (idempotent — account đã ACTIVE chỉ đăng nhập). Chỉ đúng account đã xác thực, không đụng account khác.
+  const isTraderAccount = acc => !!acc && A.ACCOUNTS.primaryRole(acc) === 'trader';
+  // A07 dùng web Tiểu thương (tieu-thuong/) — không dùng back-office. Sau OTP đúng: mở phiên web Tiểu thương
+  // (sessionStorage dùng chung) rồi chuyển trang; KHÔNG tạo phiên back-office, KHÔNG cấp quyền back-office.
+  A.goTraderWeb = function () { try { window.location.href = A.ACCOUNTS.TRADER_WEB_URL + '#/trang-chu'; } catch (e) { /* môi trường không điều hướng được */ } };
+  function traderPortalNoticeHtml(acc) {
+    return `<div class="auth-shell"><div class="auth-panel"><section class="auth-form"><div class="auth-brand-label">Chợ số Cao Lãnh</div><h1>Cổng tiểu thương</h1>
+      <p class="auth-lead">Tài khoản <b>${U.esc(acc.fullName || '')}</b> là tài khoản Tiểu thương. Vui lòng sử dụng Cổng tiểu thương để xem hợp đồng, khoản phí, biên lai và gửi phản ánh.</p>
+      <a class="btn primary auth-submit" href="${A.ACCOUNTS.TRADER_WEB_URL}#/trang-chu" data-act="auth-go-trader-web">Mở Cổng tiểu thương</a>
+      <div class="auth-links"><button class="btn link" data-act="auth-logout">Đăng xuất</button></div></section></div></div>`;
+  }
+  A.showTraderPortalNotice = function (acc) {
+    document.body.classList.add('auth-required');
+    document.querySelector('#auth-root').innerHTML = traderPortalNoticeHtml(acc);
+  };
   function completeLogin(acc) {
-    if (accountStatus(acc) === 'PENDING_ACTIVATION') A.ACCOUNTS.update(acc.id, { status: 'ACTIVE', activatedAt: now() });
+    A.ACCOUNTS.activateAfterOtp(acc); // chỉ Chờ kích hoạt → Đang hoạt động (đã xác thực OTP)
+    if (isTraderAccount(acc)) {
+      A.ACCOUNTS.startTraderWebSession(acc);
+      ui.sessionAccountId = null; ui.sessionMetadata = null; A.saveUi();
+      ui.auth = { step: 'phone', phone: '', otp: '', error: '' };
+      ui.traderWebRedirect = acc.id;
+      A.showTraderPortalNotice(acc);
+      A.goTraderWeb();
+      return;
+    }
     const loginAt = now(); A.ACCOUNTS.update(acc.id, { lastLoginAt: loginAt });
     ui.sessionAccountId = acc.id; ui.currentDemoAccountId = null;
     ui.sessionMetadata = Object.assign(createSessionMetadata(acc), { loginAt });
@@ -158,28 +186,40 @@
   const previousRoute = A.route;
   A.route = function () {
     if (!A.isLoggedIn()) { A.showLogin(); return; }
+    if (isTraderAccount(A.currentAccount())) { A.showTraderPortalNotice(A.currentAccount()); return; }
     document.body.classList.remove('auth-required');
     document.body.classList.toggle('trader-session', A.ACCOUNTS.primaryRole(A.currentAccount()) === 'trader');
     previousRoute();
   };
   const previousRender = A.render;
-  A.render = function (scroll) { if (!A.isLoggedIn()) { A.showLogin(); return; } previousRender(scroll); };
+  A.render = function (scroll) { if (!A.isLoggedIn()) { A.showLogin(); return; } if (isTraderAccount(A.currentAccount())) { A.showTraderPortalNotice(A.currentAccount()); return; } previousRender(scroll); };
 
   A.ACT['auth-continue'] = () => {
     const d = ui.auth || {}, acc = A.ACCOUNTS.byPhone(d.phone);
     if (!acc) { d.error = 'Số điện thoại chưa được đăng ký. Vui lòng liên hệ Ban Quản lý chợ.'; return A.showLogin(); }
     if (accountStatus(acc) === 'LOCKED') { d.error = 'Tài khoản hiện đang bị khóa. Vui lòng liên hệ Ban Quản lý chợ.'; return A.showLogin(); }
+    // Tạm khóa bị chặn ở trên; Chờ kích hoạt / Đang hoạt động được yêu cầu OTP (yêu cầu OTP KHÔNG kích hoạt).
+    issueOtp(d, acc);
     // Prototype: tự điền sẵn OTP mô phỏng để trình diễn nhanh; người dùng vẫn bấm "Xác nhận".
     Object.assign(d, { step: 'otp', otp: DEMO_OTP, error: '' }); A.showLogin();
   };
   A.ACT['auth-verify'] = () => {
     const d = ui.auth || {}, acc = A.ACCOUNTS.byPhone(d.phone);
     if (!acc || accountStatus(acc) === 'LOCKED') { d.step = 'phone'; d.error = 'Tài khoản hiện không thể đăng nhập. Vui lòng liên hệ Ban Quản lý chợ.'; return A.showLogin(); }
-    if (d.otp !== DEMO_OTP) { d.error = 'Mã OTP không chính xác. Vui lòng kiểm tra lại.'; return A.showLogin(); }
+    const v = A.ACCOUNTS.verifyOtpChallenge(d.otpChallenge, acc, d.phone, d.otp);
+    if (!v.ok && v.reason === 'NO_CHALLENGE') { d.error = 'Mã OTP không còn hiệu lực. Vui lòng bấm "Gửi lại mã".'; return A.showLogin(); }
+    if (!v.ok && v.reason === 'EXPIRED') { d.otpChallenge = null; d.error = 'Mã OTP đã hết hạn. Vui lòng bấm "Gửi lại mã".'; return A.showLogin(); }
+    if (!v.ok) { d.error = 'Mã OTP không chính xác. Vui lòng kiểm tra lại.'; return A.showLogin(); }
+    d.otpChallenge = null; // tiêu thụ: mã chỉ dùng được một lần
     completeLogin(acc);
   };
-  A.ACT['auth-resend'] = () => { ui.auth.error = ''; U.toast('Đã gửi lại OTP mô phỏng đến ' + U.maskPhone(ui.auth.phone) + '.'); };
-  A.ACT['auth-change-phone'] = () => { Object.assign(ui.auth, { step: 'phone', otp: '', error: '' }); A.showLogin(); };
+  A.ACT['auth-resend'] = () => {
+    const d = ui.auth || {}, acc = A.ACCOUNTS.byPhone(d.phone);
+    if (!acc || accountStatus(acc) === 'LOCKED') { Object.assign(d, { step: 'phone', otpChallenge: null, error: 'Tài khoản hiện không thể đăng nhập. Vui lòng liên hệ Ban Quản lý chợ.' }); return A.showLogin(); }
+    issueOtp(d, acc); d.error = '';
+    U.toast('Đã gửi lại OTP mô phỏng đến ' + U.maskPhone(d.phone) + '.');
+  };
+  A.ACT['auth-change-phone'] = () => { Object.assign(ui.auth, { step: 'phone', otp: '', error: '', otpChallenge: null }); A.showLogin(); };
   A.ACT['auth-user-menu'] = () => { ui.activeHeaderPopover = ui.activeHeaderPopover === 'account' ? null : 'account'; ui.personalNotificationsExpanded = false; A.render(); };
   // "Thông tin cá nhân": màn hồ sơ của CHÍNH tài khoản đang đăng nhập (accounts/profile.js).
   A.ACT['auth-profile'] = () => { ui.activeHeaderPopover = null; A.closeModal(); if (A.currentAccount()) { ui.profile = { mode: 'self', accountId: null, tab: 'info' }; if (A.openTraderPortalProfile && A.openTraderPortalProfile()) return; A.go('thong-tin-ca-nhan'); } };

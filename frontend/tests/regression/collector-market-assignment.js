@@ -48,10 +48,12 @@ ok('legacy conflicts are visible and never pick an arbitrary collector', () => {
   assert.strictEqual(A.ACCOUNTS.marketCollectorState('TVH').status, 'CONFLICT');
   assert.strictEqual(A.ACCOUNTS.getMarketCollector('TVH'), null);
 });
-ok('a new collector cannot be created with an empty scope', () => {
+// Quyết định 30/09/2026: NV thu phí 0..N Chợ — mới tạo chưa được Tổ trưởng phân công là hợp lệ.
+ok('a new collector may be created with no market (not yet assigned)', () => {
   const result = A.ACCOUNTS.saveCollectorAccount({ id: 'TEST-ASSIGN-EMPTY', code: 'TEST-ASSIGN-EMPTY', fullName: 'Empty', roleIds: ['collector'], status: 'active', marketScopes: [] });
-  assert.strictEqual(result.ok, false);
-  assert.strictEqual(result.reason, 'COLLECTOR_SCOPE_REQUIRED');
+  assert.strictEqual(result.ok, true);
+  assert.deepStrictEqual(Array.from(A.ACCOUNTS.get('TEST-ASSIGN-EMPTY').marketScopes), []);
+  assert.deepStrictEqual(Array.from(A.allowedMarkets(A.ACCOUNTS.get('TEST-ASSIGN-EMPTY'))), []);
 });
 ok('an unassigned market returns null', () => assert.strictEqual(A.ACCOUNTS.getMarketCollector('TTT'), null));
 ok('locked collector scopes are retained but do not reserve a current assignment', () => {

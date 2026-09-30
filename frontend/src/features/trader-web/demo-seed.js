@@ -1,5 +1,6 @@
-/* Dữ liệu mẫu cho Cổng tiểu thương — dùng chung cho web app /tieu-thuong/ và cổng tiểu thương trong
- * trang quản lý (màn 'mini-app'); cả hai cùng gọi A.traderWebDemoSeed() lúc khởi động.
+/* Legacy isolated fixture for the former Trader portal demo. It is intentionally
+ * not loaded by either canonical runtime entry point; keeping it here avoids
+ * breaking old/manual fixtures without contaminating shared business data.
  * Không sinh khoản phải thu/thanh toán giả: chọn các tiểu thương CÓ SẴN trong A.db với tình huống
  * phí khác nhau (quá hạn, thu một phần, chưa đến hạn) rồi cấp tài khoản tiểu thương cho họ qua
  * A.ACCOUNTS.add — đúng như Quản trị cấp tài khoản trên trang quản lý. Bổ sung 2 phản ánh mẫu
@@ -14,7 +15,7 @@
   const TAG = 'trader-web-demo';
 
   function roleName(id) { const r = A.PERM && A.PERM.role ? A.PERM.role(id) : null; return r ? r.name : 'Tiểu thương'; }
-  const hasAccount = t => !!A.features.accounts.service.byTraderId(t.id);
+  const hasAccount = t => A.ACCOUNTS.isTraderLinked(t.id);
   const unpaid = t => A.db.invoices.filter(i => i.traderId === t.id && i.status !== 'paid');
   const eligible = (market, used) => A.db.traders.filter(t => t.market === market && t.stalls.length && (!t.profileStatus || t.profileStatus === 'ACTIVE') && !hasAccount(t) && used.indexOf(t.id) === -1)
     .sort((a, b) => a.id.localeCompare(b.id));

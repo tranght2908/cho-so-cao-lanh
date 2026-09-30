@@ -10,7 +10,9 @@
   U.can = r => {
     const it = A.menuItem(r), role = A.PERM.role(ui.role);
     const acc = A.currentAccount();
-    if (!it || !role || !role.active || !acc || acc.status !== 'active') return false;
+    // Trạng thái chuẩn hoá qua A.ACCOUNTS.authStatus ('active'/'ACTIVE' đều là Đang hoạt động) — tài khoản vừa kích
+    // hoạt OTP hoặc lưu qua form có status 'ACTIVE'; so chữ thường làm các tài khoản đó mất mọi quyền.
+    if (!it || !role || !role.active || !acc || A.ACCOUNTS.authStatus(acc) !== 'ACTIVE') return false;
     const screenAllowed = r === 'mat-bang' && ui.market === 'CL'
       ? (A.PERM.canScreen(ui.role, 'mat-bang') || A.PERM.canScreen(ui.role, 'diem-kd'))
       : A.PERM.canScreen(ui.role, r);
@@ -30,7 +32,7 @@
   //                  "targetMarket ∈ account.marketScopes" mà không cần kiểm tra lại 2 lần.
   A.canDo = function (actionKey, targetMarket) {
     const acc = A.currentAccount();
-    if (!acc || acc.status !== 'active') return false;
+    if (!acc || A.ACCOUNTS.authStatus(acc) !== 'ACTIVE') return false;
     if (!A.PERM.canAction(ui.role, actionKey)) return false;
     if (targetMarket != null && targetMarket !== ui.market) return false;
     return true;

@@ -543,30 +543,29 @@
       </nav>
     </aside>`;
   }
-  function sampleTraders() {
-    const db = A.db, out = [];
-    const add = t => { if (t && !out.includes(t)) out.push(t); };
-    const scoped = db.traders.filter(t => t.stalls.length && inMiniScopeMarket(t.market));
-    add(scoped.find(t => t.market === ui.market && t.app && U.traderOverdue(t.id) > 0));
-    add(scoped.find(t => t.market === ui.market && t.app && U.traderDebt(t.id) > 0 && !U.traderOverdue(t.id)));
-    add(scoped.find(t => t.market === 'TTD' && U.traderDebt(t.id) > 0));
-    scoped.filter(t => U.traderDebt(t.id) > 0).slice(0, 8).forEach(add);
-    add(scoped.find(t => !U.traderDebt(t.id)));
-    return out.filter(t => t.stalls.length);
-  }
-  // Giữ nguyên: KHÔNG bắt buộc `t.stalls.length` — 1 trader hợp lệ (tìm được qua tra cứu SĐT, xem
-  // luồng đăng nhập mới bên dưới) vẫn phải "đăng nhập" được dù CHƯA có điểm kinh doanh (mục 9 yêu cầu
-  // correction — hợp đồng/điểm KD xử lý riêng, trader có thể tồn tại trước khi có contract/point).
-  // Không ảnh hưởng dropdown demo hiện có: sampleTraders() vẫn tự lọc chỉ trader có stalls.
+  // Hồ sơ tiểu thương hiện hành của Mini App — KHÔNG có hồ sơ mẫu/fallback: chỉ tài khoản Tiểu thương (A07) mới
+  // resolve được hồ sơ, và chỉ trong các hồ sơ liên kết với chính account (Account.traderIds). Role khác → null.
   function trader() {
     const m = mini();
-    let t = m.traderId ? A.idx.trader.get(m.traderId) : null;
     const acc = A.currentAccount();
-    const accountTraderId = acc && (acc.traderId || acc.linkedTraderId);
-    if (accountTraderId && (!t || t.id !== accountTraderId || !inMiniScopeMarket(t.market))) t = A.idx.trader.get(accountTraderId) || t;
-    if (!t || !inMiniScopeMarket(t.market)) { t = sampleTraders()[0]; if (t) m.traderId = t.id; }
-    return t;
+    // Tài khoản Tiểu thương: CHỈ hồ sơ liên kết với chính account (Account.traderIds). Không có hồ sơ hợp lệ →
+    // null (màn hình/handler hiện trạng thái trống, KHÔNG rơi sang hồ sơ mẫu của người khác). Nhiều hồ sơ mà chưa
+    // có hồ sơ mặc định → null (Task Portal sẽ cho chọn), không chọn ngẫu nhiên.
+    if (acc && A.ACCOUNTS.primaryRole(acc) === 'trader') {
+      const own = A.ACCOUNTS.traderIdsOf(acc);
+      const pick = own.indexOf(m.traderId) !== -1 ? m.traderId : (acc.traderId && own.indexOf(acc.traderId) !== -1 ? acc.traderId : (own.length === 1 ? own[0] : null));
+      const mine = pick ? A.idx.trader.get(pick) : null;
+      if (!mine || !inMiniScopeMarket(mine.market)) { m.traderId = null; return null; }
+      m.traderId = mine.id;
+      if (ui.market !== mine.market) ui.market = mine.market; // ngữ cảnh chợ theo hồ sơ đang xem
+      return mine;
+    }
+    m.traderId = null;
+    return null;
   }
+  // activeTraderProfile của phiên Tiểu thương — ĐÚNG hồ sơ mà mọi màn cổng đang dùng (không logic chọn thứ hai).
+  // Dùng cho "Thông tin cá nhân" (accounts/profile.js) để không lệch hồ sơ khi đổi "Chợ đang xem".
+  A.activeTraderProfile = () => trader();
   // QUA_HAN_CHUYEN_CONG_NO: khoản đã chuyển công nợ không nộp theo QR thường (chỉ thu hồi nợ).
   const unpaid = t => A.db.invoices.filter(i => i.traderId === t.id && i.status !== 'paid' && !(A.debtOf && A.debtOf(i))).sort((a, b) => a.due.localeCompare(b.due));
   const collectorDebtors = () => {
@@ -595,7 +594,7 @@
   // nợ (trả ĐỦ nợ còn lại, nội dung CHOSO CN-… PT-…), nhận biên lai. Quyền: action:mini-app.tra-no-qr (trader) +
   // sở hữu (account.traderId === debt.traderId) + chợ trong marketScopes — kiểm tra lại trong handler.
   function miniDebtCard(t) {
-    const acc = A.currentAccount() || {}, own = (acc.traderId || acc.linkedTraderId) === t.id;
+    const acc = A.currentAccount() || {}, own = A.ACCOUNTS.traderIdsOf(acc).indexOf(t.id) !== -1;
     const debts = (A.db.debts || []).filter(d => d.traderId === t.id);
     if (!debts.length) return '';
     const canPay = own && A.canDo('mini-app.tra-no-qr', t.market);
@@ -814,7 +813,9 @@
     const debt = U.traderOverdue(t.id) > 0, mk = U.market(t.market).short;
     // PHAT_HANH_KHOAN_THU: thông báo phát hành gửi riêng từng tiểu thương (traderLines[traderId] = mã, số tiền).
     const issuedFor = A.db.notifications.filter(n => n.kind === 'RECEIVABLE_ISSUED' && n.traderLines && n.traderLines[t.id]).map(n => Object.assign({}, n, { body: n.traderLines[t.id] }));
-    const general = issuedFor.concat(A.db.notifications.filter(n => n.kind !== 'RECEIVABLE_ISSUED' && n.kind !== 'RECEIVABLE_LIST_TO_COLLECTORS').filter(n => n.traderId === t.id || n.group === 'Toàn bộ tiểu thương' || n.group === mk || n.group === 'Ngành hàng: ' + t.cat || (debt && n.group === 'Danh sách nợ phí')));
+    // New personal records are strictly scoped by active traderId. Market-only
+    // records are broadcasts, never a substitute for financial ownership.
+    const general = issuedFor.concat(A.db.notifications.filter(n => !(n.kind === 'RECEIVABLE_ISSUED' && n.traderLines) && n.kind !== 'RECEIVABLE_LIST_TO_COLLECTORS').filter(n => n.traderId === t.id || (!n.traderId && (n.group === 'Toàn bộ tiểu thương' || n.group === mk || n.group === 'Ngành hàng: ' + t.cat || (debt && n.group === 'Danh sách nợ phí')))));
     const session = (A.db.sessionNotifications || []).map(n => {
       const s = (A.db.marketSessions || []).find(x => x.id === n.sessionId);
       if (n.merchantId && n.merchantId !== t.id) return null;
@@ -1022,7 +1023,7 @@
     const monthly = Number(c.monthly), policyAmount = c.feePolicy && Number(c.feePolicy.amount), amount = monthly > 0 ? monthly : (policyAmount > 0 ? policyAmount : null);
     const rows = snapshot.length ? snapshot.map(x => ({ name: x.name || 'Khoản thu', unit: x.unitLabel || '—', amount: x.amount, note: x.note || '—' })) : (amount ? [{ name: 'Mức giá theo hợp đồng', unit: 'tháng', amount, note: 'Theo hợp đồng' }] : []);
     if (!rows.length) return '<div class="small muted">Chưa có thông tin mức thu.</div>';
-    return `<div class="portal-charge-table"><div class="portal-charge-head"><span>STT</span><span>Khoản thu</span><span>Đơn vị tính</span><span>Mức áp dụng</span><span>Ghi chú</span></div>${rows.map((x, index) => `<div><span>${index + 1}</span><span>${U.esc(x.name)}</span><span>${U.esc(x.unit)}</span><b>${U.money(x.amount)}</b><span>${U.esc(x.note)}</span></div>`).join('')}</div>`;
+    return `<div class="portal-charge-table"><div class="portal-charge-head"><span>Khoản thu</span><span>Đơn vị tính</span><span class="num">Mức áp dụng</span><span>Ghi chú</span></div>${rows.map(x => `<div><span>${U.esc(x.name)}</span><span>${U.esc(x.unit)}</span><b>${U.money(x.amount)}</b><span>${U.esc(x.note)}</span></div>`).join('')}</div>`;
   }
   function portalContractPointCard(c) {
     const point = portalContractPoint(c);
@@ -1032,8 +1033,7 @@
     const areaType = U.areaTypeLabel(point.areaTypeId || point.areaType) || '—';
     return `<article class="portal-contract-point">
       <div class="portal-point-head"><div class="portal-point-icon">${U.icon('store')}</div><div><b>${U.esc(point.code || '—')}</b><small>${U.esc((row && row.name) || point.sectionName || 'Điểm kinh doanh')}</small></div><span class="portal-point-usage ${portalContractPhase(c)}">${portalPointUsage(c)}</span></div>
-      <div class="portal-point-detail-list"><div><span>Vị trí</span><b>${U.esc(portalLocation(point))}</b></div><div><span>Ngành hàng</span><b>${U.esc(industry)}</b></div><div><span>Diện tích</span><b>${Number.isFinite(Number(point.area)) ? Number(point.area).toLocaleString('vi-VN') + ' m²' : '—'}</b></div><div><span>Loại diện tích</span><b>${U.esc(areaType)}</b></div></div>
-      ${collector ? `<div class="portal-point-collector"><span>Nhân viên thu phí phụ trách</span><b>${U.esc(collector.fullName || collector.name || '—')}</b></div>` : ''}
+      <div class="portal-point-detail-list"><div><span>Vị trí</span><b>${U.esc(portalLocation(point))}</b></div><div><span>Ngành hàng</span><b>${U.esc(industry)}</b></div><div><span>Diện tích</span><b>${Number.isFinite(Number(point.area)) ? Number(point.area).toLocaleString('vi-VN') + ' m²' : '—'}</b></div><div><span>Loại diện tích</span><b>${U.esc(areaType)}</b></div>${collector ? `<div><span>Nhân viên thu phí phụ trách</span><b>${U.esc(collector.fullName || collector.name || '—')}</b></div>` : ''}</div>
     </article>`;
   }
   function portalContractsScreen(t) {
@@ -1041,19 +1041,16 @@
     if (!cons.length) return `<section class="merchant-panel portal-contract-empty"><div class="portal-empty-icon">${U.icon('file')}</div><h2>Bạn chưa có hợp đồng kinh doanh</h2><p>Khi được bố trí điểm kinh doanh và hợp đồng có hiệu lực, thông tin sẽ xuất hiện tại đây.</p></section>`;
     const selected = cons.find(c => c.id === mini().portalContractId) || cons[0];
     mini().portalContractId = selected.id;
-    const point = portalContractPoint(selected), signedDate = selected.signedDate || '';
-    const BP = A.features.businessPoints.service, selectedRow = point && BP.row(point);
-    const collector = point ? (typeof BP.pointCollector === 'function' ? BP.pointCollector(point.id) : (selectedRow && selectedRow.collectorId ? A.ACCOUNTS.get(selectedRow.collectorId) : null)) : null;
+    const signedDate = selected.signedDate || '';
     return `<div class="portal-contract-layout">
         <aside class="portal-contract-list"><div class="portal-contract-list-label">Danh sách hợp đồng</div>${cons.map(c => {
           const hasPoint = !!portalContractPoint(c);
           return `<button class="portal-contract-choice${c.id === selected.id ? ' selected' : ''}" data-act="mini-contract-select" data-id="${U.esc(c.id)}" aria-pressed="${c.id === selected.id}"><div><b>${U.esc(c.id)}</b>${portalContractStatus(c)}</div><span>${U.dmy(c.start)} – ${U.dmy(c.end)}</span><span>${U.esc(U.market(c.market || t.market).name)}</span><small>${hasPoint ? '01 điểm kinh doanh' : 'Chưa có điểm kinh doanh'} <i>›</i></small></button>`;
         }).join('')}</aside>
         <section class="merchant-panel portal-contract-detail"><header class="portal-detail-head"><div><h2>${U.esc(selected.id)}</h2><p>Hợp đồng thuê điểm kinh doanh</p></div>${portalContractStatus(selected)}</header>
-          <section class="portal-contract-section portal-contract-overview"><h3>Thông tin hợp đồng</h3><div class="portal-contract-detail-list"><div><span>Thời hạn</span><b>${U.dmy(selected.start)} – ${U.dmy(selected.end)}</b></div><div><span>Chợ</span><b>${U.esc(U.market(selected.market || t.market).name)}</b></div><div><span>Loại hợp đồng</span><b>${U.esc(selected.kind || '—')}</b></div></div></section>
+          <section class="portal-contract-section portal-contract-overview"><h3>Thông tin hợp đồng</h3><div class="portal-contract-detail-list"><div><span>Thời hạn</span><b>${U.dmy(selected.start)} – ${U.dmy(selected.end)}</b></div><div><span>Chợ</span><b>${U.esc(U.market(selected.market || t.market).name)}</b></div><div><span>Loại hợp đồng</span><b>${U.esc(selected.kind || '—')}</b></div><div><span>Ngày ký hợp đồng</span><b>${signedDate ? U.dmy(signedDate) : '—'}</b></div><div><span>Trạng thái tiểu thương</span><b>${portalTraderBusinessStatus(t)}</b></div></div></section>
           <section class="portal-contract-section"><h3>Điểm kinh doanh thuộc hợp đồng</h3>${portalContractPointCard(selected)}</section>
           <section class="portal-contract-section"><h3>Giá và các khoản thu áp dụng</h3>${portalChargeHtml(selected)}<p class="small muted">Khoản phải thu thực tế được xác định theo chính sách, biểu phí có hiệu lực tại từng kỳ thu.</p></section>
-          <section class="portal-contract-section"><h3>Thông tin khác</h3><div class="portal-contract-detail-list portal-contract-other"><div><span>Ngày ký hợp đồng</span><b>${signedDate ? U.dmy(signedDate) : '—'}</b></div><div><span>Trạng thái điểm</span><b>${portalPointUsage(selected)}</b></div><div><span>Trạng thái tiểu thương</span><b>${portalTraderBusinessStatus(t)}</b></div><div><span>Nhân viên thu phí phụ trách</span><b>${U.esc((collector && (collector.fullName || collector.name)) || '—')}</b></div></div></section>
         </section>
       </div>`;
   }
@@ -1104,13 +1101,31 @@
   // Mini App hides the shared .topbar while a trader is signed in.  Render the
   // existing shared header controls here instead of maintaining inert copies
   // of their icons in the trader-only shell.
+  // "Chợ đang xem": chỉ các chợ có hồ sơ liên kết với CHÍNH tài khoản (Account.traderIds). Chọn chợ = chọn hồ sơ
+  // (activeTraderProfile) của chợ đó; dữ liệu mọi màn vẫn lọc theo traderId, không theo toàn chợ.
+  function traderMarketSwitchHtml(t, account) {
+    if (!account || A.ACCOUNTS.primaryRole(account) !== 'trader') return '';
+    const profiles = A.ACCOUNTS.traderProfilesOf(account);
+    if (profiles.length < 2) return '';
+    return `<label class="merchant-market-switch"><span>Chợ đang xem</span><select class="input" data-ch="mini-profile" aria-label="Chợ đang xem">${profiles.map(p => `<option value="${p.id}" ${p.id === t.id ? 'selected' : ''}>${U.esc((U.market(p.market) || { name: p.market }).name)}</option>`).join('')}</select></label>`;
+  }
   function merchantHeaderHtml(t) {
     const account = A.currentAccount && A.currentAccount();
-    if (!account) return `<span class="merchant-avatar">${U.esc((t.name || '?').slice(0, 1))}</span><span><b>${U.esc(t.name)}</b><small>Tiểu thương</small></span>`;
+    const simple = `<span class="merchant-avatar">${U.esc((t.name || '?').slice(0, 1))}</span><span><b>${U.esc(t.name)}</b><small>Tiểu thương</small></span>`;
+    if (!account) return simple;
     const notifications = A.personalNotifications ? A.personalNotifications.headerHtml(account) : '';
-    const userMenu = A.userHeaderHtml ? A.userHeaderHtml(account) : '';
-    return notifications + userMenu;
+    const userMenu = A.userHeaderHtml ? A.userHeaderHtml(account) : simple;
+    return traderMarketSwitchHtml(t, account) + notifications + userMenu;
   }
+  A.CH['mini-profile'] = el => {
+    const account = A.currentAccount && A.currentAccount();
+    if (!account || A.ACCOUNTS.primaryRole(account) !== 'trader' || A.ACCOUNTS.traderIdsOf(account).indexOf(el.value) === -1) return;
+    const t = A.idx.trader.get(el.value);
+    if (!t) return;
+    Object.assign(mini(), { traderId: t.id, contractId: null, complaintStall: null, regForm: null });
+    ui.market = t.market; // ngữ cảnh chợ cho các kiểm tra action theo chợ (A.canDo); quyền bản ghi vẫn theo traderId
+    A.render();
+  };
   function merchantShellHtml(t, nav, stats, inner) {
     const crumb = PORTAL_CRUMB[nav] || PORTAL_CRUMB.home;
     return `<div class="merchant-shell">${merchantPortalSidebar(nav, portalBadges(t, stats))}<main class="merchant-main"><div class="merchant-portal">
@@ -1138,10 +1153,10 @@
       </div></div>`;
     }
     if (!isTraderMini()) {
-      return '<div class="empty">Mini app nhân viên thu phí chỉ áp dụng cho luồng thu tiền mặt Chợ quê TTĐ, đúng phạm vi tài khoản và kỳ đang thu.</div>';
+      return '<div class="empty">Chức năng này chỉ dành cho tài khoản Tiểu thương.</div>';
     }
     const t = trader();
-    if (!t) return '<div class="empty">Không có tiểu thương trong phạm vi tài khoản mini app.</div>';
+    if (!t) return '<div class="empty">Tài khoản chưa được liên kết với hồ sơ tiểu thương.</div>';
     const mine = A.db.incidents.filter(i => i.traderId === t.id && inMiniScopeMarket(i.market)).reverse();
     const tab = mini().complaintTab === 'list' ? 'list' : 'send';
     const stats = miniComplaintStats(mine);
@@ -1216,7 +1231,7 @@
     // này, chỉ xác định CASE A (không thấy)/CASE B (thấy đúng 1)/nhiều kết quả (mục 22 — ambiguous).
     'mini-login-lookup': () => {
       const m = mini();
-      const raw = m.loginPhone != null ? m.loginPhone : trader().phone;
+      const raw = m.loginPhone != null ? m.loginPhone : (trader() || {}).phone;
       if (!String(raw || '').trim()) { U.toast('Vui lòng nhập số điện thoại'); return; }
       const matches = miniFindTradersByPhone(raw);
       if (matches.length === 0) { m.loginStep = 'notfound'; A.render(); return; }
@@ -1249,8 +1264,9 @@
     'mini-home': () => { mini().pay = null; mini().tab = 'home'; A.render(); },
     'mini-pay': () => { mini().pay = 'qr'; A.render(); },
     'mini-paid': () => {
-      const t = trader(), list = unpaid(t);
+      const t = trader();
       if (!isTraderMini() || !t || !inMiniScopeMarket(t.market)) { U.toast('Không có quyền thanh toán cho tiểu thương này'); return; }
+      const list = unpaid(t);
       const pays = list.length ? A.applyPayment(list.map(i => i.id), U.sum(list, U.due), 'qr', 'Mini app') : [];
       // THU_HOI_NO: nợ quá hạn trả qua QR thu nợ (nội dung mã nợ) → map về khoản thu gốc.
       (A.db.debts || []).filter(d => d.traderId === t.id && d.status === 'OPEN').forEach(d => { pays.push.apply(pays, A.payDebtByQr(d.id, 'Mini app')); });
@@ -1347,7 +1363,7 @@
     },
     'mini-debt-pay': el => {
       const t = trader(), acc = A.currentAccount() || {}, d = (A.db.debts || []).find(x => x.id === el.dataset.id);
-      if (!U.can('mini-app') || !isTraderMini() || !t || !d || d.traderId !== t.id || (acc.traderId || acc.linkedTraderId) !== t.id || !inMiniScopeMarket(d.market) || !A.canDo('mini-app.tra-no-qr', d.market)) { U.toast('Không có quyền thanh toán khoản nợ này'); return; }
+      if (!U.can('mini-app') || !isTraderMini() || !t || !d || d.traderId !== t.id || A.ACCOUNTS.traderIdsOf(acc).indexOf(t.id) === -1 || !inMiniScopeMarket(d.market) || !A.canDo('mini-app.tra-no-qr', d.market)) { U.toast('Không có quyền thanh toán khoản nợ này'); return; }
       if (d.status !== 'OPEN') { U.toast(d.status === 'UNRECOVERABLE' ? 'Khoản nợ đã vào danh sách cắt điện — không nhận thanh toán' : 'Khoản nợ đã được thanh toán'); A.render(); return; }
       const pays = A.payDebtByQr(d.id, 'Mini app');
       if (!pays.length) { U.toast('Không ghi nhận được thanh toán'); return; }

@@ -552,7 +552,7 @@
   }
   // Khoản phải thu — góc nhìn NV thu phí: không hiện tiền (tiền cần thu xem ở Thu tiền & biên lai),
   // chỉ đếm khoản theo tình trạng thu và liệt kê điểm KD được phân công cho chính mình.
-  function ptMyPoints(list, meId) {
+  function ptMyPoints(list) {
     const ids = [];
     list.forEach(i => U.invStallIds(i).forEach(id => { const st = A.idx.stall.get(id); if (st && ids.indexOf(st.code || id) === -1) ids.push(st.code || id); }));
     return ids.join(', ') || '—';
@@ -621,7 +621,7 @@
       ${scopeAll ? '' : '<div class="card-b" style="padding-bottom:0"><div class="note info">Đang hiển thị khoản phải thu của các điểm kinh doanh được phân công cho bạn.</div></div>'}
       <div class="card-b">${U.table(scopeAll ? [{ t: 'Mã khoản' }, { t: 'Tiểu thương' }, { t: 'Số tiền', num: true }, { t: 'Đã thu', num: true }, { t: 'Hạn nộp' }, { t: 'Trạng thái' }] : [{ t: 'Mã khoản' }, { t: 'Tiểu thương' }, { t: 'Điểm KD của bạn' }, { t: 'Số tiền', num: true }, { t: 'Hạn nộp' }, { t: 'Trạng thái' }],
         rows.slice(pg.start, pg.end).map(g => { const one = g.list.length === 1 ? g.list[0] : null; return `<tr class="click" ${one ? `data-act="inv-open" data-id="${one.id}"` : `data-act="pt-trader-open" data-id="${g.t.id}"`}><td>${one ? one.id : `<b>${g.list.length} khoản</b><div class="small muted">Xem chi tiết</div>`}${g.adjusted ? ' <span class="tag purple">Miễn giảm</span>' : ''}</td><td>${U.esc(g.t.name)}<div class="small muted">${g.t.id}</div></td>
-          ${scopeAll ? `<td class="num">${U.money(g.amount)}${one && one.portion && zone ? `<div class="small muted">Tổng mã: ${U.money((A.idx.invoice.get(one.id) || one).amount)}</div>` : ''}</td><td class="num">${U.money(g.paid)}</td>` : `<td>${U.esc(ptMyPoints(g.list, meId))}</td><td class="num"><b>${U.money(g.amount)}</b></td>`}<td>${U.dmy(g.due)}</td><td>${one && A.invPartMode(one) ? U.invTag(one) : U.invTag(g)}${g.pending ? ' <span class="tag warn">Chờ điều chỉnh</span>' : ''}</td></tr>`; }), { empty: scopeAll ? 'Chưa có khoản phải thu trong kỳ' : 'Chưa có khoản phải thu của điểm được phân công cho bạn' })}${pg.html}</div></div>
+          ${scopeAll ? `<td class="num">${U.money(g.amount)}${one && one.portion && zone ? `<div class="small muted">Tổng mã: ${U.money((A.idx.invoice.get(one.id) || one).amount)}</div>` : ''}</td><td class="num">${U.money(g.paid)}</td>` : `<td>${U.esc(ptMyPoints(g.list))}</td><td class="num"><b>${U.money(g.amount)}</b></td>`}<td>${U.dmy(g.due)}</td><td>${one && A.invPartMode(one) ? U.invTag(one) : U.invTag(g)}${g.pending ? ' <span class="tag warn">Chờ điều chỉnh</span>' : ''}</td></tr>`; }), { empty: scopeAll ? 'Chưa có khoản phải thu trong kỳ' : 'Chưa có khoản phải thu của điểm được phân công cho bạn' })}${pg.html}</div></div>
     ${!scopeAll && !sessionRows.length ? '' : `<div class="card"><div class="card-h"><h3>Khoản thu tiền mặt đăng ký phiên chợ</h3></div>
       <div class="card-b">${U.table([{ t: 'Mã đăng ký' }, { t: 'Tiểu thương' }, { t: 'Phiên' }, { t: 'Số tiền', num: true }, { t: 'Đã thu', num: true }, { t: 'Hạn thu' }, { t: 'Trạng thái' }],
         sessionRows.slice(spg.start, spg.end).map(x => `<tr><td>${U.esc(x.id)}<div class="small muted">${U.esc(x.payment.id)}</div></td><td>${U.esc(x.trader.name)}<div class="small muted">${x.trader.id}</div></td>
@@ -1060,8 +1060,10 @@
     const elec = U.sum(its.filter(x => /^Tiền điện/.test(x.name)), x => x.amount), water = U.sum(its.filter(x => /^Tiền nước/.test(x.name)), x => x.amount);
     return { rent: U.sum(its, x => x.amount) - elec - water, elec, water };
   }
-  function thuRouteRows(p) {
-    const acc = A.currentAccount() || {}, meId = acc.id;
+  // meId = account đang xem: ô ghi chú đi thu hiện ghi chú của chính người đó (khớp thu-note-inline).
+  // Không truyền meId thì lấy an toàn từ A.currentAccount() (tránh ReferenceError meId).
+  function thuRouteRows(p, meId) {
+    if (meId == null) meId = (A.currentAccount() || {}).id;
     const zones = ptZones(), zIdx = id => { const n = zones.findIndex(z => z.id === id); return n === -1 ? 999 : n; };
     const rows = [];
     A.db.invoices.filter(i => A.receivableMarket(i) === ui.market && (i.period === p || (i.period < p && i.status !== 'paid'))).forEach(i => {
@@ -1078,7 +1080,7 @@
     const scopeAll = ptScopeAll();
     if (A.allowedMarkets(acc).indexOf(ui.market) === -1) return `<div class="card"><div class="card-b"><div class="empty">Bạn chưa được phân công Chợ này.</div></div></div>`;
     const q = (f.thuSearch || '').toLowerCase();
-    const all = thuRouteRows(p.id);
+    const all = thuRouteRows(p.id, meId);
     const zones = ptZones().filter(z => all.some(r => r.sts.some(st => st.section === z.id)));
     const zone = zones.some(z => z.id === f.thuZone) ? f.thuZone : '';
     const status = ['todo', 'done', 'all', 'debt'].indexOf(f.thuStatus) !== -1 ? f.thuStatus : 'all'; // P chốt: mặc định Tất cả — tích Đã thu dòng vẫn ở tại chỗ (mờ)

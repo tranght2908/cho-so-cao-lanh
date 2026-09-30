@@ -103,8 +103,8 @@
     if (!(A.db.meterPeriods || []).some(x => x.id === id)) A.db.meterPeriods.push({ id, month: Number(m), year: y, status: 'RECORDING', closeDate: y + '-' + m + '-' + lastDay });
     A.save(); return next;
   }
-  // PHAT_HANH_KHOAN_THU: phát hành = (1) sinh mã PT-…, (2) gửi thông báo số phải nộp cho TỪNG tiểu thương
-  // (Mini app/Zalo OA; mini app đọc traderLines[traderId]), (3) chuyển danh sách thu cho NV thu phí được phân
+  // PHAT_HANH_KHOAN_THU: phát hành = (1) sinh mã PT-…, (2) gửi notification riêng cho TỪNG tiểu thương
+  // (traderId/referenceId; legacy traderLines vẫn được portal đọc để tương thích record cũ), (3) chuyển danh sách thu cho NV thu phí được phân
   // công theo Market hiện tại (Account.marketScopes). Danh sách của NV luôn đọc trực tiếp từ khoản phải thu
   // theo Market; không suy ra từ Dãy/Điểm.
   function notifyIssued(market, period, issued, actor) {
@@ -112,9 +112,14 @@
     A.db.notifications = Array.isArray(A.db.notifications) ? A.db.notifications : [];
     const mk = U.market(market) || {}, label = period.slice(5) + '/' + period.slice(0, 4);
     const nextId = () => 'TB-' + U.pad(32 + A.db.notifications.length, 3);
-    const traderLines = {};
-    issued.forEach(i => { traderLines[i.traderId] = 'Mã khoản ' + i.id + ' · ' + U.money(i.amount) + ' · hạn nộp ' + U.dmy(i.due) + '. Nộp tiền mặt cho NV thu phí hoặc quét QR trên Mini app.'; });
-    A.db.notifications.unshift({ id: nextId(), at: U.today(), kind: 'RECEIVABLE_ISSUED', market, period, title: 'Thông báo khoản phải nộp kỳ ' + label, group: 'Tiểu thương có khoản phải thu · ' + (mk.short || market), channels: ['Mini app', 'Zalo OA'], sent: Object.keys(traderLines).length, delivered: 0.97, read: 0, auto: true, by: actor || '', traderLines });
+    issued.forEach(i => {
+      const body = 'Mã khoản ' + i.id + ' · ' + U.money(i.amount) + ' · hạn nộp ' + U.dmy(i.due) + '. Nộp tiền mặt cho NV thu phí hoặc quét QR trên Mini app.';
+      if (A.addTraderNotification) A.addTraderNotification({ kind: 'RECEIVABLE_CREATED', traderId: i.traderId, market, referenceId: i.id,
+        title: 'Có khoản phải nộp kỳ ' + label, body, group: 'Khoản phải thu · ' + (mk.short || market), channels: ['Mini app', 'Zalo OA'], by: actor || '', eventKey: 'receivable-created:' + i.id });
+      // Compatibility only if the shared helper is unavailable in an older
+      // isolated fixture. Canonical runtime always uses the targeted record.
+      else A.db.notifications.unshift({ id: nextId(), at: U.today(), kind: 'RECEIVABLE_CREATED', market, period, traderId: i.traderId, referenceId: i.id, title: 'Có khoản phải nộp kỳ ' + label, body, group: 'Khoản phải thu · ' + (mk.short || market), channels: ['Mini app', 'Zalo OA'], sent: 1, delivered: 1, read: 0, auto: true, by: actor || '' });
+    });
     const byC = {};
     const assignment = A.ACCOUNTS && A.ACCOUNTS.marketCollectorState && A.ACCOUNTS.marketCollectorState(market);
     if (assignment && assignment.state === 'assigned') byC[assignment.collector.id] = issued.length;

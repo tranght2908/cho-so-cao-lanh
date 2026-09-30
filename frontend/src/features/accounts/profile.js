@@ -25,7 +25,14 @@
     // fall back safely to SELF instead of leaking the previous viewer's selected record.
     const chosen = ui.profile && ui.profile.mode === 'admin' && ui.profile.viewerId === viewer.id && U.can('tai-khoan') ? A.ACCOUNTS.get(ui.profile.accountId) : null;
     const acc = chosen || viewer, roleId = A.ACCOUNTS.primaryRole(acc), role = A.PERM.role(roleId);
-    const trader = acc.traderId && A.idx && A.idx.trader ? A.idx.trader.get(acc.traderId) : null;
+    // Tiểu thương xem hồ sơ CỦA MÌNH: đúng activeTraderProfile của phiên (hồ sơ các màn cổng đang dùng, đổi theo
+    // "Chợ đang xem"); không có thì hồ sơ mặc định của account. Luôn phải thuộc Account.traderIds — không lấy hồ sơ
+    // mẫu/ngẫu nhiên/theo chợ. ADMIN_VIEW (Quản trị xem tài khoản khác) giữ cách tra cũ theo acc.traderId.
+    const ownTrader = () => {
+      const t = (A.activeTraderProfile && A.activeTraderProfile()) || A.ACCOUNTS.defaultTraderProfile(acc);
+      return t && A.ACCOUNTS.traderIdsOf(acc).indexOf(t.id) !== -1 ? t : null;
+    };
+    const trader = !chosen && roleId === 'trader' ? ownTrader() : (acc.traderId && A.idx && A.idx.trader ? A.idx.trader.get(acc.traderId) : null);
     const global = (acc.marketScopes || []).includes('ALL'), markets = A.allowedMarkets(acc).map(id => U.market(id)).filter(Boolean);
     return { acc, viewer, mode: chosen ? 'ADMIN_VIEW' : 'SELF', roleId, roleName: role ? role.name : (roleId || 'Chưa gán'), trader,
       kind: AS().userKind(acc), name: (trader && trader.name) || acc.fullName, phone: (trader && trader.phone) || acc.phone || '', global, markets,
@@ -43,18 +50,46 @@
   // trader.birth là nguồn duy nhất: dữ liệu cũ lưu năm sinh (số), chỉnh sửa lưu ngày dạng YYYY-MM-DD.
   const traderBirth = t => ISO_DATE.test(String(t.birth || '')) ? U.dmy(String(t.birth)) : orBlank(t.birth);
   const traderMarket = t => { const m = t.market && U.market(t.market); return m && m.name; };
-  function traderPersonalRows(p) { const t = p.trader; return [['Họ và tên', `<b>${U.esc(p.name)}</b>`], ['Ngày sinh', traderBirth(t)], ['Giới tính', orBlank(t.gender)], ['Địa chỉ', orBlank(t.address)], ['Số điện thoại đăng nhập', orBlank(p.phone)]]; }
-  function traderRecordRows(p) {
-    const t = p.trader, TS = A.features.traders && A.features.traders.service, s = TS && TS.deriveBusinessStatus ? TRADER_STATUS[TS.deriveBusinessStatus(t)] : null;
-    return [['Mã tiểu thương', `<b>${U.esc(t.id)}</b>`], ['Loại giấy tờ', orBlank(t.idType || (t.idNo ? 'CCCD' : ''))], ['Số giấy tờ', t.idNo ? U.esc(U.maskId(t.idNo)) : 'Chưa cập nhật'], ['Chợ đang kinh doanh', orBlank(traderMarket(t))], s ? ['Trạng thái kinh doanh', `<span class="tag ${s[1]}">${s[0]}</span>`] : null];
+  // Web Tiểu thương › Thông tin cá nhân: CHỈ dữ liệu thật của activeTraderProfile (A.db.traders, state dùng chung
+  // với web quản lý). Trạng thái hồ sơ = trạng thái suy ra như màn Hồ sơ tiểu thương (không dùng profileStatus legacy).
+  function traderProfileStatusTag(t) {
+    const TS = A.features.traders && A.features.traders.service, s = TS && TS.deriveBusinessStatus ? TRADER_STATUS[TS.deriveBusinessStatus(t)] : null;
+    return s ? `<span class="tag ${s[1]}"><span class="profile-status-dot"></span>${s[0]}</span>` : '';
   }
-  function traderInfoHtml(p) { return `<div class="profile-grid"><div>${card('Thông tin cá nhân', 'users', fieldList(traderPersonalRows(p)) + (ownRequest(p) ? securityRequest(p) : ''))}</div><div>${card('Thông tin hồ sơ tiểu thương', 'file', fieldList(traderRecordRows(p)) + '<p class="profile-card-note">Thông tin hồ sơ do Ban Quản lý chợ quản lý. Cần điều chỉnh, vui lòng liên hệ Ban Quản lý chợ.</p>')}</div></div>`; }
+  // "Thông tin cơ bản" chỉ gồm trường CHI TIẾT; Mã, Họ tên, SĐT, Chợ, Trạng thái hồ sơ đã ở thẻ tóm tắt (không lặp).
+  function traderBasicRows(p) {
+    const t = p.trader;
+    return [['Ngày sinh', traderBirth(t)], ['Giới tính', orBlank(t.gender)],
+      ['Loại giấy tờ', orBlank(t.idType || (t.idNo ? 'CCCD' : ''))], ['Số giấy tờ', t.idNo ? U.esc(U.maskId(t.idNo)) : 'Chưa cập nhật'],
+      ['Địa chỉ', orBlank(t.address), 'is-wide']];
+  }
+  const infoGrid = rows => `<div class="profile-info-grid">${rows.map(r => `<div class="profile-info-item ${r[2] || ''}"><span>${r[0]}</span><b>${r[1]}</b></div>`).join('')}</div>`;
+  // Hồ sơ đính kèm: đúng các tệp đang có trong trader.docFiles (metadata/ảnh xem trước của prototype), nhãn theo
+  // danh mục giấy tờ dùng chung (traders/service.js DOC_DEFS). Không tạo tệp giả; không có Phương tiện.
+  const docDefs = () => (A.features.traders && A.features.traders.service && A.features.traders.service.DOC_DEFS) || [];
+  const docCanPreview = f => !!(f && f.dataUrl && String(f.dataUrl).indexOf('data:image/') === 0);
+  function traderDocs(t) {
+    const files = t.docFiles || {}, known = docDefs().map(d => d.key);
+    return docDefs().filter(d => files[d.key]).map(d => ({ key: d.key, label: d.label, file: files[d.key] }))
+      .concat(Object.keys(files).filter(k => files[k] && known.indexOf(k) === -1).map(k => ({ key: k, label: 'Hồ sơ khác', file: files[k] })));
+  }
+  function traderDocsHtml(p) {
+    const docs = traderDocs(p.trader);
+    if (!docs.length) return '<p class="profile-empty-line">Chưa có hồ sơ đính kèm.</p>';
+    const meta = f => (f.type === 'application/pdf' || /\.pdf$/i.test(f.name || '') ? 'PDF' : docCanPreview(f) ? 'Ảnh' : 'Tệp') + (f.name ? ' · ' + U.esc(f.name) : '');
+    return `<div class="contract-copy-list profile-doc-grid">${docs.map(d => `<div class="contract-copy"><span class="contract-copy-icon">${U.icon('file')}</span><span class="profile-doc-name"><b>${U.esc(d.label)}</b><small>${meta(d.file)}</small></span>${docCanPreview(d.file) ? `<button class="btn sm" data-act="profile-doc-view" data-key="${U.esc(d.key)}">Xem</button>` : ''}</div>`).join('')}</div>`;
+  }
+  function traderInfoHtml(p) {
+    // Hai thẻ xếp dọc, full-width cùng thẻ tóm tắt (không chia cột 2 thẻ cao thấp lệch nhau).
+    return card('Thông tin cơ bản', 'users', infoGrid(traderBasicRows(p)) + (ownRequest(p) ? securityRequest(p) : '') + '<p class="profile-card-note">Thông tin hồ sơ do Ban Quản lý chợ quản lý. Cần điều chỉnh giấy tờ, vui lòng liên hệ Ban Quản lý chợ.</p>', 'profile-basic-card')
+      + card('Hồ sơ đính kèm', 'file', traderDocsHtml(p), 'profile-docs-card');
+  }
   function headerHtml(p) {
     if (isTraderSelf(p)) {
       const market = traderMarket(p.trader);
-      return `<section class="card profile-summary"><div class="profile-summary-main">${avatarHtml(p)}<div class="profile-identity"><div class="profile-name-row"><h2 class="profile-name">${U.esc(p.name)}</h2><button class="btn primary" data-act="profile-edit-open">${U.icon('edit')}Chỉnh sửa thông tin</button></div><div class="profile-role-status"><span class="profile-role">Tiểu thương</span>${statusTag(p.acc)}</div><div class="profile-contact-line">${p.phone ? `${U.icon('phone')}${U.esc(p.phone)}` : ''}${market ? `${p.phone ? '<span class="profile-contact-sep">·</span>' : ''}${U.esc(market)}` : ''}</div><div class="profile-summary-meta"><span><small>Mã tiểu thương:</small><b>${U.esc(p.trader.id)}</b></span></div></div></div></section>`;
+      return `<section class="card profile-summary"><div class="profile-summary-main">${avatarHtml(p)}<div class="profile-identity"><div class="profile-name-row"><h2 class="profile-name">${U.esc(p.name)}</h2></div><div class="profile-role-status"><span class="profile-role">Tiểu thương</span>${traderProfileStatusTag(p.trader) || statusTag(p.acc)}</div><div class="profile-contact-line">${p.phone ? `${U.icon('phone')}${U.esc(p.phone)}` : ''}${market ? `${p.phone ? '<span class="profile-contact-sep">·</span>' : ''}${U.esc(market)}` : ''}</div><div class="profile-summary-meta"><span><small>Mã tiểu thương:</small><b>${U.esc(p.trader.id)}</b></span></div></div><div class="profile-summary-action"><button class="btn primary" data-act="profile-edit-open">${U.icon('edit')}Chỉnh sửa thông tin</button></div></div></section>`;
     }
-    const sub = p.kind === 'trader' ? 'Tiểu thương' : (p.acc.organization || '');
+    const sub = p.kind === 'trader' ? 'Tiểu thương' : A.ACCOUNTS.organizationOf(p.acc);
     const action = p.mode === 'SELF' ? `<button class="btn primary" data-act="profile-edit-open">${U.icon('edit')}Chỉnh sửa thông tin</button>` : (A.canDo('tai-khoan.sua') ? `<button class="btn primary" data-act="profile-admin-edit" data-id="${p.acc.id}">${U.icon('edit')}Chỉnh sửa tài khoản</button>` : '');
     return `<section class="card profile-summary"><div class="profile-summary-main">${avatarHtml(p)}<div class="profile-identity"><div class="profile-name-row"><h2 class="profile-name">${U.esc(p.name)}</h2>${action}</div><div class="profile-role-status"><span class="profile-role">${U.esc(p.roleName)}</span>${statusTag(p.acc)}</div><div class="profile-contact-line">${p.phone ? `${U.icon('phone')}${U.esc(p.phone)}` : ''}${sub ? `${p.phone ? '<span class="profile-contact-sep">·</span>' : ''}${U.esc(sub)}` : ''}</div><div class="profile-summary-meta"><span><small>Mã tài khoản:</small><b>${U.esc(p.acc.code)}</b></span><span><small>${U.esc(AS().USER_KIND[p.kind])}</small></span><span><small>Phạm vi:</small><b>${U.esc(p.scopeLabel)}</b></span></div></div></div></section>`;
   }
@@ -91,12 +126,19 @@
   function avatarModal(draft) { return A.mHead('Chọn ảnh đại diện') + `<div class="modal-b profile-avatar-modal">${draft ? `<img src="${U.esc(draft.dataUrl)}" alt="Xem trước ảnh đại diện" class="profile-avatar-preview"><p class="small muted">${U.esc(draft.name)}</p>` : '<div class="profile-avatar-empty">Chọn ảnh JPG, JPEG, PNG hoặc WEBP (tối đa 1 MB).</div>'}</div><div class="modal-f"><button class="btn" data-act="close">Hủy</button>${draft ? '<button class="btn primary" data-act="profile-avatar-save">Lưu ảnh</button>' : '<button class="btn primary" data-act="profile-avatar-choose">Chọn ảnh</button>'}</div>`; }
   function openProfile(accountId) { ui.profile = accountId ? { mode: 'admin', accountId, viewerId: A.currentAccount().id, tab: 'info' } : { mode: 'self', accountId: null, tab: 'info' }; A.go('thong-tin-ca-nhan'); }
   A.openAccountProfile = function (accountId) { if (!U.can('tai-khoan') || !A.ACCOUNTS.get(accountId)) return; openProfile(accountId); };
-  A.VIEWS['thong-tin-ca-nhan'] = function () { const p = resolve(); if (!p) return '<div class="empty">Không xác định được tài khoản đang đăng nhập.</div>'; if (isTraderSelf(p)) return `<div class="profile-page">${headerHtml(p)}${traderInfoHtml(p)}</div>`; const tab = TABS.some(x => x[0] === (ui.profile && ui.profile.tab)) ? ui.profile.tab : 'info', back = p.mode === 'ADMIN_VIEW' ? '<div class="profile-page-head"><button class="profile-back" data-act="profile-back-accounts">← Tài khoản người dùng</button></div>' : '', body = tab === 'access' ? accessTab(p) : tab === 'security' ? securityTab(p) : infoTab(p); return `<div class="profile-page">${back}${headerHtml(p)}<div class="profile-tabs" role="tablist">${TABS.map(x => `<button role="tab" aria-selected="${tab === x[0]}" class="${tab === x[0] ? 'on' : ''}" data-act="profile-tab" data-id="${x[0]}">${x[1]}</button>`).join('')}</div>${body}</div>`; };
+  A.VIEWS['thong-tin-ca-nhan'] = function () { const p = resolve(); if (!p) return '<div class="empty">Không xác định được tài khoản đang đăng nhập.</div>'; if (isTraderSelf(p)) return `<div class="profile-page profile-page-trader">${headerHtml(p)}${traderInfoHtml(p)}</div>`; const tab = TABS.some(x => x[0] === (ui.profile && ui.profile.tab)) ? ui.profile.tab : 'info', back = p.mode === 'ADMIN_VIEW' ? '<div class="profile-page-head"><button class="profile-back" data-act="profile-back-accounts">← Tài khoản người dùng</button></div>' : '', body = tab === 'access' ? accessTab(p) : tab === 'security' ? securityTab(p) : infoTab(p); return `<div class="profile-page">${back}${headerHtml(p)}<div class="profile-tabs" role="tablist">${TABS.map(x => `<button role="tab" aria-selected="${tab === x[0]}" class="${tab === x[0] ? 'on' : ''}" data-act="profile-tab" data-id="${x[0]}">${x[1]}</button>`).join('')}</div>${body}</div>`; };
   A.ACT['profile-tab'] = el => { ui.profile = ui.profile || {}; ui.profile.tab = el.dataset.id; A.render(); };
   A.ACT['profile-back-accounts'] = () => { ui.profile = null; A.go('tai-khoan'); };
   A.ACT['profile-admin-edit'] = el => { if (A.canDo('tai-khoan.sua')) A.ACT['acc-edit'](el); };
   A.ACT['profile-edit-open'] = () => { const p = resolve(); if (p && p.mode === 'SELF') A.modal(editModal(p)); };
   A.ACT['profile-edit-save'] = () => { const p = resolve(); if (!p || p.mode !== 'SELF') return; const name = (A.$('#profile-edit-name').value || '').trim(); if (!name) { U.toast('Vui lòng nhập họ và tên.'); return; } if (isTraderSelf(p)) { const t = p.trader, birth = A.$('#profile-edit-birth').value || ''; t.name = name; t.gender = A.$('#profile-edit-gender').value || ''; t.address = (A.$('#profile-edit-address').value || '').trim(); if (birth) t.birth = birth; else if (ISO_DATE.test(String(t.birth || ''))) t.birth = null; A.ACCOUNTS.update(p.acc.id, { fullName: name }); A.save(); } else if (p.trader) { p.trader.name = name; A.ACCOUNTS.update(p.acc.id, { fullName: name }); A.save(); } else A.ACCOUNTS.update(p.acc.id, { fullName: name, dateOfBirth: A.$('#profile-edit-birth').value || '', gender: A.$('#profile-edit-gender').value || '', address: (A.$('#profile-edit-address').value || '').trim() }); A.closeModal(); A.render(); U.toast('Đã cập nhật thông tin cá nhân.'); };
+  // Xem ảnh hồ sơ đính kèm của CHÍNH hồ sơ đang xem (chỉ đọc).
+  A.ACT['profile-doc-view'] = el => {
+    const p = resolve(), f = p && isTraderSelf(p) ? (p.trader.docFiles || {})[el.dataset.key] : null;
+    if (!f || !docCanPreview(f)) return;
+    const d = traderDocs(p.trader).find(x => x.key === el.dataset.key);
+    A.modal(A.mHead(U.esc(d ? d.label : 'Hồ sơ đính kèm')) + `<div class="modal-b"><img src="${U.esc(f.dataUrl)}" alt="${U.esc(d ? d.label : '')}" class="profile-doc-preview"></div><div class="modal-f"><button class="btn" data-act="close">Đóng</button></div>`);
+  };
   A.ACT['profile-avatar-open'] = () => { const p = resolve(); if (p && p.mode === 'SELF') { ui.profileAvatarDraft = null; A.modal(avatarModal(null)); } };
   A.ACT['profile-avatar-choose'] = () => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/jpeg,image/png,image/webp'; input.style.display = 'none'; document.body.appendChild(input); input.onchange = () => { const file = input.files && input.files[0]; input.remove(); if (!file) return; if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size > 1024 * 1024) { U.toast('Chỉ hỗ trợ ảnh JPG, JPEG, PNG hoặc WEBP, tối đa 1 MB.'); return; } const reader = new FileReader(); reader.onload = () => { ui.profileAvatarDraft = { name: file.name, dataUrl: String(reader.result) }; A.modal(avatarModal(ui.profileAvatarDraft)); }; reader.readAsDataURL(file); }; input.click(); };
   A.ACT['profile-avatar-save'] = () => { const p = resolve(), draft = ui.profileAvatarDraft; if (!p || p.mode !== 'SELF' || !draft) return; if (p.trader) { p.trader.docFiles = p.trader.docFiles || {}; p.trader.docFiles.avatar = draft; A.save(); } else A.ACCOUNTS.update(p.acc.id, { avatar: draft }); ui.profileAvatarDraft = null; A.closeModal(); A.render(); U.toast('Đã cập nhật ảnh đại diện.'); };

@@ -68,6 +68,11 @@
   // wf-contract-save command; persistence happens exactly once at the end.
   service.createWithPointAllocation = function (input) {
     const contract = input.contract, traderId = input.traderId, pointId = input.pointId;
+    // INVARIANT (tầng service): Contract.market = Trader.market = Point.market, đúng hồ sơ/điểm của hợp đồng. Lệch → null,
+    // KHÔNG ghi gì (kiểm tra trước mọi mutation).
+    const t = A.idx && A.idx.trader ? A.idx.trader.get(traderId) : null, p = points().get(pointId);
+    if (!contract || !contract.market || !t || !p || contract.traderId !== traderId || (contract.businessPointId || contract.stallId) !== pointId
+      || t.market !== contract.market || p.market !== contract.market) return null;
     repository.add(contract);                                  // contracts.push + reindex
     // Current occupancy fields (point status/traderId/contractId, trader.stalls) describe TODAY. A
     // contract that starts later does not displace today's occupant; its interval still blocks

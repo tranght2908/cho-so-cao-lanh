@@ -46,11 +46,35 @@
   function canCreate() { return A.canDo('danh-muc-cho.tao'); }
   function canEdit() { return A.canDo('danh-muc-cho.sua'); }
 
-  function priceConfigHtml(cfg) {
-    if (!cfg) return '<div class="small muted">Chưa cấu hình bảng giá.</div>';
-    return `<div class="small muted" style="margin-bottom:8px">${U.esc(cfg.label)} · Căn cứ: ${U.esc(cfg.legalBasis)}</div>
-      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Hạng mục</th><th class="num">Đơn giá</th></tr></thead>
-      <tbody>${cfg.rows.map(x => `<tr><td>${U.esc(x.label)}</td><td class="num">${U.money(x.amount)}/${U.esc(String(x.unit).replace(/^đ\//, ''))}</td></tr>`).join('')}</tbody></table></div>`;
+  // Tổ Quản lý chợ là đơn vị chung, độc lập với dữ liệu legacy trên từng Market.
+  // Chỉ account current + active mới được dùng để trình bày người đang đảm nhiệm.
+  function currentMarketManager() {
+    const accounts = A.ACCOUNTS;
+    const managers = accounts && accounts.currentList ? accounts.currentList().filter(a =>
+      accounts.primaryRole(a) === 'market_manager' && accounts.isActive(a)
+    ) : [];
+    if (managers.length === 1) return managers[0];
+    if (!managers.length) return null;
+    // Không chọn ngẫu nhiên khi dữ liệu current bất thường có nhiều Tổ trưởng active.
+    return 'AMBIGUOUS';
+  }
+
+  function managementContextHtml() {
+    const markets = MC.rows();
+    const unit = MC.managementUnit(markets[0] || {});
+    const manager = currentMarketManager();
+    const managerName = manager === 'AMBIGUOUS' ? 'Cần xác nhận dữ liệu' : manager ? (manager.fullName || manager.name || manager.code || 'Chưa cập nhật') : 'Chưa có người đảm nhiệm';
+    const hasPhone = !!(manager && manager !== 'AMBIGUOUS' && manager.phone);
+    const phone = hasPhone && ui.dmcShowManagerPhone ? manager.phone : hasPhone ? U.maskPhone(manager.phone) : manager && manager !== 'AMBIGUOUS' ? 'Chưa cập nhật' : '—';
+    const phoneControl = hasPhone ? `<button class="dmc-phone-toggle" data-act="dmc-toggle-manager-phone" aria-pressed="${ui.dmcShowManagerPhone ? 'true' : 'false'}" title="${ui.dmcShowManagerPhone ? 'Ẩn số điện thoại' : 'Xem số điện thoại'}" aria-label="${ui.dmcShowManagerPhone ? 'Ẩn số điện thoại' : 'Xem số điện thoại'}">${U.icon(ui.dmcShowManagerPhone ? 'eye-off' : 'eye')}</button>` : '';
+    return `<section class="card dmc-management-context" aria-label="Thông tin đơn vị quản lý">
+      <header class="dmc-management-head"><h3>${U.esc(unit)}</h3>${canCreate() ? '<button class="btn primary" data-act="dmc-new">+ Thêm chợ mới</button>' : ''}</header>
+      <div class="dmc-management-body">
+        <div class="dmc-management-item"><span>Tổ trưởng</span><b>${U.esc(managerName)}</b></div>
+        <div class="dmc-management-item"><span>Số điện thoại</span><b class="dmc-phone-value">${U.esc(phone)}${phoneControl}</b></div>
+        <div class="dmc-management-item"><span>Phạm vi quản lý</span><b>${fmtNum(markets.length)} chợ</b></div>
+      </div>
+    </section>`;
   }
 
   // ---------- KPI ----------
@@ -89,8 +113,6 @@
           <dt>Số điện thoại</dt><dd>${U.esc(r.phone || 'Chưa cập nhật')}</dd>
           <dt>Trạng thái chợ</dt><dd>${statusTag(r.status)}</dd>
         </dl>
-        <div style="margin-top:10px"><b class="small">Bảng giá áp dụng</b></div>
-        ${priceConfigHtml(MC.priceConfig(r.priceConfigId))}
       </section>
       <section class="dmc-section"><h4>B. QUY MÔ CHỢ</h4>
         <dl class="kv">
@@ -180,31 +202,31 @@
 
   A.VIEWS['danh-muc-cho'] = function () {
     const rows = filteredRows(), f = filterState();
-    return `<div class="page-head"><div><h2>Danh mục chợ</h2><p class="muted">Quản lý thông tin, quy mô và loại diện tích kinh doanh áp dụng của các chợ thuộc phạm vi quản lý.</p></div>${canCreate() ? '<button class="btn primary" data-act="dmc-new">+ Thêm chợ mới</button>' : ''}</div>
+    return `<div class="dmc-page">${managementContextHtml()}
     ${kpisHtml()}
-    <div class="card"><div class="card-b"><div class="filters">
-      <input class="input" data-in="dmc-search" value="${U.esc(f.search)}" placeholder="Tìm kiếm theo tên chợ, địa điểm...">
+    <div class="card dmc-filters-card"><div class="card-b"><div class="filters dmc-filters">
+      <input class="input dmc-search" data-in="dmc-search" value="${U.esc(f.search)}" placeholder="Tìm kiếm theo tên chợ, địa điểm...">
       <select class="input" data-ch="dmc-rank"><option value="">Hạng chợ: Tất cả</option>${Object.keys(MC.RANKS).map(k => `<option value="${k}" ${f.rank === k ? 'selected' : ''}>${MC.RANKS[k]}</option>`).join('')}</select>
       <select class="input" data-ch="dmc-status"><option value="">Trạng thái chợ: Tất cả</option>${Object.keys(MC.STATUS).map(k => `<option value="${k}" ${f.status === k ? 'selected' : ''}>${MC.STATUS[k][0]}</option>`).join('')}</select>
       <select class="input" data-ch="dmc-layout"><option value="">Tình trạng mặt bằng: Tất cả</option>${Object.keys(LAYOUT_STATE).map(k => `<option value="${k}" ${f.layout === k ? 'selected' : ''}>${LAYOUT_STATE[k]}</option>`).join('')}</select>
       <button class="btn" data-act="dmc-reset">Làm mới</button>
       <button class="btn" data-act="dmc-csv">⬇ Xuất Excel</button>
     </div></div></div>
-    <div class="card catalog-table-card"><div class="card-b">${U.table(
+    <div class="card catalog-table-card dmc-table-card"><div class="card-b">${U.table(
       [{ t: 'STT' }, { t: 'Tên chợ' }, { t: 'Địa điểm' }, { t: 'Hạng chợ' }, { t: 'Quy mô kinh doanh' }, { t: 'Tình trạng mặt bằng' }, { t: 'Trạng thái chợ' }, { t: 'Thao tác' }],
       rows.map((r, i) => `<tr>
-        <td>${i + 1}</td>
-        <td><b>${U.esc(r.name)}</b><div class="small muted">${U.esc(r.code)}</div></td>
-        <td>${U.esc(r.address || '—')}</td>
-        <td>${rankTag(r.rank)}</td>
-        <td>${scaleCell(r)}</td>
-        <td>${layoutTag(r)}</td>
-        <td>${statusTag(r.status)}</td>
-        <td class="nowrap">
+        <td class="dmc-col-index">${i + 1}</td>
+        <td class="dmc-col-name"><div class="dmc-market-name"><b>${U.esc(r.name)}</b><span>${U.esc(r.code)}</span></div></td>
+        <td class="dmc-col-address"><div class="dmc-address" title="${U.esc(r.address || '—')}">${U.esc(r.address || '—')}</div></td>
+        <td class="dmc-col-rank">${rankTag(r.rank)}</td>
+        <td class="dmc-col-scale"><div class="dmc-scale">${scaleCell(r)}</div></td>
+        <td class="dmc-col-layout">${layoutTag(r)}</td>
+        <td class="dmc-col-status">${statusTag(r.status)}</td>
+        <td class="nowrap dmc-col-actions">
           <button class="btn sm" data-act="dmc-open" data-id="${U.esc(r.id)}">Xem chi tiết</button>
           ${canEdit() ? `<button class="btn sm" data-act="dmc-edit" data-id="${U.esc(r.id)}">Chỉnh sửa</button>` : ''}
         </td></tr>`), { empty: 'Không tìm thấy chợ phù hợp.' }
-    )}</div></div>`;
+    )}</div></div></div>`;
   };
 
   A.IN['dmc-search'] = el => { filterState().search = el.value; A.render(); };
@@ -213,6 +235,8 @@
   A.CH['dmc-status'] = el => { filterState().status = el.value; A.render(); };
   A.CH['dmc-layout'] = el => { filterState().layout = el.value; A.render(); };
   A.ACT['dmc-reset'] = () => { ui.dmcFilter = { search: '', rank: '', status: '', layout: '' }; A.render(); };
+  // Presentation-only state: never persists and naturally returns to masked after reload.
+  A.ACT['dmc-toggle-manager-phone'] = () => { ui.dmcShowManagerPhone = !ui.dmcShowManagerPhone; A.render(); };
   A.ACT['dmc-csv'] = () => {
     U.csv('danh-muc-cho', ['Tên chợ', 'Mã chợ', 'Địa điểm', 'Hạng chợ', 'Đơn vị quản lý', 'Số điện thoại', 'Bảng giá áp dụng', 'Trạng thái chợ', 'Tổng diện tích (m²)', 'Diện tích kinh doanh (m²)', 'Loại diện tích áp dụng', 'Tình trạng mặt bằng'],
       filteredRows().map(r => {

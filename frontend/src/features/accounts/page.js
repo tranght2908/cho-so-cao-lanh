@@ -10,20 +10,75 @@
     return ((parts[0] || '')[0] || '') + ((parts[parts.length - 1] || '')[0] || '');
   }
   // Phạm vi chợ = phạm vi phân quyền thực tế (A.allowedMarkets / marketScopes), không phải "Đơn vị".
-  // Nhiều chợ → chợ đầu + "+N"; danh sách đầy đủ ở tooltip và popup chi tiết.
   function scopeMarkets() { return A.allowedMarkets({ marketScopes: ['ALL'] }).map(id => U.market(id)); }
   function allMarketsLabel() { return 'Toàn bộ ' + scopeMarkets().length + ' chợ'; }
   function currentAccounts() { return A.ACCOUNTS.currentList ? A.ACCOUNTS.currentList() : A.ACCOUNTS.list(); }
   function managementUnit() { return (A.MARKET_CATALOG && A.MARKET_CATALOG.MANAGEMENT_UNIT) || 'Tổ Quản lý chợ'; }
-  function accountOrganization(a) { return A.ACCOUNTS.isCanonicalMarketManager && A.ACCOUNTS.isCanonicalMarketManager(a) ? managementUnit() : (a.organization || ''); }
+  // Đơn vị hiển thị: A.ACCOUNTS.organizationOf (actor metadata theo vai trò; account cũ không dùng chuỗi đã lưu).
+  const accountOrganization = a => A.ACCOUNTS.organizationOf(a);
   function accScopeNames(a) { return A.allowedMarkets(a).map(id => U.mShort(id)); }
+  // NV kỹ thuật được giao việc theo từng sự cố (Incident.assignee), không "sở hữu" chợ/dãy nào.
+  const INCIDENT_SCOPE_LABEL = 'Theo sự cố được giao';
+  const isIncidentScoped = a => A.ACCOUNTS.primaryRole(a) === 'technician';
+  // Chỉ presentation của cột "Phạm vi chợ": không dùng marketScopes cho Tiểu thương.
+  // Thứ tự luôn theo catalog chợ hiện hành, không theo thứ tự id được lưu trên account.
+  function accountScopeMarkets(a) {
+    const roleId = A.ACCOUNTS.primaryRole(a);
+    if (roleId === 'trader') {
+      const ids = new Set(A.ACCOUNTS.traderMarketsOf ? A.ACCOUNTS.traderMarketsOf(a) : []);
+      return scopeMarkets().filter(m => ids.has(m.id));
+    }
+    // Cột quản trị phải hiển thị assignment đã persist kể cả khi account đang chờ kích hoạt/khóa;
+    // A.allowedMarkets() vẫn là lớp authorization runtime riêng.
+    const ids = new Set((a.marketScopes || []).includes('ALL') ? scopeMarkets().map(m => m.id) : (a.marketScopes || []));
+    return scopeMarkets().filter(m => ids.has(m.id));
+  }
+  function accountScopePresentation(a) {
+    const roleId = A.ACCOUNTS.primaryRole(a);
+    if (isIncidentScoped(a)) return { kind: 'incident', label: INCIDENT_SCOPE_LABEL, markets: [], interactive: false };
+    const markets = accountScopeMarkets(a);
+    if (!markets.length) return { kind: 'empty', label: 'Chưa được phân công', markets, interactive: false };
+    const global = roleId !== 'trader' && (a.marketScopes || []).includes('ALL');
+    if (global) return { kind: 'global', label: allMarketsLabel(), markets, interactive: true, title: 'Phạm vi truy cập', footer: markets.length + ' chợ' };
+    const trader = roleId === 'trader';
+    return {
+      kind: trader ? 'trader' : 'assigned',
+      label: markets[0].name,
+      markets,
+      interactive: markets.length > 1,
+      title: trader ? 'Chợ có hồ sơ tiểu thương' : 'Phạm vi được phân công',
+      footer: trader ? markets.length + ' chợ có hồ sơ được liên kết' : markets.length + ' chợ'
+    };
+  }
   function accScopeLabel(a) {
-    if ((a.marketScopes || []).includes('ALL')) return allMarketsLabel();
-    const names = accScopeNames(a);
-    if (!names.length) return '<span class="muted">Chưa phân công</span>';
+    const p = accountScopePresentation(a);
+    if (!p.interactive) return p.kind === 'empty' ? '<span class="muted">Chưa được phân công</span>' : U.esc(p.label);
+    const suffix = p.kind === 'global'
+      ? '<span class="acc-scope-chevron" aria-hidden="true">▾</span>'
+      : `<span class="acc-scope-more">+${p.markets.length - 1}</span>`;
+    const aria = p.kind === 'global' ? `Xem danh sách ${p.markets.length} chợ` : `Xem thêm ${p.markets.length - 1} chợ`;
+    const main = p.kind === 'global' ? U.esc(p.label) : U.esc(p.label);
     const conflicts = A.ACCOUNTS.collectorMarketConflicts ? A.ACCOUNTS.collectorMarketConflicts(a) : [];
-    return U.esc(names[0]) + (names.length > 1 ? ` <span class="muted">+${names.length - 1}</span>` : '')
+    return `<button class="acc-scope-trigger ${p.kind === 'global' ? 'acc-scope-trigger-all' : ''}" data-act="acc-scope-popover" data-id="${U.esc(a.id)}" title="${U.esc(aria)}" aria-label="${U.esc(aria)}"><span>${main}</span>${suffix}</button>`
       + (conflicts.length ? ` <span class="tag warn" title="Có ${conflicts.length} chợ đang được nhiều NV thu phí phụ trách">!</span>` : '');
+  }
+  function closeScopePopover() {
+    const root = A.$('#modal-root');
+    const open = root && ((root.querySelector && root.querySelector('.acc-scope-popover')) || String(root.innerHTML || '').includes('acc-scope-popover'));
+    if (open) root.innerHTML = '';
+  }
+  function scopePopoverHtml(a, p, rect) {
+    const width = 320;
+    const viewportWidth = (typeof window !== 'undefined' && window.innerWidth) || 1024;
+    const viewportHeight = (typeof window !== 'undefined' && window.innerHeight) || 768;
+    const left = Math.max(8, Math.min(Math.round((rect && rect.left) || 8), viewportWidth - width - 8));
+    const top = Math.max(8, Math.min(Math.round(((rect && rect.bottom) || 8) + 6), viewportHeight - 300));
+    return `<div class="acc-scope-popover-backdrop" data-act="acc-scope-popover-close"></div>
+      <section class="acc-scope-popover" role="dialog" aria-label="${U.esc(p.title)}" style="top:${top}px;left:${left}px">
+        <h4>${U.esc(p.title)}</h4>
+        <div class="acc-scope-popover-list">${p.markets.map(m => `<div><span aria-hidden="true">✓</span><b>${U.esc(m.name)}</b></div>`).join('')}</div>
+        <footer>${U.esc(p.footer)}</footer>
+      </section>`;
   }
   // "Loại người dùng" = nhóm danh tính, suy ra từ quan hệ sẵn có (vai trò trader / liên kết hồ sơ
   // tiểu thương / accountType cũ) — KHÔNG thêm field mới, KHÔNG trùng với "Vai trò".
@@ -64,7 +119,7 @@
     const t = a.traderId ? A.idx.trader.get(a.traderId) : null;
     const pairs = rows => `<dl class="contract-detail-kv">${rows.map(r => `<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('')}</dl>`;
     const sec = (icon, key, title, body) => `<section class="contract-detail-section"><h4><span>${U.icon(icon)}</span>${key}. ${title}</h4>${body}</section>`;
-    const scopeFull = (a.marketScopes || []).includes('ALL') ? allMarketsLabel() : (accScopeNames(a).map(U.esc).join(', ') || '<span class="muted">Chưa phân công</span>');
+    const scopeFull = isIncidentScoped(a) ? INCIDENT_SCOPE_LABEL : (a.marketScopes || []).includes('ALL') ? allMarketsLabel() : (accScopeNames(a).map(U.esc).join(', ') || '<span class="muted">Chưa phân công</span>');
     const userRows = [['Họ tên', `<b>${U.esc(a.fullName)}</b>`], ['Số điện thoại', accPhone(a)], ['Loại người dùng', USER_KIND[accKind(a)]]];
     if (a.title && a.title !== accRoleNames(a)) userRows.push(['Chức danh', U.esc(a.title)]);
     if (accountOrganization(a)) userRows.push(['Đơn vị', U.esc(accountOrganization(a))]);
@@ -75,66 +130,86 @@
       <div class="drawer-b contract-detail-body"><div class="contract-detail-grid">${body}</div></div>
       <div class="drawer-f contract-detail-footer">${canEdit ? `<button class="btn primary" data-act="acc-edit" data-id="${a.id}">${U.icon('edit')}Chỉnh sửa tài khoản</button>` : ''}<button class="btn" data-act="close">Đóng</button></div>`;
   }
-  // RBAC_MARKET_SCOPE_MIGRATION mục 20: phần "Phạm vi" đổi theo vai trò đang chọn —
-  //   system_admin → "Toàn hệ thống" (tĩnh, không chọn từng chợ)
-  //   ward_leader  → "Toàn bộ N chợ" (tĩnh, không chọn từng chợ)
-  //   market_manager/collector/technician → multi-select 12 chợ (checkbox)
-  //   trader       → không cho gán qua form này (quản lý qua Hồ sơ tiểu thương → Tài khoản Mini App,
-  //                  "không cho phép dùng marketScopes để vượt qua ownership" — mục 20 yêu cầu)
-  //   chưa chọn vai trò → vẫn hiện multi-select (an toàn mặc định, admin luôn chọn vai trò trước khi
-  //                  Lưu vì acc-form-save đã validate).
-  function afScopeSectionHtml(d, dis) {
-    const roleId = (d.roleIds && d.roleIds[0]) || '';
-    const scopeMode = A.ACCOUNTS.scopeModeForRole(roleId);
-    if (scopeMode === 'ALL') {
-      const label = allMarketsLabel();
-      return `<div class="field" style="margin-top:12px"><label>Phạm vi</label><div class="note info">${U.esc(label)} — vai trò này không cần chọn từng chợ.</div></div>`;
-    }
-    if (scopeMode === 'TRADER') {
-      return `<div class="field" style="margin-top:12px"><label>Phạm vi</label><div class="note">Tài khoản Tiểu thương được quản lý qua <b>Tiểu thương → Hồ sơ tiểu thương → Tài khoản Mini App</b>, không gán phạm vi chợ trực tiếp ở đây.</div></div>`;
-    }
-    // Legacy ['ALL'] (account cũ) diễn giải qua đúng A.allowedMarkets() hiện có — không tự viết lại
-    // logic 'ALL' ở đây — để checkbox hiển thị đã tick sẵn đúng các chợ; account KHÔNG bị ghi lại
-    // cho tới khi admin thật sự bấm Lưu.
-    const dm = A.allowedMarkets({ marketScopes: d.marketScopes || [] });
-    const isCollector = roleId === 'collector';
-    const scopeItem = m => {
-      const own = dm.includes(m.id);
-      const state = isCollector && A.ACCOUNTS.marketCollectorState ? A.ACCOUNTS.marketCollectorState(m.id) : null;
-      let note = '';
-      if (state) {
-        if (state.status === 'CONFLICT') note = '<small class="warn">Đang có nhiều NV thu phí được phân công</small>';
-        else if (own) note = '<small class="muted">Đang phụ trách bởi tài khoản này</small>';
-        else if (state.collector) note = `<small class="muted">Đang phụ trách: ${U.esc(state.collector.fullName)}</small>`;
-        else note = '<small class="muted">Chưa phân công</small>';
-      }
-      return `<label class="small" style="display:flex;flex-direction:column;align-items:flex-start;gap:3px;cursor:pointer"><span style="display:flex;align-items:center;gap:6px"><input type="checkbox" data-ch="af-scope" data-market="${m.id}" ${own ? 'checked' : ''} ${dis}> ${U.esc(m.short)}</span>${note}</label>`;
-    };
-    return `<div class="field" style="margin-top:12px"><label>Phạm vi chợ được phân công</label>
-      <div class="row" style="gap:14px;flex-wrap:wrap;margin-top:4px">${scopeMarkets().map(scopeItem).join('')}</div></div>`;
+  // FORM TÀI KHOẢN NỘI BỘ (Thêm + Sửa dùng chung renderAccForm/acc-form-save) — CHỈ quản lý danh tính tài khoản;
+  // phần phạm vi ĐỘNG THEO VAI TRÒ và luôn chỉ đọc:
+  //   collector (A03)  → KHÔNG phân công Chợ ở đây. Tạo mới = chưa được phân công (marketScopes []); sửa chỉ hiển
+  //                      thị Chợ đang phụ trách. Phân công/chuyển Chợ là nghiệp vụ của Tổ trưởng (Account.marketScopes
+  //                      qua A.ACCOUNTS.saveCollectorAccount), không phải của Admin tạo tài khoản.
+  //   technician (A04) → "Theo sự cố được giao" (Incident.assignee); marketScopes=['ALL'] chỉ là giá trị tương
+  //                      thích để mở sự cố được giao, không hiển thị như phân công Chợ.
+  //   system_admin/market_manager/central_accountant/ward_leader → "Toàn bộ N chợ" (lưu ['ALL']).
+  //   trader → không gán phạm vi ở đây (Tiểu thương → Hồ sơ tiểu thương → Tài khoản Mini App).
+  const ROLE_SCOPE_INFO = {
+    system_admin: { title: 'Phạm vi dữ liệu', all: true },
+    market_manager: { title: 'Phạm vi quản lý', all: true, help: 'Quản lý hoạt động của Tổ Quản lý chợ trên toàn bộ hệ thống.' },
+    technician: { title: 'Phạm vi công việc', value: INCIDENT_SCOPE_LABEL, help: 'Nhân viên kỹ thuật được Tổ trưởng phân công theo từng phản ánh/sự cố.' },
+    central_accountant: { title: 'Phạm vi dữ liệu', all: true, help: 'Thực hiện nghiệp vụ kế toán và đối soát theo quyền được phân.' },
+    ward_leader: { title: 'Phạm vi theo dõi', all: true, help: 'Xem và giám sát số liệu tổng hợp theo quyền được phân.' }
+  };
+  const afRole = d => (d && d.roleIds && d.roleIds[0]) || '';
+  // Chợ NV thu phí trong form: chỉ id Chợ cụ thể hợp lệ — không bao giờ diễn giải 'ALL' thành 12 Chợ.
+  const afCollectorScopes = d => { const valid = new Set(scopeMarkets().map(m => m.id)); return (d.marketScopes || []).filter(id => valid.has(id)); };
+  function afInfoBox(title, value, help) {
+    return `<section class="af-scope"><div class="af-scope-title">${U.esc(title)}</div><div class="af-scope-value">${U.esc(value)}</div>${help ? `<p class="af-scope-help">${U.esc(help)}</p>` : ''}</section>`;
+  }
+  const ACC_PENDING = 'PENDING_ACTIVATION';
+  function afCollectorInfoHtml(d) {
+    const names = afCollectorScopes(d).map(id => U.mShort(id));
+    return names.length
+      ? afInfoBox('Phân công công việc', 'Đang phụ trách: ' + names.join(', '), 'Phân công chợ do Tổ trưởng Tổ Quản lý chợ thực hiện.')
+      : afInfoBox('Phân công công việc', 'Chưa được phân công chợ', 'Tổ trưởng Tổ Quản lý chợ sẽ phân công chợ sau khi tài khoản được tạo.');
+  }
+  function afScopeSectionHtml(d) {
+    const roleId = afRole(d);
+    if (!roleId) return '<section class="af-scope af-scope-empty">Chọn vai trò để xác định phạm vi làm việc.</section>';
+    if (roleId === 'collector') return afCollectorInfoHtml(d);
+    if (roleId === 'trader') return afInfoBox('Phạm vi', 'Theo hồ sơ tiểu thương', 'Tài khoản Tiểu thương được quản lý qua Tiểu thương → Hồ sơ tiểu thương → Tài khoản Mini App.');
+    const info = ROLE_SCOPE_INFO[roleId];
+    if (info) return afInfoBox(info.title, info.all ? allMarketsLabel() : info.value, info.help);
+    // Vai trò không thuộc danh mục actor (tuỳ biến/legacy khi sửa account cũ): chỉ hiển thị, giữ phạm vi đã lưu.
+    const names = A.allowedMarkets({ marketScopes: d.marketScopes || [] }).map(id => U.mShort(id));
+    return afInfoBox('Phạm vi', names.join(', ') || 'Chưa phân công', 'Vai trò này giữ nguyên phạm vi đã lưu.');
+  }
+  // Danh sách vai trò của form: role nội bộ hiện hành; khi SỬA account có role ngoài danh sách (trader, role
+  // tuỳ biến) thì vẫn hiện đúng role đó để không âm thầm đổi vai trò.
+  function afRoleOptions(d, isNew) {
+    const roles = A.ACCOUNTS.internalRoles();
+    const existing = !isNew && d.id ? A.ACCOUNTS.get(d.id) : null, own = existing && A.ACCOUNTS.primaryRole(existing);
+    if (own && !roles.some(r => r.id === own) && A.PERM.role(own)) roles.push(A.PERM.role(own));
+    return roles;
   }
   function renderAccForm() {
     const d = ui.accForm, isNew = !d.id;
     const canAssign = isNew || A.canDo('tai-khoan.gan-quyen');
     const dis = canAssign ? '' : 'disabled';
     // Tài khoản Tiểu thương chỉ tạo từ "Cần xử lý → Tạo tài khoản" (liên kết hồ sơ); form này dành cho
-    // tài khoản nội bộ nên khi tạo mới không có vai trò Tiểu thương. "Loại tài khoản" (accountType)
-    // vẫn tự đồng bộ theo vai trò như trước (A.CH['af-role']), không còn là ô chọn trùng với Vai trò.
-    const currentRole = (d.roleIds && d.roleIds[0]) || '';
-    const traderRoleLocked = currentRole === 'trader';
-    const roles = A.PERM.roles().filter(r => r.id !== 'trader' || (!isNew && traderRoleLocked));
-    A.modal(A.mHead(isNew ? 'Thêm tài khoản nội bộ' : 'Sửa tài khoản') + `<div class="modal-b"><div class="form-grid">
-      <div class="field"><label>Mã tài khoản *</label><input class="input" data-ch="af-code" value="${U.esc(d.code || '')}" ${isNew ? '' : 'disabled'}></div>
-      <div class="field"><label>Họ tên *</label><input class="input" data-ch="af-name" value="${U.esc(d.fullName || '')}"></div>
-      <div class="field"><label>Số điện thoại đăng nhập</label>${isNew ? `<input class="input" data-ch="af-phone" value="${U.esc(d.phone || '')}">` : `<input class="input" value="${U.esc(U.maskPhone(d.phone || ''))}" readonly><small class="muted">Số đăng nhập chỉ thay đổi qua quy trình yêu cầu, phê duyệt và OTP.</small>${A.phoneChangeAdminOpenButton ? A.phoneChangeAdminOpenButton(d.id) : ''}`}</div>
-      <div class="field"><label>Vai trò</label><select class="input" data-ch="af-role" ${dis || (traderRoleLocked ? 'disabled' : '')}><option value="">— Chưa gán —</option>${roles.map(r => `<option value="${r.id}" ${(d.roleIds && d.roleIds[0]) === r.id ? 'selected' : ''}>${U.esc(r.name)}</option>`).join('')}</select></div>
-      <div class="field"><label>Đơn vị</label><input class="input" data-ch="af-org" value="${U.esc(A.ACCOUNTS.isCanonicalMarketManager && A.ACCOUNTS.isCanonicalMarketManager(d) ? managementUnit() : (d.organization || ''))}" ${A.ACCOUNTS.isCanonicalMarketManager && A.ACCOUNTS.isCanonicalMarketManager(d) ? 'readonly' : ''}></div>
-      <div class="field"><label>Trạng thái</label><select class="input" data-ch="af-status"><option value="ACTIVE" ${A.ACCOUNTS.authStatus(d) === 'ACTIVE' ? 'selected' : ''}>Đang hoạt động</option><option value="LOCKED" ${A.ACCOUNTS.authStatus(d) === 'LOCKED' ? 'selected' : ''}>Tạm khóa</option></select></div>
+    // tài khoản nội bộ nên không có vai trò Tiểu thương khi tạo mới. "Loại tài khoản" (accountType) tự đồng bộ
+    // theo vai trò (A.CH['af-role']).
+    const currentRole = afRole(d), traderRoleLocked = currentRole === 'trader';
+    const existing = !isNew ? A.ACCOUNTS.get(d.id) : null;
+    const org = A.ACCOUNTS.organizationForRole(currentRole) || (existing ? A.ACCOUNTS.organizationOf(existing) : '');
+    const phoneField = isNew
+      ? `<input class="input" data-ch="af-phone" inputmode="numeric" placeholder="0xxxxxxxxx" value="${U.esc(d.phone || '')}">`
+      : `<input class="input" value="${U.esc(U.maskPhone(d.phone || ''))}" readonly><small class="muted">Số đăng nhập chỉ thay đổi qua quy trình yêu cầu, phê duyệt và OTP.</small>${A.phoneChangeAdminOpenButton ? A.phoneChangeAdminOpenButton(d.id) : ''}`;
+    // Tạo mới: mã do hệ thống sinh lúc Lưu, trạng thái luôn "Chờ kích hoạt" (kích hoạt sau OTP đầu tiên).
+    const codeField = isNew
+      ? '<div class="af-readonly-text">Hệ thống tự động tạo</div>'
+      : `<input class="input af-readonly" value="${U.esc(d.code || '')}" readonly tabindex="-1">`;
+    const statusField = isNew
+      ? '<div class="af-readonly-text">Chờ kích hoạt</div><small class="muted">Tài khoản sẽ được kích hoạt sau lần xác thực OTP đầu tiên.</small>'
+      : `<select class="input" data-ch="af-status">${A.ACCOUNTS.authStatus(d) === ACC_PENDING ? '<option value="PENDING_ACTIVATION" selected>Chờ kích hoạt</option>' : ''}<option value="ACTIVE" ${A.ACCOUNTS.authStatus(d) === 'ACTIVE' ? 'selected' : ''}>Đang hoạt động</option><option value="LOCKED" ${A.ACCOUNTS.authStatus(d) === 'LOCKED' ? 'selected' : ''}>Tạm khóa</option></select>`;
+    A.modal(A.mHead(isNew ? 'Thêm tài khoản nội bộ' : 'Sửa tài khoản') + `<div class="modal-b acc-form"><div class="form-grid">
+      <div class="field"><label>Họ và tên *</label><input class="input" data-ch="af-name" value="${U.esc(d.fullName || '')}"></div>
+      <div class="field"><label>Số điện thoại đăng nhập${isNew ? ' *' : ''}</label>${phoneField}</div>
+      <div class="field"><label>Vai trò *</label><select class="input" data-ch="af-role" ${dis || (traderRoleLocked ? 'disabled' : '')}><option value="">— Chọn vai trò —</option>${afRoleOptions(d, isNew).map(r => `<option value="${r.id}" ${currentRole === r.id ? 'selected' : ''}>${U.esc(r.name)}</option>`).join('')}</select></div>
+      <div class="field"><label>Đơn vị</label><input class="input af-readonly" value="${U.esc(org)}" placeholder="Tự xác định theo vai trò" readonly tabindex="-1"></div>
+      <div class="field"><label>Mã tài khoản</label>${codeField}</div>
+      <div class="field"><label>Trạng thái</label>${statusField}</div>
     </div>
-    ${afScopeSectionHtml(d, dis)}
+    ${afScopeSectionHtml(d)}
     ${!canAssign ? '<div class="note" style="margin-top:12px">Bạn không có quyền gán vai trò / phạm vi chợ nên các trường này đang bị khoá.</div>' : ''}
     </div>
-    <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="acc-form-save">Lưu</button></div>`);
+    <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="acc-form-save">${isNew ? 'Tạo tài khoản' : 'Lưu thay đổi'}</button></div>`);
   }
 
   const ACC_VIEW = { ACCOUNTS: 'ACCOUNTS', PHONE_CHANGE_REQUESTS: 'PHONE_CHANGE_REQUESTS', PENDING_ACTIVATION: 'PENDING_ACTIVATION', TRADERS_WITHOUT_ACCOUNT: 'TRADERS_WITHOUT_ACCOUNT' };
@@ -150,14 +225,16 @@
   }
   function pendingActivationQueue() {
     const q = queueState(), rows = currentAccounts().filter(a => A.ACCOUNTS.authStatus(a) === 'PENDING_ACTIVATION' && (!q.search || [a.fullName, a.code, a.phone].join(' ').toLowerCase().includes(q.search.toLowerCase())) && (!q.type || accKind(a) === q.type) && (!q.role || (a.roleIds || []).includes(q.role)) && (!q.market || A.allowedMarkets(a).includes(q.market))), pg = U.pager('accQueue', rows.length, 15);
-    const filters = `<div class="card acc-filters"><div class="card-b row"><input class="input acc-search" placeholder="Tìm họ tên, mã tài khoản, số điện thoại..." data-in="accq-search" value="${U.esc(q.search)}"><select class="input" data-ch="accq-type"><option value="">Loại người dùng: Tất cả</option><option value="staff" ${q.type === 'staff' ? 'selected' : ''}>${USER_KIND.staff}</option><option value="trader" ${q.type === 'trader' ? 'selected' : ''}>${USER_KIND.trader}</option></select><select class="input" data-ch="accq-role"><option value="">Vai trò: Tất cả</option>${A.PERM.roles().map(r => `<option value="${r.id}" ${q.role === r.id ? 'selected' : ''}>${U.esc(r.name)}</option>`).join('')}</select><select class="input" data-ch="accq-market"><option value="">Phạm vi chợ: Tất cả</option>${D.MARKETS.map(m => `<option value="${m.id}" ${q.market === m.id ? 'selected' : ''}>${U.esc(m.short)}</option>`).join('')}</select><button class="btn" data-act="accq-clear">Đặt lại</button></div></div>`;
+    const filters = `<div class="card acc-filters"><div class="card-b row"><input class="input acc-search" placeholder="Tìm họ tên, mã tài khoản, số điện thoại..." data-in="accq-search" value="${U.esc(q.search)}"><select class="input" data-ch="accq-type"><option value="">Loại người dùng: Tất cả</option><option value="staff" ${q.type === 'staff' ? 'selected' : ''}>${USER_KIND.staff}</option><option value="trader" ${q.type === 'trader' ? 'selected' : ''}>${USER_KIND.trader}</option></select><select class="input" data-ch="accq-role"><option value="">Vai trò: Tất cả</option>${A.PERM.currentRoles().map(r => `<option value="${r.id}" ${q.role === r.id ? 'selected' : ''}>${U.esc(r.name)}</option>`).join('')}</select><select class="input" data-ch="accq-market"><option value="">Phạm vi chợ: Tất cả</option>${D.MARKETS.map(m => `<option value="${m.id}" ${q.market === m.id ? 'selected' : ''}>${U.esc(m.short)}</option>`).join('')}</select><button class="btn" data-act="accq-clear">Đặt lại</button></div></div>`;
     const table = U.table([{ t: 'Mã tài khoản' }, { t: 'Người dùng' }, { t: 'Số điện thoại' }, { t: 'Loại người dùng' }, { t: 'Vai trò' }, { t: 'Phạm vi chợ' }, { t: 'Ngày tạo' }, { t: 'Trạng thái' }, { t: 'Thao tác' }], rows.slice(pg.start, pg.end).map(a => `<tr class="click" data-act="acc-open" data-id="${a.id}"><td>${U.esc(a.code)}</td><td><b>${U.esc(a.fullName)}</b></td><td>${accPhone(a)}</td><td>${USER_KIND[accKind(a)]}</td><td>${accRoleNames(a)}</td><td>${accScopeLabel(a)}</td><td>${a.createdAt ? U.dmy(a.createdAt) : '—'}</td><td>${accStatusTag(a)}</td><td><button class="btn sm" data-act="acc-open" data-id="${a.id}">Xem</button></td></tr>`), { empty: 'Không có tài khoản chờ kích hoạt' }) + pg.html;
     return filters + queueTable('Tài khoản chờ kích hoạt', rows.length + ' tài khoản', table);
   }
+  // Mọi cặp Hợp đồng–Điểm hợp lệ của hồ sơ (trader-account.js là nguồn điều kiện), không chỉ cặp đầu tiên.
+  const queuePairs = (x, key, field) => (x.pairs || [{ c: x.c, s: x.s }]).map(p => p[key] && p[key][field]).filter(Boolean).join(', ');
   function traderWithoutAccountQueue(canCreate) {
-    const q = queueState(), source = A.features.accounts.service.traderAccountRows ? A.features.accounts.service.traderAccountRows() : [], rows = source.filter(x => (!q.market || x.t.market === q.market) && (!q.search || [x.t.id, x.t.name, x.t.phone, x.c && x.c.id, x.s && x.s.code].join(' ').toLowerCase().includes(q.search.toLowerCase()))), pg = U.pager('accQueue', rows.length, 15);
-    const filters = `<div class="card acc-filters"><div class="card-b row"><input class="input acc-search" placeholder="Tìm mã tiểu thương, tên, SĐT, điểm, hợp đồng..." data-in="accq-search" value="${U.esc(q.search)}"><select class="input" data-ch="accq-market"><option value="">Chợ: Tất cả</option>${D.MARKETS.map(m => `<option value="${m.id}" ${q.market === m.id ? 'selected' : ''}>${U.esc(m.short)}</option>`).join('')}</select><button class="btn" data-act="accq-clear">Đặt lại</button></div></div>`;
-    const table = U.table([{ t: 'Mã tiểu thương' }, { t: 'Tiểu thương' }, { t: 'Số điện thoại' }, { t: 'Điểm kinh doanh' }, { t: 'Hợp đồng' }, { t: 'Chợ' }, { t: 'Trạng thái' }, { t: 'Thao tác' }], rows.slice(pg.start, pg.end).map(x => `<tr><td>${U.esc(x.t.id)}</td><td><b>${U.esc(x.t.name)}</b></td><td>${U.esc(U.maskPhone(x.t.phone || ''))}</td><td>${U.esc((x.s && x.s.code) || '—')}</td><td>${U.esc((x.c && x.c.id) || '—')}</td><td>${U.esc(U.mShort(x.t.market))}</td><td><span class="tag warn">Chưa có tài khoản</span></td><td>${canCreate ? `<button class="btn sm primary" data-act="wf-account-open" data-id="${x.t.id}">Tạo tài khoản</button>` : '<span class="muted small">Chỉ xem</span>'}</td></tr>`), { empty: 'Không có tiểu thương phù hợp' }) + pg.html;
+    const q = queueState(), source = A.features.accounts.service.traderAccountRows ? A.features.accounts.service.traderAccountRows() : [], rows = source.filter(x => (!q.market || x.t.market === q.market) && (!q.search || [x.t.id, x.t.name, x.t.phone, queuePairs(x, 'c', 'id'), queuePairs(x, 's', 'code')].join(' ').toLowerCase().includes(q.search.toLowerCase()))), pg = U.pager('accQueue', rows.length, 15);
+    const filters = `<div class="card acc-filters"><div class="card-b row"><input class="input acc-search" placeholder="Tìm mã tiểu thương, tên, SĐT, điểm, hợp đồng..." data-in="accq-search" value="${U.esc(q.search)}"><select class="input" data-ch="accq-market"><option value="">Chợ: Tất cả</option>${D.MARKETS.filter(m => A.allowedMarkets(A.currentAccount()).includes(m.id)).map(m => `<option value="${m.id}" ${q.market === m.id ? 'selected' : ''}>${U.esc(m.short)}</option>`).join('')}</select><button class="btn" data-act="accq-clear">Đặt lại</button></div></div>`;
+    const table = U.table([{ t: 'Mã tiểu thương' }, { t: 'Tiểu thương' }, { t: 'Số điện thoại' }, { t: 'Điểm kinh doanh' }, { t: 'Hợp đồng' }, { t: 'Chợ' }, { t: 'Trạng thái' }, { t: 'Thao tác' }], rows.slice(pg.start, pg.end).map(x => `<tr><td>${U.esc(x.t.id)}</td><td><b>${U.esc(x.t.name)}</b></td><td>${U.esc(U.maskPhone(x.t.phone || ''))}</td><td>${U.esc(queuePairs(x, 's', 'code') || '—')}</td><td>${U.esc(queuePairs(x, 'c', 'id') || '—')}</td><td>${U.esc(U.mShort(x.t.market))}</td><td><span class="tag warn">Chưa có tài khoản</span></td><td>${canCreate ? `<button class="btn sm primary" data-act="wf-account-open" data-id="${x.t.id}">Tạo tài khoản</button>` : '<span class="muted small">Chỉ xem</span>'}</td></tr>`), { empty: 'Không có tiểu thương phù hợp' }) + pg.html;
     return filters + queueTable('Tiểu thương chưa có tài khoản', rows.length + ' tiểu thương', table, 'Tiểu thương đã có hồ sơ/hợp đồng đủ điều kiện nhưng chưa được cấp tài khoản.');
   }
   const accountsView = function () {
@@ -179,7 +256,7 @@
     const defaultTable = `<div class="card acc-filters"><div class="card-b row">
       <input class="input acc-search" placeholder="Tìm theo họ tên, mã, số điện thoại..." data-in="acc-search" value="${U.esc(f.search || '')}">
       <select class="input" data-ch="acc-type"><option value="all" ${kind === 'all' ? 'selected' : ''}>Loại người dùng: Tất cả</option><option value="staff" ${kind === 'staff' ? 'selected' : ''}>Loại người dùng: ${USER_KIND.staff}</option><option value="trader" ${kind === 'trader' ? 'selected' : ''}>Loại người dùng: ${USER_KIND.trader}</option></select>
-      <select class="input" data-ch="acc-role"><option value="">Vai trò: Tất cả</option>${A.PERM.roles().map(r => `<option value="${r.id}" ${f.role === r.id ? 'selected' : ''}>${U.esc(r.name)}</option>`).join('')}</select>
+      <select class="input" data-ch="acc-role"><option value="">Vai trò: Tất cả</option>${A.PERM.currentRoles().map(r => `<option value="${r.id}" ${f.role === r.id ? 'selected' : ''}>${U.esc(r.name)}</option>`).join('')}</select>
       <select class="input" data-ch="acc-market"><option value="">Phạm vi chợ: Tất cả</option>${D.MARKETS.map(m => `<option value="${m.id}" ${f.market === m.id ? 'selected' : ''}>${U.esc(m.short)}</option>`).join('')}</select>
       <select class="input" data-ch="acc-status"><option value="">Trạng thái: Tất cả</option>${statusOpts}</select>
       <button class="btn" data-act="acc-clear">Đặt lại</button></div></div>
@@ -223,6 +300,16 @@
       ${canToggle ? `<button class="acc-menu-item ${active ? 'danger' : ''}${wait ? ' is-disabled' : ''}" role="menuitem" data-act="acc-menu-toggle" data-id="${a.id}"${lockAttr}>${active ? 'Tạm khóa tài khoản' : 'Mở khóa tài khoản'}</button>` : ''}${wait ? `<div class="acc-menu-hint">${cooldownMsg(wait)}</div>` : ''}</div>`;
   };
   A.ACT['acc-toggle-phone'] = () => { ui.accShowPhone = !ui.accShowPhone; A.render(); };
+  A.ACT['acc-scope-popover'] = el => {
+    const a = A.ACCOUNTS.get(el.dataset.id), p = a && accountScopePresentation(a);
+    if (!a || !p || !p.interactive) return;
+    const root = A.$('#modal-root');
+    const open = root && ((root.querySelector && root.querySelector('.acc-scope-popover')) || String(root.innerHTML || '').includes('acc-scope-popover'));
+    if (open) { closeScopePopover(); return; }
+    const rect = el.getBoundingClientRect ? el.getBoundingClientRect() : { left: 8, bottom: 8 };
+    if (root) root.innerHTML = scopePopoverHtml(a, p, rect);
+  };
+  A.ACT['acc-scope-popover-close'] = () => closeScopePopover();
   A.ACT['acc-menu-toggle'] = el => { A.closeModal(); A.ACT['acc-toggle'](el); };
   A.IN['acc-search'] = el => { ui.acc.search = el.value; ui.page.acc = 0; A.render(); };
   A.CH['acc-type'] = el => { ui.acc.type = el.value; ui.page.acc = 0; A.render(); };
@@ -248,13 +335,15 @@
     if (!U.can('tai-khoan') || !A.openAccountProfile) return;
     A.openAccountProfile(el.dataset.id);
   };
+  // Fixed-position popover must not remain detached from its account row while the table scrolls.
+  if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('scroll', closeScopePopover, true);
   A.ACT['acc-new'] = () => {
     if (!A.canDo('tai-khoan.tao-moi')) return;
     // Chưa chọn vai trò → chưa biết chợ nào phù hợp, để trống thay vì mặc định cứng — admin chọn
     // vai trò trước (A.CH['af-role'] tự hiện đúng dạng Phạm vi), rồi mới tick chợ. "Loại tài khoản"
     // mặc định ACCOUNT_TYPES[3] = tên role 'collector' (thứ tự cố định theo defaultRoles(),
     // js/permissions.js) — vai trò vận hành phổ biến nhất, tránh mặc định thiên về quyền cao.
-    ui.accForm = { id: null, code: '', fullName: '', phone: '', accountType: A.ACCOUNTS.ACCOUNT_TYPES[3], roleIds: [], organization: '', marketScopes: [], status: 'ACTIVE', collectorTransferMarkets: [] };
+    ui.accForm = { id: null, code: '', fullName: '', phone: '', accountType: A.ACCOUNTS.ACCOUNT_TYPES[3], roleIds: [], organization: '', marketScopes: [], status: ACC_PENDING };
     renderAccForm();
   };
   A.ACT['acc-edit'] = el => {
@@ -265,10 +354,9 @@
     // không chỉ lúc render checkbox — để checkbox hiển thị ĐÚNG state form đang giữ, và Lưu ngay
     // (không cần đụng checkbox) cũng ghi lại đúng ['CL','TTD'] tường minh thay vì giữ nguyên 'ALL'
     // (mục 3 yêu cầu Phase 5B: "làm sạch dữ liệu dần khi account thực sự được sửa").
-    ui.accForm = { id: a.id, code: a.code, fullName: a.fullName, phone: a.phone, accountType: a.accountType, roleIds: (a.roleIds || []).slice(), organization: a.organization, marketScopes: (a.marketScopes || []).slice(), status: a.status, collectorTransferMarkets: [] };
+    ui.accForm = { id: a.id, code: a.code, fullName: a.fullName, phone: a.phone, accountType: a.accountType, roleIds: (a.roleIds || []).slice(), organization: a.organization, marketScopes: (a.marketScopes || []).slice(), status: a.status };
     renderAccForm();
   };
-  A.CH['af-code'] = el => { ui.accForm.code = el.value; };
   A.CH['af-name'] = el => { ui.accForm.fullName = el.value; };
   A.CH['af-phone'] = el => { ui.accForm.phone = el.value; };
   A.CH['af-type'] = el => { ui.accForm.accountType = el.value; };
@@ -276,77 +364,62 @@
   // select 12 chợ) — phải vẽ lại cả form, có tiền lệ an toàn ở v-taichinh.js A.CH['adj-proposed'].
   // Đồng bộ luôn "Loại tài khoản" theo tên vai trò mới chọn (2 field cùng phản ánh 1 vai trò, tránh
   // lệch nhãn) — admin vẫn có thể tự đổi lại "Loại tài khoản" sau nếu muốn.
+  // Đổi vai trò KHÔNG mang marketScopes của vai trò cũ sang: NV thu phí chỉ còn Chợ nếu CHÍNH account này đang là
+  // NV thu phí (hiển thị lại phân công đã lưu, chỉ đọc); vai trò khác được chuẩn hoá lúc Lưu (['ALL'] …).
   A.CH['af-role'] = el => {
-    ui.accForm.roleIds = el.value ? [el.value] : [];
-    const r = el.value ? A.PERM.role(el.value) : null;
-    if (r) ui.accForm.accountType = r.name;
-    renderAccForm();
-  };
-  A.CH['af-org'] = el => { ui.accForm.organization = el.value; };
-  // Rebuild ui.accForm.marketScopes theo ĐÚNG danh sách D.MARKETS hiện có (12 chợ, không còn hard-
-  // code CL/TTD) mỗi lần tick/bỏ tick 1 checkbox — không bao giờ ghi 'ALL'. Chuẩn hoá state hiện có
-  // qua A.allowedMarkets() trước khi add/remove để 1 account cũ ['ALL'] (hoặc vừa mở form) được diễn
-  // giải đúng thành danh sách chợ cụ thể trước khi người dùng bỏ tick 1 trong số đó.
-  function afSetScope(mid, checked) {
-    const cur = new Set(A.allowedMarkets({ marketScopes: ui.accForm.marketScopes || [] }));
-    if (checked) cur.add(mid); else cur.delete(mid);
-    ui.accForm.marketScopes = scopeMarkets().map(m => m.id).filter(m => cur.has(m));
-  }
-  A.CH['af-scope'] = el => {
-    const d = ui.accForm, mid = el.dataset.market;
-    if (!d) return;
-    const roleId = (d.roleIds && d.roleIds[0]) || '';
-    const own = A.allowedMarkets({ marketScopes: d.marketScopes || [] }).includes(mid);
-    const state = roleId === 'collector' && A.ACCOUNTS.marketCollectorState ? A.ACCOUNTS.marketCollectorState(mid, d.id) : null;
-    const targetIsActive = A.ACCOUNTS.isActive({ status: d.status });
-    if (el.checked && !own && targetIsActive && state && state.collectors.length) {
-      ui.accPendingCollectorTransfer = { marketId: mid, collectorIds: state.collectors.map(a => a.id) };
-      const names = state.collectors.map(a => U.esc(a.fullName)).join(', ');
-      A.modal(A.mHead('Chuyển phân công') + `<div class="modal-b">Chợ <b>${U.esc(U.mShort(mid))}</b> hiện đang được <b>${names}</b> phụ trách. Bạn có muốn chuyển phân công sang tài khoản này không?</div><div class="modal-f"><button class="btn" data-act="af-transfer-cancel">Hủy</button><button class="btn primary" data-act="af-transfer-confirm">Chuyển phân công</button></div>`);
-      return;
-    }
-    afSetScope(mid, el.checked);
-    renderAccForm();
-  };
-  A.ACT['af-transfer-cancel'] = () => { ui.accPendingCollectorTransfer = null; renderAccForm(); };
-  A.ACT['af-transfer-confirm'] = () => {
-    const pending = ui.accPendingCollectorTransfer;
-    if (!pending || !ui.accForm) return;
-    afSetScope(pending.marketId, true);
-    const transfers = new Set(ui.accForm.collectorTransferMarkets || []);
-    transfers.add(pending.marketId);
-    ui.accForm.collectorTransferMarkets = Array.from(transfers);
-    ui.accPendingCollectorTransfer = null;
+    const d = ui.accForm, roleId = el.value || '';
+    const existing = d.id ? A.ACCOUNTS.get(d.id) : null, ownRole = existing && A.ACCOUNTS.primaryRole(existing);
+    d.roleIds = roleId ? [roleId] : [];
+    const r = roleId ? A.PERM.role(roleId) : null;
+    if (r) d.accountType = r.name;
+    d.marketScopes = existing && roleId === ownRole ? (roleId === 'collector' ? afCollectorScopes({ marketScopes: existing.marketScopes }) : (existing.marketScopes || []).slice()) : [];
     renderAccForm();
   };
   A.CH['af-status'] = el => { ui.accForm.status = el.value; };
+  const afPhoneOk = phone => /^0\d{9}$/.test(A.ACCOUNTS.normalizePhone(phone));
   A.ACT['acc-form-save'] = () => {
     const d = ui.accForm, isNew = !d.id;
     if (!A.canDo(isNew ? 'tai-khoan.tao-moi' : 'tai-khoan.sua')) return;
     const canAssign = isNew || A.canDo('tai-khoan.gan-quyen');
-    if (!d.code || !d.code.trim()) { U.toast('Vui lòng nhập mã tài khoản'); return; }
-    if (!d.fullName || !d.fullName.trim()) { U.toast('Vui lòng nhập họ tên'); return; }
-    if (A.ACCOUNTS.codeTaken(d.code, d.id)) { U.toast('Mã tài khoản "' + d.code + '" đã tồn tại'); return; }
+    if (!d.fullName || !d.fullName.trim()) { U.toast('Vui lòng nhập họ và tên'); return; }
+    // SĐT đăng nhập: bắt buộc khi tạo mới (cùng quy tắc 10 số bắt đầu bằng 0 của luồng đổi số), không trùng
+    // account khác vì đăng nhập OTP tra account theo SĐT. Khi sửa, SĐT chỉ đổi qua quy trình yêu cầu đổi số.
+    if (isNew) {
+      if (!afPhoneOk(d.phone)) { U.toast('Vui lòng nhập số điện thoại gồm 10 chữ số, bắt đầu bằng 0.'); return; }
+      if (A.ACCOUNTS.byPhone(d.phone)) { U.toast('Số điện thoại đã được dùng cho tài khoản khác.'); return; }
+    }
     const existing = d.id ? A.ACCOUNTS.get(d.id) : null;
-    const roleId = canAssign ? ((d.roleIds && d.roleIds[0]) || '') : (existing && A.ACCOUNTS.primaryRole(existing)) || '';
-    // RBAC_MARKET_SCOPE_MIGRATION mục 20: system_admin/ward_leader luôn GLOBAL ('ALL', không multi-
-    // select); market_manager/collector/technician bắt buộc chọn ít nhất 1 trong 12 chợ; trader
-    // không gán phạm vi ở form này (giữ nguyên phạm vi hiện có — quản lý qua Hồ sơ tiểu thương).
-    let marketScopes = canAssign ? (d.marketScopes || []) : (existing ? existing.marketScopes : []);
+    const ownRole = existing ? A.ACCOUNTS.primaryRole(existing) : '';
+    const roleId = canAssign ? afRole(d) : (ownRole || '');
+    if (!roleId) { U.toast('Vui lòng chọn vai trò'); return; }
+    if (canAssign && roleId !== ownRole && !A.ACCOUNTS.internalRoles().some(r => r.id === roleId)) { U.toast('Vai trò không dùng cho tài khoản nội bộ.'); return; }
+    // Phạm vi theo vai trò: vai trò toàn hệ thống (kể cả technician — giá trị tương thích) → ['ALL'];
+    // NV thu phí → Chợ cụ thể, bắt buộc ≥1 Chợ khi đang hoạt động; trader/vai trò ngoài danh mục → giữ nguyên.
+    let marketScopes = existing ? existing.marketScopes : [];
     if (canAssign) {
       const scopeMode = A.ACCOUNTS.scopeModeForRole(roleId);
-      if (scopeMode === 'ALL') marketScopes = ['ALL'];
-      else if (scopeMode === 'TRADER') marketScopes = existing ? existing.marketScopes : (d.marketScopes || []);
-      else if (!marketScopes.length && (roleId !== 'collector' || isNew)) { U.toast('Vui lòng chọn ít nhất một chợ được phân công.'); return; }
+      // NV thu phí: form KHÔNG đổi phân công Chợ. Tạo mới / vừa đổi sang NV thu phí → [] (chưa được phân công, hợp
+      // lệ ở mọi trạng thái); NV thu phí đã có → giữ nguyên Chợ đang phụ trách.
+      if (roleId === 'collector') marketScopes = roleId === ownRole ? existing.marketScopes : [];
+      else if (scopeMode === 'ALL') marketScopes = ['ALL'];
+      else if (roleId === ownRole) marketScopes = existing.marketScopes;
+      else marketScopes = [];
     }
-    const patch = { code: d.code.trim(), fullName: d.fullName.trim(), phone: existing ? existing.phone : (d.phone || '').trim(), accountType: d.accountType, roleIds: canAssign ? d.roleIds : (existing ? existing.roleIds : []), organization: (d.organization || '').trim(), marketScopes, status: d.status };
-    const fullRecord = Object.assign({ id: d.id || ('AC-' + patch.code.trim().toUpperCase()) }, patch);
+    const organization = A.ACCOUNTS.organizationForRole(roleId) || (existing && existing.organization) || '';
+    // Mã: tạo mới → hệ thống sinh ngay lúc Lưu (không lấy từ form); sửa → giữ nguyên mã cũ (bất biến).
+    const code = isNew ? A.features.accounts.service.nextInternalAccountCode(roleId, U.pad) : existing.code;
+    if (!code) { U.toast('Không xác định được mã tài khoản cho vai trò này.'); return; }
+    const patch = { code, fullName: d.fullName.trim(), phone: existing ? existing.phone : A.ACCOUNTS.normalizePhone(d.phone), accountType: d.accountType, roleIds: canAssign ? [roleId] : (existing ? existing.roleIds : []), organization, marketScopes, status: isNew ? ACC_PENDING : d.status };
+    const fullRecord = Object.assign({ id: d.id || ('AC-' + code) }, patch);
+    // Prototype: chưa có nhà cung cấp SMS — chỉ tạo hướng dẫn kích hoạt (không khẳng định đã gửi thật).
+    const createdMsg = 'Đã tạo tài khoản ' + code + '. Hướng dẫn kích hoạt đã được tạo cho số điện thoại đăng nhập ' + U.maskPhone(patch.phone) + '.';
     if (roleId === 'collector') {
-      const saved = A.ACCOUNTS.saveCollectorAccount(fullRecord, { transferMarkets: d.collectorTransferMarkets || [] });
+      // Không truyền transferMarkets: lưu tài khoản không bao giờ chuyển Chợ. Chỉ có thể vướng khi mở khoá lại NV có
+      // Chợ nay đã thuộc NV khác → chặn, để Tổ trưởng phân công lại (không tạo trùng NV thu phí hiện hành).
+      const saved = A.ACCOUNTS.saveCollectorAccount(fullRecord);
       if (!saved.ok) {
-        if (saved.reason === 'TRANSFER_REQUIRED') U.toast('Chợ đã có NV thu phí phụ trách. Hãy chọn “Chuyển phân công”.');
-        else if (saved.reason === 'COLLECTOR_SCOPE_REQUIRED') U.toast('Nhân viên thu phí mới cần được phân công ít nhất một chợ.');
-        else U.toast('Không thể lưu phân công Nhân viên thu phí.');
+        if (saved.reason === 'TRANSFER_REQUIRED') U.toast('Chợ ' + saved.conflicts.map(x => U.mShort(x.marketId)).join(', ') + ' đang do NV thu phí khác phụ trách. Tổ trưởng cần phân công lại trước khi mở khóa tài khoản này.');
+        else U.toast('Không thể lưu tài khoản Nhân viên thu phí.');
         return;
       }
     } else if (d.id) {
@@ -357,13 +430,13 @@
       U.toast('Đã cập nhật tài khoản ' + patch.code);
     } else {
       A.ACCOUNTS.add(fullRecord);
-      U.log('Thêm tài khoản mới "' + patch.fullName + '" (' + patch.code + ')');
-      U.toast('Đã thêm tài khoản ' + patch.code);
+      U.log('Thêm tài khoản mới "' + patch.fullName + '" (' + patch.code + ') — chờ kích hoạt qua OTP');
+      U.toast(createdMsg);
     }
     if (roleId === 'collector') {
       if (A.currentAccount && A.currentAccount().id === fullRecord.id) A.syncAccountContext();
       U.log((d.id ? 'Cập nhật' : 'Thêm') + ' tài khoản "' + patch.fullName + '" (' + patch.code + ')');
-      U.toast(d.id ? 'Đã cập nhật tài khoản ' + patch.code : 'Đã thêm tài khoản ' + patch.code);
+      U.toast(d.id ? 'Đã cập nhật tài khoản ' + patch.code : createdMsg);
     }
     ui.accForm = null;
     A.closeModal(); A.render();

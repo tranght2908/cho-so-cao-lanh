@@ -23,6 +23,7 @@ function mirrorPointSelection(p) {
   h.input('#wf-ct-building', b.id);
   if (f) h.input('#wf-ct-floor', f.id);
   h.input('#wf-ct-row', r.id);
+  h.input('#wf-ct-areaType', p.areaTypeId);
   h.input('#wf-ct-point', p.id);
 }
 
@@ -35,9 +36,9 @@ ok('fixed-trader entry renders v16 selectors using IDs', () => {
   assert(!/Khu \*/.test(modal) && /Khối\/Nhà/.test(modal));
 });
 
-ok('menu entry uses the same form with an editable Trader selector', () => {
+ok('menu entry uses the same form with a Trader phone lookup', () => {
   h.go('hop-dong'); h.act('ct-new');
-  assert(/id="wf-ct-trader"/.test(h.modal()));
+  assert(/id="wf-ct-phone"/.test(h.modal()) && !/id="wf-ct-trader"/.test(h.modal()));
   assert(/id="wf-ct-building"/.test(h.modal()) && /data-act="wf-contract-save"/.test(h.modal()));
   h.act('wf-contract-open', { id: trader.id });
 });

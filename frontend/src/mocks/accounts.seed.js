@@ -1,6 +1,8 @@
-/* Demo account seed (Phase 15.8, from js/accounts.js): staff accounts derived from D.STAFF plus the
- * demo roster of the 10 markets without business data. Consumed by features/accounts/store.js through
- * APP.data source "accounts-seed"; the store owns persistence and migrations. */
+/* Demo account seed (Phase 15.8, from js/accounts.js). CURRENT ORGANIZATION demo set only — một Tổ
+ * Quản lý chợ chung cho 12 chợ: 1 Quản trị hệ thống, 1 Tổ trưởng (NV01), 3 NV thu phí, 3 NV kỹ thuật,
+ * 1 Kế toán Trung tâm (A05), 1 Lãnh đạo UBND phường + vài Tiểu thương demo. Account demo cũ (NV04, NV08,
+ * TP/KT/QL của 10 chợ, KT01...) không seed nữa; bản đã lưu được store giữ nguyên nhưng ẩn khỏi tổ chức
+ * hiện hành. Consumed by features/accounts/store.js through APP.data source "accounts-seed". */
 (function (A) {
   'use strict';
   const D = A.D;
@@ -28,75 +30,48 @@
     NV05: '0900000005'
   };
 
+  // Phân công NV thu phí hiện hành theo Chợ (nguồn DUY NHẤT: Account.marketScopes). 12 id lấy đúng từ
+  // D.MARKETS; mỗi Chợ đúng 1 NV, mỗi NV 4 Chợ. Store kiểm tra lại với D.MARKETS và không tạo trùng.
+  const COLLECTOR_MARKET_SCOPES = {
+    NV02: ['CL', 'HA', 'TVH', 'TTT'],
+    NV03: ['TL', 'TT', 'TTH', 'MN'],
+    NV07: ['TTD', 'LH', 'XB', 'SQ']
+  };
+  // D.STAFF thuộc tổ chức hiện hành. NV04/NV08 (NV thu phí) và NV06 (Trưởng Ban TTD cũ) vẫn ở D.STAFF để
+  // đọc lịch sử (payment.by, Incident.assignee...) nhưng không còn account demo hiện hành.
+  const CURRENT_STAFF_IDS = ['NV01', 'NV02', 'NV03', 'NV05', 'NV07', 'NV09'];
+  // NV kỹ thuật được giao việc theo Incident.assignee, không theo Chợ/Khu/Dãy. marketScopes=['ALL'] chỉ
+  // để mở được sự cố được giao ở bất kỳ chợ nào; không phải ownership.
+  const staffScopes = (s, roleId) => roleId === 'market_manager' || roleId === 'technician' ? ['ALL'] : (COLLECTOR_MARKET_SCOPES[s.id] || [s.market]);
+
   function defaultStaffAccounts() {
-    return D.STAFF.map(s => {
+    return D.STAFF.filter(s => CURRENT_STAFF_IDS.indexOf(s.id) !== -1).map(s => {
       const roleId = STAFF_ROLE_MAP[s.role] || 'collector';
-      // Chỉ seed Tổ trưởng canonical dùng chung. Account Tổ trưởng từng chợ đã có trong localStorage
-      // vẫn được giữ bởi store để cleanup ở task riêng, nhưng không được tạo thêm cho dữ liệu mới.
-      if (roleId === 'market_manager' && s.id !== 'NV01') return null;
       return {
         id: 'AC-' + s.id, code: s.id, fullName: s.name, phone: STAFF_DEMO_PHONE_BY_ID[s.id] || '',
         accountType: roleName(roleId),
         title: s.role, roleIds: [roleId],
-        // Trưởng Ban Quản lý chợ quản lý cả 02 chợ có dữ liệu nghiệp vụ (demo "1 account, nhiều
-        // chợ" — mục 19 yêu cầu); nhân viên gắn với đúng chợ được giao.
-        organization: s.role === 'Trưởng Ban Quản lý chợ' ? managementUnit() : 'Ban Quản lý ' + ((D.MARKETS.find(m => m.id === s.market) || {}).short || s.market),
-        marketScopes: roleId === 'market_manager' ? ['ALL'] : [s.market], status: 'active'
+        organization: managementUnit(),
+        marketScopes: staffScopes(s, roleId), status: 'active'
       };
-    }).filter(Boolean);
+    });
   }
 
-  // Account demo cho 10 chợ CHƯA có dữ liệu nghiệp vụ (floors:[] — xem data.js) — mỗi chợ có đúng 1
-  // Trưởng Ban Quản lý chợ + 1 Nhân viên thu phí + 1 Nhân viên kỹ thuật (mục 19: mức tối thiểu),
-  // KHÔNG có Tiểu thương demo (mục 19: "nếu phù hợp với dữ liệu hiện có" — 10 chợ này chưa có
-  // A.db.traders/stalls thật để gắn traderId có ý nghĩa, tạo account tiểu thương "rỗng" không chứng
-  // minh được gì thêm về ownership so với 4 account tiểu thương demo đã có ở CL/TTD). Tên người chỉ
-  // là dữ liệu minh họa (mục 19: "Không tạo dữ liệu cá nhân thực").
-  const NEW_MARKET_ROSTER = [
-    ['HA', 'Nguyễn Văn Hòa', 'Trần Thị Ngọc An', 'Lê Văn Bình'],
-    ['TVH', 'Phạm Văn Việt', 'Đặng Thị Hồng Hòa', 'Bùi Văn Toàn'],
-    ['TTT', 'Ngô Văn Tây', 'Dương Thị Mỹ Dân', 'Lý Văn Thuận'],
-    ['TL', 'Hồ Văn Lưu', 'Mai Thị Bình', 'Trương Văn Thông'],
-    ['TT', 'Châu Văn Tịch', 'Lâm Thị Tân', 'Nguyễn Văn Đức'],
-    ['TTH', 'Trần Văn Thới', 'Lê Thị Tịnh', 'Phạm Văn Long'],
-    ['MN', 'Huỳnh Văn Ngãi', 'Võ Thị Mỹ', 'Đỗ Văn Sang'],
-    ['LH', 'Ngô Văn Hồi', 'Dương Thị Long', 'Hồ Văn Thịnh'],
-    ['XB', 'Mai Văn Bèo', 'Trương Thị Xẻo', 'Châu Văn Phát'],
-    ['SQ', 'Lâm Văn Quốc', 'Nguyễn Thị Sáu', 'Trần Văn Cường']
-  ];
-  // SĐT demo cho luồng đăng nhập SĐT + OTP mock (dữ liệu minh hoạ, không phải số thật). Chỉ Chợ Hòa
-  // An dùng cho E2E; account đã lưu có phone rỗng được mergeSeedAccounts (store.js) backfill.
-  const NEW_MARKET_DEMO_PHONE_BY_ID = {
-    'AC-HA-QL': '0911000001',
-    'AC-HA-TP': '0911000002'
-  };
-  function newMarketAccounts() {
-    const out = [];
-    NEW_MARKET_ROSTER.forEach(row => {
-      const mid = row[0], managerName = row[1], collectorName = row[2], technicianName = row[3];
-      const m = D.MARKETS.find(x => x.id === mid);
-      const org = 'Ban Quản lý ' + (m ? m.name : mid);
-      const mk = (suffix, roleId, fullName, title) => ({
-        id: 'AC-' + mid + '-' + suffix, code: mid + '-' + suffix, fullName, phone: NEW_MARKET_DEMO_PHONE_BY_ID['AC-' + mid + '-' + suffix] || '',
-        accountType: roleName(roleId), title, roleIds: [roleId], organization: org,
-        marketScopes: [mid], status: 'active'
-      });
-      out.push(mk('TP', 'collector', collectorName, 'Nhân viên thu phí'));
-      out.push(mk('KT', 'technician', technicianName, 'Nhân viên kỹ thuật'));
-    });
-    return out;
+  // NV kỹ thuật thứ 3 tái sử dụng account demo sẵn có AC-HA-KT (cùng id/code/tên — không tạo trùng).
+  function extraTechnicianAccount() {
+    return { id: 'AC-HA-KT', code: 'HA-KT', fullName: 'Lê Văn Bình', phone: '', accountType: roleName('technician'), title: 'Nhân viên kỹ thuật', roleIds: ['technician'], organization: managementUnit(), marketScopes: ['ALL'], status: 'active' };
   }
 
   function defaultAccounts() {
     const list = defaultStaffAccounts();
-    list.push(
+    list.push(extraTechnicianAccount(),
       // 2 account GLOBAL (scopeType suy ra từ marketScopes=['ALL'] — mục 5/7 yêu cầu): Lãnh đạo UBND
       // và Quản trị hệ thống KHÔNG gán vào 1 chợ cụ thể nào (mục 12: "Không gán Admin/Lãnh đạo giả
       // vào từng market chỉ để thanh demo hoạt động").
       { id: 'AC-LD01', code: 'LD01', fullName: 'Nguyễn Văn Phúc', phone: '0909123456', accountType: roleName('ward_leader'), title: 'Phó Chủ tịch UBND phường', roleIds: ['ward_leader'], organization: 'UBND phường Cao Lãnh', marketScopes: ['ALL'], status: 'active' },
       { id: 'AC-QT01', code: 'QT01', fullName: 'Đặng Thị Thu', phone: '0909234567', accountType: roleName('system_admin'), title: 'Quản trị hệ thống', roleIds: ['system_admin'], organization: 'UBND phường Cao Lãnh', marketScopes: ['ALL'], status: 'active' },
-      // Kế toán Trung tâm (A05) dùng role metadata chưa được cấp permission nghiệp vụ mặc định; phạm vi
-      // ALL theo chuẩn hoá central_accountant ở accounts/store. Kế toán phường không còn account seed.
+      // Kế toán Trung tâm (A05) — role kế toán duy nhất hiện hành, phạm vi ALL. Không còn Kế toán phường
+      // (A06) hay Kế toán Ban Quản lý chợ (market_accountant) trong tổ chức hiện hành.
       { id: 'AC-KTTT01', code: 'KTTT01', fullName: 'Nguyễn Thị Minh Anh', phone: '0909000505', accountType: roleName('central_accountant'), title: 'Kế toán Trung tâm', roleIds: ['central_accountant'], organization: 'Trung tâm Cung ứng dịch vụ công', marketScopes: ['ALL'], status: 'active' },
       { id: 'AC-CHI-QUYET', code: 'CHI-QUYET', fullName: 'Chí Quyết', phone: '0909000001', accountType: roleName('trader'), title: 'Tiểu thương chợ quê', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'active', linkedTraderId: 'TTD-CQ', traderId: 'TTD-CQ' },
       { id: 'AC-TT-TTD', code: 'TT-TTD', fullName: 'Tiểu thương Chợ quê Tân Thuận Đông', phone: '0909666777', accountType: roleName('trader'), title: 'Tiểu thương chợ quê mẫu', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'active' },
@@ -105,18 +80,14 @@
       // với hồ sơ nào (giữ nguyên 2 account demo cũ này ở trạng thái CHƯA LIÊN KẾT — không có cách
       // nào xác định AN TOÀN chúng "là" trader nào trong A.db.traders vì tên/SĐT hoàn toàn độc lập
       // với dữ liệu mẫu sinh ngẫu nhiên có seed riêng; auto-link case demo LINKED thật lấy trực tiếp
-      // từ A.db lúc runtime — xem A.ensureMiniAppDemoLink() ở js/core.js).
+      // từ A.db khi Management tạo/link tài khoản; bootstrap không tự liên kết hồ sơ demo.
       { id: 'AC-TT01', code: 'TT-DEMO1', fullName: 'Nguyễn Thị Hoa', phone: '0909345678', accountType: roleName('trader'), title: 'Tiểu thương mẫu', roleIds: ['trader'], organization: 'Chợ Cao Lãnh', marketScopes: ['CL'], status: 'active', traderId: null },
       // Tài khoản Mini App của TT0003 Trần Thị Kim Nhung (thuê 4 điểm KA-A03/KA-A04/HS-A01/TG-A01, Chợ
       // Cao Lãnh) — SĐT trùng hồ sơ tiểu thương trong data.js; liên kết đúng 1 hồ sơ qua traderId.
       { id: 'AC-TT03', code: 'TT0003', fullName: 'Trần Thị Kim Nhung', phone: '0918320516', accountType: roleName('trader'), title: 'Tiểu thương (thuê 4 điểm)', roleIds: ['trader'], organization: 'Chợ Cao Lãnh', marketScopes: ['CL'], status: 'active', linkedTraderId: 'TT0003', traderId: 'TT0003' },
-      // DOI_SOAT_CUOI_NGAY: Kế toán Ban Quản lý Chợ Cao Lãnh (role market_accountant) — nhận tiền mặt NV thu phí
-      // nộp cuối buổi và đối soát phiếu nộp. Tên là dữ liệu mẫu; không gán SĐT đăng nhập trong code (SĐT thử chỉ
-      // đặt ở trang local frontend/tai-khoan-thu-phi.local.html).
-      { id: 'AC-KT01', code: 'KT01', fullName: 'Lê Thị Thu Trang', phone: '', accountType: roleName('market_accountant'), title: 'Kế toán Ban Quản lý chợ', roleIds: ['market_accountant'], organization: 'Ban Quản lý Chợ Cao Lãnh', marketScopes: ['CL'], status: 'active' },
       { id: 'AC-TT02', code: 'TT-DEMO2', fullName: 'Trần Văn Sáu', phone: '0909456789', accountType: roleName('trader'), title: 'Tiểu thương mẫu (đã tạm khoá minh hoạ)', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'disabled', traderId: null }
     );
-    return list.concat(newMarketAccounts());
+    return list;
   }
-  A.data.registerSource('accounts-seed', { defaultAccounts });
+  A.data.registerSource('accounts-seed', { defaultAccounts, collectorMarketScopes: () => COLLECTOR_MARKET_SCOPES });
 })(window.APP);

@@ -29,8 +29,7 @@
     A02: ['Quy hoạch khu/mặt bằng', 'Phân công nhân viên thu phí', 'Khai báo mức thu', 'Mở/chốt kỳ thu tháng', 'Duyệt miễn giảm và nghiệp vụ tiểu thương', 'Giao, theo dõi phản ánh', 'Xem báo cáo'],
     A03: ['Thu phí tháng tại điểm kinh doanh', 'Phát hành biên lai điện tử', 'Nộp tiền mặt tháng', 'Nhắc nộp phí'],
     A04: ['Nhận và xử lý phản ánh được giao', 'Cập nhật tiến độ xử lý', 'Cập nhật kết quả kèm ảnh minh họa'],
-    A05: ['Xác nhận phiếu nộp tiền mặt', 'Đối soát số thu kỳ tháng với chứng từ'],
-    A06: ['Xem danh sách thu và báo cáo thu', 'Xuất danh sách thu và báo cáo', 'Không đối soát hoặc sửa dữ liệu'],
+    A05: ['Xác nhận phiếu nộp tiền mặt', 'Đối soát số thu kỳ tháng với chứng từ', 'Xem, xuất số liệu thu, công nợ và báo cáo tài chính'],
     A07: ['Đăng ký và quản lý tài khoản cá nhân', 'Xem khoản phải nộp và thanh toán', 'Xem biên lai', 'Gửi, đánh giá phản ánh và nhận thông báo'],
     A08: ['Xem số liệu tổng hợp thu phí, công nợ và phản ánh của 12 chợ', 'Giám sát, không thao tác nghiệp vụ']
   };

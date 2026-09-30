@@ -8,51 +8,59 @@
 (function (A) {
   'use strict';
   if (!A) return;
-  const D = A.D, U = A.U, $ = A.$;
-  const SKEY = 'choso-caolanh-trader-web-session';
+  // `A.ui` is the shared UI context used by the canonical sidebar renderer
+  // (`trader-portal/page.js`).  This web app owns authentication/session only;
+  // it supplies the authenticated context to that existing shell.
+  const D = A.D, U = A.U, $ = A.$, ui = A.ui;
+  const SKEY = A.ACCOUNTS.TRADER_WEB_SESSION_KEY; // dùng chung với web quản lý (chuyển A07 sang đây)
   const SOURCE = 'Web app tiểu thương';
   const CATS = ['Điện', 'Cấp thoát nước', 'Vệ sinh', 'An ninh trật tự', 'PCCC', 'Hạ tầng', 'Khác'];
 
   // ---------- trạng thái giao diện của trang (không phải dữ liệu nghiệp vụ) ----------
-  const S = { traderId: null, accountId: null, step: 'phone', phone: '', candidates: [], candidateId: null, otp: '', error: '',
+  // accountId = tài khoản đăng nhập (A07); traderId = HỒ SƠ ĐANG XEM (activeTraderProfile) — thuộc Account.traderIds.
+  const S = { traderId: null, accountId: null, step: 'phone', phone: '', loginAccountId: null, otpChallenge: null, otp: '', error: '',
     paySel: null, paying: false, openInv: null, contractSel: null, billFilter: 'all', noticeFilter: 'all', headerPopover: null, draftImages: [], sessionImages: {}, lastPays: null, feeFilter: '', lookup: '', lookupResult: null };
   function loadSession() {
-    try { const x = JSON.parse(sessionStorage.getItem(SKEY) || 'null'); if (x && x.traderId) { S.traderId = x.traderId; S.accountId = x.accountId; } } catch (e) { /* bỏ qua */ }
+    try { const x = JSON.parse(sessionStorage.getItem(SKEY) || 'null'); if (x && x.accountId) { S.accountId = x.accountId; S.traderId = x.traderId || null; } } catch (e) { /* bỏ qua */ }
   }
   function saveSession() {
-    try { if (S.traderId) sessionStorage.setItem(SKEY, JSON.stringify({ traderId: S.traderId, accountId: S.accountId })); else sessionStorage.removeItem(SKEY); } catch (e) { /* bỏ qua */ }
+    try { if (S.accountId) sessionStorage.setItem(SKEY, JSON.stringify({ traderId: S.traderId, accountId: S.accountId })); else sessionStorage.removeItem(SKEY); } catch (e) { /* bỏ qua */ }
   }
 
   // ---------- danh tính & phạm vi ----------
   const normPhone = p => String(p || '').replace(/\D/g, '');
   const accounts = () => A.features.accounts.service;
+  // Tài khoản trong phiên: phải là tài khoản Tiểu thương (A07) và đang hoạt động (đã kích hoạt qua OTP).
+  // Trong web Tiểu thương, "tài khoản hiện tại" LUÔN là tài khoản A07 của phiên (không dùng tài khoản demo/đầu tiên).
+  A.currentAccount = () => sessionAccount();
+  function sessionAccount() {
+    const acc = S.accountId ? A.ACCOUNTS.get(S.accountId) : null;
+    return acc && A.ACCOUNTS.primaryRole(acc) === 'trader' && A.ACCOUNTS.authStatus(acc) === 'ACTIVE' ? acc : null;
+  }
+  // Hồ sơ được xem = hồ sơ liên kết với CHÍNH tài khoản (Account.traderIds) và còn hiệu lực. KHÔNG dùng marketScopes.
+  const profileUsable = t => !!t && (!t.profileStatus || t.profileStatus === 'ACTIVE');
+  function myProfiles(acc) { return acc ? A.ACCOUNTS.traderProfilesOf(acc).filter(profileUsable) : []; }
+  // Tương thích các handler cũ: tài khoản của phiên nếu `t` là một hồ sơ của nó.
   function traderAccount(t) {
-    const acc = t && accounts().byTraderId(t.id);
-    return acc && acc.status === 'active' && (acc.roleIds || []).indexOf('trader') !== -1 ? acc : null;
+    const acc = sessionAccount();
+    return acc && t && A.ACCOUNTS.traderIdsOf(acc).indexOf(t.id) !== -1 ? acc : null;
   }
-  function inScope(acc, market) {
-    const sc = (acc && acc.marketScopes) || [];
-    return sc.indexOf('ALL') !== -1 || sc.indexOf(market) !== -1;
-  }
-  // Tiểu thương đang đăng nhập: hồ sơ còn, tài khoản còn hoạt động và chợ nằm trong phạm vi tài khoản.
+  // Hồ sơ đang xem (activeTraderProfile): S.traderId nếu thuộc tài khoản; nếu không → hồ sơ mặc định. Không
+  // có hồ sơ hợp lệ → null (màn "chưa liên kết"), không lấy hồ sơ người khác/hồ sơ mẫu.
   function me() {
-    const t = S.traderId ? A.idx.trader.get(S.traderId) : null;
-    const acc = t && traderAccount(t);
-    if (!t || !acc || acc.id !== S.accountId || !inScope(acc, t.market)) return null;
+    const acc = sessionAccount(), mine = myProfiles(acc);
+    if (!acc || !mine.length) return null;
+    let t = mine.find(x => x.id === S.traderId);
+    if (!t) { const def = A.ACCOUNTS.defaultTraderProfile(acc); t = def && mine.indexOf(def) !== -1 ? def : mine[0]; S.traderId = t.id; saveSession(); }
     return t;
   }
   function logout(msg) {
-    Object.assign(S, { traderId: null, accountId: null, step: 'phone', phone: '', candidates: [], candidateId: null, otp: '', error: '', paySel: null, lastPays: null, headerPopover: null });
+    Object.assign(S, { traderId: null, accountId: null, step: 'phone', phone: '', loginAccountId: null, otpChallenge: null, otp: '', error: '', paySel: null, lastPays: null, headerPopover: null });
     saveSession();
     location.hash = '#/dang-nhap';
     render();
     if (msg) U.toast(msg);
   }
-  function demoTraders() {
-    return A.ACCOUNTS.list().filter(a => a.status === 'active' && (a.roleIds || []).indexOf('trader') !== -1 && a.traderId)
-      .map(a => ({ a, t: A.idx.trader.get(a.traderId) })).filter(x => x.t);
-  }
-
   // ---------- dữ liệu của tiểu thương (chỉ đọc, suy ra từ A.db) ----------
   const stallOf = id => A.idx.stall.get(id);
   const marketName = id => (U.market(id) || { name: id }).name;
@@ -86,29 +94,28 @@
     const err = S.error ? `<div class="auth-error" role="alert">${U.esc(S.error)}</div>` : '';
     let form;
     if (S.step === 'otp') {
-      const t = A.idx.trader.get(S.candidateId);
+      const acc = S.loginAccountId ? A.ACCOUNTS.get(S.loginAccountId) : null;
       form = `<div class="auth-brand-label">Cổng tiểu thương</div><h1>Xác thực OTP</h1>
-        <p class="auth-lead">Mã xác thực đã được gửi đến số điện thoại <b>${U.maskPhone(t ? t.phone : '')}</b></p>
+        <p class="auth-lead">Mã xác thực đã được gửi đến số điện thoại <b>${U.maskPhone(acc ? acc.phone : S.phone)}</b></p>
         <div class="field"><label id="tw-otp-label">Mã OTP *</label><div class="auth-otp" role="group" aria-labelledby="tw-otp-label">${[0, 1, 2, 3, 4, 5].map(i => `<input class="input" inputmode="numeric" autocomplete="one-time-code" maxlength="1" data-tw-otp="${i}" value="${U.esc(S.otp[i] || '')}" aria-label="Số ${i + 1}">`).join('')}</div>${err}</div>
         <button class="btn primary auth-submit" data-act="tw-verify">Xác nhận</button>
-        <div class="small muted auth-demo-otp">Prototype: nhập 6 chữ số bất kỳ, không gửi SMS thật.</div>
+        <div class="small muted auth-demo-otp">Prototype: đã tự điền OTP mô phỏng <b>${A.ACCOUNTS.otpDemoCode}</b>, không gửi SMS thật. Bấm "Xác nhận" để tiếp tục.</div>
         <div class="auth-links"><button class="btn link" data-act="tw-back">← Đổi số điện thoại</button></div>`;
-    } else if (S.step === 'multi') {
-      form = `<div class="auth-brand-label">Cổng tiểu thương</div><h1>Chọn hồ sơ</h1>
-        <p class="auth-lead">Số điện thoại gắn với nhiều hồ sơ tiểu thương. Vui lòng chọn hồ sơ cần đăng nhập.</p>
-        ${U.table([{ t: 'Tiểu thương' }, { t: 'Chợ' }, { t: '' }], S.candidates.map(id => { const t = A.idx.trader.get(id); return `<tr class="click" data-act="tw-pick" data-id="${t.id}"><td><b>${U.esc(t.name)}</b></td><td>${U.esc(marketName(t.market))}</td><td class="num">Chọn ›</td></tr>`; }))}
-        <div class="auth-links"><button class="btn link" data-act="tw-back">← Quay lại</button></div>`;
     } else {
-      const demo = demoTraders();
       form = `<div class="auth-brand-label">Cổng tiểu thương</div><h1>Đăng nhập</h1>
         <p class="auth-lead">Sử dụng số điện thoại đã đăng ký với Ban Quản lý chợ.</p>
         <div class="field"><label for="tw-phone">Số điện thoại *</label><input id="tw-phone" class="input auth-input" type="tel" inputmode="tel" autocomplete="tel" data-in="tw-phone" value="${U.esc(S.phone)}" placeholder="Nhập số điện thoại">${err}</div>
-        <button class="btn primary auth-submit" data-act="tw-lookup">Tiếp tục</button>
-        ${demo.length ? `<div class="small muted" style="margin-top:14px">Tài khoản tiểu thương mẫu:</div><div class="row" style="flex-wrap:wrap;gap:6px;margin-top:6px">${demo.map(x => { const debt = U.traderDebt(x.t.id); return `<button class="btn sm" data-act="tw-demo" data-id="${x.t.id}" title="${U.esc(x.a.title || '')}">${U.esc(x.t.name)} · ${U.esc(U.market(x.t.market).short)} · ${debt ? 'còn nợ ' + U.money(debt) : 'đã nộp đủ'}</button>`; }).join('')}</div>` : ''}`;
+        <button class="btn primary auth-submit" data-act="tw-lookup">Tiếp tục</button>`;
     }
     return `<div class="auth-shell"><div class="auth-panel">${authBrand('Cổng tiểu thương', 'Xem khoản phí, thanh toán, nhận biên lai và gửi phản ánh tới Ban Quản lý chợ.')}<section class="auth-form">${form}${authFoot()}</section></div></div>`;
   }
 
+  function screenUnlinked(acc) {
+    return `<div class="auth-shell"><div class="auth-panel">${authBrand('Cổng tiểu thương', 'Xem khoản phí, thanh toán, nhận biên lai và gửi phản ánh tới Ban Quản lý chợ.')}<section class="auth-form"><div class="auth-brand-label">Cổng tiểu thương</div><h1>${U.esc(acc.fullName || '')}</h1>
+      <div class="auth-error" role="alert">Tài khoản chưa được liên kết với hồ sơ tiểu thương.</div>
+      <p class="auth-lead">Vui lòng liên hệ Ban Quản lý chợ để được liên kết hồ sơ.</p>
+      <div class="auth-links"><button class="btn link" data-act="tw-logout">Đăng xuất</button></div>${authFoot()}</section></div></div>`;
+  }
   // ==================== TRA CỨU BIÊN LAI (công khai) ====================
   function screenLookup() {
     const r = S.lookupResult;
@@ -443,6 +450,13 @@
   const PAGES = { 'trang-chu': pageHome, 'hoa-don': pageBills, 'thanh-toan': pagePay, 'hop-dong': pageContracts, 'phan-anh': pageReport, 'thong-bao': pageNotices, 'tai-khoan': pageAccount };
   const route = () => (location.hash.replace(/^#\/?/, '').split('?')[0] || '');
 
+  // "Chợ đang xem": các chợ có hồ sơ liên kết với tài khoản (traderMarketsOf). Chọn chợ = chọn hồ sơ của chợ đó;
+  // dữ liệu luôn lọc theo hồ sơ (traderId), không theo toàn chợ.
+  function profileSwitchHtml(t, acc) {
+    const mine = myProfiles(acc);
+    if (mine.length < 2) return '';
+    return `<label class="tw-profile-switch"><span>Chợ đang xem</span><select class="input" data-ch="tw-profile" aria-label="Chợ đang xem">${mine.map(p => `<option value="${p.id}" ${p.id === t.id ? 'selected' : ''}>${U.esc(marketName(p.market))}</option>`).join('')}</select></label>`;
+  }
   function shell(t, r) {
     const due = unpaid(t).length;
     const badge = id => id === 'hoa-don' && due ? `<i class="tw-badge">${due}</i>` : '';
@@ -453,7 +467,7 @@
     const notificationOpen = S.headerPopover === 'notifications';
     const accountOpen = S.headerPopover === 'account';
     return `<header class="tw-top"><div class="tw-top-in">
-        <a class="tw-brand" href="#/trang-chu"><span class="brand-logo">${MARK.replace('<svg ', '<svg width="24" height="24" ')}</span><span><b>Chợ số Cao Lãnh</b><small>Cổng tiểu thương · ${U.esc(U.market(t.market).short)}</small></span></a>
+        <a class="tw-brand" href="#/trang-chu"><span class="brand-logo">${MARK.replace('<svg ', '<svg width="24" height="24" ')}</span><span><b>Chợ số Cao Lãnh</b><small>Cổng tiểu thương · ${U.esc(U.market(t.market).short)}</small></span></a>${profileSwitchHtml(t, acc)}
         <nav class="tw-nav" aria-label="Điều hướng">${TABS.map(x => `<a href="#/${x[0]}" class="${r === x[0] ? 'on' : ''}">${x[1]}${badge(x[0])}</a>`).join('')}</nav>
         <div class="tw-header-actions">
           <div class="tw-header-popover-anchor">
@@ -476,15 +490,26 @@
     let r = route();
     if (r === 'tra-cuu') { root.innerHTML = screenLookup(); return; }
     const t = me();
+    if (!t && sessionAccount()) { root.innerHTML = screenUnlinked(sessionAccount()); return; }
     if (!t) {
-      if (S.traderId) { S.traderId = null; S.accountId = null; saveSession(); }
+      if (S.accountId) { S.traderId = null; S.accountId = null; saveSession(); }
       if (r !== 'dang-nhap') history.replaceState(null, '', '#/dang-nhap');
       root.innerHTML = screenLogin();
       bindOtp();
       return;
     }
-    if (!PAGES[r]) { r = 'trang-chu'; history.replaceState(null, '', '#/trang-chu'); }
-    root.innerHTML = shell(t, r);
+    // Giao diện chính thức sau đăng nhập: Web App Tiểu thương dạng sidebar (trader-portal / A.VIEWS['mini-app']).
+    root.innerHTML = portalHtml(t);
+  }
+  // Đồng bộ ngữ cảnh cho giao diện sidebar: tài khoản phiên (A07), vai trò trader, hồ sơ đang xem và chợ của hồ sơ.
+  // Hồ sơ đổi từ ô "Chợ đang xem" (ui.mini.traderId) được nhận nếu thuộc chính tài khoản.
+  function portalHtml(t) {
+    const acc = sessionAccount();
+    ui.mini = ui.mini || {};
+    if (ui.mini.traderId && ui.mini.traderId !== t.id && myProfiles(acc).some(p => p.id === ui.mini.traderId)) { S.traderId = ui.mini.traderId; saveSession(); t = me(); }
+    Object.assign(ui.mini, { traderId: t.id, step: 'app' });
+    ui.role = 'trader'; ui.market = t.market;
+    return A.VIEWS['mini-app'] ? A.VIEWS['mini-app']() : '<div class="empty">Không tải được giao diện tiểu thương.</div>';
   }
   // Ô OTP 6 số: tự nhảy ô, Enter = Xác nhận (giống màn đăng nhập của hệ thống).
   function bindOtp() {
@@ -502,9 +527,7 @@
     if (first) first.focus();
   }
 
-  let seeded = false;
   A.route = function () {
-    if (!seeded) { seeded = true; if (A.traderWebDemoSeed) A.traderWebDemoSeed(); }
     if (route() !== 'thanh-toan') { S.lastPays = null; S.paySel = null; }
     if (route() !== 'hoa-don') S.openInv = null;
     const sb = document.getElementById('sidebar'); if (sb) sb.classList.remove('open');
@@ -514,18 +537,27 @@
   A.guide = function () { /* không hiện hướng dẫn của trang quản lý */ };
 
   // ==================== HÀNH ĐỘNG ====================
-  function login(t) {
-    const acc = traderAccount(t);
-    if (!acc || !inScope(acc, t.market) || (t.profileStatus && t.profileStatus !== 'ACTIVE')) {
-      Object.assign(S, { step: 'phone', error: 'Tài khoản chưa được kích hoạt hoặc đang tạm khóa. Vui lòng liên hệ Ban Quản lý chợ.' }); render(); return;
-    }
-    Object.assign(S, { traderId: t.id, accountId: acc.id, step: 'phone', otp: '', error: '', candidates: [], candidateId: null });
-    saveSession();
-    location.hash = '#/trang-chu';
+  // Đăng nhập: SĐT → Tài khoản A07 (không phải hồ sơ) → OTP dùng một lần (mã mô phỏng dùng chung) → kích hoạt nếu
+  // Chờ kích hoạt → vào hồ sơ mặc định. Tài khoản nội bộ / bị khoá không vào được web Tiểu thương.
+  function requestOtp(acc) {
+    Object.assign(S, { loginAccountId: acc.id, otpChallenge: A.ACCOUNTS.issueOtpChallenge(acc), step: 'otp', otp: A.ACCOUNTS.otpDemoCode, error: '' });
     render();
   }
-  const toOtp = t => { Object.assign(S, { candidateId: t.id, step: 'otp', otp: '', error: '' }); render(); };
+  function lookupAccount(phone) {
+    const acc = A.ACCOUNTS.byPhone(phone);
+    if (!acc || A.ACCOUNTS.primaryRole(acc) !== 'trader') return { error: 'Số điện thoại chưa có tài khoản tiểu thương. Vui lòng liên hệ Ban Quản lý chợ.' };
+    if (A.ACCOUNTS.authStatus(acc) === 'LOCKED') return { error: 'Tài khoản đang tạm khóa. Vui lòng liên hệ Ban Quản lý chợ.' };
+    return { acc };
+  }
   A.IN['tw-phone'] = el => { S.phone = el.value; };
+  // Nhập/dán cả mã OTP 6 số một lần (bổ sung cho 6 ô nhập từng số ở bindOtp).
+  A.IN['tw-otp'] = el => { S.otp = String(el.value || '').replace(/\D/g, '').slice(0, 6); S.error = ''; };
+  A.CH['tw-profile'] = el => {
+    const acc = sessionAccount();
+    if (!acc || !myProfiles(acc).some(p => p.id === el.value)) return; // chỉ hồ sơ của chính tài khoản
+    Object.assign(S, { traderId: el.value, paySel: null, contractSel: null, openInv: null, headerPopover: null });
+    saveSession(); render();
+  };
   A.IN['tw-lookup'] = el => { S.lookup = el.value; };
   A.CH['tw-images'] = el => {
     const files = Array.from(el.files || []);
@@ -545,28 +577,33 @@
   };
   Object.assign(A.ACT, {
     'tw-lookup': () => {
-      const found = A.db.traders.filter(t => normPhone(t.phone) && normPhone(t.phone) === normPhone(S.phone));
       if (!normPhone(S.phone)) { S.error = 'Vui lòng nhập số điện thoại.'; render(); return; }
-      if (!found.length) { S.error = 'Không tìm thấy hồ sơ tiểu thương với số điện thoại này. Vui lòng liên hệ Ban Quản lý chợ.'; render(); return; }
-      if (found.length > 1) { Object.assign(S, { step: 'multi', candidates: found.map(t => t.id), error: '' }); render(); return; }
-      if (!traderAccount(found[0])) { S.error = 'Tài khoản chưa được kích hoạt hoặc đang tạm khóa. Vui lòng liên hệ Ban Quản lý chợ.'; render(); return; }
-      toOtp(found[0]);
+      const r = lookupAccount(S.phone);
+      if (r.error) { S.error = r.error; render(); return; }
+      requestOtp(r.acc);
     },
-    'tw-pick': el => {
-      const t = A.idx.trader.get(el.dataset.id);
-      if (!t || S.candidates.indexOf(t.id) === -1) return;
-      if (!traderAccount(t)) { Object.assign(S, { step: 'phone', error: 'Tài khoản chưa được kích hoạt hoặc đang tạm khóa. Vui lòng liên hệ Ban Quản lý chợ.' }); render(); return; }
-      toOtp(t);
-    },
-    'tw-demo': el => { const t = A.idx.trader.get(el.dataset.id); if (t) { S.phone = t.phone; toOtp(t); } },
-    'tw-back': () => { Object.assign(S, { step: 'phone', otp: '', error: '', candidates: [], candidateId: null }); render(); },
+    'tw-back': () => { Object.assign(S, { step: 'phone', otp: '', error: '', loginAccountId: null, otpChallenge: null }); render(); },
     'tw-verify': () => {
-      const t = A.idx.trader.get(S.candidateId);
-      if (!t) { S.step = 'phone'; render(); return; }
-      if (!/^\d{6}$/.test(S.otp)) { S.error = 'Vui lòng nhập đủ 6 chữ số OTP.'; render(); return; }
-      login(t);
+      const acc = S.loginAccountId ? A.ACCOUNTS.get(S.loginAccountId) : null;
+      if (!acc || A.ACCOUNTS.primaryRole(acc) !== 'trader') { Object.assign(S, { step: 'phone', otpChallenge: null }); render(); return; }
+      const v = A.ACCOUNTS.verifyOtpChallenge(S.otpChallenge, acc, acc.phone, S.otp);
+      if (!v.ok) {
+        if (v.reason === 'LOCKED') Object.assign(S, { step: 'phone', otpChallenge: null, error: 'Tài khoản đang tạm khóa. Vui lòng liên hệ Ban Quản lý chợ.' });
+        else if (v.reason === 'EXPIRED') Object.assign(S, { otpChallenge: null, error: 'Mã OTP đã hết hạn. Vui lòng đăng nhập lại để nhận mã mới.' });
+        else if (v.reason === 'NO_CHALLENGE') S.error = 'Mã OTP không còn hiệu lực. Vui lòng đăng nhập lại để nhận mã mới.';
+        else S.error = 'Mã OTP không chính xác. Vui lòng kiểm tra lại.';
+        render(); return;
+      }
+      A.ACCOUNTS.activateAfterOtp(acc); // chỉ Chờ kích hoạt → Đang hoạt động
+      const def = A.ACCOUNTS.defaultTraderProfile(acc);
+      Object.assign(S, { accountId: acc.id, traderId: def ? def.id : null, step: 'phone', otp: '', error: '', loginAccountId: null, otpChallenge: null });
+      saveSession();
+      location.hash = '#/trang-chu';
+      render();
     },
     'tw-logout': () => logout('Đã đăng xuất'),
+    // Mục "Đăng xuất" của sidebar (trader-portal) gọi auth-logout.
+    'auth-logout': () => logout('Đã đăng xuất'),
     'tw-header-notifications': () => { S.headerPopover = S.headerPopover === 'notifications' ? null : 'notifications'; render(); },
     'tw-header-account': () => { S.headerPopover = S.headerPopover === 'account' ? null : 'account'; render(); },
     'tw-header-account-profile': () => {
