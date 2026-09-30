@@ -140,6 +140,12 @@ table { border-collapse: collapse; width: 100%; }
 .asset-table .tag { min-width: 86px; min-height: 24px; justify-content: center; padding: 3px 8px; }
 .asset-table .asset-incident { min-width: 0; }
 .asset-table .asset-view-btn { min-width: 48px; height: 28px; padding: 3px 10px; }
+.asset-loc { display: grid; min-width: 0; line-height: 1.3; }
+.asset-loc b, .asset-loc span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asset-loc b { font-weight: 600; }
+.asset-loc-form { margin-top: 12px; }
+.asset-loc-title { display: block; margin-bottom: 6px; font-weight: 600; }
+.asset-loc-legacy { margin-bottom: 8px; }
 .kpi { padding: 14px 16px; }
 .kpi .k-label { font-size: var(--font-size-sm); color: var(--muted); }
 .kpi .k-value { font-size: var(--font-size-kpi); font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
@@ -171,6 +177,42 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 .tbl-wrap { overflow-x: auto; }
 .tbl th { text-align: left; font-size: var(--font-size-sm); color: var(--muted); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--line); background: var(--surface-2); white-space: nowrap; }
 .tbl td { padding: 8px 10px; border-bottom: 1px solid #eef2f7; vertical-align: middle; font-size: var(--font-size-base); }
+.cash-reconcile-kpis .card { min-height: 82px; }
+.cash-reconcile-filters { gap: 8px; flex-wrap: wrap; }
+.cash-reconcile-filters .input { min-width: 180px; flex: 1 1 190px; }
+.cash-reconcile-list .tbl-wrap, .cash-reconcile-receipts .tbl-wrap { width: 100%; overflow-x: auto; }
+.cash-reconcile-list .tbl { min-width: 1540px; }
+.cash-reconcile-receipts .tbl { min-width: 1060px; }
+.cash-reconcile-list .tbl th + th, .cash-reconcile-list .tbl td + td,
+.cash-reconcile-receipts .tbl th + th, .cash-reconcile-receipts .tbl td + td { border-left: 1px solid #f0f3f7; }
+.cash-reconcile-list .tbl td, .cash-reconcile-receipts .tbl td { vertical-align: top; }
+.cash-reconcile-diff { color: #a8493f; font-weight: 650; }
+.period-reconcile-filters { gap: 8px; flex-wrap: wrap; }
+.period-reconcile-filters .input { min-width: 190px; flex: 1 1 210px; }
+.period-reconcile-kpis .card { min-height: 82px; }
+.period-reconcile-page > .card:last-child .tbl-wrap { overflow-x: auto; }
+.period-reconcile-page > .card:last-child .tbl { min-width: 1260px; }
+.period-reconcile-progress { display: grid; gap: 8px; max-width: 720px; }
+.period-reconcile-progress-bar { height: 10px; border-radius: 999px; background: var(--surface-2); overflow: hidden; border: 1px solid var(--line); }
+.period-reconcile-progress-bar i { display: block; height: 100%; background: #4d8bd6; border-radius: inherit; }
+.period-reconcile-detail .tbl-wrap { overflow-x: auto; }
+.period-reconcile-detail .tbl { min-width: 980px; }
+.modal.wide:has(.cash-reconcile-modal) { width: min(1180px, 100%); }
+.cash-reconcile-modal .modal-b { display: flex; flex-direction: column; gap: 18px; }
+.cash-reconcile-section { padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.cash-reconcile-section:last-child { padding-bottom: 0; border-bottom: 0; }
+.cash-reconcile-section > h4 { margin: 0 0 12px; font-size: var(--font-size-md); }
+.cash-reconcile-facts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin: 0; }
+.cash-reconcile-facts > div { min-width: 0; }
+.cash-reconcile-facts dt { color: var(--muted); font-size: var(--font-size-sm); }
+.cash-reconcile-facts dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.cash-reconcile-inputs { display: grid; gap: 12px; max-width: 650px; margin-top: 16px; }
+.cash-reconcile-inputs .field { margin: 0; }
+.cash-reconcile-live-diff { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+.cash-reconcile-live-diff output { font-weight: 700; font-variant-numeric: tabular-nums; }
+@media (max-width: 680px) {
+   .cash-reconcile-modal .modal-f { position: sticky; bottom: 0; background: #fff; }
+}
 .tbl tr.click { cursor: pointer; }
 .tbl tr.click:hover td { background: #f3f7fc; }
 .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -781,7 +823,12 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
    liệu trong sơ đồ dùng chung .card-h h3 (md)/.small (sm)/.cell (xs) đã chuẩn hóa ở nơi khác. */
 .mb-summary { flex-wrap: wrap; gap: 10px 14px; font-size: var(--font-size-base); }
 .mb-summary b { font-variant-numeric: tabular-nums; font-weight: 700; }
-.mb-workspace { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; align-items: start; }
+/* Workspace thiết kế mặt bằng: cây | sơ đồ | inspector (>= 1440px). Hẹp hơn: inspector xuống dưới sơ đồ. */
+.mb-workspace { display: grid; grid-template-columns: 280px minmax(0, 1fr) 380px; grid-template-areas: "tree ws insp"; gap: 16px; align-items: start; }
+.mb-workspace > .mb-tree-card { grid-area: tree; }
+.mb-workspace > .mb-ws { grid-area: ws; }
+.mb-workspace > .mb-insp { grid-area: insp; }
+@media (max-width: 1439px) { .mb-workspace { grid-template-columns: 260px minmax(0, 1fr); grid-template-areas: "tree ws" "tree insp"; } }
 
 /* Bảng Mặt bằng & điểm kinh doanh: chỉ scope trong workspace này để bảng ở các màn khác giữ nguyên. */
 .mb-table-card .tbl-wrap { width: 100%; overflow-x: auto; }
@@ -838,11 +885,13 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 .dmc-err { color: #b01c1e; font-size: var(--font-size-sm); }
 .dmc-err:empty, .dmc-err-summary:empty { display: none; }
 .dmc-err-summary { margin-bottom: 12px; }
-.dmc-cap-tbl td, .dmc-cap-tbl th { vertical-align: middle; }
-.dmc-cap-tbl tfoot th { background: #f8fafc; color: #0f1e32; font-variant-numeric: tabular-nums; }
-.dmc-cap-tbl .dmc-num { min-width: 130px; }
-.dmc-cap-tbl tr.dmc-err-row td { padding-top: 0; padding-bottom: 0; border-bottom: 0; }
-.dmc-cap-tbl tr.dmc-err-row:has(.dmc-err:empty) { display: none; }
+.dmc-area-types { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 6px; }
+.dmc-area-item { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer; }
+.dmc-area-item:has(input:checked) { border-color: var(--brand-2); background: var(--brand-soft); }
+.dmc-area-item input { margin: 0; flex: none; }
+.dmc-area-item small { margin-left: auto; font-size: var(--font-size-xs); }
+.dmc-area-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+@media (max-width: 640px) { .dmc-area-types { grid-template-columns: 1fr; } }
 .dmc-detail .kv { grid-template-columns: 200px minmax(0, 1fr); }
 .catalog-table-card .tbl td:nth-child(2), .trader-table-card .tbl td:nth-child(2), .contract-table-card .tbl td:nth-child(1) { font-weight: 700; }
 .trader-table-card .tbl th:nth-child(1), .trader-table-card .tbl td:nth-child(1) { width: 95px; }
@@ -852,25 +901,39 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 .trader-table-card .tbl th:nth-child(5), .trader-table-card .tbl td:nth-child(5) { width: 110px; }
 .trader-table-card .tbl th:nth-child(6), .trader-table-card .tbl td:nth-child(6) { width: 135px; }
 .trader-table-card .tbl th:nth-child(7), .trader-table-card .tbl td:nth-child(7) { width: 90px; text-align: center; }
+.trader-table-card .tt-cats-cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-points-anchor { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.tt-points-eye { width: 28px; height: 28px; padding: 0; justify-content: center; }
+.tt-points-eye .ui-icon { width: 16px; height: 16px; }
+.tt-points-pop { position: fixed; z-index: 95; width: min(320px, calc(100vw - 16px)); border: 1px solid var(--line); border-radius: 10px; background: #fff; box-shadow: 0 12px 30px rgba(23,48,79,.16); white-space: normal; text-align: left; font-weight: 400; cursor: default; }
+.tt-points-pop-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.tt-points-pop-list { max-height: 320px; overflow-y: auto; overflow-x: hidden; }
+.tt-points-pop-item { display: grid; gap: 2px; padding: 8px 12px; border-bottom: 1px solid #edf1f5; }
+.tt-points-pop-item:last-child { border-bottom: 0; }
+.tt-points-pop-line { display: flex; justify-content: space-between; gap: 8px; }
+.tt-points-pop-line span { color: var(--ink-2); white-space: nowrap; }
+.tt-points-pop-item small { overflow: hidden; color: var(--muted); font-size: var(--font-size-sm); text-overflow: ellipsis; white-space: nowrap; }
 .trader-table-card .tbl th:nth-child(8), .trader-table-card .tbl td:nth-child(8) { width: 110px; }
 .trader-table-card .tbl th:nth-child(9), .trader-table-card .tbl td:nth-child(9) { width: 80px; text-align: center; white-space: nowrap; }
 .tt-private-heading { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }.tt-private-heading .btn { display: grid; place-items: center; width: 26px; min-height: 24px; padding: 2px; }.tt-private-heading .ui-icon { width: 15px; height: 15px; }
-.contract-table-card .tbl th:nth-child(1), .contract-table-card .tbl td:nth-child(1) { width: 105px; }
-.contract-table-card .tbl th:nth-child(2), .contract-table-card .tbl td:nth-child(2) { width: 160px; }
-.contract-table-card .tbl th:nth-child(3), .contract-table-card .tbl td:nth-child(3) { width: 95px; }
-.contract-table-card .tbl th:nth-child(4), .contract-table-card .tbl td:nth-child(4), .contract-table-card .tbl th:nth-child(5), .contract-table-card .tbl td:nth-child(5) { width: 105px; white-space: nowrap; }
-.contract-table-card .tbl th:nth-child(6), .contract-table-card .tbl td:nth-child(6) { width: 120px; }
-.contract-table-card .tbl th:nth-child(7), .contract-table-card .tbl td:nth-child(7) { width: 140px; }
-.contract-table-card .tbl th:nth-child(8), .contract-table-card .tbl td:nth-child(8) { width: 120px; text-align: center; }
-.contract-table-card .tbl th:nth-child(9), .contract-table-card .tbl td:nth-child(9) { width: 80px; text-align: center; white-space: nowrap; }
-.contract-table-card .tbl th:nth-child(6), .contract-table-card .tbl td:nth-child(6) { text-align: right; font-variant-numeric: tabular-nums; }
-/* Tên cột đầy đủ (Mã hợp đồng, Ngày bắt đầu, Mức thu mặt bằng...): header được xuống dòng thay vì tràn; ô ngày vẫn giữ 1 dòng. */
-.contract-table-card .tbl th { white-space: normal; }
-.contract-table-card .tbl th:nth-child(1), .contract-table-card .tbl td:nth-child(1) { width: 150px; }
-.contract-table-card .tbl th:nth-child(3), .contract-table-card .tbl td:nth-child(3) { width: 110px; }
-.contract-table-card .tbl th:nth-child(4), .contract-table-card .tbl td:nth-child(4), .contract-table-card .tbl th:nth-child(5), .contract-table-card .tbl td:nth-child(5) { width: 112px; }
-.contract-table-card .tbl th:nth-child(6), .contract-table-card .tbl td:nth-child(6) { width: 130px; }
-.contract-table-card .tbl th:nth-child(8), .contract-table-card .tbl td:nth-child(8) { width: 130px; }
+/* Hợp đồng: tỷ lệ cột cố định để phần dư không dồn riêng vào Tiểu thương. */
+.contract-table-card .tbl { min-width: 0; }
+.contract-table-card .tbl th, .contract-table-card .tbl td { padding-right: 11px; padding-left: 11px; vertical-align: middle; }
+.contract-table-card .tbl th { white-space: normal; line-height: 1.3; }
+.contract-table-card .tbl th:nth-child(1), .contract-table-card .tbl td:nth-child(1) { width: 12.5%; text-align: left; }
+.contract-table-card .tbl th:nth-child(2), .contract-table-card .tbl td:nth-child(2) { width: 20%; text-align: left; }
+.contract-table-card .tbl th:nth-child(3), .contract-table-card .tbl td:nth-child(3) { width: 8.5%; text-align: left; }
+.contract-table-card .tbl th:nth-child(4), .contract-table-card .tbl td:nth-child(4), .contract-table-card .tbl th:nth-child(5), .contract-table-card .tbl td:nth-child(5) { width: 8%; text-align: left; font-variant-numeric: tabular-nums; }
+.contract-table-card .tbl th:nth-child(6), .contract-table-card .tbl td:nth-child(6) { width: 10.5%; text-align: left; }
+.contract-table-card .tbl th:nth-child(7), .contract-table-card .tbl td:nth-child(7) { width: 12%; text-align: left; }
+.contract-table-card .tbl th:nth-child(8), .contract-table-card .tbl td:nth-child(8) { width: 13%; text-align: right; font-variant-numeric: tabular-nums; }
+.contract-table-card .tbl th:nth-child(9), .contract-table-card .tbl td:nth-child(9) { width: 7.5%; text-align: center; }
+/* Nội dung định danh/ngày/badge/tiền/nút không bị ngắt; header có thể xuống tối đa hai dòng theo tỷ lệ cột. */
+.contract-table-card .tbl td:nth-child(1), .contract-table-card .tbl td:nth-child(3), .contract-table-card .tbl td:nth-child(4), .contract-table-card .tbl td:nth-child(5), .contract-table-card .tbl td:nth-child(7), .contract-table-card .tbl td:nth-child(8), .contract-table-card .tbl td:nth-child(9) { white-space: nowrap; }
+@media (max-width: 1100px) { .contract-table-card .tbl { min-width: 1140px; } }
+.contract-remaining { display: grid; justify-items: start; gap: 3px; }
+.contract-remaining span:first-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.contract-remaining .tag { white-space: nowrap; }
 
 .mb-tree { display: flex; flex-direction: column; gap: 1px; }
 /* Hàng trong cây: có thể là 1 nút full-row (Tổng quan) hoặc 1 hàng chứa nhiều phần tử tương tác
@@ -930,7 +993,66 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
   .mb-tree-card { display: none; }
   .mb-tree-card.open { display: block; margin-bottom: 12px; }
 }
-@media (max-width: 1180px) { .mb-workspace { grid-template-columns: 1fr; } }
+@media (max-width: 1180px) { .mb-workspace { grid-template-columns: minmax(0, 1fr); grid-template-areas: "tree" "ws" "insp"; } }
+
+/* ---- Workspace thiết kế mặt bằng: ngân sách diện tích, sơ đồ logic, inspector ---- */
+.mb-budget { margin-bottom: 12px; }
+.mb-budget-title { font-size: var(--font-size-sm); color: var(--muted); margin-bottom: 8px; }
+.mb-budget-title b { color: var(--ink); }
+.mb-meter { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 10px; }
+.mb-meter-nums { display: flex; flex-wrap: wrap; gap: 6px 24px; }
+.mb-meter-n { display: flex; flex-direction: column; min-width: 0; }
+.mb-meter-n span { font-size: var(--font-size-xs); color: var(--muted); }
+.mb-meter-n b { font-size: var(--font-size-md); font-variant-numeric: tabular-nums; color: var(--ink); }
+.mb-meter-n.over b { color: var(--danger); }
+.mb-meter-bar { height: 6px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
+.mb-meter-bar i { display: block; height: 100%; background: var(--brand-2); }
+.mb-meter-bar.over i { background: var(--danger); }
+.mb-kind { display: block; font-size: var(--font-size-xs); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.mb-blocks { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.mb-block { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); text-align: left; font: inherit; color: inherit; min-width: 0; }
+button.mb-block { cursor: pointer; }
+button.mb-block:hover, .mb-block-floor:hover { border-color: var(--brand-2); }
+.mb-block-h { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; align-items: baseline; border: 0; background: transparent; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.mb-block-h .mb-kind { grid-column: 1 / -1; }
+.mb-block-h b { font-size: var(--font-size-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mb-block-area { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink-2); }
+.mb-block-list { display: flex; flex-direction: column; border-top: 1px solid var(--line); padding-top: 6px; font-size: var(--font-size-sm); }
+.mb-block-li { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border: 0; background: transparent; font: inherit; color: inherit; text-align: left; }
+button.mb-block-li { cursor: pointer; border-radius: 4px; }
+button.mb-block-li:hover { color: var(--brand); }
+.mb-block-li > span:last-child { font-variant-numeric: tabular-nums; color: var(--ink-2); white-space: nowrap; }
+.mb-add-tile { min-height: 64px; border: 1px dashed var(--line); border-radius: var(--radius); background: transparent; color: var(--brand); font: inherit; font-weight: 600; cursor: pointer; padding: 10px; }
+.mb-add-tile:hover { border-color: var(--brand-2); background: var(--brand-soft); }
+.mb-rowtiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.mb-rowtile { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); text-align: left; font: inherit; color: inherit; cursor: pointer; min-width: 0; }
+.mb-rowtile:hover { border-color: var(--brand-2); }
+.mb-rowtile b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mb-rowtile-code { font-size: var(--font-size-xs); color: var(--muted); }
+.mb-rowtile-meta { display: flex; justify-content: space-between; font-size: var(--font-size-sm); font-variant-numeric: tabular-nums; }
+.mb-ws-note { margin-bottom: 8px; }
+.cells-detail { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; overflow: visible; }
+.cells-detail .cell { height: auto; min-height: 48px; padding: 6px; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+.cell-meta { font-size: 11px; font-weight: 500; opacity: .9; }
+.mb-insp .card-h h3 { font-size: var(--font-size-md); }
+.mb-kv { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 6px 10px; margin: 0 0 12px; font-size: var(--font-size-sm); }
+.mb-kv dt { color: var(--muted); }
+.mb-kv dd { margin: 0; overflow-wrap: anywhere; }
+.mb-insp-sec { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 4px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.mb-insp-sec h4 { margin: 0; font-size: var(--font-size-sm); }
+.mb-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.mb-groups { list-style: none; margin: 0; padding: 0; width: 100%; font-size: var(--font-size-sm); }
+.mb-groups li { display: flex; justify-content: space-between; gap: 8px; padding: 5px 0; border-bottom: 1px dashed var(--line); font-variant-numeric: tabular-nums; }
+.mb-insp-actions { display: flex; flex-wrap: wrap; gap: 6px; border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; }
+.mb-num { position: relative; display: flex; align-items: center; }
+.mb-num .input { width: 100%; padding-right: 40px; text-align: right; font-variant-numeric: tabular-nums; }
+.mb-num span { position: absolute; right: 10px; font-size: var(--font-size-sm); color: var(--muted); pointer-events: none; }
+.mb-form-ctx { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+.mb-form-ctx-t { font-size: var(--font-size-sm); font-weight: 600; margin-bottom: 4px; }
+.mb-form-ctx .mb-meter { margin-bottom: 0; }
+.mb-form-err { margin-top: 10px; color: #b01c1e; font-size: var(--font-size-sm); }
+.mb-form-err:empty { display: none; }
+.mb-pg-sum { margin-top: 10px; font-size: var(--font-size-sm); font-weight: 600; font-variant-numeric: tabular-nums; }
 
 /* ---------- Tài khoản người dùng ---------- */
 .avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: var(--font-size-sm); flex: none; }
@@ -1013,6 +1135,14 @@ body.trader-session .app { grid-template-columns: 1fr; } body.trader-session .si
 .asset-detail-image { display: grid; gap: 4px; min-width: 0; font-size: var(--font-size-xs); }
 .asset-detail-image b { font-size: var(--font-size-xs); color: var(--ink-2); }
 .asset-detail-image span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asset-incident-history { display: grid; gap: 10px; }
+.asset-incident-card { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid #e4ebf3; border-radius: 8px; background: #fff; }
+.asset-incident-card-h { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }
+.asset-incident-card-h .asset-incident-title { flex: 1 1 160px; min-width: 0; font-size: var(--font-size-sm); }
+.asset-incident-card .asset-profile-kv { grid-template-columns: 160px minmax(0, 1fr); }
+.asset-incident-images { display: grid; gap: 4px; }
+.asset-incident-card-f { display: flex; justify-content: flex-end; }
+@media (max-width: 640px) { .asset-incident-card .asset-profile-kv { grid-template-columns: minmax(0, 1fr); } }
 .asset-image-placeholder { height: 75px; display: grid; place-items: center; border-radius: 6px; border: 1px solid #dbe5ef; background: linear-gradient(135deg, #dfeaf5, #f8fbff); font-size: 25px; }
 .asset-detail-note { margin-top: 10px; font-size: var(--font-size-xs); color: #657993; }
 /* Phản ánh & sự cố: workflow form and detail are scoped to this module. */
@@ -1553,6 +1683,17 @@ button.mb-chip.on { outline: 2px solid currentColor; outline-offset: -2px; }
 .acc-menu { position: fixed; z-index: 111; width: 210px; padding: 6px; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 28px rgba(15, 30, 50, .16); }
 .acc-menu-item { display: block; width: 100%; padding: 8px 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; font: inherit; color: var(--ink); cursor: pointer; }.acc-menu-item:hover, .acc-menu-item:focus-visible { background: var(--surface-2); outline: none; }.acc-menu-item.danger { color: #b42326; }
 .acc-menu-sep { height: 1px; margin: 4px 2px; background: var(--line); }
+.acc-menu-item.is-disabled { color: var(--muted); opacity: .6; cursor: not-allowed; }.acc-menu-hint { padding: 2px 10px 6px; font-size: var(--font-size-xs); color: var(--muted); }
+/* Popup "Tạm khóa tài khoản" — xác nhận có chủ đích bằng mã thao tác */
+.acc-lock { display: flex; flex-direction: column; gap: 12px; }
+.acc-lock-target { display: flex; align-items: flex-start; gap: 12px; }.acc-lock-who { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }.acc-lock-who span { font-size: var(--font-size-sm); color: var(--muted); }
+.acc-lock-req { color: var(--danger); }
+.acc-lock-section { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line); font-size: var(--font-size-xs); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.acc-lock-code { padding: 10px; border: 1px dashed var(--line); border-radius: 8px; background: var(--surface-2, #f5f7fa); text-align: center; font-size: 26px; font-weight: 700; letter-spacing: .18em; font-variant-numeric: tabular-nums; user-select: none; }.acc-lock-code.expired { color: var(--muted); text-decoration: line-through; opacity: .6; }
+.acc-lock-input { max-width: 180px; font-size: 18px; letter-spacing: .3em; font-variant-numeric: tabular-nums; }
+.acc-lock-timer { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: var(--font-size-sm); color: var(--muted); }.acc-lock-expired { color: #b42326; }
+.acc-lock-error { padding: 8px 12px; border-radius: 6px; background: var(--danger-soft); color: #b01c1e; font-size: var(--font-size-sm); }.acc-lock-error[hidden] { display: none; }
+.acc-lock-submit:not([disabled]) { background: var(--danger); border-color: var(--danger); color: #fff; }.acc-lock-submit[disabled] { opacity: .55; cursor: not-allowed; }
 @media (max-width: 900px) { .acc-overview { grid-template-columns: 1fr; }.acc-work { min-height: auto; } }
 @media (max-width: 700px) { .acc-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 600px) { .acc-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }.acc-table-head { align-items: flex-start; flex-direction: column; }.acc-table-head .btn { width: 100%; justify-content: center; } }

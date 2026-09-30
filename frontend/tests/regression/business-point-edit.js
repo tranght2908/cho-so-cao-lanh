@@ -19,10 +19,6 @@ const zKA = zones.find(z => z.code === 'KA-A'), zKB = zones.find(z => z.code ===
 assert(zKA && zKB, 'layout has dãy KA and KB');
 const floorOf = z => S.findFloorOfZone('CL', z.key);
 const blockOf = z => S.findBlock('CL', z.blockId);
-const collectors = BP.collectorAccounts('CL');
-assert(collectors.length >= 2, 'at least two collector accounts in CL');
-BP.assignCollector(A.mbBusinessPointsForZone('CL', zKA), collectors[0].id);
-BP.assignCollector(A.mbBusinessPointsForZone('CL', zKB), collectors[1].id);
 const occupied = A.db.stalls.find(s => s.market === 'CL' && s.rowId === zKA.key && BP.contractOn(s.id, today));
 const free = A.db.stalls.find(s => s.market === 'CL' && s.status === 'active' && !BP.contractOn(s.id, today));
 assert(occupied && free);
@@ -91,21 +87,18 @@ ok('8 active-contract point shows Đang thuê read-only', () => {
   h.act('dkcl-edit-cancel', { id: occupied.id });
 });
 ok('9 free point shows Còn trống read-only', () => { open(free); assert(/○ Còn trống/.test(modal()) && /Không có hợp đồng hiệu lực hiện tại/.test(modal())); h.act('dkcl-edit-cancel', { id: free.id }); });
-ok('10 collector resolved from the dãy KA assignment', () => {
+ok('10 point edit does not display a collector assigned by row', () => {
   open(occupied);
-  assert(modal().includes(collectors[0].fullName) && /Theo phân công dãy KA-A/.test(modal()));
-  assert(!/<select[^>]*collector/i.test(modal()), 'collector is not an editable field');
+  assert(!/Nhân viên thu phí phụ trách|Theo phân công dãy/i.test(modal()));
 });
-ok('11 moving to dãy KB-A previews and applies the KB-A assignment (within the row allocated area)', () => {
+ok('11 moving to dãy KB-A preserves only point-owned data (within the row allocated area)', () => {
   A.CH['dke-block']({ value: blockOf(zKB).key }); A.CH['dke-floor']({ value: floorOf(zKB).key }); A.CH['dke-zone']({ value: zKB.key });
-  assert(modal().includes(collectors[1].fullName) && /theo dãy mới KB-A/.test(modal()));
   h.act('dkcl-edit-save', { id: occupied.id });
   assert(/chỉ còn .* m² chưa phân bổ/.test(h.trace.toasts.at(-1)), 'a 14,5 m² point does not fit the remaining KB-A allocation');
   assert.strictEqual(occupied.rowId, zKA.key);
   fld('area', '2');
   h.act('dkcl-edit-save', { id: occupied.id });
-  assert.strictEqual(occupied.rowId, zKB.key); assert.strictEqual(occupied.section, 'KB-A'); assert.strictEqual(occupied.collectorId, collectors[1].id);
-  assert.strictEqual(BP.zoneCollectorId('CL', zKB), collectors[1].id, 'dãy KB assignment stays uniform');
+  assert.strictEqual(occupied.rowId, zKB.key); assert.strictEqual(occupied.section, 'KB-A');
   assert.strictEqual(snapshot(), before, 'moving the point still leaves contracts/invoices untouched');
 });
 ok('12 Nợ phí cannot be cleared from the popup', () => {

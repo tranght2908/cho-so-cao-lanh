@@ -25,14 +25,14 @@ ok('rejects invalid quantity, invalid area and area beyond the remaining Row cap
   assert(!make([{ id: 'g', areaTypeId: 'covered', quantity: 1, areaPerPoint: row.allocatedArea - used() + 1 }]).ok);
   assert.strictEqual(points().length, before);
 });
-ok('checks count and area capacities independently', () => {
-  const original = MC.get('CL').capacityByAreaType;
+ok('area type must be applied by the market; legacy per-type quota no longer limits groups', () => {
+  const original = MC.get('CL');
   const usage = MC.usage('CL');
-  MC.update('CL', { totalArea: 9999, businessArea: 9999, capacityByAreaType: [{ areaTypeId: 'covered', maxPointCount: usage.covered.count, maxArea: 9999 }] }, 'test');
-  assert(!make([{ id: 'g', areaTypeId: 'covered', quantity: 1, areaPerPoint: 1 }]).ok, 'count limit');
-  MC.update('CL', { totalArea: 9999, businessArea: 9999, capacityByAreaType: [{ areaTypeId: 'covered', maxPointCount: 999, maxArea: usage.covered.area }] }, 'test');
-  assert(!make([{ id: 'g', areaTypeId: 'covered', quantity: 1, areaPerPoint: 1 }]).ok, 'area limit');
-  MC.update('CL', { totalArea: 9999, businessArea: 9999, capacityByAreaType: original }, 'test');
+  MC.update('CL', { totalArea: 9999, businessArea: 9999, capacityByAreaType: [{ areaTypeId: 'covered', maxPointCount: usage.covered.count, maxArea: usage.covered.area }], allowedAreaTypeIds: ['covered'] }, 'test');
+  assert(make([{ id: 'g', areaTypeId: 'covered', quantity: 1, areaPerPoint: 1 }]).ok, 'no count/area quota per area type');
+  const bad = make([{ id: 'g', areaTypeId: 'uncovered', quantity: 1, areaPerPoint: 1 }]);
+  assert(!bad.ok && /không được áp dụng tại chợ này/.test(bad.errors[0]), 'type outside allowedAreaTypeIds');
+  MC.update('CL', { totalArea: original.totalArea, businessArea: original.businessArea, capacityByAreaType: original.capacityByAreaType, allowedAreaTypeIds: original.allowedAreaTypeIds }, 'test');
 });
 ok('atomic create adds all points as vacant operational points only', () => {
   const before = { points: points().length, contracts: A.db.contracts.length, traders: A.db.traders.length, invoices: A.db.invoices.length };

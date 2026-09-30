@@ -83,19 +83,15 @@
       .map(c => c.businessPointId || c.stallId);
     return Array.from(new Set(ids)).map(id => BP.get(id)).filter(Boolean);
   }
+  // Dãy / Tầng / Ngành hàng của điểm đang thuê: đọc qua BP.row/BP.industry (Điểm → Dãy → Tầng tùy chọn).
   function ttSectionsOf(t) {
     return ttActivePointsOf(t).map(st => st.rowId);
   }
-  // Cột "Khu vực" ở bảng danh sách (mục 3-4 yêu cầu hotfix) — suy ra từ ĐÚNG quan hệ Trader → Hợp đồng
-  // đang hiệu lực → Điểm KD → st.sectionName, KHÔNG thêm field "area" giả vào trader. Dedupe bằng Set để
-  // nhiều điểm cùng khu vực không lặp tên khu (mục 4 yêu cầu: "Khu A, Khu A" → chỉ còn "Khu A").
-  function ttSectionNamesOf(t) {
-    const names = ttActivePointsOf(t).map(st => st.sectionName);
-    return Array.from(new Set(names));
+  function ttFloorsOf(t) {
+    return ttActivePointsOf(t).map(st => { const r = BP.row(st); return r ? r.floorId : null; }).filter(Boolean);
   }
   function ttCatsOf(t) {
-    const points = ttActivePointsOf(t);
-    return points.length ? Array.from(new Set(points.map(st => st.cat).filter(Boolean))) : [];
+    return Array.from(new Set(ttActivePointsOf(t).map(st => BP.industry(st)).filter(Boolean)));
   }
   // ==================== TRADER_PROFILE_AND_MINIAPP_WORKFLOW ====================
   // CORRECTION (xem TRADER_PROFILE_MINIAPP_CORRECTION_REPORT.md): Mini App KHÔNG còn tự đăng ký hồ
@@ -144,26 +140,42 @@
   function ttRowsCL() {
     const q = (f.ttclSearch || '').trim().toLowerCase();
     return TS.list().filter(t => U.inM(t)
-      && (!f.ttclFloor || ttActivePointsOf(t).some(st => st.floor === f.ttclFloor))
+      && (!f.ttclFloor || ttFloorsOf(t).includes(f.ttclFloor))
       && (!f.ttclSection || ttSectionsOf(t).includes(f.ttclSection))
       && (!f.ttclCat || ttCatsOf(t).includes(f.ttclCat))
       && (!f.ttclStatus || ttProfileStatus(t) === f.ttclStatus)
       && (!f.ttclApp || ttMiniAppState(t) === f.ttclApp)
       && (!q || ttSearchMatchCL(t, q)));
   }
+  // ---------- Cột "Điểm KD": "N điểm" + nút xem nhanh (popover) ----------
+  // Nguồn: ttActivePointsOf (Tiểu thương → HĐ đang hiệu lực → Điểm KD) → BP.row/BP.industry. Không đọc
+  // trader.stalls, không ghi gì vào trader. Popover position:fixed (bảng nằm trong .tbl-wrap overflow).
+  const TT_POP_W = 320, TT_POP_LIST_MAX = 320;
+  function ttPointsCell(t) {
+    const points = ttActivePointsOf(t);
+    if (!points.length) return '<span class="muted">—</span>';
+    const open = !!(ui.ttPointPop && ui.ttPointPop.traderId === t.id);
+    return `<span class="tt-points-anchor"><span>${points.length} điểm</span><button type="button" class="btn sm tt-points-eye" data-act="tt-points-pop" data-id="${U.esc(t.id)}" title="Xem các điểm kinh doanh" aria-label="Xem các điểm kinh doanh của ${U.esc(t.name)}" aria-haspopup="dialog" aria-expanded="${open}">${U.icon('eye')}</button>${open ? ttPointsPopover(points) : ''}</span>`;
+  }
+  function ttPointsPopover(points) {
+    const p = ui.ttPointPop, pos = `left:${p.left}px;` + (p.top != null ? `top:${p.top}px;` : `bottom:${p.bottom}px;`);
+    const items = points.slice().sort((a, b) => String(a.code).localeCompare(String(b.code))).map(st => {
+      const r = BP.row(st), sub = [r ? 'Dãy ' + r.code : '', BP.industry(st)].filter(Boolean).join(' · ') || '—';
+      return `<div class="tt-points-pop-item"><div class="tt-points-pop-line"><b>${U.esc(st.code)}</b><span>${U.esc(Number(st.area || 0).toLocaleString('vi-VN'))} m²</span></div><small title="${U.esc(sub)}">${U.esc(sub)}</small></div>`;
+    }).join('');
+    return `<div class="tt-points-pop" role="dialog" aria-label="Điểm kinh doanh đang thuê" data-act="tt-points-pop-inside" style="${pos}"><div class="tt-points-pop-h"><b>Điểm kinh doanh đang thuê</b><span class="tag info">${points.length}</span></div><div class="tt-points-pop-list">${items}</div></div>`;
+  }
   function ttRowHtmlCL(t) {
     const debt = U.traderDebt(t.id), over = U.traderOverdue(t.id);
     // Bảng chính bỏ Điện thoại/Địa chỉ/CCCD đầy đủ (mục 4/35 yêu cầu) — dữ liệu model KHÔNG đổi, vẫn
     // xem đủ trong drawer chi tiết (Section A) và vẫn tìm được qua ô search (ttSearchMatchCL).
-    const area = ttSectionNamesOf(t).join(', ') || '–';
-    const points = ttActivePointsOf(t);
-    const pointLabel = points.length > 1 ? points.length + ' điểm' : (points[0] ? points[0].code : '–');
+    const cats = ttCatsOf(t).join(', ') || '—';
     const status = ttProfileStatusTag(t);
     const phone = ui.ttclShowPhone ? U.esc(t.phone || '–') : U.maskPhone(t.phone);
     const idNo = ui.ttclShowIdNo ? U.esc(t.idNo || '–') : U.maskId(t.idNo);
     return `<tr class="click" data-act="trader" data-id="${t.id}">
       <td>${t.id}</td><td><b>${U.esc(t.name)}</b></td><td>${phone}</td><td>${idNo}</td>
-      <td title="${U.esc(area)}">${U.esc(pointLabel)}</td><td>${U.esc(ttCatsOf(t).join(', ') || '—')}</td><td>${status}</td>
+      <td>${ttPointsCell(t)}</td><td class="tt-cats-cell" title="${U.esc(cats)}">${U.esc(cats)}</td><td>${status}</td>
       <td class="nowrap"><button class="btn sm" data-act="trader" data-id="${t.id}">Xem</button></td></tr>`;
   }
   function ttViewCL() {
@@ -207,6 +219,28 @@
     ui.page.ttcl = 0;
     A.render();
   };
+  // Mở/đóng popover điểm KD: chỉ 1 popover tại 1 thời điểm; neo cạnh nút, kẹp trong viewport.
+  A.ACT['tt-points-pop'] = el => {
+    const id = el.dataset.id;
+    if (ui.ttPointPop && ui.ttPointPop.traderId === id) { ui.ttPointPop = null; A.render(); return; }
+    const t = TS.list().find(x => x.id === id), n = t ? ttActivePointsOf(t).length : 0;
+    if (!n) return;
+    const rect = el.getBoundingClientRect ? el.getBoundingClientRect() : { left: 0, top: 0, bottom: 0 };
+    const vw = window.innerWidth || 1280, vh = window.innerHeight || 800, h = Math.min(TT_POP_LIST_MAX, n * 56) + 52;
+    const left = Math.max(8, Math.min(rect.left, vw - TT_POP_W - 8));
+    ui.ttPointPop = rect.bottom + 6 + h <= vh - 8 || rect.top < h + 14
+      ? { traderId: id, left, top: Math.max(8, Math.min(rect.bottom + 6, vh - h - 8)) }
+      : { traderId: id, left, bottom: vh - rect.top + 6 };
+    A.render();
+  };
+  // Click bên trong popover không được lan ra dòng (mở drawer tiểu thương).
+  A.ACT['tt-points-pop-inside'] = () => {};
+  const ttClosePointPop = () => { if (ui.ttPointPop) { ui.ttPointPop = null; A.render(); } };
+  document.addEventListener('click', e => { if (ui.ttPointPop && !(e.target && e.target.closest && e.target.closest('.tt-points-anchor'))) ttClosePointPop(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') ttClosePointPop(); });
+  // Popover position:fixed → đóng khi trang cuộn/đổi kích thước (trừ cuộn danh sách bên trong popover).
+  document.addEventListener('scroll', e => { if (!(e.target && e.target.closest && e.target.closest('.tt-points-pop'))) ttClosePointPop(); }, true);
+  if (typeof window.addEventListener === 'function') window.addEventListener('resize', ttClosePointPop);
   A.ACT['ttcl-toggle-private'] = el => {
     if (el.dataset.key === 'phone') ui.ttclShowPhone = !ui.ttclShowPhone;
     if (el.dataset.key === 'idNo') ui.ttclShowIdNo = !ui.ttclShowIdNo;
@@ -237,9 +271,9 @@
       <div class="card-b">${U.table([{ t: 'Mã' }, { t: 'Họ tên' }, { t: 'Điện thoại' }, { t: 'Chợ' }, { t: 'Ngành hàng' }, { t: 'Điểm KD' }, { t: 'Trạng thái' }, { t: 'Mini app' }, { t: 'Công nợ', num: true }],
         rows.slice(pg.start, pg.end).map(t => {
           const debt = U.traderDebt(t.id), over = U.traderOverdue(t.id);
-          const points = ttActivePointsOf(t);
-          return `<tr class="click" data-act="trader" data-id="${t.id}"><td>${t.id}</td><td><b>${U.esc(t.name)}</b></td><td>${U.maskPhone(t.phone)}</td><td>${U.mShort(t.market)}</td><td>${U.esc(ttCatsOf(t).join(', ') || '—')}</td>
-            <td>${points.map(p => p.code).join(', ') || '–'}</td><td>${ttProfileStatusTag(t)}</td><td>${t.app ? '<span class="tag ok">Đã cài</span>' : '<span class="tag">Chưa</span>'}</td>
+          const cats = ttCatsOf(t).join(', ') || '—';
+          return `<tr class="click" data-act="trader" data-id="${t.id}"><td>${t.id}</td><td><b>${U.esc(t.name)}</b></td><td>${U.maskPhone(t.phone)}</td><td>${U.mShort(t.market)}</td><td class="tt-cats-cell" title="${U.esc(cats)}">${U.esc(cats)}</td>
+            <td>${ttPointsCell(t)}</td><td>${ttProfileStatusTag(t)}</td><td>${t.app ? '<span class="tag ok">Đã cài</span>' : '<span class="tag">Chưa</span>'}</td>
             <td class="num" style="${over ? 'color:#df2225;font-weight:600' : ''}">${debt ? U.money(debt) : '–'}</td></tr>`;
         }))}${pg.html}
         <div class="small muted" style="margin-top:8px">Số điện thoại, số giấy tờ được che trên danh sách theo Nghị định 356/2025/NĐ-CP về bảo vệ dữ liệu cá nhân.</div></div></div>`;

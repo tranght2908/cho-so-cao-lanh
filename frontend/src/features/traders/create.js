@@ -46,7 +46,8 @@
     <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="wf-profile-save">Lưu hồ sơ</button></div>`);
   }
   function profileSuccess(t) {
-    A.modal(A.mHead('Đã tạo hồ sơ tiểu thương') + `<div class="modal-b"><dl class="kv"><dt>Tiểu thương</dt><dd><b>${U.esc(t.name)} · ${t.id}</b></dd><dt>Trạng thái hồ sơ</dt><dd><span class="tag warn">Chờ bố trí</span></dd></dl><div class="note info" style="margin-top:12px">Bước tiếp theo: tạo hợp đồng để bố trí điểm kinh doanh.</div></div><div class="modal-f"><button class="btn" data-act="wf-profile-later">Để sau</button><button class="btn primary" data-act="wf-profile-contract" data-id="${t.id}">Tạo hợp đồng ngay</button></div>`);
+    const canCreateContract = A.canDo('hop-dong.tao', t.market);
+    A.modal(A.mHead('Đã tạo hồ sơ tiểu thương') + `<div class="modal-b"><dl class="kv"><dt>Tiểu thương</dt><dd><b>${U.esc(t.name)} · ${t.id}</b></dd><dt>Trạng thái hồ sơ</dt><dd><span class="tag warn">Chờ bố trí</span></dd></dl><div class="note info" style="margin-top:12px">Bước tiếp theo: tạo hợp đồng để bố trí điểm kinh doanh.</div></div><div class="modal-f"><button class="btn" data-act="wf-profile-later">Để sau</button>${canCreateContract ? `<button class="btn primary" data-act="wf-profile-contract" data-id="${t.id}">Tạo hợp đồng ngay</button>` : ''}</div>`);
   }
   A.ACT['tt-new'] = () => {
     if (!A.canDo('tieu-thuong.them-moi', ui.market)) return;
@@ -54,6 +55,7 @@
     renderProfile();
   };
   ['name', 'phone', 'idno', 'address'].forEach(k => { A.IN['wf-p-' + k] = el => { if (profileDraft) profileDraft[{ idno: 'idNo' }[k] || k] = el.value; }; });
+  A.IN['wf-p-cat'] = () => {};
   A.CH['wf-p-idtype'] = el => { if (profileDraft) profileDraft.idType = el.value; };
   A.ACT['wf-profile-file'] = el => {
     if (!profileDraft) return;
@@ -76,6 +78,7 @@
     renderProfile();
   };
   A.ACT['wf-profile-save'] = () => {
+    if (!A.canDo('tieu-thuong.them-moi', ui.market)) return U.toast('Bạn không có quyền tạo hồ sơ tiểu thương tại chợ này.');
     const d = profileDraft;
     if (!d || !d.name.trim() || !d.phone.trim() || !d.idNo.trim()) return U.toast('Vui lòng nhập họ tên, số điện thoại và số giấy tờ.');
     if (A.db.traders.some(t => t.market === ui.market && t.idNo === d.idNo.trim())) return U.toast('Số giấy tờ đã tồn tại trong chợ.');
@@ -85,6 +88,6 @@
     if ((d.vehicles || []).length) A.save();
     profileDraft = null; profileSuccess(t); U.toast('Đã tạo hồ sơ tiểu thương');
   };
-  A.ACT['wf-profile-contract'] = el => { const t = trader(el.dataset.id); if (!t) return; A.closeModal(); A.go('hop-dong'); setTimeout(() => A.ACT['ct-new']({ dataset: { trader: t.id } }), 0); };
+  A.ACT['wf-profile-contract'] = el => { const t = trader(el.dataset.id); if (!t || !A.canDo('hop-dong.tao', t.market)) return; A.closeModal(); A.go('hop-dong'); setTimeout(() => A.ACT['ct-new']({ dataset: { trader: t.id } }), 0); };
   A.ACT['wf-profile-later'] = () => { profileDraft = null; A.closeModal(); A.render(); };
 })(window.APP);

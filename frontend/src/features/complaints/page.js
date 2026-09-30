@@ -173,6 +173,7 @@
   };
   const incAssignedToCurrentTech = i => !!i && i.assignee && i.assignee === incCurrentStaffId();
   const incCanView = i => !!i && U.can('su-co') && incRecordInScope(i) && (!incCanAssignedQueue() || incAssignedToCurrentTech(i));
+  complaints.canView = incCanView; // read-only: Tài sản chợ dùng để quyết định hiện nút "Xem hồ sơ sự cố"
   const incAction = i => {
     if (incCanAssignedQueue()) {
       return ({ phancong:['inc-inspect-open','Nhận xử lý'], dangxuly:['inc-work-open','Cập nhật tiến độ'], chonghiemthu:['inc-open','Xem kết quả'], hoanthanh:['inc-open','Xem kết quả'], dong:['inc-open','Xem hồ sơ'] }[i.state]);
@@ -267,6 +268,14 @@
       if (!i.deadline) { i.deadline = incDefaultDeadline(i.cat, i.created || U.today(), String(i.created || '').indexOf('T') !== -1); changed = true; }
       if (incEnsureLeaderReminder(i)) changed = true;
     });
+    if (ensureDemoIncidents()) changed = true;
+    if (changed) A.save();
+  }
+  // Hồ sơ sự cố mẫu gắn tài sản CL (Tài sản chợ đọc qua incident.assetId). Idempotent theo id cố định
+  // SC-DEMO-*: được gọi lúc khởi động/đặt lại dữ liệu mẫu và khi mở màn Phản ánh, không nhân bản.
+  function ensureDemoIncidents() {
+    if (!A.db || !Array.isArray(A.db.incidents) || !Array.isArray(A.db.stalls)) return false;
+    let changed = false;
     const defs = [
       ['SC-DEMO-01','tiepnhan','Đồng hồ nước chạy bất thường','Cấp thoát nước','AST-CL-003'],
       ['SC-DEMO-02','phancong','Đèn lối đi khu B không hoạt động','Điện','AST-CL-002'],
@@ -286,11 +295,18 @@
       incEnsureLeaderReminder(i);
       A.db.incidents.push(i); changed = true;
     });
-    if (changed) A.save();
+    return changed;
   }
+  complaints.ensureDemoIncidents = function () { if (ensureDemoIncidents()) A.save(); };
   function incImageInput(kind) { return `<div class="inc-image-input"><input type="file" accept="image/*" multiple data-ch="inc-images" data-kind="${kind}"><div class="small muted">Hỗ trợ: JPG, PNG${kind === 'report' ? ' (tối đa 3 ảnh trong prototype)' : ''}. Ảnh chỉ preview cục bộ, không upload/lưu base64.</div><div class="inc-image-draft" data-image-list="${kind}"></div></div>`; }
   function incImages(names) { return names && names.length ? `<div class="inc-image-list">${names.map(n => `<div class="inc-image-thumb">${U.icon('camera')}<span>${U.esc(typeof n === 'string' ? n : n.name)}</span></div>`).join('')}</div>` : '<div class="empty small">Chưa có hình ảnh.</div>'; }
-  function incAssetPreview(asset) { return asset ? `<div class="inc-asset-preview"><b>${U.esc(asset.code)} · ${U.esc(asset.name)}</b><span>${U.esc(asset.locationLabel)} · ${U.esc(asset.status)}</span></div>` : ''; }
+  // Vị trí TÀI SẢN chỉ để hiển thị: đọc qua A.features.assets.resolveLocation (nguồn duy nhất, graph mặt bằng);
+  // tài sản cũ chỉ có locationLabel → giữ nguyên text cũ. Không đổi vị trí phản ánh (điểm KD) của incident.
+  function incAssetLoc(asset) {
+    const resolve = A.features.assets && A.features.assets.resolveLocation, loc = resolve ? resolve(asset) : null;
+    return !loc || loc.legacy ? { label: asset.locationLabel, secondary: '', fullPath: asset.locationLabel } : loc;
+  }
+  function incAssetPreview(asset) { const loc = asset && incAssetLoc(asset); return asset ? `<div class="inc-asset-preview"><b>${U.esc(asset.code)} · ${U.esc(asset.name)}</b><span>${U.esc(loc.label)} · ${U.esc(asset.status)}</span>${loc.secondary ? `<span>${U.esc(loc.secondary)}</span>` : ''}</div>` : ''; }
   function incModal(title, body, footer) { A.modal(`<div class="modal-h inc-modal-h"><h3>${title}</h3><button class="x" data-act="close">×</button></div><div class="modal-b inc-modal-b">${body}</div><div class="modal-f inc-modal-f">${footer}</div>`, true); }
   function incHeader(i) { return `<div class="inc-case"><b>${i.id}</b><span>${U.esc(i.title)}</span></div>`; }
   function incReadonly(i) { const st=A.idx.stall.get(i.stallId)||{}, t=A.idx.trader.get(i.traderId), imgs=(i.images||{}).report||[]; return `<section class="inc-section"><h4>Thông tin phản ánh</h4><dl class="kv"><dt>Nguồn</dt><dd>${U.esc(i.source)}</dd><dt>Người phản ánh</dt><dd>${U.esc(t ? t.name : (i.reporterName || '—'))}</dd><dt>Điểm kinh doanh</dt><dd>${U.esc(st.code || '—')}</dd><dt>Thời gian tiếp nhận</dt><dd>${incFmt(i.created)}</dd><dt>Nội dung</dt><dd>${U.esc(i.desc || '—')}</dd></dl></section><section class="inc-section"><h4>Hình ảnh phản ánh</h4>${incImages(imgs)}</section>`; }
@@ -529,7 +545,7 @@
         <dl class="inc-tech-kv">
           <dt>Người gửi</dt><dd>${U.esc(t ? t.name : (i.reporterName || '—'))}${t && t.phone ? `<small>${U.maskPhone(t.phone)}</small>` : ''}</dd>
           <dt>Nhóm vấn đề</dt><dd>${U.esc(i.cat)}</dd>
-          <dt>Vị trí</dt><dd>${U.esc(st.code || '—')}${a ? `<small>${U.esc(a.locationLabel || a.name)}</small>` : ''}</dd>
+          <dt>Vị trí</dt><dd>${U.esc(st.code || '—')}${a ? `<small>${U.esc(incAssetLoc(a).fullPath || a.name)}</small>` : ''}</dd>
           <dt>Thời gian gửi</dt><dd>${incFmt(i.created)}</dd>
           <dt>Hạn xử lý</dt><dd>${incFmt(i.deadline)}${late(i) ? `<small class="danger-text">Quá hạn ${incOverdueDays(i)} ngày</small>` : ''}</dd>
           <dt>Trạng thái</dt><dd>${incTechStateTag(i)}</dd>
@@ -906,7 +922,7 @@
         <dl class="kv">
           <dt>Người xử lý</dt><dd>${U.esc(incStaff(i))}</dd>
           <dt>Hạn xử lý</dt><dd>${incFmt(i.deadline)}${late(i) ? ' <span class="tag danger">Quá hạn</span>' : ''}</dd>
-          <dt>Vị trí</dt><dd>${U.esc(st.code || '—')}${a ? '<br><span class="small muted">' + U.esc(a.locationLabel || a.name) + '</span>' : ''}</dd>
+          <dt>Vị trí</dt><dd>${U.esc(st.code || '—')}${a ? '<br><span class="small muted">' + U.esc(incAssetLoc(a).fullPath || a.name) + '</span>' : ''}</dd>
           <dt>Tài sản liên quan</dt><dd>${a ? U.esc(a.code + ' · ' + a.name) : '—'}</dd>
           <dt>Nội dung phản ánh</dt><dd>${U.esc(i.desc || i.title || '—')}</dd>
         </dl>

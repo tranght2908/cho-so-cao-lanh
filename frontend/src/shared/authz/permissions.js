@@ -69,7 +69,8 @@
     { key: 'screen:dien-nuoc', kind: 'screen', group: 'Tài chính', label: 'Chỉ số điện, nước' },
     { key: 'screen:phai-thu', kind: 'screen', group: 'Tài chính', label: 'Khoản phải thu' },
     { key: 'screen:thu-tien', kind: 'screen', group: 'Tài chính', label: 'Thu tiền & biên lai' },
-    { key: 'screen:doi-soat', kind: 'screen', group: 'Tài chính', label: 'Đối soát' },
+    { key: 'screen:doi-soat', kind: 'screen', group: 'Tài chính', label: 'Đối soát buổi thu' },
+    { key: 'screen:theo-doi-ky-doi-soat', kind: 'screen', group: 'Tài chính', label: 'Theo dõi kỳ đối soát' },
     { key: 'screen:cong-no', kind: 'screen', group: 'Tài chính', label: 'Công nợ & nhắc nợ' },
     { key: 'screen:su-co', kind: 'screen', group: 'Vận hành', label: 'Phản ánh & sự cố' },
     { key: 'screen:thong-bao', kind: 'screen', group: 'Vận hành', label: 'Thông báo đa kênh' },
@@ -148,6 +149,7 @@
     { key: 'action:doi-soat.xac-nhan-phieu-nop', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Đối soát phiếu nộp tiền mặt theo buổi của NV thu phí' },
     { key: 'action:doi-soat.xem-truy-vet', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Xem lịch sử truy vết đối soát' },
     { key: 'action:doi-soat.xuat-excel', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Xuất Excel dữ liệu đối soát' },
+    { key: 'action:theo-doi-ky-doi-soat.xac-nhan-hoan-tat', kind: 'action', group: 'Tài chính', screenId: 'theo-doi-ky-doi-soat', label: 'Xác nhận hoàn tất đối soát kỳ' },
     { key: 'action:cong-no.nhac-no', kind: 'action', group: 'Tài chính', screenId: 'cong-no', label: 'Nhắc nợ 1 tiểu thương' },
     { key: 'action:cong-no.nhac-no-hang-loat', kind: 'action', group: 'Tài chính', screenId: 'cong-no', label: 'Nhắc nợ hàng loạt' },
     // THU_HOI_NO (P chốt 29/09/2026): NV thu phí phụ trách gian thu nợ (không thu một phần).
@@ -256,7 +258,6 @@
       // Hai role kế toán chỉ là container RBAC để quản trị viên tự cấu hình. Cố ý không có
       // dòng nào trong defaultRolePermissions(), nên không được cấp quyền nghiệp vụ mặc định.
       { id: 'central_accountant', name: 'Kế toán Trung tâm', desc: 'Tổ Văn phòng – Trung tâm Cung ứng dịch vụ công', scope: 'all', market: null, selfService: false, builtin: true, active: true },
-      { id: 'ward_accountant', name: 'Kế toán phường', desc: 'UBND phường Cao Lãnh', scope: 'all', market: null, selfService: false, builtin: true, active: true },
       { id: 'trader', name: 'Tiểu thương', desc: 'Tự phục vụ qua mini app: xem hồ sơ/điểm kinh doanh/hợp đồng của chính mình, thanh toán, gửi phản ánh — chỉ dữ liệu thuộc merchantId/traderId của chính tài khoản (ownership)', scope: 'self', market: null, selfService: true, builtin: true, active: true }
     ];
   }
@@ -321,7 +322,7 @@
       'cau-truc.delete': ['market_manager'],
       'cau-truc.reset': ['market_manager'],
       'so-do.xem-ho-so': ['ward_leader', 'market_manager', 'collector'],
-      'so-do.tao-hop-dong': ['market_manager', 'collector'],
+      'so-do.tao-hop-dong': ['market_manager'],
       'so-do.doi-trang-thai': ['market_manager'],
       // NEED_CONFIRMATION: chỉ BQL được thêm/sửa trong prototype; các role khác chỉ xem.
       'tai-san.create': ['market_manager'],
@@ -344,11 +345,11 @@
       'phien-cho.xem-bao-cao': ['ward_leader', 'market_manager', 'collector'],
       'mini-app.stall-registration.create': ['trader'],
       'mini-app.tra-no-qr': ['trader'],
-      // Hồ sơ tiểu thương/hợp đồng: đúng mục 3.D "Cập nhật hồ sơ tiểu thương theo permission. Lập/
-      // cập nhật hợp đồng...".
-      'tieu-thuong.them-moi': ['market_manager', 'collector'],
+      // Hồ sơ tiểu thương/hợp đồng: Tổ trưởng Tổ Quản lý chợ tạo và quản lý theo market scope.
+      // Collector chỉ thực hiện nghiệp vụ thu phí, không tạo hồ sơ hoặc hợp đồng.
+      'tieu-thuong.them-moi': ['market_manager'],
       'tieu-thuong.xac-minh': ['market_manager', 'collector'],
-      'hop-dong.tao': ['market_manager', 'collector'],
+      'hop-dong.tao': ['market_manager'],
       'hop-dong.gia-han': ['market_manager', 'collector'],
       'hop-dong.thanh-ly': ['market_manager'],
       'hop-dong.in': ['market_manager', 'collector'],
@@ -504,7 +505,7 @@
   //        lệch khiến loadState() đi thẳng nhánh RESEED TOÀN BỘ (freshState(), không qua
   //        mergeIntoCurrentSeed()), nên seedVersion v15 ở đây chỉ còn ý nghĩa tài liệu/đánh dấu, không
   //        phải cơ chế migrate chính cho lần đổi này (xem RBAC_MARKET_SCOPE_MIGRATION_REPORT.md).
-  const PERM_SEED_VERSION = 18; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: action:phai-thu.ban-do-thu
+  const PERM_SEED_VERSION = 19; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: action:phai-thu.ban-do-thu; 19: trader/contract creation belongs to market_manager
   const RATE_POLICY_PERM_VERSION = 1;
   const BANK_ACCOUNT_PERM_VERSION = 1;
   const PC3A_SESSION_PERM_VERSION = 1;
@@ -520,6 +521,7 @@
   const CASH_HANDOVER_PERM_VERSION = 1;
   const PHAI_THU_MAP_PERM_VERSION = 1;
   const PHAI_THU_MAP_KEY = 'action:phai-thu.ban-do-thu';
+  const TRADER_CONTRACT_CREATION_PERM_VERSION = 1;
   function freshState() {
     return {
       schemaVersion: A.RBAC_SCHEMA,
@@ -536,6 +538,7 @@
       meterRecordPermVersion: METER_RECORD_PERM_VERSION,
       cashHandoverPermVersion: CASH_HANDOVER_PERM_VERSION,
       phaiThuMapPermVersion: PHAI_THU_MAP_PERM_VERSION,
+      traderContractCreationPermVersion: TRADER_CONTRACT_CREATION_PERM_VERSION,
       roles: defaultRoles(),
       rolePerms: defaultRolePermissions()
     };
@@ -606,6 +609,16 @@
       if (!stored.rolePerms.some(x => x.roleId === r.roleId && x.permKey === r.permKey)) stored.rolePerms.push(Object.assign({}, r, { grantedAt: 'migrate-phai-thu-map', grantedBy: 'Hệ thống' }));
     });
     stored.phaiThuMapPermVersion = PHAI_THU_MAP_PERM_VERSION;
+    return true;
+  }
+  // Task 5: collector's former profile/contract-create grants came from the old default matrix.
+  // Remove only those obsolete default-role grants once; subsequent administrator changes remain
+  // dynamic because runtime authorization continues to read stored rolePerms through A.canDo().
+  function migrateTraderContractCreationPerms(stored) {
+    if (stored.traderContractCreationPermVersion >= TRADER_CONTRACT_CREATION_PERM_VERSION) return false;
+    const keys = new Set(['action:tieu-thuong.them-moi', 'action:hop-dong.tao', 'action:so-do.tao-hop-dong']);
+    stored.rolePerms = stored.rolePerms.filter(r => !(r.roleId === 'collector' && keys.has(r.permKey)));
+    stored.traderContractCreationPermVersion = TRADER_CONTRACT_CREATION_PERM_VERSION;
     return true;
   }
   function migrateRatePolicyPerms(stored) {
@@ -711,6 +724,7 @@
     migrateMeterRecordPerms(stored);
     migrateCashHandoverPerms(stored);
     migratePhaiThuMapPerms(stored);
+    migrateTraderContractCreationPerms(stored);
     stored.seedVersion = PERM_SEED_VERSION;
     return stored;
   }

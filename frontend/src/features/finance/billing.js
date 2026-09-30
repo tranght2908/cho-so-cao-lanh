@@ -105,7 +105,8 @@
   }
   // PHAT_HANH_KHOAN_THU: phát hành = (1) sinh mã PT-…, (2) gửi thông báo số phải nộp cho TỪNG tiểu thương
   // (Mini app/Zalo OA; mini app đọc traderLines[traderId]), (3) chuyển danh sách thu cho NV thu phí được phân
-  // công theo khu (stall.collectorId). Danh sách của NV vẫn đọc trực tiếp từ khoản phải thu + phân công.
+  // công theo Market hiện tại (Account.marketScopes). Danh sách của NV luôn đọc trực tiếp từ khoản phải thu
+  // theo Market; không suy ra từ Dãy/Điểm.
   function notifyIssued(market, period, issued, actor) {
     if (!issued.length) return;
     A.db.notifications = Array.isArray(A.db.notifications) ? A.db.notifications : [];
@@ -115,9 +116,11 @@
     issued.forEach(i => { traderLines[i.traderId] = 'Mã khoản ' + i.id + ' · ' + U.money(i.amount) + ' · hạn nộp ' + U.dmy(i.due) + '. Nộp tiền mặt cho NV thu phí hoặc quét QR trên Mini app.'; });
     A.db.notifications.unshift({ id: nextId(), at: U.today(), kind: 'RECEIVABLE_ISSUED', market, period, title: 'Thông báo khoản phải nộp kỳ ' + label, group: 'Tiểu thương có khoản phải thu · ' + (mk.short || market), channels: ['Mini app', 'Zalo OA'], sent: Object.keys(traderLines).length, delivered: 0.97, read: 0, auto: true, by: actor || '', traderLines });
     const byC = {};
-    issued.forEach(i => (Array.isArray(i.stallIds) && i.stallIds.length ? i.stallIds : [i.stallId]).forEach(id => { const st = A.idx.stall.get(id); const c = (st && st.collectorId) || 'Chưa phân công'; byC[c] = (byC[c] || 0) + 1; }));
+    const assignment = A.ACCOUNTS && A.ACCOUNTS.marketCollectorState && A.ACCOUNTS.marketCollectorState(market);
+    if (assignment && assignment.state === 'assigned') byC[assignment.collector.id] = issued.length;
+    else byC['Chưa phân công'] = issued.length;
     const accName = id => { const a = A.ACCOUNTS && A.ACCOUNTS.get && A.ACCOUNTS.get(id); return a ? a.fullName : id; };
-    A.db.notifications.unshift({ id: nextId(), at: U.today(), kind: 'RECEIVABLE_LIST_TO_COLLECTORS', market, period, title: 'Chuyển danh sách thu kỳ ' + label + ' cho nhân viên thu phí', group: 'Nhân viên thu phí · ' + (mk.short || market), channels: ['Ứng dụng nhân viên'], sent: Object.keys(byC).filter(k => k !== 'Chưa phân công').length, delivered: 1, read: 0, auto: true, by: actor || '', collectorCounts: byC, body: Object.keys(byC).map(k => accName(k) + ': ' + byC[k] + ' điểm').join(' · ') });
+    A.db.notifications.unshift({ id: nextId(), at: U.today(), kind: 'RECEIVABLE_LIST_TO_COLLECTORS', market, period, title: 'Chuyển danh sách thu kỳ ' + label + ' cho nhân viên thu phí', group: 'Nhân viên thu phí · ' + (mk.short || market), channels: ['Ứng dụng nhân viên'], sent: Object.keys(byC).filter(k => k !== 'Chưa phân công').length, delivered: 1, read: 0, auto: true, by: actor || '', collectorCounts: byC, body: Object.keys(byC).map(k => accName(k) + ': ' + byC[k] + ' khoản phải thu').join(' · ') });
   }
   function issue(market, period, actor) {
     const bp = A.db.billingPeriods.find(x => x.id === period), list = drafts(market, period), blocks = warnings(market, period).filter(x => x.severity === 'BLOCKING');

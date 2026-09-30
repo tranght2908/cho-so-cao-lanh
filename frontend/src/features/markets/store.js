@@ -33,6 +33,8 @@
   // GIỮ NGUYÊN không đổi/xoá).
   const RANKS = { HANG_1: 'Hạng 1', HANG_2: 'Hạng 2', HANG_3: 'Hạng 3' };
   const STATUS = { active: ['Hoạt động', 'ok'], inactive: ['Tạm ngừng', 'warn'] };
+  // Cả 12 chợ thuộc một Tổ Quản lý chợ. Không suy ra đơn vị hoặc nhân sự theo từng market.
+  const MANAGEMENT_UNIT = 'Tổ Quản lý chợ';
 
   // Cấu hình "Bảng giá áp dụng" tối giản cho màn Danh mục chợ (mục 6/9 yêu cầu) — mock/config data
   // RIÊNG cho màn này, KHÔNG nối vào D.RATE_POLICY_SEED/A.SERVICE_CFG (nguồn tính khoản phải thu thật
@@ -57,15 +59,6 @@
   ];
 
   function isBuiltin(id) { return !!(D.MARKETS || []).find(m => m.id === id); }
-  function staffManagerName(mid) {
-    const s = (D.STAFF || []).find(x => x.market === mid && x.role === 'Trưởng Ban Quản lý chợ');
-    if (s) return s.name;
-    // 10 chợ mới trong market master (RBAC_MARKET_SCOPE_MIGRATION) không có D.STAFF (nghiệp vụ
-    // Phản ánh & sự cố ở data.js vẫn chỉ dùng CL/TTD) — tra account demo market_manager tương ứng
-    // (js/accounts.js) làm "Người phụ trách" mặc định thay vì để trống.
-    const acc = A.ACCOUNTS && A.ACCOUNTS.list().find(a => A.ACCOUNTS.primaryRole(a) === 'market_manager' && (a.marketScopes || []).indexOf(mid) !== -1);
-    return acc ? acc.fullName : '';
-  }
   // Hạng chợ mặc định theo đúng market master 12 chợ (RBAC_MARKET_SCOPE_MIGRATION mục 4) — CL hạng
   // 1, HA hạng 2, 10 chợ còn lại hạng 3.
   const RANK_BY_MARKET = { CL: 'HANG_1', HA: 'HANG_2' };
@@ -73,8 +66,9 @@
     return {
       id: m.id, code: m.id,
       rank: RANK_BY_MARKET[m.id] || 'HANG_3',
-      unit: 'Ban Quản lý ' + m.name,
-      manager: staffManagerName(m.id),
+      unit: MANAGEMENT_UNIT,
+      // Legacy/deprecated: personnel assignment belongs to Account/RBAC/marketScopes, not Market.
+      manager: '',
       phone: '',
       priceConfigId: m.id === 'CL' ? 'QD480_CHO_CAO_LANH' : 'QD480_NHOM_CON_LAI',
       status: 'active',
@@ -104,10 +98,15 @@
   ensureSeeded();
 
   function metaRow(id) { return LIST.find(x => x.id === id); }
-  // Quy mô & chỉ tiêu điểm kinh doanh do Quản trị hệ thống khai báo (capacity/quy hoạch):
+  // Quy mô chợ & loại diện tích kinh doanh áp dụng do Quản trị hệ thống khai báo:
   //   totalArea          : tổng diện tích chợ (m²)
   //   businessArea       : diện tích phục vụ kinh doanh (m²), 0 <= businessArea <= totalArea
-  //   capacityByAreaType : [{ areaTypeId, maxPointCount, maxArea }] — areaTypeId theo U.AREA_TYPE_CODES
+  //   allowedAreaTypeIds : [areaTypeId] — các loại diện tích (U.AREA_TYPE_CODES) được dùng khi bố trí
+  //                        điểm kinh doanh tại chợ; null = chưa cấu hình. KHÔNG có quota số điểm/m²
+  //                        theo loại — phân bổ do mặt bằng thực tế quyết định.
+  //   capacityByAreaType : [{ areaTypeId, maxPointCount, maxArea }] — LEGACY (mô hình chỉ tiêu cũ). Danh
+  //                        mục chợ không ghi mới field này; bản ghi cũ vẫn giữ nguyên (không migration
+  //                        phá huỷ) nhưng KHÔNG còn module nào dùng làm quota (Mặt bằng đã bỏ).
   // Field TUỲ CHỌN, thêm tương thích ngược: bản ghi đã lưu trước đây (chưa có field) đọc ra null =
   // "Chưa cập nhật" — không migration ghi đè, không tự bịa số liệu cho 12 chợ hiện có. Phần "đã sử
   // dụng" KHÔNG lưu ở đây (suy ra từ điểm kinh doanh thật, xem features/markets/service.js).
@@ -116,7 +115,18 @@
     const cap = Array.isArray(meta.capacityByAreaType)
       ? meta.capacityByAreaType.filter(x => x && x.areaTypeId).map(x => ({ areaTypeId: String(x.areaTypeId), maxPointCount: num(x.maxPointCount) || 0, maxArea: num(x.maxArea) || 0 }))
       : null;
-    return { totalArea: num(meta.totalArea), businessArea: num(meta.businessArea), capacityByAreaType: cap };
+    return { totalArea: num(meta.totalArea), businessArea: num(meta.businessArea), capacityByAreaType: cap, allowedAreaTypeIds: allowedAreaTypesOf(meta) };
+  }
+  // Đọc tương thích: ưu tiên allowedAreaTypeIds; bản ghi cũ chỉ có capacityByAreaType → suy ra các loại
+  // đã thực sự khai báo chỉ tiêu (> 0 điểm hoặc > 0 m²). Form cũ luôn ghi đủ 4 loại kể cả dòng 0/0, nên
+  // dòng 0/0 KHÔNG được coi là "áp dụng". Chỉ đọc — không ghi đè bản ghi đã lưu.
+  function allowedAreaTypesOf(meta) {
+    const codes = U.AREA_TYPE_CODES || [];
+    if (Array.isArray(meta.allowedAreaTypeIds)) return codes.filter(k => meta.allowedAreaTypeIds.indexOf(k) !== -1);
+    if (Array.isArray(meta.capacityByAreaType)) {
+      return codes.filter(k => meta.capacityByAreaType.some(x => x && x.areaTypeId === k && ((num(x.maxPointCount) || 0) > 0 || (num(x.maxArea) || 0) > 0)));
+    }
+    return null;
   }
   function mergedRow(id) {
     const meta = metaRow(id);
@@ -163,12 +173,16 @@
     });
     return custom.length ? base.concat(custom) : base;
   }
+  // Display helper only: do not rewrite legacy `unit` values persisted in existing catalogs.
+  function marketManagementUnit() { return MANAGEMENT_UNIT; }
   A.effectiveMarkets = effectiveMarkets;
 
   const MC = A.MARKET_CATALOG = {
     KEY: CKEY,
     RANKS: RANKS,
     STATUS: STATUS,
+    MANAGEMENT_UNIT: MANAGEMENT_UNIT,
+    marketManagementUnit: marketManagementUnit,
     PRICE_CONFIGS: PRICE_CONFIGS,
     priceConfig: id => PRICE_CONFIGS.find(p => p.id === id) || null,
     rows: () => { ensureSeeded(); return LIST.map(x => mergedRow(x.id)).filter(Boolean); },
@@ -186,9 +200,13 @@
       const id = String(rec.code || '').trim().toUpperCase() || nextCode();
       const row = {
         id: id, code: id, name: (rec.name || '').trim(), address: (rec.address || '').trim(),
-        rank: rec.rank, unit: (rec.unit || '').trim(), manager: (rec.manager || '').trim(),
+        rank: rec.rank, unit: MANAGEMENT_UNIT,
+        // Retained solely for compatibility with legacy persisted records; Markets never assigns it.
+        manager: (rec.manager || '').trim(),
         phone: (rec.phone || '').trim(), priceConfigId: rec.priceConfigId, status: rec.status || 'active',
         totalArea: num(rec.totalArea), businessArea: num(rec.businessArea),
+        allowedAreaTypeIds: Array.isArray(rec.allowedAreaTypeIds) ? rec.allowedAreaTypeIds.slice() : null,
+        // Legacy: chỉ giữ nếu nơi gọi truyền vào (màn Danh mục chợ không còn truyền).
         capacityByAreaType: Array.isArray(rec.capacityByAreaType) ? rec.capacityByAreaType : null,
         createdBy: user || 'Không rõ', createdAt: new Date().toISOString(), updatedBy: user || 'Không rõ', updatedAt: new Date().toISOString()
       };
@@ -209,7 +227,7 @@
         if (patch.name !== undefined) meta.name = String(patch.name || '').trim();
         if (patch.address !== undefined) meta.address = String(patch.address || '').trim();
       }
-      ['rank', 'unit', 'manager', 'phone', 'priceConfigId', 'status', 'totalArea', 'businessArea', 'capacityByAreaType'].forEach(k => {
+      ['rank', 'unit', 'manager', 'phone', 'priceConfigId', 'status', 'totalArea', 'businessArea', 'allowedAreaTypeIds', 'capacityByAreaType'].forEach(k => {
         if (patch[k] !== undefined) meta[k] = patch[k];
       });
       meta.updatedBy = user || 'Không rõ';

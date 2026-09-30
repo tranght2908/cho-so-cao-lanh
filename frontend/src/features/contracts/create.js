@@ -81,8 +81,6 @@
     ['buildingId', 'floorId', 'rowId', 'pointId'].forEach(key => { const value = val('#wf-ct-' + key.replace('Id', '')); if (value !== null) draft[key] = value; });
     ['electricity', 'water', 'market'].forEach(k => { const e = A.$('#wf-ct-service-' + k); if (e) draft.services[k] = !!e.checked; });
   }
-  const isCollector = () => { const acc = A.currentAccount(); return !!acc && A.ACCOUNTS.primaryRole(acc) === 'collector'; };
-  const collectorCanUse = point => !isCollector() || BP.collectorCanAccessPoint(A.currentAccount().id, point.id);
   const pointGraph = point => ({ row: point && BP.row(point), floor: point && BP.floor(point), building: point && BP.building(point) });
   const pointPath = point => { const x = BP.location(point); return [x.khu, x.tang, x.day].filter(v => v && v !== '—').join(' / ') || '—'; };
   const selectionMatches = (point, d) => {
@@ -98,8 +96,8 @@
     draft.pointId = point.id;
   }
   const info = (point, start, end) => {
-    const owner = BP.pointCollector(point.id), available = BP.isAvailable(point.id, start, end) && collectorCanUse(point);
-    return `<div class="note info" id="wf-ct-stall-info" style="margin-top:10px"><b>THÔNG TIN ĐIỂM ĐÃ CHỌN</b><dl class="kv" style="margin-top:8px"><dt>Mã điểm</dt><dd><b>${U.esc(point.code)}</b></dd><dt>Vị trí</dt><dd>${U.esc(pointPath(point))}</dd><dt>Ngành hàng</dt><dd>${U.esc(BP.industry(point) || 'Chưa có thông tin')}</dd><dt>Diện tích</dt><dd>${Number(point.area || 0).toLocaleString('vi-VN')} m²</dd><dt>Loại diện tích</dt><dd>${U.esc(U.areaTypeLabel(point.areaTypeId) || 'Chưa có thông tin')}</dd><dt>NV thu phí phụ trách</dt><dd>${owner ? U.esc(owner.fullName) : 'Chưa phân công'}</dd><dt>Tình trạng trong thời hạn đã chọn</dt><dd>${available ? '<span style="color:var(--ok)">Còn trống</span>' : '<span class="contract-danger-text">Không khả dụng</span>'}</dd></dl></div>`;
+    const available = BP.isAvailable(point.id, start, end);
+    return `<div class="note info" id="wf-ct-stall-info" style="margin-top:10px"><b>THÔNG TIN ĐIỂM ĐÃ CHỌN</b><dl class="kv" style="margin-top:8px"><dt>Mã điểm</dt><dd><b>${U.esc(point.code)}</b></dd><dt>Vị trí</dt><dd>${U.esc(pointPath(point))}</dd><dt>Ngành hàng</dt><dd>${U.esc(BP.industry(point) || 'Chưa có thông tin')}</dd><dt>Diện tích</dt><dd>${Number(point.area || 0).toLocaleString('vi-VN')} m²</dd><dt>Loại diện tích</dt><dd>${U.esc(U.areaTypeLabel(point.areaTypeId) || 'Chưa có thông tin')}</dd><dt>Tình trạng trong thời hạn đã chọn</dt><dd>${available ? '<span style="color:var(--ok)">Còn trống</span>' : '<span class="contract-danger-text">Không khả dụng</span>'}</dd></dl></div>`;
   };
   const feePolicyHtml = p => {
     if (!p) return '<div class="small muted" id="wf-ct-fee-policy">Chọn điểm kinh doanh để xem chính sách thu áp dụng.</div>';
@@ -110,7 +108,6 @@
   function pointCheckHtml(p, start, end) {
     if (!p) return '';
     if (!start || !end || end < start) return '<div class="note" id="wf-ct-point-check" style="margin-top:8px">Nhập ngày bắt đầu và ngày kết thúc hợp lệ để kiểm tra điểm.</div>';
-    if (!collectorCanUse(p)) return '<div class="note" id="wf-ct-point-check" style="margin-top:8px">Điểm kinh doanh này không thuộc Dãy được phân công cho bạn.</div>';
     return BP.isAvailable(p.id, start, end) ? `<div class="small" id="wf-ct-point-check" style="margin-top:6px;color:var(--ok)">✓ Điểm còn trống trong toàn bộ thời hạn ${U.dmy(start)} → ${U.dmy(end)}.</div>` : `<div class="note" id="wf-ct-point-check" style="margin-top:8px"><b>${U.esc(overlapMessage(p))}</b></div>`;
   }
   function locationSelect(id, label, value, values, placeholder, disabled) {
@@ -122,13 +119,10 @@
     const floors = building ? (A.db.floors || []).filter(x => x.market === d.market && x.buildingId === building.id) : [];
     const hasFloors = floors.length > 0;
     const candidateRows = building ? (A.db.rows || []).filter(x => x.market === d.market && x.buildingId === building.id && (hasFloors ? x.floorId === d.floorId : !x.floorId)) : [];
-    // Collector scope is defined by Row assignment. Keeping unrelated Rows out of
-    // this selector avoids a dead-end choice with no eligible points; save still
-    // repeats the point-level scope check below.
-    const rows = isCollector() ? candidateRows.filter(x => x.collectorId === A.currentAccount().id) : candidateRows;
+    const rows = candidateRows;
     const datesReady = !!d.start && !!d.end && d.end >= d.start;
     const ready = datesReady && !!building && (!hasFloors || !!d.floorId) && !!d.rowId;
-    const available = ready ? BP.availablePoints(d.market, d.start, d.end).filter(p => p.rowId === d.rowId && collectorCanUse(p)) : [];
+    const available = ready ? BP.availablePoints(d.market, d.start, d.end).filter(p => p.rowId === d.rowId) : [];
     const fields = [
       locationSelect('wf-ct-building', 'Khối/Nhà', d.buildingId, buildings.map(x => ({ value: x.id, label: x.name })), '— Chọn Khối/Nhà —', !buildings.length),
       hasFloors ? locationSelect('wf-ct-floor', 'Tầng', d.floorId, floors.map(x => ({ value: x.id, label: x.name })), '— Chọn tầng —', !building) : '',
@@ -140,7 +134,7 @@
   function renderContractForm() {
     const d = draft, traderChoices = contracts.tradersForCreate(d.market), selectedTrader = trader(d.traderId), sv = d.services;
     let p = d.pointId ? stall(d.pointId) : null;
-    if (p && (!selectionMatches(p, d) || !collectorCanUse(p) || !BP.isAvailable(p.id, d.start, d.end))) { d.pointId = ''; p = null; }
+    if (p && (!selectionMatches(p, d) || !BP.isAvailable(p.id, d.start, d.end))) { d.pointId = ''; p = null; }
     const chk = (k, label) => `<label><input id="wf-ct-service-${k}" type="checkbox" ${sv[k] ? 'checked' : ''}> ${label}</label>`;
     A.modal(A.mHead('Tạo hợp đồng') + `<div class="modal-b workflow-contract-form">
       <section><h4>A. TIỂU THƯƠNG</h4>${d.traderLocked && selectedTrader ? `<dl class="kv"><dt>Tiểu thương</dt><dd><b>${U.esc(selectedTrader.name)}</b><br><span class="small muted">${selectedTrader.id} · ${U.maskPhone(selectedTrader.phone)}</span></dd><dt>Trạng thái</dt><dd>${traders.deriveBusinessStatus(selectedTrader) === traders.BUSINESS_STATUS.WAITING_ALLOCATION ? 'Chờ bố trí' : traders.deriveBusinessStatus(selectedTrader) === traders.BUSINESS_STATUS.ACTIVE ? 'Đang hoạt động' : 'Ngừng hoạt động'}</dd></dl>` : `<select class="input" id="wf-ct-trader"><option value="">— Chọn tiểu thương —</option>${traderChoices.map(x => `<option value="${x.id}" ${x.id === d.traderId ? 'selected' : ''}>${x.id} · ${U.esc(x.name)} · ${U.maskPhone(x.phone)}</option>`).join('')}</select>`}</section>
@@ -149,7 +143,7 @@
       <section><h4>D. CHÍNH SÁCH THU ÁP DỤNG</h4><div class="field"><label>1. Phí sử dụng điểm</label>${feePolicyHtml(p)}<div class="small muted" style="margin-top:8px">Mức dự kiến hiện tại được suy ra từ điểm kinh doanh và chính sách thu đang hiệu lực. Mức thu thực tế từng kỳ được xác định theo chính sách/biểu phí có hiệu lực tại kỳ thu.</div></div><div class="field"><label>2. Dịch vụ tại điểm</label>${chk('electricity', 'Điện')}${chk('water', 'Nước')}${chk('market', 'Dịch vụ chợ')}${p && !p.hasMeter ? '<div class="small muted" style="margin-top:6px">Điểm chưa ghi nhận công tơ; điện/nước sẽ được đối chiếu khi ghi chỉ số kỳ thu.</div>' : ''}<div class="small muted" style="margin-top:6px">Điện và nước được tính ở kỳ thu từ chỉ số công tơ và biểu giá cấu hình, không tính khi tạo hợp đồng.</div></div><div class="field"><label>3. Phương tiện</label><div class="note info">Phương tiện và phí gửi xe được quản lý theo đăng ký phương tiện của tiểu thương.</div></div></section>
       <section><h4>E. HỒ SƠ HỢP ĐỒNG</h4><div id="wf-ct-files" class="${contractFiles.length ? 'small' : 'small muted'}">${contractFiles.length ? contractFiles.map(f => U.esc(f.name)).join('<br>') : 'Chưa có tệp đính kèm.'}</div><button class="btn sm" style="margin-top:8px" data-act="wf-contract-file">Chọn ảnh/scan hợp đồng</button><div class="small muted" style="margin-top:6px">Tệp chỉ được lưu metadata trong prototype.</div></section>
       </div><div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="wf-contract-save">Tạo hợp đồng</button></div>`);
-    const refresh = () => { readDraftFromDom(); const point = draft.pointId && stall(draft.pointId); if (point && (!BP.isAvailable(point.id, draft.start, draft.end) || !collectorCanUse(point))) draft.pointId = ''; renderContractForm(); };
+    const refresh = () => { readDraftFromDom(); const point = draft.pointId && stall(draft.pointId); if (point && !BP.isAvailable(point.id, draft.start, draft.end)) draft.pointId = ''; renderContractForm(); };
     ['#wf-ct-start', '#wf-ct-end'].forEach(sel => { const e = A.$(sel); if (e) e.onchange = refresh; });
   }
   // Entry point for every creation path: trader (traderId), available point (preset.pointId + dates),
@@ -196,7 +190,7 @@
     else if (key === 'row') { draft.rowId = value; draft.pointId = ''; }
     else if (key === 'point') {
       const p = stall(value);
-      if (!p || !selectionMatches(p, draft) || !collectorCanUse(p) || !BP.isAvailable(p.id, draft.start, draft.end)) return U.toast('Điểm kinh doanh không còn phù hợp trong thời hạn đã chọn.');
+      if (!p || p.market !== draft.market || !selectionMatches(p, draft) || !BP.isAvailable(p.id, draft.start, draft.end)) return U.toast('Điểm kinh doanh không còn phù hợp trong thời hạn đã chọn.');
       draft.pointId = p.id;
     }
     renderContractForm();
@@ -205,7 +199,7 @@
     open: workflowOpenContract,
     active: () => !!draft,
     resume: () => { if (draft) renderContractForm(); },
-    pickPoint: id => { readDraftFromDom(); const p = stall(id); if (!draft || !p || p.market !== draft.market || !collectorCanUse(p)) return; setSelectionFromPoint(p); renderContractForm(); }
+    pickPoint: id => { readDraftFromDom(); const p = stall(id); if (!draft || !p || p.market !== draft.market) return; setSelectionFromPoint(p); renderContractForm(); }
   };
   A.ACT['wf-contract-file'] = () => {
     const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*,.pdf'; input.multiple = true; input.style.display = 'none';
@@ -216,9 +210,10 @@
     if (!draft) return;
     readDraftFromDom();
     const t = trader(draft.traderId), s = stall(draft.pointId), start = draft.start, end = draft.end;
-    if (!t || !s || !start || !end || end < start || draft.market !== ui.market || t.market !== draft.market || s.market !== draft.market || !selectionMatches(s, draft)) return U.toast('Vui lòng kiểm tra tiểu thương, bố trí điểm kinh doanh và thời hạn.');
+    if (!t || !s || !start || !end || end < start || draft.market !== ui.market) return U.toast('Vui lòng kiểm tra tiểu thương, bố trí điểm kinh doanh và thời hạn.');
+    if (t.market !== s.market || t.market !== draft.market) return U.toast('Tiểu thương và điểm kinh doanh phải thuộc cùng một chợ.');
+    if (!selectionMatches(s, draft)) return U.toast('Vui lòng kiểm tra tiểu thương, bố trí điểm kinh doanh và thời hạn.');
     if (!canCreateIn(s.market) || !allowedMarket(s.market)) return U.toast('Bạn không có quyền tạo hợp đồng tại chợ này.');
-    if (!collectorCanUse(s)) return U.toast('Điểm kinh doanh không thuộc Dãy được phân công cho bạn.');
     if (!BP.isAllocatable(s)) return U.toast('Điểm ' + s.code + ' đang tạm ngừng, tranh chấp hoặc không còn sử dụng nên không thể bố trí.');
     // Save-time revalidation against CURRENT contract data (never trust an earlier search result).
     if (!BP.isAvailable(s.id, start, end)) return U.toast(overlapMessage(s));

@@ -63,8 +63,8 @@ ok('6 referential integrity of the layout graph (floorId null allowed)', () => {
 ok('7 area rules: Σ point.area ≤ row.allocatedArea; Σ row.allocatedArea ≤ floor.businessArea', () => {
   db.rows.forEach(r => assert(sum(db.stalls.filter(s => s.rowId === r.id), s => s.area) <= r.allocatedArea + 1e-9, r.id));
   db.floors.forEach(f => assert(sum(db.rows.filter(r => r.floorId === f.id), r => r.allocatedArea) <= f.businessArea + 1e-9, f.id));
-  assert(S.rowErrors(Object.assign({}, R.get('CL-R-KA-A'), { allocatedArea: 10 })).some(e => /nhỏ hơn tổng diện tích các điểm/.test(e)));
-  assert(S.rowErrors(Object.assign({}, R.get('CL-R-KA-A'), { allocatedArea: 1000 })).some(e => /vượt diện tích kinh doanh của tầng/.test(e)));
+  assert(S.rowErrors(Object.assign({}, R.get('CL-R-KA-A'), { allocatedArea: 10 })).some(e => /Không thể giảm xuống 10 m² vì các điểm kinh doanh trong Dãy/.test(e)));
+  assert(S.rowErrors(Object.assign({}, R.get('CL-R-KA-A'), { allocatedArea: 1000 })).some(e => /^Vượt .* m² so với diện tích còn lại của Tầng/.test(e)));
 });
 ok('8 points store no derived duplicates; compat getters are read-only', () => {
   const derived = ['cat', 'section', 'sectionName', 'floor', 'traderId', 'contractId', 'sellerId', 'collectorId', 'areaType', 'pointType'];
@@ -132,26 +132,28 @@ ok('13 operational screens render for CL and TTD', () => {
     });
   });
 });
-ok('14 capacity: a declared market capacity bounds point edits (count + area per area type)', () => {
+ok('14 area types: point edits only accept the market allowedAreaTypeIds; legacy per-type quota is no longer enforced', () => {
   const mgr = A.ACCOUNTS.list().find(a => A.ACCOUNTS.primaryRole(a) === 'market_manager' && (a.marketScopes || []).includes('CL'));
   const MC = A.features.markets.service, u = MC.usage('CL');
+  // Legacy quota at the current usage would have blocked the change below; it must not any more.
   const cap = A.U.AREA_TYPE_CODES.map(k => ({ areaTypeId: k, maxPointCount: (u[k] || { count: 0 }).count, maxArea: Math.ceil((u[k] || { area: 0 }).area) }));
-  MC.update('CL', { totalArea: 20435, businessArea: 5000, capacityByAreaType: cap }, 'test');
+  MC.update('CL', { totalArea: 20435, businessArea: 5000, capacityByAreaType: cap, allowedAreaTypeIds: ['covered', 'uncovered'] }, 'test');
   const st = db.stalls.find(s => s.market === 'CL' && s.areaTypeId === 'uncovered' && !BP.contractOn(s.id, A.U.today()));
   use(A, mgr.id, 'CL'); h.act('dk-open', { id: st.id }); h.act('dkcl-edit-open', { id: st.id });
+  assert(!/value="session"/.test(h.modal()), 'not-allowed area type is not offered');
+  A.CH['dke-field']({ dataset: { k: 'areaType' }, value: 'session' });
+  h.act('dkcl-edit-save', { id: st.id });
+  assert(/không được áp dụng tại chợ này/.test(h.trace.toasts.at(-1)), h.trace.toasts.at(-1));
+  assert.strictEqual(st.areaTypeId, 'uncovered');
   A.CH['dke-field']({ dataset: { k: 'areaType' }, value: 'covered' });
   h.act('dkcl-edit-save', { id: st.id });
-  assert(/Vượt chỉ tiêu số điểm loại "Có mái che"/.test(h.trace.toasts.at(-1)), h.trace.toasts.at(-1));
-  assert.strictEqual(st.areaTypeId, 'uncovered');
-  const used = MC.usage('CL');
-  cap.forEach(c => assert((used[c.areaTypeId] || { count: 0 }).count <= c.maxPointCount && (used[c.areaTypeId] || { area: 0 }).area <= c.maxArea + 1e-9));
+  assert.strictEqual(st.areaTypeId, 'covered', 'allowed type saved without any per-type quota');
 });
-ok('15 collector assignment is stored on the row; points read it through the row', () => {
-  const coll = BP.collectorAccounts('CL')[0];
-  const z = S.findZone('CL', 'CL-R-TG-A');
-  BP.assignCollector(A.mbBusinessPointsForZone('CL', z), coll.id);
-  assert.strictEqual(R.get('CL-R-TG-A').collectorId, coll.id);
-  assert(db.stalls.filter(s => s.rowId === 'CL-R-TG-A').every(s => s.collectorId === coll.id));
+ok('15 new rows do not create collector assignments', () => {
+  const place = S.firstZonePlace('CL');
+  const row = S.addRow('CL', place, 'NO-COLLECTOR', 'Dãy không phân công', 'Khác').row;
+  assert(row && !Object.prototype.hasOwnProperty.call(row, 'collectorId'));
+  assert(S.removeRow(row.id));
 });
 ok('16 row commands keep the rules (industry required, no delete with points) and persist in A.db only', () => {
   const place = S.firstZonePlace('CL');
