@@ -406,16 +406,19 @@
   }
   function miniComplaintStatusClass(i) {
     if (!i) return '';
-    if (i.state === 'dong') return 'danger';
+    if (i.state === 'dong') return 'info';
     if (i.state === 'hoanthanh') return 'warn';
     return 'info';
+  }
+  function miniCanRateComplaint(i) {
+    return !!i && i.state === 'hoanthanh';
   }
   const MINI_ISSUE_META = [
     { key: 'Điện', label: 'Điện, chiếu sáng', desc: 'Mất điện, chập điện, đèn chiếu sáng...', icon: 'bolt', tone: 'warn' },
     { key: 'Cấp thoát nước', label: 'Cấp thoát nước', desc: 'Mất nước, rò rỉ, nghẹt thoát nước...', icon: 'settings', tone: 'blue' },
     { key: 'Hạ tầng', label: 'Hạ tầng, cơ sở vật chất', desc: 'Sửa chữa, hư hỏng, xuống cấp...', icon: 'settings', tone: 'blue' },
     { key: 'Vệ sinh', label: 'Vệ sinh môi trường', desc: 'Rác thải, vệ sinh khu vực...', icon: 'warning', tone: 'green' },
-    { key: 'PCCC', label: 'PCCC', desc: 'Thiết bị, lối thoát hiểm, an toàn cháy nổ...', icon: 'warning', tone: 'danger' }
+    { key: 'PCCC', label: 'PCCC', desc: 'Thiết bị, lối thoát hiểm, an toàn cháy nổ...', icon: 'warning', tone: 'slate' }
   ];
   function miniIssueMeta(cat) {
     return MINI_ISSUE_META.find(x => x.key === cat) || MINI_ISSUE_META[2];
@@ -461,7 +464,7 @@
   }
   function miniComplaintRow(i, n) {
     const st = A.idx.stall.get(i.stallId);
-    const canRate = i.state === 'hoanthanh' || i.state === 'dong';
+    const canRate = miniCanRateComplaint(i);
     return `<tr>
       <td>${n}</td>
       <td><b>${U.esc(i.id)}</b></td>
@@ -482,7 +485,7 @@
     return xs.length ? `<div class="inc-timeline">${xs.map(x => `<div class="inc-timeline-i"><b>${U.esc(String(x.at || '').replace('T', ' · '))}</b><strong>${U.esc(x.action || '')}</strong>${x.detail ? `<span>${U.esc(x.detail)}</span>` : ''}</div>`).join('')}</div>` : '<div class="empty small">Chưa có nhật ký xử lý.</div>';
   }
   function miniComplaintRatingHtml(i) {
-    if (i.state !== 'hoanthanh' && i.state !== 'dong') return '';
+    if (!miniCanRateComplaint(i)) return '';
     const m = mini(), drafts = m.ratingDrafts || (m.ratingDrafts = {});
     const draft = drafts[i.id] || {};
     const selected = Number(draft.rating || i.rating || 0);
@@ -833,7 +836,7 @@
       <button class="btn" style="margin-top:8px" data-act="mini-attach" ${miniComplaintAttachments().length >= 3 ? 'disabled' : ''}>${miniAttachmentSummary()}</button>${miniAttachmentListHtml()}
       <button class="m-btn solid" style="margin-top:10px" data-act="mini-report">Gửi phản ánh</button></div>
       ${mine.length ? `<div class="m-card"><b>Phản ánh đã gửi</b><div class="m-list">${mine.map(i => `<div class="it" style="flex-wrap:wrap"><span style="flex:1">${U.esc(i.title)}<div class="small muted">${i.id} · ${U.dmy(i.created)}</div></span><span class="tag info">${D.INCIDENT_STATES.find(s => s.id === i.state).label}</span>
-        ${(i.state === 'hoanthanh' || i.state === 'dong') ? `<div class="stars" style="width:100%">${[1, 2, 3, 4, 5].map(n => `<button class="${i.rating >= n ? 'on' : ''}" data-act="mini-rate" data-id="${i.id}" data-n="${n}" aria-label="${n} sao">★</button>`).join('')}<span class="small muted">${i.rating ? 'Cảm ơn bạn đã đánh giá' : 'Đánh giá dịch vụ'}</span></div>` : ''}</div>`).join('')}</div></div>` : ''}`;
+        ${miniCanRateComplaint(i) ? `<div class="stars" style="width:100%">${[1, 2, 3, 4, 5].map(n => `<button class="${i.rating >= n ? 'on' : ''}" data-act="mini-rate" data-id="${i.id}" data-n="${n}" aria-label="${n} sao">★</button>`).join('')}<span class="small muted">${i.rating ? 'Cảm ơn bạn đã đánh giá' : 'Đánh giá dịch vụ'}</span></div>` : ''}</div>`).join('')}</div></div>` : ''}`;
   }
 
   function tabRegister(t) {
@@ -1187,7 +1190,7 @@
         </aside>
       </div>` : `<section class="merchant-panel merchant-list-panel">
         <div class="merchant-list-head"><div class="merchant-title-row">${U.icon('warning')}<div><h2>Danh sách phản ánh của tôi</h2></div></div>
-          <div class="merchant-list-tools"><input class="input" data-in="mini-complaint-search" value="${U.esc(mini().complaintSearch || '')}" placeholder="Tìm kiếm phản ánh..."><button class="btn">${U.icon('settings')} Bộ lọc</button></div></div>
+          <div class="merchant-list-tools"><input class="input" data-in="mini-complaint-search" value="${U.esc(mini().complaintSearch || '')}" placeholder="Tìm kiếm phản ánh..."></div></div>
         <div class="merchant-tabs">${statusTabs.map(x => `<button class="${status === x[0] ? 'active' : ''}" data-act="mini-complaint-status" data-id="${x[0]}">${x[1]} (${x[2]})</button>`).join('')}</div>
         <div class="tbl-wrap"><table class="tbl merchant-table"><thead><tr><th>STT</th><th>Mã phản ánh</th><th>Thời gian gửi</th><th>Tiêu đề</th><th>Nhóm vấn đề</th><th>Địa điểm</th><th>Trạng thái</th><th>Cập nhật cuối</th><th>Thao tác</th></tr></thead><tbody>${filtered.map((i, n) => miniComplaintRow(i, n + 1)).join('') || `<tr><td colspan="9"><div class="empty">Không có phản ánh phù hợp.</div></td></tr>`}</tbody></table></div>
         <div class="merchant-table-foot"><span>Hiển thị ${filtered.length ? '1 - ' + Math.min(filtered.length, 5) : '0'} của ${filtered.length} phản ánh</span><div><button class="btn sm">‹</button><button class="btn sm primary">1</button><button class="btn sm">2</button><button class="btn sm">›</button></div></div>
@@ -1339,7 +1342,7 @@
     },
     'mini-complaint-rate-open': el => {
       const t = trader(), i = A.db.incidents.find(x => x.id === el.dataset.id);
-      if (!miniComplaintAllowed(t, i) || (i.state !== 'hoanthanh' && i.state !== 'dong')) { U.toast('Không có quyền đánh giá phản ánh này.'); return; }
+      if (!miniComplaintAllowed(t, i) || !miniCanRateComplaint(i)) { U.toast('Phản ánh đã đóng hoặc chưa hoàn thành nên không thể đánh giá.'); return; }
       miniComplaintRateModal(i);
     },
     'mini-debt-pay': el => {
@@ -1409,14 +1412,14 @@
     },
     'mini-rate-pick': el => {
       const t = trader(), i = A.db.incidents.find(x => x.id === el.dataset.id);
-      if (!miniComplaintAllowed(t, i) || (i.state !== 'hoanthanh' && i.state !== 'dong')) { U.toast('Không có quyền đánh giá phản ánh này.'); return; }
+      if (!miniComplaintAllowed(t, i) || !miniCanRateComplaint(i)) { U.toast('Phản ánh đã đóng hoặc chưa hoàn thành nên không thể đánh giá.'); return; }
       const drafts = mini().ratingDrafts || (mini().ratingDrafts = {});
       drafts[i.id] = Object.assign({}, drafts[i.id] || {}, { rating: Number(el.dataset.n) });
       miniComplaintRateModal(i);
     },
     'mini-rate-submit': el => {
       const t = trader(), i = A.db.incidents.find(x => x.id === el.dataset.id);
-      if (!miniComplaintAllowed(t, i) || (i.state !== 'hoanthanh' && i.state !== 'dong')) { U.toast('Không có quyền đánh giá phản ánh này.'); return; }
+      if (!miniComplaintAllowed(t, i) || !miniCanRateComplaint(i)) { U.toast('Phản ánh đã đóng hoặc chưa hoàn thành nên không thể đánh giá.'); return; }
       const draft = ((mini().ratingDrafts || {})[i.id]) || {};
       const rating = Number(draft.rating || i.rating || 0);
       if (!rating) { U.toast('Vui lòng chọn số sao đánh giá.'); return; }
