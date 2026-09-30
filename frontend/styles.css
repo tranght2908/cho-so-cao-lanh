@@ -353,6 +353,10 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 .inc-quick-filters { display: flex; gap: 6px; flex-wrap: wrap; }
 .inc-quick-filters button { border: 1px solid var(--line); background: #fff; color: var(--ink-2); border-radius: 8px; padding: 7px 10px; cursor: pointer; font-size: var(--font-size-sm); }
 .inc-quick-filters button:hover, .inc-quick-filters button.on { border-color: rgba(0, 137, 223, .34); background: var(--brand-soft); color: var(--brand); }
+.inc-tech-filter-top { margin-bottom: 8px; }
+.inc-tech-filters { display: grid; gap: 8px; margin-bottom: 12px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+.inc-tech-status-filters button b { margin-left: 5px; color: inherit; font-size: var(--font-size-xs); opacity: .75; }
+.inc-tech-filter-fields { display: grid; grid-template-columns: minmax(180px, 260px) minmax(180px, 1fr) auto; gap: 8px; align-items: center; }
 .inc-filter-panel { display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap: 8px; margin: 0 0 12px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
 .inc-board-people { display: flex; align-items: center; gap: 0; min-height: 32px; }
 .inc-avatar { width: 28px; height: 28px; display: inline-grid; place-items: center; border-radius: 50%; border: 2px solid #fff; background: var(--brand-soft); color: var(--brand); font-size: var(--font-size-xs); font-weight: 800; margin-left: -6px; box-shadow: 0 1px 2px rgba(15,30,50,.14); }
@@ -1306,8 +1310,8 @@ body.trader-session .app { grid-template-columns: 1fr; } body.trader-session .si
 .inc-check { display: flex; align-items: center; gap: 6px; margin: 7px 0; color: var(--ok); font-weight: 600; }
 .inc-check .ui-icon { width: 16px; height: 16px; margin: 0; }
 @media (max-width: 1100px) { .inc-tech-workspace { grid-template-columns: 1fr; } .inc-tech-detail { position: static; } .inc-jira-board { grid-template-columns: repeat(4, minmax(260px, 300px)); } }
-@media (max-width: 900px) { .inc-function-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); } .inc-filter-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); } .inc-tech-item { grid-template-columns: 1fr; align-items: start; } .inc-tech-status { justify-content: flex-start; } .inc-jira-col { max-height: none; min-height: 460px; } .inc-detail-drawer { width: min(560px, 86vw); min-width: 0; } }
-@media (max-width: 640px) { .inc-detail-drawer { width: calc(100vw - 20px); height: calc(100vh - 20px); top: 10px; right: 10px; border-radius: 12px; } .inc-filter-panel { grid-template-columns: 1fr; } .inc-card-actions { flex-wrap: wrap; } .inc-card-actions .btn { flex: 1; justify-content: center; } .inc-function-nav { grid-template-columns: 1fr; } .inc-tech-main, .inc-tech-kv, .inc-detail-kv { grid-template-columns: 1fr; } .inc-tech-detail-f .btn { flex: 1; justify-content: center; } }
+@media (max-width: 900px) { .inc-function-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); } .inc-filter-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); } .inc-tech-filter-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } .inc-tech-filter-fields .btn { justify-content: center; } .inc-tech-item { grid-template-columns: 1fr; align-items: start; } .inc-tech-status { justify-content: flex-start; } .inc-jira-col { max-height: none; min-height: 460px; } .inc-detail-drawer { width: min(560px, 86vw); min-width: 0; } }
+@media (max-width: 640px) { .inc-detail-drawer { width: calc(100vw - 20px); height: calc(100vh - 20px); top: 10px; right: 10px; border-radius: 12px; } .inc-filter-panel, .inc-tech-filter-fields { grid-template-columns: 1fr; } .inc-card-actions { flex-wrap: wrap; } .inc-card-actions .btn { flex: 1; justify-content: center; } .inc-function-nav { grid-template-columns: 1fr; } .inc-tech-main, .inc-tech-kv, .inc-detail-kv { grid-template-columns: 1fr; } .inc-tech-detail-f .btn { flex: 1; justify-content: center; } }
 @keyframes popupIn { from { opacity: 0; transform: translate(-50%, -47%) scale(.98); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
 @keyframes incDrawerIn { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: translateX(0); } }
 .drawer-h { padding: 16px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; }
