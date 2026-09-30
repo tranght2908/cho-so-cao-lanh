@@ -34,7 +34,7 @@
   function cfgCommonLandAllowed(actionKey) {
     return A.canDo('cau-hinh-gia.chinh-sach-chung.' + actionKey);
   }
-  function cfgCommonLandAddAllowed() { return cfgCommonLandAllowed('them-muc'); }
+  function cfgCommonLandAddAllowed() { return ui.role === 'market_manager' && A.canDo('cau-hinh-gia.them-phi', ui.market); }
   function cfgCommonLandApplyAllowed(rec) { return !!rec && rec.status === 'draft' && cfgCommonLandAllowed('ap-dung'); }
   function cfgCommonLandLockAllowed(rec) { return !!rec && (rec.status === 'active' || rec.status === 'inactive') && cfgCommonLandAllowed('khoa-mo'); }
   function cfgCommonLandDraftMutateAllowed(rec) { return !!rec && rec.status !== 'active' && rec.status !== 'expired' && cfgCommonLandAllowed('them-muc'); }
@@ -125,21 +125,14 @@
 
   // ---- sub-tab: Đơn giá mặt bằng ----
   function settingsGiaHtml() {
+    const market = ui.market;
     const canNew = cfgCommonLandAddAllowed();
-    const rows = A.SERVICE_CFG.list('stallPrices');
-    return `<div class="card"><div class="card-h"><div><h3>Đơn giá sử dụng mặt bằng</h3><div class="small muted">Phạm vi: dùng chung cho tất cả 12 chợ</div></div>${canNew ? '<button class="btn sm primary" data-act="cfg-price-new">+ Thêm mức giá</button>' : ''}</div>
-      <div class="card-b"><div class="note info" style="margin-bottom:12px">Biểu phí dùng chung do Quản trị hệ thống quản lý và áp dụng theo chính sách hiện hành.${canNew ? '' : ' Biểu phí chung do Quản trị hệ thống quản lý.'}</div>${U.table([{ t: 'Phạm vi' }, { t: 'Khu vực / loại điểm' }, { t: 'Mức giá', num: true }, { t: 'Đơn vị / chu kỳ' }, { t: 'Phân loại thuế' }, { t: 'Hiệu lực / căn cứ' }, { t: 'Miễn giảm' }, { t: 'Trạng thái' }, { t: '' }],
-        rows.map(r => { const canApply = cfgCommonLandApplyAllowed(r), canLock = cfgCommonLandLockAllowed(r); return `<tr>
-          <td>${r.marketId === 'ALL' ? 'Tất cả 12 chợ' : 'Dữ liệu chuyển tiếp'}<div class="small muted">${U.esc(CFG_MARKET_MODEL_LABELS[r.marketModel] || '—')}</div></td>
-          <td class="small">${U.esc(r.area)}<div class="muted">${U.esc(r.stallType)}</div></td>
-          <td class="num">${r.amount.toLocaleString('vi-VN')}</td><td class="small nowrap">${U.esc(r.unit)}<div class="muted">Chu kỳ: ${U.esc(CFG_CYCLE_LABELS[r.collectionCycle] || '—')}</div></td>
-          <td class="small">${U.esc(CFG_TAX_LABELS[r.taxClass] || '—')}</td>
-          <td class="nowrap">${U.dmy(r.effectiveFrom)}${r.effectiveTo ? `<div class="small muted">đến ${U.dmy(r.effectiveTo)}</div>` : ''}<div class="small">${r.legalBasis && r.legalBasis.docNo ? U.esc(r.legalBasis.docNo) : '<span class="muted">—</span>'}</div></td>
-          <td class="small">${U.esc(cfgWaiverName(r.waiverTypeId))}</td>
-          <td>${cfgStatusTag(r.status)}</td>
-          <td class="nowrap"><button class="btn sm" data-act="cfg-price-view" data-id="${r.id}">Xem</button>
-            ${cfgLifecycleButtons('stallPrices', r.id, r.status, canApply, canLock)}
-          </td></tr>`; }), { empty: 'Chưa có đơn giá sử dụng mặt bằng' })}</div></div>`;
+    const rows = A.SERVICE_CFG.list('stallPrices').filter(r => r.marketId === market && r.status === 'active');
+    const mapped = rows.length && market === 'CL' || rows.length && market === 'TTD';
+    return `<div class="card"><div class="card-h"><div><h3>Phí sử dụng mặt bằng</h3><div class="small muted">Theo phụ lục Quyết định 480/QĐ-UBND · ${U.esc(U.market(market).name)}</div></div>${canNew ? '<button class="btn sm primary" data-act="cfg-price-new">+ Thêm phí mặt bằng</button>' : ''}</div>
+      <div class="card-b"><div class="note info"><b>Căn cứ áp dụng</b><br>Quyết định 480/QĐ-UBND · Ban hành 14/02/2026 · Hiệu lực 15/02/2026<br>Giá đã bao gồm VAT.<br><a href="https://thuvienphapluat.vn/van-ban/Thuong-mai/Quyet-dinh-480-QD-UBND-2026-gia-dich-vu-su-dung-dien-tich-ban-hang-tai-cho-Dong-Thap-720181.aspx" target="_blank" rel="noopener">Nguồn văn bản</a> <button class="btn sm" data-act="cfg-price-view-basis">Xem phụ lục / căn cứ</button></div>
+      ${U.table([{ t: 'Loại diện tích / vị trí' }, { t: 'Đơn giá', num: true }, { t: 'Đơn vị' }, { t: 'Hiệu lực' }, { t: 'Căn cứ' }, { t: 'Trạng thái' }, { t: 'Thao tác' }],
+        rows.map(r => `<tr><td>${U.esc(r.stallType || r.area)}</td><td class="num">${Number(r.amount).toLocaleString('vi-VN')}</td><td>${U.esc(r.unit)}</td><td>${U.dmy(r.effectiveFrom)}</td><td>480/QĐ-UBND</td><td>${cfgStatusTag(r.status)}</td><td><button class="btn sm" data-act="cfg-price-view" data-id="${r.id}">Xem căn cứ</button></td></tr>`), { empty: mapped ? 'Chưa có dữ liệu đối chiếu QĐ 480' : 'Chưa có dữ liệu đối chiếu QĐ 480' })}</div></div>`;
   }
   function cfgPriceDrawerHtml(r) {
     const canManage = cfgCommonLandDraftMutateAllowed(r), canApply = cfgCommonLandApplyAllowed(r), canLock = cfgCommonLandLockAllowed(r);
@@ -158,7 +151,7 @@
   A.ACT['cfg-price-new'] = () => {
     if (!cfgCommonLandAddAllowed()) return;
     ui.cfgForm = { cat: 'stallPrices', id: null, marketId: 'ALL', area: '', stallType: '', marketModel: 'FIXED_MONTHLY', collectionCycle: 'MONTH', amount: 0, unit: 'đ/m²/ngày', taxClass: 'TAXABLE_REVENUE', waiverTypeId: null, effectiveFrom: A.db.today, effectiveTo: null, status: 'draft', legalBasis: { docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: '', note: '' } };
-    renderCfgForm();
+    renderStallPriceForm();
   };
   A.ACT['cfg-price-edit'] = el => {
     U.toast('Không sửa trực tiếp phí đã tạo. Hãy thêm phí mới, khóa phí cũ rồi áp dụng phí mới.');
@@ -177,7 +170,7 @@
   // action:cau-hinh-gia.hinh-thuc-dien-nuoc (mặc định Quản trị hệ thống) được đổi; handler kiểm tra lại.
   const UTILITY_MODE_LABEL = {
     METER: ['Theo công tơ từng điểm kinh doanh', 'Nhân viên ghi chỉ số điện, nước hằng tháng; khoản phải thu tính theo chỉ số × đơn giá bên dưới.'],
-    SERVICE: ['Chia đều – thu như dịch vụ chợ', 'Không ghi chỉ số. Tiền điện, nước khai báo ở tab "Dịch vụ chợ" (số tiền cố định/tháng); tính/phát hành khoản thu không tạo dòng điện, nước theo công tơ.']
+    SERVICE: ['Theo công tơ từng điểm kinh doanh', 'Điện và nước được thu theo chỉ số công tơ tại từng điểm kinh doanh.']
   };
   const cfgCanUtilityMode = () => U.can('cau-hinh-gia') && A.canDo('cau-hinh-gia.hinh-thuc-dien-nuoc', ui.market);
   function utilityModeCardHtml() {
@@ -209,14 +202,14 @@
   function settingsDienNuocHtml() {
     const canNew = cfgFeeAddAllowed('utilities', null);
     const rows = A.SERVICE_CFG.list('utilities').filter(r => r.marketId === ui.market);
-    return utilityModeCardHtml() + `<div class="card"><div class="card-h"><h3>Điện & nước · ${U.esc(U.market(ui.market).name)}</h3>${canNew ? '<button class="btn sm primary" data-act="cfg-util-new">Thiết lập mức mới</button>' : ''}</div>
+    return `<div class="card"><div class="card-h"><h3>Điện & nước · ${U.esc(U.market(ui.market).name)}</h3>${canNew ? '<button class="btn sm primary" data-act="cfg-util-new">Thiết lập mức mới</button>' : ''}</div>
       <div class="card-b">${U.table([{ t: 'Chợ / mô hình' }, { t: 'Mức giá điện', num: true }, { t: 'Mức giá nước', num: true }, { t: 'Chu kỳ thu' }, { t: 'Phân loại thuế' }, { t: 'Hiệu lực / căn cứ' }, { t: 'Miễn giảm' }, { t: 'Trạng thái' }, { t: '' }],
         rows.map(r => { const canApply = cfgFeeApplyAllowed('utilities', r), canLock = cfgFeeLockAllowed('utilities', r); return `<tr>
           <td>${U.mShort(r.marketId)}<div class="small muted">${U.esc(CFG_MARKET_MODEL_LABELS[r.marketModel] || '—')}</div></td><td class="num">${r.elecPrice.toLocaleString('vi-VN')}<div class="small muted">${U.esc(r.elecUnit || 'đ/kWh')}</div></td><td class="num">${r.waterPrice.toLocaleString('vi-VN')}<div class="small muted">${U.esc(r.waterUnit || 'đ/m³')}</div></td>
           <td class="small">${U.esc(CFG_CYCLE_LABELS[r.collectionCycle] || '—')}</td><td class="small">${U.esc(CFG_TAX_LABELS[r.taxClass] || '—')}</td><td class="nowrap">${U.dmy(r.effectiveFrom)}${r.effectiveTo ? `<div class="small muted">đến ${U.dmy(r.effectiveTo)}</div>` : ''}<div class="small">${r.legalBasis && r.legalBasis.docNo ? U.esc(r.legalBasis.docNo) : '<span class="muted">—</span>'}</div></td><td class="small">${U.esc(cfgWaiverName(r.waiverTypeId))}</td>
           <td>${cfgStatusTag(r.status)}</td>
-          <td class="nowrap"><button class="btn sm" data-act="cfg-util-view" data-id="${r.id}">Xem</button>
-            ${cfgLifecycleButtons('utilities', r.id, r.status, canApply, canLock)}
+          <td class="nowrap"><button class="btn sm" data-act="cfg-util-view" data-id="${r.id}">Lịch sử</button>
+            ${canNew ? `<button class="btn sm primary" data-act="cfg-util-new">Thiết lập mức mới</button>` : ''}
           </td></tr>`; }), { empty: 'Chưa có cấu hình điện nước cho ' + U.market(ui.market).short })}</div></div>`;
   }
   function cfgUtilDrawerHtml(r) {
@@ -264,7 +257,7 @@
           <td class="num">${r.amount.toLocaleString('vi-VN')}</td><td class="small nowrap">${U.esc(r.unit)}<div class="muted">Chu kỳ: ${U.esc(CFG_CYCLE_LABELS[r.collectionCycle] || '—')}</div></td><td class="small">${U.esc(CFG_TAX_LABELS[r.taxClass] || '—')}</td><td class="nowrap">${U.dmy(r.effectiveFrom)}${r.effectiveTo ? `<div class="small muted">đến ${U.dmy(r.effectiveTo)}</div>` : ''}<div class="small">${r.legalBasis && r.legalBasis.docNo ? U.esc(r.legalBasis.docNo) : '<span class="muted">—</span>'}</div></td><td class="small">${U.esc(cfgWaiverName(r.waiverTypeId))}</td>
           <td>${cfgStatusTag(r.status)}</td>
           <td class="nowrap"><button class="btn sm" data-act="cfg-svc-view" data-id="${r.id}">Xem</button>
-            ${cfgLifecycleButtons('extraServices', r.id, r.status, canApply, canLock)}
+            ${canNew ? `<button class="btn sm primary" data-act="cfg-svc-new">Thiết lập mức mới</button>` : ''}
           </td></tr>`; }), { empty: 'Chưa có dịch vụ chợ nào cho ' + U.market(ui.market).short })}</div></div>`;
   }
   function settingsVehicleHtml() {
@@ -279,7 +272,7 @@
           <td>${U.esc(CFG_CYCLE_LABELS[r.collectionCycle] || r.collectionCycle || '—')}</td>
           <td class="nowrap">${U.dmy(r.effectiveFrom)}${r.effectiveTo ? `<div class="small muted">đến ${U.dmy(r.effectiveTo)}</div>` : ''}</td>
           <td class="small">${r.legalBasis && r.legalBasis.docNo ? U.esc(r.legalBasis.docNo) : '—'}</td><td>${cfgStatusTag(r.status)}</td>
-          <td class="nowrap"><button class="btn sm" data-act="cfg-svc-view" data-id="${r.id}">Xem</button>${cfgLifecycleButtons('extraServices', r.id, r.status, canApply, canLock)}</td>
+          <td class="nowrap"><button class="btn sm" data-act="cfg-svc-view" data-id="${r.id}">Lịch sử</button>${canNew ? `<button class="btn sm primary" data-act="cfg-svc-new">Thiết lập mức mới</button>` : ''}</td>
         </tr>`; }), { empty: 'Chưa có biểu phí phương tiện theo loại xe cho ' + U.market(ui.market).short })}
         ${legacyRows.length ? `<div class="note warn" style="margin-top:12px"><b>Dữ liệu legacy:</b> ${legacyRows.map(r => `${U.esc(r.name)} · ${r.amount.toLocaleString('vi-VN')} ${U.esc(r.unit || '')}`).join('; ')}. Bản ghi lượt gửi xe cũ không được dùng để xác định phí đăng ký phương tiện theo tháng và chỉ được giữ để tham chiếu.</div>` : ''}
       </div></div>`;
@@ -347,6 +340,28 @@
     if (cat === 'stallPrices') return 'mức giá sử dụng mặt bằng dùng chung';
     if (cat === 'utilities') return 'mức điện & nước mới';
     return ui.cfgForm && ui.cfgForm.vehiclePolicy ? 'biểu phí phương tiện' : 'dịch vụ chợ';
+  }
+  function renderStallPriceForm() {
+    const market = U.market(ui.market);
+    A.modal(A.mHead('Thêm phí mặt bằng') + `<div class="modal-b">
+      <div class="field"><label>Chợ áp dụng</label><input class="input" value="${U.esc(market ? market.name : ui.market)}" disabled></div>
+      <div class="divider"></div><h3 style="margin:0 0 10px">Căn cứ áp dụng</h3>
+      <div class="form-grid">
+        <div class="field"><label>Số/ký hiệu văn bản *</label><input class="input"></div>
+        <div class="field"><label>Cơ quan ban hành *</label><input class="input"></div>
+        <div class="field"><label>Ngày ban hành *</label><input class="input" type="date"></div>
+        <div class="field"><label>Ngày hiệu lực *</label><input class="input" type="date"></div>
+      </div>
+      <div class="field" style="margin-top:8px"><label>Trích yếu *</label><input class="input"></div>
+      <div class="field" style="margin-top:8px"><label>Link văn bản</label><input class="input" type="url"></div>
+      <div class="field" style="margin-top:8px"><label>Ghi chú</label><textarea class="input" rows="2"></textarea></div>
+      <div class="divider"></div><h3 style="margin:0 0 10px">Danh sách mức phí</h3>
+      <table class="table"><thead><tr><th>Loại điểm kinh doanh</th><th>Loại diện tích/vị trí áp dụng</th><th>Đơn giá (đồng)</th><th>Đơn vị</th><th>Thao tác</th></tr></thead>
+        <tbody><tr><td><input class="input" value="Điểm kinh doanh"></td><td><input class="input" value="Diện tích tiêu chuẩn"></td><td><input class="input" type="number" value="0"></td><td>đồng/m²/ngày</td><td><button class="btn" disabled>Xóa</button></td></tr></tbody>
+      </table>
+      <button class="btn" disabled>+ Thêm loại điểm kinh doanh</button>
+      <div class="small" style="margin-top:8px">Có thể bổ sung các mức phí khác theo loại điểm kinh doanh và vị trí áp dụng.</div>
+    </div><div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="close">Lưu và áp dụng</button></div>`);
   }
   function renderCfgForm() {
     const d = ui.cfgForm, isNew = !d.id, lb = d.legalBasis;
@@ -464,8 +479,16 @@
     }
     const actor = cfgActor();
     patch.__detail = detail;
-    A.SERVICE_CFG.add(d.cat, patch, actor);
-    U.toast('Đã thêm phí mới ở trạng thái Chưa áp dụng');
+    const active = d.cat === 'stallPrices' ? null : A.SERVICE_CFG.list(d.cat).find(r => r.status === 'active' && cfgSameFeeScope(d.cat, r, patch));
+    if (active) {
+      if (d.effectiveFrom <= (active.effectiveFrom || '')) return U.toast('Ngày bắt đầu mức mới phải sau mức đang áp dụng');
+      const next = A.SERVICE_CFG.createVersion(d.cat, active.id, patch, actor, detail);
+      if (!next) return U.toast('Không thể tạo phiên bản mới');
+      U.toast('Đã tạo phiên bản mới; mức cũ được giữ trong lịch sử');
+    } else {
+      A.SERVICE_CFG.add(d.cat, patch, actor);
+      U.toast('Đã thêm phí mới ở trạng thái Chưa áp dụng');
+    }
     ui.cfgForm = null;
     A.closeModal(); A.render();
   };
@@ -645,9 +668,9 @@
   const PRICE_TABS = [['dien-nuoc', 'Điện & nước'], ['dich-vu', 'Dịch vụ chợ'], ['phi-gui-xe', 'Phí gửi xe']];
   A.VIEWS['cau-hinh-gia'] = function () {
     const tab = PRICE_TABS.some(t => t[0] === ui.cfgTab) ? ui.cfgTab : 'dien-nuoc';
-    const common = `<section style="margin-bottom:18px"><div class="card-h" style="padding:0 0 8px"><div><h2 style="margin:0">CHÍNH SÁCH CHUNG</h2><div class="small muted">Biểu phí dùng chung do Quản trị hệ thống quản lý và áp dụng theo chính sách hiện hành.</div></div></div>${settingsGiaHtml()}</section>`;
+    const common = `<section style="margin-bottom:18px"><div class="card-h" style="padding:0 0 8px"><div><h2 style="margin:0">Chính sách thu & biểu phí</h2><div class="small muted">Quản lý căn cứ áp dụng và mức thu theo từng chợ.</div></div></div><div class="note info" style="margin-bottom:12px">Chợ đang xem: <b>${U.esc(U.market(ui.market).name)}</b>. Phạm vi chợ tuân theo tài khoản hiện tại.</div>${settingsGiaHtml()}</section>`;
     const bar = `<div class="seg" style="margin:12px 0 14px">${PRICE_TABS.map(t => `<button class="${tab === t[0] ? 'on' : ''}" data-act="cfg-tab" data-id="${t[0]}">${t[1]}</button>`).join('')}</div>`;
-    const local = `<section><div class="card-h" style="padding:0 0 8px"><div><h2 style="margin:0">CẤU HÌNH THU RIÊNG CỦA CHỢ</h2><div class="small muted"><b>${U.esc(U.market(ui.market).name)}</b> · Điện, nước, dịch vụ chợ và phí phương tiện được cấu hình riêng theo từng chợ.</div></div></div>${bar}${tab === 'dien-nuoc' ? settingsDienNuocHtml() : tab === 'dich-vu' ? settingsDichVuHtml() : settingsVehicleHtml()}</section>`;
+    const local = `<section><div class="card-h" style="padding:0 0 8px"><div><h3 style="margin:0">Các khoản thu vận hành</h3><div class="small muted">Cấu hình theo chợ, có lịch sử phiên bản; mức đã phát sinh không bị sửa đè.</div></div></div>${bar}${tab === 'dien-nuoc' ? settingsDienNuocHtml() : tab === 'dich-vu' ? settingsDichVuHtml() : settingsVehicleHtml()}</section>`;
     return common + local;
   };
   A.ACT['cfg-tab'] = el => { ui.cfgTab = el.dataset.id === 'gia' ? 'dien-nuoc' : el.dataset.id; A.render(); };
