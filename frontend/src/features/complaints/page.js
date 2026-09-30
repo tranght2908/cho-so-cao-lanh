@@ -532,6 +532,25 @@
       </tr>`;
     });
   }
+  function incResultRows(rows, options) {
+    const viewReadOnly = !!(options && options.viewReadOnly);
+    return rows.map(i => {
+      const st = A.idx.stall.get(i.stallId) || {}, a = incAsset(i), t = A.idx.trader.get(i.traderId);
+      const work = i.work || {}, acceptance = i.acceptance || {}, feedback = i.feedback || {};
+      const rating = i.rating
+        ? `<div class="small muted">Đánh giá: ${'★'.repeat(i.rating)}${'☆'.repeat(5 - i.rating)}${feedback.comment ? ' · ' + U.esc(feedback.comment) : ''}</div>`
+        : '<div class="small muted">Chưa có đánh giá</div>';
+      return `<tr>
+        <td><b>${U.esc(i.id)}</b><div class="small muted">${incFmt(i.created)}</div></td>
+        <td><b>${U.esc(i.title)}</b><div class="small muted">${U.esc(i.cat)} · ${U.esc(t ? t.name : (i.reporterName || '—'))}</div></td>
+        <td>${U.esc(U.mShort(i.market))} · ${U.esc(st.code || '—')}${a ? `<div class="small muted">${U.esc(a.code)} · ${U.esc(a.name)}</div>` : ''}</td>
+        <td><b>${U.esc(work.result || 'Chưa có kết quả chi tiết')}</b><div class="small muted">${work.completedAt ? 'Hoàn thành: ' + incFmt(work.completedAt) : 'Trạng thái: ' + stLabel(i.state)}</div></td>
+        <td><span class="tag info">${U.esc(stLabel(i.state))}</span>${acceptance.result === 'accepted' ? ' <span class="tag ok">Đã nghiệm thu</span>' : ''}${acceptance.result === 'rejected' ? ' <span class="tag danger">Không đạt</span>' : ''}${rating}</td>
+        <td>${U.esc(incStaff(i))}<div class="small muted">${work.completedBy ? 'Người hoàn thành: ' + U.esc(incActorLabel(work.completedBy)) : 'Hạn: ' + incFmt(i.deadline)}</div></td>
+        <td class="nowrap"><button class="btn sm" data-act="inc-open" data-id="${i.id}" data-readonly="${viewReadOnly ? '1' : '0'}">Xem kết quả</button></td>
+      </tr>`;
+    });
+  }
   function incTechPriorityTag(i) {
     if (late(i)) return '<span class="tag danger">Cao</span>';
     if (incUrgentCats.has(i.cat)) return '<span class="tag warn">Cao</span>';
@@ -774,7 +793,7 @@
       <div class="inc-board-search"><input class="input" data-in="inc-code-search" placeholder="Tìm mã hoặc nội dung..." value="${U.esc(ui.incCodeSearch || '')}"></div>
       <button class="btn sm ${filterCount ? 'primary' : ''}" data-act="inc-toggle-filters">+ Bộ lọc${filterCount ? ' (' + filterCount + ')' : ''}</button>
       <span class="spacer"></span>
-      <div class="seg inc-view-switch"><button class="${(ui.incViewMode || 'board') === 'board' ? 'on' : ''}" data-act="inc-view-mode" data-id="board">Bảng</button><button class="${ui.incViewMode === 'list' ? 'on' : ''}" data-act="inc-view-mode" data-id="list">Danh sách</button></div>
+      ${opts.listOnly ? '' : `<div class="seg inc-view-switch"><button class="${(ui.incViewMode || 'board') === 'board' ? 'on' : ''}" data-act="inc-view-mode" data-id="board">Bảng</button><button class="${ui.incViewMode === 'list' ? 'on' : ''}" data-act="inc-view-mode" data-id="list">Danh sách</button></div>`}
     </div>${ui.incFilterOpen ? `<div class="inc-filter-panel">
       <div class="inc-quick-filters">
         <button class="${quick('late')}" data-act="inc-quick-filter" data-id="late">Quá hạn</button>
@@ -847,6 +866,9 @@
   function incWorkflowBoardHtml(rows, options) {
     const opts = options || {}, readOnly = !!opts.readOnly;
     const filtered = incApplyBoardFilters(rows);
+    if (opts.resultList) {
+      return `${incBoardToolbarHtml(rows, Object.assign({}, opts, { listOnly: true }))}${U.table([{t:'Mã / thời gian'}, {t:'Nội dung'}, {t:'Vị trí / tài sản'}, {t:'Kết quả xử lý'}, {t:'Nghiệm thu / đánh giá'}, {t:'Người xử lý'}, {t:''}], incResultRows(filtered, { viewReadOnly: true }), { empty: 'Không có kết quả phản ánh phù hợp.' })}`;
+    }
     if (ui.incViewMode === 'list') {
       return `${incBoardToolbarHtml(rows, opts)}${U.table([{t:'Mã / thời gian'}, {t:'Nội dung'}, {t:'Vị trí / tài sản'}, {t:'Trạng thái'}, {t:'Người xử lý / hạn'}, {t:''}], incRows(filtered, { readOnly: true, viewReadOnly: true }), { empty: 'Không có phản ánh phù hợp.' })}`;
     }
@@ -952,7 +974,8 @@
     const createBtn = ctx === 'manager' && A.canDo('su-co.tao-phan-anh', ui.market) ? '<button class="btn primary" data-act="inc-new-v2">+ Tạo phản ánh</button>' : '';
     const head = `<div class="page-head inc-page-head"><div><h2>${incRoleTitle(ctx)}</h2>${incShortSummaryHtml(all)}<p class="muted">${incRoleDesc(ctx, marketName)}</p></div>${createBtn}</div>`;
     const readOnly = ctx === 'leader' || (!tech && !incCanManageComplaints());
-    const boardOptions = tech ? { readOnly, groups: incTechBoardGroups(tab), techFilters: true } : (ctx === 'leader' ? { readOnly, hideMineFilter: true } : { readOnly });
+    let boardOptions = tech ? { readOnly, groups: incTechBoardGroups(tab), techFilters: true } : (ctx === 'leader' ? { readOnly, hideMineFilter: true } : { readOnly });
+    if (tab && tab.id === 'results') boardOptions = Object.assign({}, boardOptions, { readOnly: true, resultList: true, listOnly: true });
     const boardTitle = tech ? 'Bảng công việc kỹ thuật' : (tab ? tab.label : 'Bảng xử lý phản ánh');
     return `${head}<div class="card inc-board-card"><div class="card-h"><h3>${boardTitle}</h3>${ctx === 'manager' || ctx === 'leader' ? incFunctionNav(tabs, tab && tab.id) : ''}</div><div class="card-b">${incWorkflowBoardHtml(rows, boardOptions)}</div></div>`;
   };
