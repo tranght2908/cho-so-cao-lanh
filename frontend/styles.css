@@ -281,9 +281,28 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 .tt-contract-row .tag { flex: none; }
 .workflow-new { display: inline-block; padding: 2px 6px; border: 1px solid #b9d5e9; border-radius: 4px; background: #f2f8fc; color: #315f7e; font-size: 11px; font-weight: 600; line-height: 1.35; }
 .workflow-grid-new { display: block; margin-top: 1px; font-size: 9px; font-weight: 700; line-height: 1; color: inherit; }
-.workflow-contract-form section { margin-top: 17px; }
-.workflow-contract-form section:first-child { margin-top: 0; }
-.workflow-contract-form h4 { margin: 0 0 8px; font-size: 15px; }
+/* Popup Tạo hợp đồng: một thang chữ thống nhất (section = md/700, nhãn = sm/600, nhập liệu/nội dung = base,
+ * mô tả = sm/muted/1.5) và khoảng cách đều giữa các mục A–E. */
+.workflow-contract-form { font-size: var(--font-size-base); }
+.workflow-contract-form section { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.workflow-contract-form section:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.workflow-contract-form h4 { margin: 0 0 12px; font-size: var(--font-size-md); font-weight: 700; line-height: 1.3; }
+.workflow-contract-form .field { margin-top: 12px; }
+.workflow-contract-form .form-grid .field, .workflow-contract-form h4 + .field, .workflow-contract-form h4 + .form-grid { margin-top: 0; }
+.workflow-contract-form .form-grid { gap: 12px 16px; }
+.workflow-contract-form .field > label { font-size: var(--font-size-sm); font-weight: 600; color: var(--ink-2); }
+.workflow-contract-form .input, .workflow-contract-form .btn, .workflow-contract-form .kv { font-size: var(--font-size-base); }
+.workflow-contract-form .kv { grid-template-columns: 170px 1fr; gap: 6px 12px; }
+.workflow-contract-form .wf-ct-help, .workflow-contract-form .note { font-size: var(--font-size-sm); line-height: 1.5; }
+.workflow-contract-form .wf-ct-help { margin: 8px 0 0; color: var(--muted); }
+.workflow-contract-form .note { margin-top: 10px; }
+.workflow-contract-form .wf-ct-full { grid-column: 1 / -1; }
+.workflow-contract-form .wf-ct-market { margin: 0 0 14px; color: var(--muted); }
+.wf-ct-phone-row { display: flex; gap: 8px; }.wf-ct-phone-row .input { flex: 1; min-width: 0; }
+.wf-ct-found { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+.wf-ct-found-title { margin-bottom: 6px; font-weight: 600; color: var(--ok, #20a04e); }
+.workflow-contract-form .field > label.wf-ct-check { display: inline-flex; align-items: center; gap: 6px; margin: 6px 18px 0 0; font-size: var(--font-size-base); font-weight: 400; color: inherit; }
+@media (max-width: 640px) { .workflow-contract-form .kv { grid-template-columns: 1fr; } }
 @media (max-width: 680px) { .workflow-task-row, .pending-summary, .pending-work-row { align-items: flex-start; flex-direction: column; }.workflow-task-row .btn, .pending-summary .btn, .pending-work-row .btn { width: 100%; } .pending-worklist { max-height: 68vh; } }
 .card, .card-b, .plan-section { min-width: 0; }
 .g-report { grid-template-columns: minmax(200px, 260px) minmax(0, 1fr); align-items: start; }
@@ -443,6 +462,9 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 .merchant-breadcrumb b { color: #0f274d; }
 .merchant-user { display: flex; align-items: center; gap: 10px; color: #0f274d; }
 .merchant-user small { display: block; color: #6b7b90; }
+/* Chợ đang xem (tài khoản Tiểu thương có hồ sơ ở nhiều chợ) — chỉ là ngữ cảnh, dữ liệu theo hồ sơ. */
+.merchant-market-switch { display: flex; align-items: center; gap: 8px; margin-right: 6px; color: #33475f; font-size: var(--font-size-sm); white-space: nowrap; }
+.merchant-market-switch .input { width: auto; min-width: 200px; font-size: var(--font-size-base); }
 .merchant-avatar { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: linear-gradient(135deg, #4ea1ff, #1066df); color: #fff; font-weight: 800; }
 .merchant-bell { position: relative; display: grid; place-items: center; width: 34px; height: 34px; }
 .merchant-bell i { position: absolute; right: 0; top: 1px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: #f04438; color: #fff; font-size: 10px; font-style: normal; line-height: 16px; text-align: center; }
@@ -524,7 +546,7 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 .portal-contract-layout { display: grid; grid-template-columns: minmax(260px, 320px) minmax(0, 1fr); gap: 16px; min-width: 0; max-width: 100%; align-items: start; box-sizing: border-box; }
 .portal-contract-list { display: grid; min-width: 0; max-width: 100%; gap: 10px; }
 .portal-contract-list-label { padding: 1px 2px 5px; color: #60728a; font-size: var(--font-size-xs); font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
-.portal-contract-choice { display: grid; gap: 8px; width: 100%; padding: 14px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; color: #172b4d; font: inherit; text-align: left; cursor: pointer; }
+.portal-contract-choice { display: grid; gap: 6px; width: 100%; padding: 12px 14px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; color: #172b4d; font: inherit; text-align: left; cursor: pointer; }
 .portal-contract-choice:hover { border-color: #9cc7ff; background: #f8fbff; }
 .portal-contract-choice.selected { border-color: #0d6efd; background: #eef6ff; box-shadow: inset 0 0 0 1px rgba(13,110,253,.07); }
 .portal-contract-choice > div { display: flex; align-items: start; justify-content: space-between; gap: 8px; }
@@ -539,34 +561,37 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 .portal-contract-status.terminated, .portal-point-usage.terminated { background: #fff0ef; color: #c2413a; }
 .portal-contract-detail { min-width: 0; max-width: 100%; overflow: hidden; padding: 0; box-sizing: border-box; }
 .portal-detail-head { display: flex; align-items: start; justify-content: space-between; gap: 14px; }
-.portal-contract-detail > .portal-detail-head { padding: 18px 20px; background: #fff; }
-.portal-detail-head h2 { margin: 0 0 4px; color: #0f274d; font-size: 19px; font-weight: 700; line-height: 1.3; }
+.portal-contract-detail > .portal-detail-head { padding: 16px 20px 14px; background: #fff; }
+.portal-detail-head h2 { margin: 0 0 2px; color: #0f274d; font-size: 20px; font-weight: 700; line-height: 1.3; }
 .portal-detail-head p { margin: 0; color: #60728a; font-size: var(--font-size-sm); }
-.portal-contract-section { min-width: 0; max-width: 100%; margin: 0 20px; padding: 18px 0; border-top: 1px solid #e2e8f0; box-sizing: border-box; }
+.portal-contract-section { min-width: 0; max-width: 100%; margin: 0 20px; padding: 16px 0 20px; border-top: 1px solid #e2e8f0; box-sizing: border-box; }
+.portal-contract-section:last-child { padding-bottom: 18px; }
 .portal-contract-overview { border-top: 1px solid #e2e8f0; }
 .portal-contract-section h3 { margin: 0 0 12px; color: #183153; font-size: 15px; font-weight: 700; line-height: 1.35; }
-.portal-contract-detail-list, .portal-point-detail-list { display: grid; gap: 16px; min-width: 0; max-width: 100%; }
-.portal-contract-detail-list > div, .portal-point-detail-list > div { display: grid; gap: 5px; min-width: 0; }
-.portal-contract-detail-list span, .portal-point-detail-list span, .portal-point-collector span { color: #475569; font-size: 13px; font-weight: 600; }
-.portal-contract-detail-list b, .portal-point-detail-list b, .portal-point-collector b { color: #1e293b; font-size: 14px; font-weight: 400; line-height: 1.45; overflow-wrap: anywhere; }
+/* Lưới thông tin gọn: 3 cột desktop → 2 cột (≤ 860px) → 1 cột (≤ 560px); không viền từng ô. */
+.portal-contract-detail-list, .portal-point-detail-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 28px; min-width: 0; max-width: 100%; }
+.portal-contract-detail-list > div, .portal-point-detail-list > div { display: grid; gap: 3px; align-content: start; min-width: 0; }
+.portal-contract-detail-list span, .portal-point-detail-list span { color: #64748b; font-size: 13px; font-weight: 400; }
+.portal-contract-detail-list b, .portal-point-detail-list b { color: #1e293b; font-size: 14px; font-weight: 500; line-height: 1.45; overflow-wrap: anywhere; }
 .portal-contract-point { min-width: 0; max-width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; overflow: hidden; box-sizing: border-box; }
 .portal-point-head { display: flex; align-items: center; gap: 10px; }
-.portal-contract-point .portal-point-head { padding: 14px 16px; }
+.portal-contract-point .portal-point-head { padding: 14px 16px 12px; }
 .portal-point-head > div:nth-child(2) { display: grid; gap: 2px; min-width: 0; }
 .portal-point-head b { color: #0f274d; font-size: var(--font-size-md); }
 .portal-point-head small { color: #60728a; font-size: var(--font-size-sm); }
 .portal-point-icon { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 9px; background: #eaf3ff; color: #0d6efd; flex: none; }
 .portal-point-icon .ui-icon { width: 20px; height: 20px; }
 .portal-point-usage { margin-left: auto; }
-.portal-point-detail-list { padding: 0 16px 16px; }
-.portal-point-collector { display: grid; gap: 5px; padding: 0 16px 16px; margin-top: 0; }
+.portal-point-detail-list { padding: 12px 16px 16px; border-top: 1px solid #eef2f6; }
 .portal-charge-table { max-width: 100%; overflow-x: auto; overflow-y: hidden; border: 1px solid #e2e8f0; border-radius: 6px; box-sizing: border-box; }
-.portal-charge-table > div { display: grid; grid-template-columns: 44px minmax(130px, 1.35fr) minmax(92px, .72fr) minmax(110px, .8fr) minmax(120px, 1fr); min-width: 568px; gap: 12px; padding: 10px 12px; color: #1e293b; font-size: 13px; font-weight: 400; box-sizing: border-box; }
+.portal-charge-table > div { display: grid; grid-template-columns: minmax(150px, 1.5fr) minmax(90px, .7fr) minmax(110px, .8fr) minmax(120px, 1fr); min-width: 500px; gap: 12px; padding: 10px 12px; color: #1e293b; font-size: 13px; font-weight: 400; box-sizing: border-box; }
 .portal-charge-table > div + div { border-top: 1px solid #e2e8f0; }
 .portal-charge-head { background: #f8fafc; color: #475569; font-weight: 600; }
+.portal-charge-head .num { text-align: right; }
 .portal-charge-table b { color: #1e293b; font-weight: 400; text-align: right; white-space: nowrap; }
-.portal-contract-section > .small { margin: 10px 0 0; }
-.portal-contract-other { grid-template-columns: minmax(0, 1fr); }
+.portal-contract-section > .small { margin: 8px 0 0; }
+@media (max-width: 860px) { .portal-contract-detail-list, .portal-point-detail-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .portal-contract-detail-list, .portal-point-detail-list { grid-template-columns: minmax(0, 1fr); } }
 .portal-contract-empty { display: grid; justify-items: center; gap: 8px; padding: 42px 22px; text-align: center; }
 .portal-contract-empty h2 { margin: 4px 0 0; color: #0f274d; font-size: var(--font-size-lg); }
 .portal-contract-empty p { max-width: 440px; margin: 0; color: #60728a; }
@@ -727,7 +752,7 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
   .portal-contract-list { grid-template-columns: minmax(0, 1fr); }
   .portal-contract-detail > .portal-detail-head { padding: 16px; }
   .portal-contract-section { margin: 0 16px; padding: 16px 0; }
-  .portal-contract-point .portal-point-head, .portal-point-detail-list, .portal-point-collector { padding-left: 14px; padding-right: 14px; }
+  .portal-contract-point .portal-point-head, .portal-point-detail-list { padding-left: 14px; padding-right: 14px; }
 }
 @media (max-width: 480px) {
   .kpis { grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -799,14 +824,43 @@ select.input { max-width: 100%; text-overflow: ellipsis; }
 .catalog-table-card .tbl-wrap, .trader-table-card .tbl-wrap, .contract-table-card .tbl-wrap { width: 100%; overflow-x: auto; }
 .catalog-table-card .tbl, .trader-table-card .tbl, .contract-table-card .tbl { width: 100%; min-width: 1040px; table-layout: fixed; border-collapse: collapse; }
 .catalog-table-card .tbl { min-width: 1240px; }
-.catalog-table-card .tbl th:nth-child(1), .catalog-table-card .tbl td:nth-child(1) { width: 50px; text-align: center; }
-.catalog-table-card .tbl th:nth-child(2), .catalog-table-card .tbl td:nth-child(2) { width: 180px; }
-.catalog-table-card .tbl th:nth-child(4), .catalog-table-card .tbl td:nth-child(4) { width: 90px; }
-.catalog-table-card .tbl th:nth-child(5), .catalog-table-card .tbl td:nth-child(5) { width: 140px; }
-.catalog-table-card .tbl th:nth-child(6), .catalog-table-card .tbl td:nth-child(6) { width: 145px; }
-.catalog-table-card .tbl th:nth-child(7), .catalog-table-card .tbl td:nth-child(7) { width: 110px; }
-.catalog-table-card .tbl th:nth-child(8), .catalog-table-card .tbl td:nth-child(8) { width: 150px; }
-.catalog-table-card .tbl th:nth-child(9), .catalog-table-card .tbl td:nth-child(9) { width: 205px; text-align: center; }
+/* Danh mục chợ: fixed columns keep header/body aligned and leave room for both actions. */
+.dmc-table-card .tbl { width: 100%; min-width: 1240px; table-layout: fixed; border-collapse: collapse; }
+.dmc-table-card .tbl th, .dmc-table-card .tbl td { padding: 12px 14px; vertical-align: middle; line-height: 1.38; overflow-wrap: anywhere; }
+.dmc-table-card .tbl th { background: #f8fafc; }
+.dmc-table-card .tbl th + th, .dmc-table-card .tbl td + td { border-left: 1px solid #f0f3f7; }
+.dmc-table-card .tbl th:nth-child(1), .dmc-table-card .tbl td:nth-child(1) { width: 4%; text-align: center; }
+.dmc-table-card .tbl th:nth-child(2), .dmc-table-card .tbl td:nth-child(2) { width: 18%; }
+.dmc-table-card .tbl th:nth-child(3), .dmc-table-card .tbl td:nth-child(3) { width: 27%; }
+.dmc-table-card .tbl th:nth-child(4), .dmc-table-card .tbl td:nth-child(4) { width: 7%; }
+.dmc-table-card .tbl th:nth-child(5), .dmc-table-card .tbl td:nth-child(5) { width: 12%; }
+.dmc-table-card .tbl th:nth-child(6), .dmc-table-card .tbl td:nth-child(6) { width: 10%; }
+.dmc-table-card .tbl th:nth-child(7), .dmc-table-card .tbl td:nth-child(7) { width: 8%; }
+.dmc-table-card .tbl th:nth-child(8), .dmc-table-card .tbl td:nth-child(8) { width: 14%; text-align: center; white-space: nowrap; }
+.dmc-market-name { display: grid; gap: 2px; max-width: 100%; }
+.dmc-market-name b { font-weight: 700; color: var(--ink-2); }
+.dmc-market-name span, .dmc-scale .small { color: var(--muted); font-size: var(--font-size-sm); }
+.dmc-address { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.4; }
+.dmc-scale { display: grid; gap: 2px; }
+.dmc-col-rank, .dmc-col-layout, .dmc-col-status { white-space: nowrap; }
+.dmc-col-actions .btn + .btn { margin-left: 4px; }
+.dmc-col-actions .btn { height: 30px; padding-right: 8px; padding-left: 8px; }
+.dmc-management-context { margin-bottom: 14px; padding: 0; overflow: hidden; }
+.dmc-management-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 16px 10px; }
+.dmc-management-head h3 { margin: 0; color: var(--ink-2); font-size: var(--font-size-md); font-weight: 700; }
+.dmc-management-body { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.dmc-management-item { display: grid; gap: 4px; padding: 10px 16px 14px; min-width: 0; }
+.dmc-management-item + .dmc-management-item { border-left: 1px solid var(--line); }
+.dmc-management-item span { color: var(--muted); font-size: var(--font-size-sm); }
+.dmc-management-item b { color: var(--ink-2); font-size: var(--font-size-base); overflow-wrap: anywhere; }
+.dmc-phone-value { display: inline-flex; align-items: center; gap: 5px; min-height: 20px; white-space: nowrap; }
+.dmc-phone-toggle { display: inline-grid; width: 24px; height: 24px; padding: 0; place-items: center; border: 0; border-radius: 5px; background: transparent; color: var(--muted); cursor: pointer; }.dmc-phone-toggle:hover, .dmc-phone-toggle:focus-visible { background: var(--surface-2); color: var(--brand); outline: none; }.dmc-phone-toggle .ui-icon { width: 15px; height: 15px; }
+.dmc-filters-card { margin-bottom: 14px; }
+.dmc-filters-card .card-b { padding-top: 12px; padding-bottom: 12px; }
+.dmc-filters .dmc-search { flex: 1 1 300px; min-width: 260px; }
+.dmc-filters select.input { flex: 0 1 190px; }
+.dmc-filters .btn { height: 36px; white-space: nowrap; }
+@media (max-width: 760px) { .dmc-management-head { align-items: flex-start; flex-direction: column; }.dmc-management-body { grid-template-columns: 1fr; } .dmc-management-item + .dmc-management-item { border-top: 1px solid var(--line); border-left: 0; } .dmc-filters .dmc-search { min-width: 100%; } }
 /* Danh mục chợ: KPI gọn, form/chi tiết quy mô & chỉ tiêu điểm kinh doanh. */
 .dmc-kpis { margin-bottom: 14px; }
 .dmc-kpis .kpi { padding: 12px 16px; }
@@ -1600,6 +1654,15 @@ button.mb-chip.on { outline: 2px solid currentColor; outline-offset: -2px; }
 .acc-table-card .tbl td { vertical-align: middle; }
 .acc-table-card .tbl th:nth-child(1), .acc-table-card .tbl td:nth-child(1) { width: 90px; }
 .acc-table-card .tbl th:nth-child(8), .acc-table-card .tbl td:nth-child(8) { width: 96px; }
+.acc-scope-trigger { display: inline-flex; align-items: center; max-width: 100%; gap: 6px; padding: 0; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-align: left; cursor: pointer; }
+.acc-scope-trigger:hover, .acc-scope-trigger:focus-visible { color: var(--brand); outline: none; }.acc-scope-trigger:focus-visible { border-radius: 4px; box-shadow: 0 0 0 2px rgba(31, 103, 196, .22); }
+.acc-scope-more { display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border: 1px solid #d9e2ec; border-radius: 99px; background: #f7f9fc; color: #536b85; font-size: var(--font-size-xs); font-weight: 700; line-height: 18px; white-space: nowrap; }
+.acc-scope-trigger:hover .acc-scope-more { border-color: #bcd1e7; background: #edf5fd; color: var(--brand); }.acc-scope-chevron { color: var(--muted); font-size: 12px; line-height: 1; }
+.acc-scope-popover-backdrop { position: fixed; inset: 0; z-index: 110; }
+.acc-scope-popover { position: fixed; z-index: 111; width: min(320px, calc(100vw - 16px)); padding: 14px 16px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; box-shadow: 0 12px 28px rgba(15, 30, 50, .16); }
+.acc-scope-popover h4 { margin: 0 0 10px; color: var(--ink-2); font-size: var(--font-size-base); }.acc-scope-popover-list { display: grid; gap: 7px; max-height: 220px; overflow: auto; padding-right: 2px; }
+.acc-scope-popover-list > div { display: flex; align-items: flex-start; gap: 8px; color: var(--ink-2); font-size: var(--font-size-sm); line-height: 1.4; }.acc-scope-popover-list span { color: var(--ok); font-weight: 700; }.acc-scope-popover-list b { font-weight: 500; }
+.acc-scope-popover footer { margin-top: 11px; padding-top: 9px; border-top: 1px solid #edf1f5; color: var(--muted); font-size: var(--font-size-sm); }
 .acc-actions .btn + .btn { margin-left: 4px; }.acc-more { min-width: 30px; justify-content: center; font-weight: 700; letter-spacing: 1px; }
 .acc-menu-wrap { position: fixed; inset: 0; z-index: 110; }
 .acc-menu { position: fixed; z-index: 111; width: 210px; padding: 6px; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 28px rgba(15, 30, 50, .16); }
@@ -1607,6 +1670,16 @@ button.mb-chip.on { outline: 2px solid currentColor; outline-offset: -2px; }
 .acc-menu-sep { height: 1px; margin: 4px 2px; background: var(--line); }
 .acc-menu-item.is-disabled { color: var(--muted); opacity: .6; cursor: not-allowed; }.acc-menu-hint { padding: 2px 10px 6px; font-size: var(--font-size-xs); color: var(--muted); }
 /* Popup "Tạm khóa tài khoản" — xác nhận có chủ đích bằng mã thao tác */
+/* Form Thêm/Sửa tài khoản nội bộ: phạm vi động theo vai trò (features/accounts/page.js). */
+.modal:has(.acc-form) { width: min(700px, 100%); }
+.acc-form .form-grid { gap: 12px 16px; }
+.acc-form .af-readonly { background: var(--surface-2); color: var(--muted); cursor: default; }
+.acc-form .af-readonly-text { padding: 7px 0 2px; font-weight: 600; color: var(--ink-2); }
+.af-scope { margin-top: 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+.af-scope-title { font-size: var(--font-size-sm); color: var(--muted); }
+.af-scope-value { margin-top: 2px; font-weight: 600; }
+.af-scope-help { margin: 4px 0 0; font-size: var(--font-size-sm); color: var(--muted); }
+.af-scope-empty { color: var(--muted); font-size: var(--font-size-sm); }
 .acc-lock { display: flex; flex-direction: column; gap: 12px; }
 .acc-lock-target { display: flex; align-items: flex-start; gap: 12px; }.acc-lock-who { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }.acc-lock-who span { font-size: var(--font-size-sm); color: var(--muted); }
 .acc-lock-req { color: var(--danger); }
@@ -1729,3 +1802,71 @@ button.mb-chip.on { outline: 2px solid currentColor; outline-offset: -2px; }
 .mb-setup-stepper .done{color:var(--primary,#2563eb)}
 .modal-sub{margin:-10px 0 8px;padding:0 20px;color:var(--muted,#64748b);font-size:13px}
 @media(max-width:720px){.mb-setup-stepper{gap:8px}.mb-setup-stepper span{font-size:12px}}
+/* Nhân sự & phân công (features/staff-assignment): dùng lại KPI/bộ lọc/bảng/popover của màn Tài khoản; chỉ bổ sung
+   dòng ngữ cảnh Tổ, tab chế độ xem và danh sách chợ trong popup phân công. */
+.sa-context { margin: -24px 0 0; color: var(--ink-2); font-size: var(--font-size-sm); } /* sát dòng mô tả (~8px), cách KPI theo gap chung */
+.sa-kpis { margin-bottom: -2px; } /* .content gap 18px → KPI↔bộ lọc 16px */
+.sa-conflict-text { color: var(--danger); font-weight: 600; }
+.sa-filters { margin-bottom: -4px; } /* bộ lọc↔bảng 14px */
+.sa-filters .sa-market-filter { min-width: 200px; max-width: 260px; }
+.sa-kpi-link { display: block; width: 100%; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.sa-kpi-link:hover, .sa-kpi-link:focus-visible { border-color: #bcd1e7; outline: none; box-shadow: 0 0 0 2px rgba(31, 103, 196, .15); }
+.sa-kpi-more { color: var(--brand); font-weight: 600; }
+.sa-pop-sub { margin: 12px 0 6px; padding-top: 10px; border-top: 1px solid #edf1f5; color: var(--danger); font-size: var(--font-size-sm); font-weight: 600; }
+.sa-pop-conflict { justify-content: space-between; align-items: center; }
+.sa-pop-conflict > span { display: grid; gap: 2px; }
+.sa-table-card .tbl th:nth-child(1), .sa-table-card .tbl td:nth-child(1) { width: 90px; }
+.sa-assign .kv { margin-bottom: 12px; }
+.sa-assign .note { margin-bottom: 12px; }
+.sa-market-search { width: 100%; margin-bottom: 8px; }
+.sa-market-list { display: grid; max-height: 340px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.sa-market-row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 2px 10px; padding: 9px 12px; border-top: 1px solid #edf1f5; cursor: pointer; }
+.sa-market-row:first-child { border-top: 0; }
+.sa-market-row:hover { background: var(--surface-2); }
+.sa-market-row input { margin-top: 3px; }
+.sa-market-row.is-disabled { cursor: default; opacity: .7; }
+.sa-market-name { color: var(--ink); font-weight: 500; }
+.sa-market-note { grid-column: 2; color: var(--muted); font-size: var(--font-size-sm); }
+.sa-market-note.is-held { color: var(--ok); }
+.sa-market-note.is-conflict { color: var(--danger); }
+.sa-selected-count { align-self: center; }
+.sa-confirm-block { margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.sa-confirm-block p { margin: 0 0 4px; }
+.sa-confirm-who { font-weight: 700; color: var(--ink); }
+@media (max-width: 720px) { .sa-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .sa-market-row { padding: 10px; } }
+/* Thông tin cá nhân của tiểu thương (accounts/profile.js, web Tiểu thương): tiêu đề trang + hồ sơ đính kèm. */
+/* Bố cục riêng của tiểu thương (breadcrumb do khung cổng vẽ; không có tiêu đề trang thứ hai):
+   thẻ tóm tắt → Thông tin cơ bản → Hồ sơ đính kèm, cách nhau 16px. "Information cluster": vùng hồ sơ tối đa
+   1160px (thẳng mép trái với breadcrumb), lưới trường 2 cột có độ rộng cố định — không kéo giãn theo viewport. */
+.profile-page-trader { gap: 16px; max-width: 1160px; margin: 4px 0 0; } /* .merchant-portal gap 12px + 4px = 16px dưới breadcrumb */
+.profile-page-trader .profile-summary { padding: 20px 24px; }
+.profile-page-trader .profile-summary-main { align-items: center; gap: 20px; }
+.profile-page-trader .profile-avatar { width: 68px; height: 68px; }
+.profile-page-trader .profile-name { margin: 0; font-size: 21px; line-height: 1.3; }
+.profile-page-trader .profile-role-status { margin-top: 4px; }
+.profile-page-trader .profile-contact-line { gap: 8px; margin-top: 8px; }
+.profile-page-trader .profile-contact-sep { margin: 0 4px; }
+.profile-page-trader .profile-summary-meta { margin-top: 6px; font-size: var(--font-size-sm); }
+.profile-summary-action { flex: none; align-self: center; }
+.profile-page-trader .profile-card { padding: 20px 24px; }
+.profile-page-trader .profile-card h3 { margin-bottom: 16px; font-size: var(--font-size-md); font-weight: 700; }
+.profile-info-grid { display: grid; grid-template-columns: repeat(2, minmax(220px, 360px)); gap: 20px 48px; max-width: 820px; }
+.profile-info-item { display: grid; gap: 4px; align-content: start; min-width: 0; }
+.profile-info-item.is-wide { grid-column: 1 / -1; }
+.profile-info-item > span { color: var(--muted); font-size: var(--font-size-sm); }
+.profile-info-item > b { color: var(--ink); font-size: var(--font-size-base); font-weight: 500; overflow-wrap: anywhere; }
+.profile-page-trader .profile-card-note { margin-top: 18px; padding-top: 12px; }
+.profile-page-trader .profile-docs-card { padding-top: 16px; padding-bottom: 16px; }
+.profile-page-trader .profile-docs-card h3 { margin-bottom: 8px; }
+.profile-empty-line { margin: 0; color: var(--muted); font-size: var(--font-size-sm); }
+.profile-doc-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+@media (max-width: 760px) {
+  .profile-page-trader .profile-summary, .profile-page-trader .profile-card { padding: 16px; }
+  .profile-page-trader .profile-summary-main { flex-wrap: wrap; }
+  .profile-summary-action { flex-basis: 100%; }
+  .profile-summary-action .btn { width: 100%; justify-content: center; }
+}
+@media (max-width: 560px) { .profile-info-grid { grid-template-columns: minmax(0, 1fr); } }
+.profile-doc-name { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.profile-doc-name small { color: var(--muted); overflow-wrap: anywhere; }
+.profile-doc-preview { display: block; max-width: 100%; max-height: 70vh; margin: 0 auto; border-radius: 8px; }

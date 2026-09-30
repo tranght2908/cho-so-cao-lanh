@@ -31,20 +31,21 @@ ok('canonical leader, central accountant, and ward leader are all-market account
   ['AC-NV01', 'AC-KTTT01', 'AC-LD01'].forEach(id => assert.deepStrictEqual(Array.from(A.ACCOUNTS.get(id).marketScopes), ['ALL'], id));
   ['AC-NV01', 'AC-KTTT01', 'AC-LD01'].forEach(id => assert.deepStrictEqual(Array.from(A.allowedMarkets(A.ACCOUNTS.get(id))), Array.from(allIds()), id));
 });
-ok('collector cannot save an empty scope', () => {
+// Quyết định 30/09/2026: tạo tài khoản không phân công Chợ — NV thu phí mới hợp lệ với marketScopes [] (Tổ trưởng phân công sau).
+ok('new collector account is saved unassigned (empty scope)', () => {
   login('AC-QT01'); h.go('tai-khoan'); h.act('acc-new');
-  Object.assign(A.ui.accForm, { code: 'SCOPE-EMPTY', fullName: 'Scope Empty', roleIds: ['collector'], marketScopes: [] });
+  Object.assign(A.ui.accForm, { fullName: 'Scope Empty', phone: '0987000001', roleIds: ['collector'], marketScopes: [] });
   const count = A.ACCOUNTS.list().length;
   h.act('acc-form-save');
-  assert.strictEqual(A.ACCOUNTS.list().length, count);
-  assert(/ít nhất một chợ/.test(h.trace.toasts.at(-1)));
+  assert.strictEqual(A.ACCOUNTS.list().length, count + 1);
+  assert.deepStrictEqual(Array.from(A.ACCOUNTS.byPhone('0987000001').marketScopes), []);
   A.closeModal();
 });
 ok('account form stores ALL for fixed all-market roles', () => {
   h.act('acc-new');
-  Object.assign(A.ui.accForm, { code: 'SCOPE-CENTRAL', fullName: 'Central Scope', roleIds: ['central_accountant'], marketScopes: ['HA'], status: 'ACTIVE' });
+  Object.assign(A.ui.accForm, { code: 'SCOPE-CENTRAL', fullName: 'Central Scope', phone: '0987000002', roleIds: ['central_accountant'], marketScopes: ['HA'], status: 'ACTIVE' });
   h.act('acc-form-save');
-  assert.deepStrictEqual(Array.from(A.ACCOUNTS.get('AC-SCOPE-CENTRAL').marketScopes), ['ALL']);
+  assert.deepStrictEqual(Array.from(A.ACCOUNTS.byPhone('0987000002').marketScopes), ['ALL']);
 });
 ok('account edit preserves role, status, and phone while changing a collector scope', () => {
   const before = Object.assign({}, A.ACCOUNTS.get('AC-SCOPE-MULTI'));

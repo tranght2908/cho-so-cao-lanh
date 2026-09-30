@@ -42,7 +42,7 @@ function createApp(root, opts) {
     addEventListener: (ev, fn) => { (listeners[ev] = listeners[ev] || []).push(fn); }
   };
   const store = (m => ({ getItem: k => m.has(k) ? m.get(k) : null, setItem: (k, v) => m.set(k, String(v)), removeItem: k => m.delete(k), _m: m }));
-  const localStorage = store(new Map()), sessionStorage = store(new Map());
+  const localStorage = opts.localStorage || store(new Map()), sessionStorage = store(new Map());
   const winListeners = {};
   const location = { _hash: '', get hash() { return this._hash; }, set hash(v) { this._hash = v.startsWith('#') ? v : '#' + v; (winListeners.hashchange || []).forEach(fn => fn()); } };
   const FIXED = new Date('2026-05-15T09:30:00Z').getTime();
@@ -67,6 +67,7 @@ function createApp(root, opts) {
   ctx.addEventListener = (ev, fn) => { (winListeners[ev] = winListeners[ev] || []).push(fn); };
   vm.createContext(ctx);
   if (opts.storage) Object.keys(opts.storage).forEach(k => localStorage.setItem(k, opts.storage[k]));
+  if (opts.sessionStorage) Object.keys(opts.sessionStorage).forEach(k => sessionStorage.setItem(k, opts.sessionStorage[k]));
   const scripts = indexScripts(root);
   scripts.forEach(src => vm.runInContext(fs.readFileSync(path.join(root, src), 'utf8'), ctx, { filename: src }));
   const A = ctx.APP;

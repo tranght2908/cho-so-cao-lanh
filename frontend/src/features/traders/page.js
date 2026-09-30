@@ -36,12 +36,8 @@
   // B của drawer chi tiết — không tạo danh mục giấy tờ song song. Key cũ 'cccd' (gộp) của dữ liệu cũ
   // (nếu có trong docFiles đã lưu) không còn được đọc — chỉ là mock metadata rỗng mặc định nên không
   // có dữ liệu thật nào bị mất.
-  const TT_DOCS = [
-    { key: 'cccdFront', label: 'CCCD - Mặt trước' },
-    { key: 'cccdBack', label: 'CCCD - Mặt sau' },
-    { key: 'dkkd', label: 'Giấy chứng nhận đăng ký kinh doanh' },
-    { key: 'avatar', label: 'Ảnh chân dung' }
-  ];
+  // Danh mục nằm ở traders/service.js (DOC_DEFS) để web Tiểu thương (không nạp file này) dùng CHUNG 1 nguồn.
+  const TT_DOCS = A.features.traders.service.DOC_DEFS;
   // Expose cho js/mini.js (đăng ký/bổ sung hồ sơ Mini App dùng ĐÚNG danh mục này — mục 32 yêu cầu
   // "không duplicate trader data"). v-tieuthuong.js load TRƯỚC mini.js (xem index.html) nên luôn có
   // giá trị khi mini.js thực thi.
@@ -420,7 +416,7 @@
         <div class="tt-detail-card-h"><span>${U.icon('file')}</span><div><b>Lịch sử hợp đồng</b><div class="small muted">Truy vết từ quan hệ Contract, không sao chép vào hồ sơ tiểu thương</div></div></div>
         ${(()=>{const cs=CS.listByTrader(t.id).sort((a,b)=>b.start.localeCompare(a.start));return cs.length?U.table([{t:'Mã HĐ'},{t:'Điểm KD'},{t:'Thời hạn'},{t:'Trạng thái'},{t:''}],cs.map(c=>`<tr><td>${c.id}</td><td>${A.idx.stall.get(c.stallId)?A.idx.stall.get(c.stallId).code:'—'}</td><td>${U.dmy(c.start)} – ${U.dmy(c.end)}</td><td>${c.status==='hieuluc'?'<span class="tag ok">Hiệu lực</span>':'<span class="tag">'+(c.status==='chamdut'?'Đã chấm dứt':'Đã kết thúc')+'</span>'}</td><td><button class="btn sm" data-act="ct-view" data-id="${c.id}">Xem</button></td></tr>`)): '<div class="empty small">Chưa có hợp đồng.</div>';})()}
         </section>
-        ${A.VEHICLES ? A.VEHICLES.traderSection(t) : ''}<section class="tt-detail-card">
+        <section class="tt-detail-card">
         <div class="tt-detail-card-h"><span>${U.icon('money')}</span><div><b>E. Tình trạng công nợ</b><div class="small muted">Tóm tắt các khoản cần theo dõi</div></div></div>
         <dl class="kv">
           <dt>Công nợ hiện tại</dt><dd>${debt ? `<b style="color:#df2225">${U.money(debt)}</b>` : '<span class="tag ok">Không nợ</span>'}</dd>
@@ -471,7 +467,7 @@
     const footer = editing
       ? `<button class="btn" data-act="tt-edit-cancel" data-id="${t.id}">Hủy</button><button class="btn primary" data-act="tt-edit-save" data-id="${t.id}">Lưu thay đổi</button>`
       : `${canEdit ? `<button class="btn primary" data-act="tt-edit-open" data-id="${t.id}">${U.icon('edit')}Chỉnh sửa thông tin</button>` : ''}${canCreateContract ? `<button class="btn" data-act="wf-contract-open" data-id="${t.id}">${U.icon('file')}Tạo hợp đồng</button>` : ''}<button class="btn" data-act="close">Đóng</button>`;
-    return `<div class="drawer-h tt-dossier-head"><div class="row" style="gap:8px"><h3>${U.icon('users')}Hồ sơ tiểu thương ${t.id}</h3>${ttProfileStatusTag(t)}</div><button class="x" data-act="close" aria-label="Đóng">×</button></div><div class="drawer-b contract-detail-body"><div class="contract-detail-grid">${info}${docs}${points}${A.VEHICLES ? A.VEHICLES.traderSection(t) : ''}${debtBlock}</div></div><div class="drawer-f contract-detail-footer">${footer}</div>`;
+    return `<div class="drawer-h tt-dossier-head"><div class="row" style="gap:8px"><h3>${U.icon('users')}Hồ sơ tiểu thương ${t.id}</h3>${ttProfileStatusTag(t)}</div><button class="x" data-act="close" aria-label="Đóng">×</button></div><div class="drawer-b contract-detail-body"><div class="contract-detail-grid">${info}${docs}${points}${debtBlock}</div></div><div class="drawer-f contract-detail-footer">${footer}</div>`;
   }
   A.ACT['tt-placement-view'] = el => {
     const st = A.idx.stall.get(el.dataset.point);
@@ -592,7 +588,7 @@
   // Tìm-hoặc-tạo account Mini App cho ĐÚNG 1 trader — an toàn gọi lại nhiều lần (không tạo trùng nếu
   // trader đã có account, xem mục 15 yêu cầu correction "Account uniqueness").
   function ttCreateLinkedAccount(trader, phone) {
-    if (A.ACCOUNTS.byTraderId(trader.id)) return A.ACCOUNTS.byTraderId(trader.id);
+    if (A.ACCOUNTS.isTraderLinked(trader.id)) return A.ACCOUNTS.byTraderId(trader.id);
     const id = ttNextAccountId();
     const acc = { id, code: id.replace('AC-', ''), fullName: trader.name, phone: phone || trader.phone, accountType: 'Tiểu thương', title: 'Tiểu thương', roleIds: ['trader'], organization: U.mShort(trader.market), marketScopes: [trader.market], status: 'active', traderId: trader.id };
     A.ACCOUNTS.add(acc);
@@ -628,8 +624,10 @@
     if (!t || !A.canDo('tieu-thuong.them-moi', t.market)) return;
     const name = A.$('#tte-name').value.trim(), idNo = A.$('#tte-idno').value.trim(), phone = A.$('#tte-phone').value.trim();
     if (!name || !idNo || !phone) { U.toast('Vui lòng nhập đủ họ tên, số CCCD và điện thoại'); return; }
-    if (TS.idNoTaken(idNo, t.id)) { U.toast('Số CCCD đã tồn tại trong hệ thống'); return; }
-    TS.updateProfile(t.id, { name, idNo, phone, idType: A.$('#tte-idtype').value });
+    // Duy nhất theo CHỢ của chính hồ sơ (khác chợ được trùng: cùng người, nhiều hồ sơ).
+    const dup = TS.validateProfileUnique({ market: t.market, phone, idNo }, t.id);
+    if (dup) { U.toast(dup.message); return; }
+    if (!TS.updateProfile(t.id, { name, idNo, phone, idType: A.$('#tte-idtype').value })) { U.toast('Không thể cập nhật hồ sơ: trùng số điện thoại hoặc CCCD trong chợ này.'); return; }
     // Hồ sơ số hóa: CHỈ ghi đè đúng giấy tờ có file thay thế đang chờ (mục 10 yêu cầu) — giấy tờ
     // không bấm "Thay thế" giữ nguyên tham chiếu cũ, không bắt upload lại toàn bộ khi chỉ sửa field
     // thông tin khác.

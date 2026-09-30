@@ -9,6 +9,52 @@
   const KEY = 'choso-caolanh-state';
   const BACKUP_KEY = 'choso-caolanh-state-backup';
   const data = A.data || (A.data = {});
+  // Last persisted snapshot seen by this tab. It protects unrelated changes
+  // made in a second web app from a stale whole-A.db save.
+  let baselineDb = null;
+  const clone = value => JSON.parse(JSON.stringify(value));
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const captureBaseline = db => { baselineDb = clone(db); };
+  const hasIdObjects = list => Array.isArray(list) && list.every(x => x && typeof x === 'object' && !Array.isArray(x) && x.id != null);
+
+  // Three-way merge: unchanged local fields retain the newest persisted value;
+  // local edits apply on top. Arrays of business records merge by stable id.
+  function mergeChanged(base, local, remote) {
+    if (same(local, base)) return clone(remote);
+    if (same(remote, base)) return clone(local);
+    if (Array.isArray(base) && Array.isArray(local) && Array.isArray(remote) && hasIdObjects(base) && hasIdObjects(local) && hasIdObjects(remote)) {
+      const baseById = new Map(base.map(x => [x.id, x]));
+      const localById = new Map(local.map(x => [x.id, x]));
+      const remoteById = new Map(remote.map(x => [x.id, x]));
+      const ids = remote.map(x => x.id).concat(local.map(x => x.id).filter(id => !remoteById.has(id)));
+      return ids.reduce((out, id) => {
+        const b = baseById.get(id), l = localById.get(id), r = remoteById.get(id);
+        if (!b) { out.push(clone(l || r)); return out; }
+        if (!l) { if (!r || same(r, b)) return out; out.push(clone(r)); return out; }
+        if (!r) { if (!same(l, b)) out.push(clone(l)); return out; }
+        out.push(mergeChanged(b, l, r)); return out;
+      }, []);
+    }
+    if (base && local && remote && typeof base === 'object' && typeof local === 'object' && typeof remote === 'object' && !Array.isArray(base) && !Array.isArray(local) && !Array.isArray(remote)) {
+      const out = {};
+      new Set(Object.keys(base).concat(Object.keys(local), Object.keys(remote))).forEach(key => {
+        const inBase = Object.prototype.hasOwnProperty.call(base, key), inLocal = Object.prototype.hasOwnProperty.call(local, key), inRemote = Object.prototype.hasOwnProperty.call(remote, key);
+        if (!inLocal) { if (inRemote && (!inBase || !same(remote[key], base[key]))) out[key] = clone(remote[key]); return; }
+        if (!inRemote) { if (!inBase || !same(local[key], base[key])) out[key] = clone(local[key]); return; }
+        out[key] = inBase ? mergeChanged(base[key], local[key], remote[key]) : clone(local[key]);
+      });
+      return out;
+    }
+    return clone(local);
+  }
+  function readSharedState() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (!raw) return { db: null };
+      const db = JSON.parse(raw);
+      return db && db.version === D.VERSION ? { db } : { db: null, incompatible: true };
+    } catch (e) { return { db: null, invalid: true }; }
+  }
   // ---------- dữ liệu ----------
   A.reindex = function () {
     const db = A.db;
@@ -24,11 +70,21 @@
     };
   };
 
-  A.save = function () { try { localStorage.setItem(KEY, JSON.stringify(A.db)); } catch (e) { /* bỏ qua */ } };
+  A.save = function () {
+    try {
+      const latest = readSharedState();
+      if (latest.incompatible || latest.invalid) { console.warn('[choso] Shared state khong tuong thich; bo qua ghi de.'); return false; }
+      if (latest.db && baselineDb && !same(latest.db, baselineDb)) { A.db = mergeChanged(baselineDb, A.db, latest.db); A.reindex(); }
+      localStorage.setItem(KEY, JSON.stringify(A.db));
+      captureBaseline(A.db);
+      return true;
+    } catch (e) { return false; }
+  };
 
   A.fresh = function () {
     A.db = D.build();
     A.reindex();
+    captureBaseline(A.db);
   };
   // Trước khi bỏ state của version cũ (reseed có chủ đích, vd. 15 → 16), sao lưu MỘT lần nguyên văn vào
   // 'choso-caolanh-state-backup' ({version, savedAt, state}) — không ghi đè backup đã có; hết dung lượng
@@ -44,7 +100,7 @@
       const s = localStorage.getItem(KEY);
       if (s) {
         const x = JSON.parse(s);
-        if (x && x.version === D.VERSION) A.db = x;
+        if (x && x.version === D.VERSION) { A.db = x; captureBaseline(x); }
         else if (x && x.version) backupOutdated(s, x.version);
       }
     } catch (e) { A.db = null; }
@@ -75,6 +131,19 @@
     });
     A.db.actorMetadata = actorMetadata;
     if (migratedActorMetadata) A.save();
+  };
+  // External-tab refresh: never seed, clear, or write localStorage. UI callers
+  // decide separately whether it is safe to render (for example, no open form).
+  data.reloadSharedState = function () {
+    const latest = readSharedState();
+    if (!latest.db) return { changed: false, reason: latest.incompatible ? 'INCOMPATIBLE' : (latest.invalid ? 'INVALID' : 'EMPTY') };
+    if (baselineDb && same(latest.db, baselineDb)) return { changed: false };
+    A.db = latest.db;
+    captureBaseline(latest.db);
+    A.reindex();
+    if (A.syncDebts) A.syncDebts({ save: false });
+    if (!Array.isArray(A.db.phoneChangeRequests)) A.db.phoneChangeRequests = [];
+    return { changed: true };
   };
   data.clearPersisted = function () {
     try { localStorage.removeItem(KEY); } catch (e) { /* bỏ qua */ }

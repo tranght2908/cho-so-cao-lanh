@@ -40,6 +40,10 @@
   'use strict';
   const PKEY = 'choso-caolanh-permissions';
   const RETIRED_ROLE_IDS = ['session_market_operator_demo', 'market_staff', 'accountant'];
+  // Role kế toán cũ (A06 Kế toán phường, Kế toán Ban Quản lý chợ) không còn trong mô hình actor hiện hành:
+  // A05 central_accountant là role kế toán duy nhất. KHÁC RETIRED_ROLE_IDS — không xoá khỏi state đã lưu
+  // (account/rolePerms cũ vẫn đọc được), chỉ loại khỏi UI hiện hành qua PERM.currentRoles().
+  const LEGACY_COMPAT_ROLE_IDS = ['market_accountant', 'ward_accountant'];
 
   // ============================================================
   // 1) PERMISSION — danh mục quyền (catalog). Tương đối tĩnh: chỉ
@@ -52,6 +56,9 @@
     // Danh mục chợ = quản lý thông tin CẤP CHỢ (tên, mã, địa điểm, hạng, BQL, bảng giá, trạng thái)
     // — KHÁC screen:mat-bang (cấu trúc BÊN TRONG 1 chợ, không đổi gì ở đó). Xem js/v-danhmuccho.js.
     { key: 'screen:danh-muc-cho', kind: 'screen', group: 'Điều hành', label: 'Danh mục chợ' },
+    // Nhân sự & phân công = nghiệp vụ của Tổ trưởng (A02): xem nhân sự Tổ Quản lý chợ (derive từ Account) và
+    // phân công/điều chuyển Chợ cho NV thu phí (Account.marketScopes). KHÔNG phải quản trị tài khoản (tai-khoan.*).
+    { key: 'screen:nhan-su-phan-cong', kind: 'screen', group: 'Điều hành', label: 'Nhân sự & phân công' },
     // Phase 7 — chuẩn hóa RBAC theo UI đã gộp "Thiết lập mặt bằng chợ" + "Sơ đồ mặt bằng" thành 1
     // workspace (MARKET_LAYOUT_UX_HOTFIX_REPORT.md): 2 screen permission cũ 'cau-truc'/'so-do' gộp
     // thành DUY NHẤT 'mat-bang'. Xem MARKET_LAYOUT_SCREEN_PERMISSION_AUDIT.md +
@@ -84,6 +91,9 @@
     { key: 'action:danh-muc-cho.tao', kind: 'action', group: 'Điều hành', screenId: 'danh-muc-cho', label: 'Tạo chợ mới trong danh mục' },
     { key: 'action:danh-muc-cho.sua', kind: 'action', group: 'Điều hành', screenId: 'danh-muc-cho', label: 'Cập nhật thông tin chợ trong danh mục' },
     { key: 'action:danh-muc-cho.xuat-excel', kind: 'action', group: 'Điều hành', screenId: 'danh-muc-cho', label: 'Xuất Excel danh mục chợ' },
+    { key: 'action:nhan-su-phan-cong.xem-phan-cong', kind: 'action', group: 'Điều hành', screenId: 'nhan-su-phan-cong', label: 'Xem phân công hiện tại (theo nhân viên / theo chợ)' },
+    { key: 'action:nhan-su-phan-cong.phan-cong', kind: 'action', group: 'Điều hành', screenId: 'nhan-su-phan-cong', label: 'Phân công chợ chưa có người phụ trách / gỡ phân công cho NV thu phí' },
+    { key: 'action:nhan-su-phan-cong.dieu-chuyen', kind: 'action', group: 'Điều hành', screenId: 'nhan-su-phan-cong', label: 'Điều chuyển chợ giữa các NV thu phí / xử lý xung đột phân công' },
     { key: 'action:cau-truc.edit', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Thêm/sửa khối, tầng, khu, loại điểm; lưu nháp/chính thức' },
     { key: 'action:cau-truc.delete', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Xoá khối, tầng, khu, loại điểm' },
     { key: 'action:cau-truc.reset', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Khôi phục cấu trúc mặc định' },
@@ -228,6 +238,12 @@
     ,{ key: 'action:diem-kd.chuyen-doi.thuc-hien', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'diem-kd', label: 'Thực hiện chuyển đổi vị trí sau khi được phê duyệt' }
     ,{ key: 'action:diem-kd.chuyen-doi.assign', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'diem-kd', label: 'Đề xuất chuyển đổi vị trí và giao nhân viên xử lý' }
   ];
+  // PHIEN_CHO_QUE_RETIRED (quyết định 30/09/2026): module "Phiên chợ quê" đã bỏ khỏi sản phẩm. Các key vẫn nằm
+  // trong CATALOG (nội bộ) chỉ để rolePerms đã lưu KHÔNG bị bộ lọc validKeys xoá (không reset/không ghi đè RBAC) —
+  // nhưng bị loại khỏi catalog HIỆN HÀNH (PERM.catalog(): màn Phân quyền, Thông tin cá nhân) và khỏi seed mặc định.
+  // Không có menu/route nên screen:phien-cho không còn mở được màn nào (U.can cần A.menuItem).
+  const RETIRED_PERMISSION_KEYS = new Set(CATALOG.filter(p => p.key === 'screen:phien-cho' || p.screenId === 'phien-cho').map(p => p.key));
+  const CURRENT_CATALOG = CATALOG.filter(p => !RETIRED_PERMISSION_KEYS.has(p.key));
 
   // ============================================================
   // 2) ROLE — vai trò, ĐỘNG: thêm/sửa/vô hiệu hoá được (không xoá
@@ -251,12 +267,14 @@
       { id: 'ward_leader', name: 'Lãnh đạo UBND phường', desc: 'Xem Tổng quan liên chợ, dữ liệu tổng hợp 12 chợ, báo cáo, giám sát phản ánh quá hạn — phạm vi TOÀN HỆ THỐNG (GLOBAL), không mặc định có quyền chỉnh sửa nghiệp vụ', scope: 'all', market: null, selfService: false, builtin: true, active: true },
       { id: 'market_manager', name: 'Tổ trưởng Tổ Quản lý chợ', desc: 'Quản lý mặt bằng, điểm kinh doanh, hợp đồng, mở/chốt kỳ thu, duyệt nghiệp vụ, xác nhận tiền nhân viên thu phí nộp về, tiếp nhận/phân công phản ánh — trong (các) chợ được giao qua account.marketScopes', scope: 'all', market: null, selfService: false, builtin: true, active: true },
       { id: 'collector', name: 'Nhân viên thu phí', desc: 'Cập nhật hồ sơ tiểu thương, lập/cập nhật hợp đồng theo permission, ghi nhận thu, nộp tiền về Ban Quản lý, nhắc nợ — trong (các) chợ được giao qua account.marketScopes', scope: 'all', market: null, selfService: false, builtin: true, active: true },
-      // DOI_SOAT_CUOI_NGAY (P chốt 29/09/2026): role thứ 7 — lệch thuyết minh (06 vai trò), P sẽ báo lại. Id mới
+      // LEGACY_COMPAT: 'market_accountant' giữ lại chỉ để đọc account/rolePerms cũ; nghiệp vụ đối soát phiếu
+      // nộp đã chuyển sang central_accountant (A05). Không seed account mới, không hiện trong UI hiện hành.
+      // Lịch sử: DOI_SOAT_CUOI_NGAY (P chốt 29/09/2026) thêm role thứ 7 — lệch thuyết minh (06 vai trò). Id mới
       // 'market_accountant' (KHÔNG dùng lại 'accountant' đã nghỉ hưu). Phạm vi chợ qua account.marketScopes.
       { id: 'market_accountant', name: 'Kế toán Ban Quản lý chợ', desc: 'Nhận tiền mặt NV thu phí nộp cuối buổi, đối soát từng phiếu nộp tiền với biên lai tiền mặt, ghi chênh lệch — trong (các) chợ được giao qua account.marketScopes', scope: 'all', market: null, selfService: false, builtin: true, active: true },
-      { id: 'technician', name: 'Nhân viên kỹ thuật', desc: 'Nhận, cập nhật tiến độ và kết quả xử lý phản ánh/sự cố được giao — trong (các) chợ được giao qua account.marketScopes', scope: 'all', market: null, selfService: false, builtin: true, active: true },
-      // Hai role kế toán chỉ là container RBAC để quản trị viên tự cấu hình. Cố ý không có
-      // dòng nào trong defaultRolePermissions(), nên không được cấp quyền nghiệp vụ mặc định.
+      { id: 'technician', name: 'Nhân viên kỹ thuật', desc: 'Nhận, cập nhật tiến độ và kết quả xử lý phản ánh/sự cố được giao — phân công theo từng sự cố (Incident.assignee), không sở hữu chợ/khu/dãy', scope: 'all', market: null, selfService: false, builtin: true, active: true },
+      // A05 — role kế toán DUY NHẤT hiện hành, phạm vi toàn bộ chợ (Account.marketScopes = ['ALL']):
+      // xác nhận phiếu nộp tiền mặt, đối soát số thu kỳ tháng với chứng từ (xem defaultRolePermissions()).
       { id: 'central_accountant', name: 'Kế toán Trung tâm', desc: 'Tổ Văn phòng – Trung tâm Cung ứng dịch vụ công', scope: 'all', market: null, selfService: false, builtin: true, active: true },
       { id: 'trader', name: 'Tiểu thương', desc: 'Tự phục vụ qua mini app: xem hồ sơ/điểm kinh doanh/hợp đồng của chính mình, thanh toán, gửi phản ánh — chỉ dữ liệu thuộc merchantId/traderId của chính tài khoản (ownership)', scope: 'self', market: null, selfService: true, builtin: true, active: true }
     ];
@@ -276,46 +294,56 @@
   //    không applicable: 'phien-cho' chỉ applicable TTD; 'tai-san' chỉ applicable CL; 'danh-muc-cho'/
   //    'tong-quan'/'bao-cao' là CROSS (liên chợ, không bị chặn bởi selectedMarket).
   // ============================================================
+  // SCREEN_ACCESS_BY_ACTOR (30/09/2026): ai được VÀO màn nào (sidebar + route) cho 6 actor nội bộ. CHỈ screen:* —
+  // không có dòng action:* nào ở đây; quyền thao tác bên trong màn giữ nguyên actionRoles/rolePerms đã lưu.
+  //   A01 system_admin · A02 market_manager · A03 collector · A04 technician · A05 central_accountant · A08 ward_leader
+  // 'diem-kd' (ẩn khỏi menu) là alias của 'mat-bang' ở Chợ Cao Lãnh (U.can) nên cùng tập actor với 'mat-bang'.
+  // Không thuộc bảng này (giữ nguyên): theo-doi-ky-doi-soat, mini-app, phien-cho (đã bỏ), role legacy/tuỳ biến, trader.
+  const SCREEN_ACCESS_ROLE_IDS = ['system_admin', 'market_manager', 'collector', 'technician', 'central_accountant', 'ward_leader'];
+  const ACTOR_SCREEN_ACCESS = {
+    'tong-quan': ['system_admin', 'market_manager', 'central_accountant', 'ward_leader'],
+    'danh-muc-cho': ['system_admin', 'market_manager', 'ward_leader'],
+    'nhan-su-phan-cong': ['market_manager'],
+    'mat-bang': ['system_admin', 'market_manager', 'collector', 'ward_leader'],
+    'diem-kd': ['system_admin', 'market_manager', 'collector', 'ward_leader'],
+    'tai-san': ['system_admin', 'market_manager', 'technician'],
+    'tieu-thuong': ['system_admin', 'market_manager', 'collector', 'central_accountant', 'ward_leader'],
+    'hop-dong': ['system_admin', 'market_manager', 'collector', 'central_accountant', 'ward_leader'],
+    'cau-hinh-gia': ['system_admin', 'market_manager', 'collector', 'central_accountant', 'ward_leader'],
+    'tai-khoan-ngan-hang': ['system_admin', 'market_manager', 'collector', 'central_accountant'],
+    'dien-nuoc': ['system_admin', 'market_manager', 'collector', 'central_accountant'],
+    'phai-thu': ['system_admin', 'market_manager', 'collector', 'central_accountant', 'ward_leader'],
+    'thu-tien': ['system_admin', 'market_manager', 'collector', 'central_accountant'],
+    'doi-soat': ['system_admin', 'market_manager', 'collector', 'central_accountant'],
+    'cong-no': ['system_admin', 'market_manager', 'collector', 'central_accountant', 'ward_leader'],
+    'su-co': ['system_admin', 'market_manager', 'technician', 'ward_leader'],
+    'thong-bao': ['system_admin', 'market_manager', 'collector', 'technician', 'central_accountant'],
+    'bao-cao': ['system_admin', 'market_manager', 'collector', 'technician', 'central_accountant', 'ward_leader'],
+    'tai-khoan': ['system_admin'],
+    'cai-dat': ['system_admin']
+  };
   function defaultRolePermissions() {
     // RBAC_MARKET_SCOPE_MIGRATION — market_staff/accountant đã loại khỏi mọi dòng bên dưới, quyền cũ
     // của 2 role đó redistribute theo mapping ở comment đầu file (mục 26 yêu cầu). Không role nào
     // trong 6 role còn lại được cấp thừa quyền chỉ vì "tiện" — mỗi lượt gộp đều khớp đúng 1 dòng mô
     // tả công việc ở mục 3 yêu cầu.
-    const screenRoles = {
-      'tong-quan': ['system_admin', 'ward_leader'],
-      'danh-muc-cho': ['system_admin', 'ward_leader'],
-      // Phase 7: 'cau-truc' + 'so-do' gộp thành 'mat-bang' — default = hợp (OR) của 2 ma trận cũ,
-      // đúng bằng tập cũ của 'so-do' (vì 'cau-truc' vốn là tập con). state cũ đã lưu (không rơi vào
-      // fresh state này) được xử lý bằng migration tường minh trong mergeIntoCurrentSeed() bên dưới,
-      // KHÔNG dùng ma trận này để ghi đè tuỳ biến đã có.
-      'mat-bang': ['system_admin', 'ward_leader', 'market_manager', 'collector', 'technician'],
-      // NEED_CONFIRMATION: nhóm được xem tài sản là giả định prototype V1.
-      'tai-san': ['ward_leader', 'market_manager', 'technician'],
-      'diem-kd': ['system_admin', 'ward_leader', 'market_manager', 'collector'],
+    // Màn chuẩn hoá theo actor: nguồn DUY NHẤT là ACTOR_SCREEN_ACCESS (ở trên). Ở đây chỉ còn các màn KHÔNG thuộc
+    // bảng đó: phien-cho (đã bỏ — lọc khỏi seed qua RETIRED_PERMISSION_KEYS), theo-doi-ky-doi-soat, mini-app.
+    const screenRoles = Object.assign({
       'phien-cho': ['ward_leader', 'market_manager', 'collector'],
-      'tieu-thuong': ['system_admin', 'ward_leader', 'market_manager', 'collector'],
-      'hop-dong': ['system_admin', 'ward_leader', 'market_manager', 'collector'],
-      'cau-hinh-gia': ['system_admin', 'market_manager', 'ward_leader'],
-      // Cùng bộ role xem với 'cau-hinh-gia' — màn liền kề trong cùng nhóm con 'Quản lý khai báo'.
-      'tai-khoan-ngan-hang': ['system_admin', 'market_manager', 'ward_leader'],
-      'dien-nuoc': ['market_manager', 'collector'],
-      'phai-thu': ['ward_leader', 'market_manager', 'collector'],
-      'thu-tien': ['market_manager', 'collector'],
-      'doi-soat': ['ward_leader', 'market_manager', 'market_accountant'],
-      'cong-no': ['ward_leader', 'market_manager', 'collector'],
-      'su-co': ['ward_leader', 'market_manager', 'technician'],
-      'thong-bao': ['market_manager'],
-      'bao-cao': ['system_admin', 'ward_leader', 'market_manager'],
-      'tai-khoan': ['system_admin'],
-      'cai-dat': ['system_admin'],
+      // Đối soát số thu kỳ tháng với chứng từ — A05 Kế toán Trung tâm.
+      'theo-doi-ky-doi-soat': ['central_accountant'],
       'mini-app': ['trader', 'collector']
-    };
+    }, ACTOR_SCREEN_ACCESS);
     // DEFAULT ACTION PERMISSION MATRIX — market_staff/accountant đã loại khỏi mọi dòng, quyền cũ
     // redistribute theo mapping ở comment đầu file. 'technician' chính thức có action cập nhật
     // tiến độ/kết quả xử lý được giao; handler màn su-co tiếp tục giới hạn đúng hồ sơ đã phân công.
     const actionRoles = {
       'danh-muc-cho.tao': ['system_admin'],
       'danh-muc-cho.sua': ['system_admin'],
+      'nhan-su-phan-cong.xem-phan-cong': ['market_manager'],
+      'nhan-su-phan-cong.phan-cong': ['market_manager'],
+      'nhan-su-phan-cong.dieu-chuyen': ['market_manager'],
       // cau-truc.*/so-do.* (mặt bằng, cấu trúc) là nghiệp vụ "Quản lý mặt bằng" — mục 3.C, chỉ
       // market_manager (market_staff cũ gộp về đây, không còn role thứ 2 nào thao tác cấu trúc).
       'cau-truc.edit': ['market_manager'],
@@ -365,21 +393,27 @@
       'phai-thu.phat-hanh': ['market_manager'],
       // Người dùng xác nhận 28/09/2026: NV thu phí chỉ xem khoản của điểm được phân công; Trưởng Ban xem
       // toàn chợ; Lãnh đạo phường giữ quyền xem như trước (chỉ xem, không thao tác).
-      'phai-thu.xem-toan-cho': ['ward_leader', 'market_manager'],
+      'phai-thu.xem-toan-cho': ['ward_leader', 'market_manager', 'central_accountant'],
       // PHAI_THU_BAN_DO (P xác nhận 29/09/2026): Trưởng Ban + NV thu phí; Lãnh đạo phường KHÔNG cần bản đồ;
-      // market_accountant: NEED_CONFIRMATION → mặc định DENY (P "tính sau").
+      // Kế toán (nay là central_accountant): NEED_CONFIRMATION → mặc định DENY (P "tính sau").
       'phai-thu.ban-do-thu': ['market_manager', 'collector'],
       'phai-thu.yeu-cau-dieu-chinh': ['collector'],
       'phai-thu.mien-giam': ['market_manager'],
       'thu-tien.thu': ['market_manager', 'collector'],
-      'doi-soat.xem-ngan-hang': ['ward_leader', 'market_manager'],
+      'doi-soat.xem-ngan-hang': ['ward_leader', 'market_manager', 'central_accountant'],
       'doi-soat.gan-thu-cong': ['market_manager'],
-      'doi-soat.xem-tien-mat': ['ward_leader', 'market_manager', 'market_accountant'],
+      'doi-soat.xem-tien-mat': ['ward_leader', 'market_manager', 'central_accountant'],
       'thu-tien.chot-buoi': ['collector'],
-      'doi-soat.xac-nhan-phieu-nop': ['market_accountant'],
+      'doi-soat.xac-nhan-phieu-nop': ['central_accountant'],
+      'theo-doi-ky-doi-soat.xac-nhan-hoan-tat': ['central_accountant'],
       // "Xác nhận tiền nhân viên thu phí nộp về" — đúng mục 3.C, chỉ market_manager.
       'doi-soat.xac-nhan-nop-quy': ['market_manager'],
-      'doi-soat.xem-truy-vet': ['market_manager'],
+      'doi-soat.xem-truy-vet': ['market_manager', 'central_accountant'],
+      // Xuất dữ liệu kế toán: A05 (không cấp bao-cao.luu-mau — lưu/cấu hình mẫu báo cáo).
+      'doi-soat.xuat-excel': ['central_accountant'],
+      'cong-no.xuat-excel': ['central_accountant'],
+      'bao-cao.xuat-excel': ['central_accountant'],
+      'bao-cao.xuat-pdf-in': ['central_accountant'],
       // "Nhắc nợ" — đúng mục 3.D, collector; nhắc hàng loạt vẫn cùng 1 nghiệp vụ (mở rộng số lượng),
       // không phải quyền mới.
       'cong-no.nhac-no': ['market_manager', 'collector'],
@@ -453,7 +487,7 @@
     const grant = (roleId, permKey) => rows.push({ roleId: roleId, permKey: permKey, grantedAt: 'seed', grantedBy: 'Hệ thống (seed mặc định)' });
     Object.keys(screenRoles).forEach(s => screenRoles[s].forEach(r => grant(r, 'screen:' + s)));
     Object.keys(actionRoles).forEach(a => actionRoles[a].forEach(r => grant(r, 'action:' + a)));
-    return rows;
+    return rows.filter(r => !RETIRED_PERMISSION_KEYS.has(r.permKey));
   }
 
   // ============================================================
@@ -505,7 +539,7 @@
   //        lệch khiến loadState() đi thẳng nhánh RESEED TOÀN BỘ (freshState(), không qua
   //        mergeIntoCurrentSeed()), nên seedVersion v15 ở đây chỉ còn ý nghĩa tài liệu/đánh dấu, không
   //        phải cơ chế migrate chính cho lần đổi này (xem RBAC_MARKET_SCOPE_MIGRATION_REPORT.md).
-  const PERM_SEED_VERSION = 19; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: action:phai-thu.ban-do-thu; 19: trader/contract creation belongs to market_manager
+  const PERM_SEED_VERSION = 20; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: action:phai-thu.ban-do-thu; 19: trader/contract creation belongs to market_manager; 20: đối soát chuyển sang central_accountant (A05), A05 xem/xuất số liệu thu, technician bỏ màn Mặt bằng/Tài sản
   const RATE_POLICY_PERM_VERSION = 1;
   const BANK_ACCOUNT_PERM_VERSION = 1;
   const PC3A_SESSION_PERM_VERSION = 1;
@@ -522,6 +556,14 @@
   const PHAI_THU_MAP_PERM_VERSION = 1;
   const PHAI_THU_MAP_KEY = 'action:phai-thu.ban-do-thu';
   const TRADER_CONTRACT_CREATION_PERM_VERSION = 1;
+  const CENTRAL_ACCOUNTANT_PERM_VERSION = 2;
+  const TECHNICIAN_SCREEN_PERM_VERSION = 1;
+  // NHAN_SU_PHAN_CONG v1: 4 permKey của màn "Nhân sự & phân công" — cấp theo default seed ĐÚNG 1 LẦN (marker),
+  // không qua vòng "key mới → seed" chung để quyền quản trị viên thu hồi sau đó không bị cấp lại khi reload.
+  const STAFF_ASSIGNMENT_PERM_VERSION = 1;
+  const SCREEN_ACCESS_BY_ACTOR_VERSION = 1;
+  const STAFF_ASSIGNMENT_PERM_KEYS = new Set(['screen:nhan-su-phan-cong', 'action:nhan-su-phan-cong.xem-phan-cong',
+    'action:nhan-su-phan-cong.phan-cong', 'action:nhan-su-phan-cong.dieu-chuyen']);
   function freshState() {
     return {
       schemaVersion: A.RBAC_SCHEMA,
@@ -539,6 +581,10 @@
       cashHandoverPermVersion: CASH_HANDOVER_PERM_VERSION,
       phaiThuMapPermVersion: PHAI_THU_MAP_PERM_VERSION,
       traderContractCreationPermVersion: TRADER_CONTRACT_CREATION_PERM_VERSION,
+      centralAccountantPermVersion: CENTRAL_ACCOUNTANT_PERM_VERSION,
+      technicianScreenPermVersion: TECHNICIAN_SCREEN_PERM_VERSION,
+      staffAssignmentPermVersion: STAFF_ASSIGNMENT_PERM_VERSION,
+      screenAccessByActorVersion: SCREEN_ACCESS_BY_ACTOR_VERSION,
       roles: defaultRoles(),
       rolePerms: defaultRolePermissions()
     };
@@ -619,6 +665,60 @@
     const keys = new Set(['action:tieu-thuong.them-moi', 'action:hop-dong.tao', 'action:so-do.tao-hop-dong']);
     stored.rolePerms = stored.rolePerms.filter(r => !(r.roleId === 'collector' && keys.has(r.permKey)));
     stored.traderContractCreationPermVersion = TRADER_CONTRACT_CREATION_PERM_VERSION;
+    return true;
+  }
+  // A05 là role kế toán duy nhất: state đã lưu — cấp cho central_accountant theo từng version, MỖI version
+  // ĐÚNG 1 LẦN (marker). Chỉ cộng thêm; không thu hồi rolePerms cũ của market_accountant (role tương thích,
+  // không còn account hiện hành); quyền quản trị viên thu hồi sau đó không bị cấp lại.
+  //   v1: đối soát phiếu nộp + đối soát kỳ.  v2: xem/xuất thu tiền, khoản phải thu, công nợ, báo cáo.
+  const CENTRAL_ACCOUNTANT_PERM_KEYS = {
+    1: ['screen:doi-soat', 'action:doi-soat.xem-tien-mat', 'action:doi-soat.xac-nhan-phieu-nop',
+      'screen:theo-doi-ky-doi-soat', 'action:theo-doi-ky-doi-soat.xac-nhan-hoan-tat'],
+    2: ['screen:phai-thu', 'action:phai-thu.xem-toan-cho', 'screen:thu-tien', 'screen:cong-no', 'screen:bao-cao',
+      'action:doi-soat.xem-ngan-hang', 'action:doi-soat.xem-truy-vet', 'action:doi-soat.xuat-excel',
+      'action:cong-no.xuat-excel', 'action:bao-cao.xuat-excel', 'action:bao-cao.xuat-pdf-in']
+  };
+  function migrateCentralAccountantPerms(stored) {
+    const from = stored.centralAccountantPermVersion || 0;
+    if (from >= CENTRAL_ACCOUNTANT_PERM_VERSION) return false;
+    for (let v = from + 1; v <= CENTRAL_ACCOUNTANT_PERM_VERSION; v++) {
+      CENTRAL_ACCOUNTANT_PERM_KEYS[v].forEach(permKey => {
+        if (!stored.rolePerms.some(r => r.roleId === 'central_accountant' && r.permKey === permKey)) stored.rolePerms.push({ roleId: 'central_accountant', permKey, grantedAt: 'migrate-central-accountant-v' + v, grantedBy: 'Hệ thống' });
+      });
+    }
+    stored.centralAccountantPermVersion = CENTRAL_ACCOUNTANT_PERM_VERSION;
+    return true;
+  }
+  // NVKT không sở hữu chợ: thu hồi MỘT LẦN (marker) màn Mặt bằng/Tài sản của technician trong state đã lưu, vì
+  // technician nay có marketScopes=['ALL'] chỉ để xử lý sự cố được giao. Sau đó quản trị viên cấp lại thì giữ.
+  function migrateTechnicianScreenPerms(stored) {
+    if (stored.technicianScreenPermVersion >= TECHNICIAN_SCREEN_PERM_VERSION) return false;
+    const keys = new Set(['screen:mat-bang', 'screen:tai-san']);
+    stored.rolePerms = stored.rolePerms.filter(r => !(r.roleId === 'technician' && keys.has(r.permKey)));
+    stored.technicianScreenPermVersion = TECHNICIAN_SCREEN_PERM_VERSION;
+    return true;
+  }
+  // Additive + idempotent: chỉ thêm dòng (role, key) theo default seed còn thiếu; không thu hồi/ghi đè quyền nào.
+  function migrateStaffAssignmentPerms(stored) {
+    if (stored.staffAssignmentPermVersion >= STAFF_ASSIGNMENT_PERM_VERSION) return false;
+    defaultRolePermissions().filter(r => STAFF_ASSIGNMENT_PERM_KEYS.has(r.permKey)).forEach(r => {
+      if (!stored.rolePerms.some(x => x.roleId === r.roleId && x.permKey === r.permKey)) stored.rolePerms.push(Object.assign({}, r, { grantedAt: 'migrate-staff-assignment', grantedBy: 'Hệ thống' }));
+    });
+    stored.staffAssignmentPermVersion = STAFF_ASSIGNMENT_PERM_VERSION;
+    return true;
+  }
+  // SCREEN_ACCESS_BY_ACTOR v1 — chạy ĐÚNG 1 LẦN (marker) cho state đã lưu: đưa quyền VÀO MÀN của 6 actor nội bộ về
+  // ACTOR_SCREEN_ACCESS. Chỉ đụng dòng screen:<màn trong bảng> của 6 role đó; KHÔNG đụng dòng action:*, role
+  // legacy/tuỳ biến, trader, hay màn ngoài bảng. Sau lần này, quản trị viên cấp/thu hồi ở màn Phân quyền thì giữ nguyên.
+  function migrateScreenAccessByActor(stored) {
+    if (stored.screenAccessByActorVersion >= SCREEN_ACCESS_BY_ACTOR_VERSION) return false;
+    const keys = new Set(Object.keys(ACTOR_SCREEN_ACCESS).map(id => 'screen:' + id));
+    const managed = r => SCREEN_ACCESS_ROLE_IDS.indexOf(r.roleId) !== -1 && keys.has(r.permKey);
+    stored.rolePerms = stored.rolePerms.filter(r => !managed(r) || (ACTOR_SCREEN_ACCESS[r.permKey.slice(7)] || []).indexOf(r.roleId) !== -1);
+    Object.keys(ACTOR_SCREEN_ACCESS).forEach(id => ACTOR_SCREEN_ACCESS[id].forEach(roleId => {
+      if (!stored.rolePerms.some(r => r.roleId === roleId && r.permKey === 'screen:' + id)) stored.rolePerms.push({ roleId, permKey: 'screen:' + id, grantedAt: 'migrate-screen-access-by-actor', grantedBy: 'Hệ thống' });
+    }));
+    stored.screenAccessByActorVersion = SCREEN_ACCESS_BY_ACTOR_VERSION;
     return true;
   }
   function migrateRatePolicyPerms(stored) {
@@ -713,6 +813,7 @@
       if (stored.phaiThuScopePermVersion >= PHAI_THU_SCOPE_PERM_VERSION && d.permKey === PHAI_THU_SCOPE_KEY) return;
       if (stored.utilityModePermVersion >= UTILITY_MODE_PERM_VERSION && d.permKey === UTILITY_MODE_KEY) return;
       if (d.permKey === PHAI_THU_MAP_KEY) return; // cấp qua migratePhaiThuMapPerms (một lần)
+      if (STAFF_ASSIGNMENT_PERM_KEYS.has(d.permKey)) return; // cấp qua migrateStaffAssignmentPerms (một lần)
       if (!knownKeys.has(d.permKey)) stored.rolePerms.push(d);
     });
     migratePc3aSessionPerms(stored);
@@ -725,6 +826,10 @@
     migrateCashHandoverPerms(stored);
     migratePhaiThuMapPerms(stored);
     migrateTraderContractCreationPerms(stored);
+    migrateCentralAccountantPerms(stored);
+    migrateTechnicianScreenPerms(stored);
+    migrateStaffAssignmentPerms(stored);
+    migrateScreenAccessByActor(stored); // sau mọi migration screen cũ (vd. migrateTechnicianScreenPerms)
     stored.seedVersion = PERM_SEED_VERSION;
     return stored;
   }
@@ -780,6 +885,7 @@
       if (s.pc3aSessionPermVersion >= PC3A_SESSION_PERM_VERSION && d.permKey.indexOf('action:phien-cho.') === 0) return;
       if (s.phaiThuScopePermVersion >= PHAI_THU_SCOPE_PERM_VERSION && d.permKey === PHAI_THU_SCOPE_KEY) return;
       if (s.utilityModePermVersion >= UTILITY_MODE_PERM_VERSION && d.permKey === UTILITY_MODE_KEY) return;
+      if (STAFF_ASSIGNMENT_PERM_KEYS.has(d.permKey)) return; // cấp qua migrateStaffAssignmentPerms (một lần)
       if (!known.has(d.permKey)) s.rolePerms.push(d);
     });
     if (migratePc3aSessionPerms(s)) needSave = true;
@@ -793,6 +899,10 @@
     if (migrateUtilityModePerms(s)) needSave = true;
     if (migrateMeterRecordPerms(s)) needSave = true;
     if (migrateCashHandoverPerms(s)) needSave = true;
+    if (migrateCentralAccountantPerms(s)) needSave = true;
+    if (migrateTechnicianScreenPerms(s)) needSave = true;
+    if (migrateStaffAssignmentPerms(s)) needSave = true;
+    if (migrateScreenAccessByActor(s)) needSave = true; // sau mọi migration screen cũ
     {
       const validKeys = new Set(CATALOG.map(p => p.key));
       const before = s.rolePerms.length;
@@ -811,11 +921,15 @@
   const PERM = A.PERM = {
     KEY: PKEY,
     CATALOG: CATALOG,
-    catalog: () => CATALOG,
+    catalog: () => CURRENT_CATALOG,
+    isRetiredPermission: key => RETIRED_PERMISSION_KEYS.has(key),
     permission: key => CATALOG.find(p => p.key === key),
 
     roles: () => STATE.roles,
     activeRoles: () => STATE.roles.filter(r => r.active),
+    // Role hiện hành cho UI (bộ lọc/form tài khoản, ma trận phân quyền). roles() vẫn trả đủ để đọc dữ liệu cũ.
+    currentRoles: () => STATE.roles.filter(r => LEGACY_COMPAT_ROLE_IDS.indexOf(r.id) === -1),
+    isLegacyCompatRole: id => LEGACY_COMPAT_ROLE_IDS.indexOf(id) !== -1,
     role: id => STATE.roles.find(r => r.id === id),
 
     rolePermKeys: roleId => STATE.rolePerms.filter(r => r.roleId === roleId).map(r => r.permKey),

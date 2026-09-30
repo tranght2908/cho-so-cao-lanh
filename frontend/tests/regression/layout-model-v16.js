@@ -120,8 +120,10 @@ ok('12 TT0001 / TTD-CQ exist with valid business data; demo accounts stay linked
   });
   assert.strictEqual(A.ACCOUNTS.get('AC-TT01').traderId, 'TT0001');
   assert.strictEqual(A.ACCOUNTS.get('AC-CHI-QUYET').traderId, 'TTD-CQ');
-  use(A, 'AC-TT01', 'CL'); h.go('mini-app'); assert(h.view().includes('KA-A01'), 'AC-TT01 sees KA-A01');
-  use(A, 'AC-CHI-QUYET', 'TTD'); h.go('mini-app'); assert(h.view().includes('CD-A01'), 'AC-CHI-QUYET sees CD-A01');
+  // A07 dùng web Tiểu thương (tieu-thuong/); back-office chỉ hiện màn hướng sang cổng đó. Dữ liệu hồ sơ liên kết
+  // vẫn render đúng qua view Mini App (gọi trực tiếp, không qua router back-office).
+  use(A, 'AC-TT01', 'CL'); assert(A.VIEWS['mini-app']().includes('KA-A01'), 'AC-TT01 sees KA-A01');
+  use(A, 'AC-CHI-QUYET', 'TTD'); assert(A.VIEWS['mini-app']().includes('CD-A01'), 'AC-CHI-QUYET sees CD-A01');
 });
 ok('13 operational screens render for CL and TTD', () => {
   const mgr = mid => A.ACCOUNTS.list().find(a => A.ACCOUNTS.primaryRole(a) === 'market_manager' && (a.marketScopes || []).includes(mid));

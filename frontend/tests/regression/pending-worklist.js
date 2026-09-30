@@ -14,7 +14,7 @@ const login = (A, accountId) => { A.ui.sessionAccountId = accountId; A.ui.market
   A.db.traders = []; A.db.stalls = []; A.db.contracts = [];
   for (let n = 1; n <= 250; n++) {
     const traderId = `PW-TT${String(n).padStart(3, '0')}`, pointId = `PW-PT${String(n).padStart(3, '0')}`;
-    A.db.traders.push({ id: traderId, name: `Hồ sơ chờ ${n}`, phone: `090${String(n).padStart(7, '0')}`, market: 'CL' });
+    A.db.traders.push({ id: traderId, name: `Hồ sơ chờ ${n}`, phone: `098${String(n).padStart(7, '0')}`, market: 'CL' }); // dải SĐT không trùng account nhân sự demo (SĐT đăng nhập phải duy nhất)
     A.db.stalls.push({ id: pointId, code: `PW-A${n}`, market: 'CL', status: 'thue', traderId, area: 4, cat: 'Quầy', sectionName: 'Khu A' });
     A.db.contracts.push({ id: `PW-HD${String(n).padStart(3, '0')}`, traderId, stallId: pointId, businessPointId: pointId, market: 'CL', status: 'hieuluc', start: '2026-01-01', end: '2026-12-31' });
   }
@@ -112,7 +112,7 @@ const login = (A, accountId) => { A.ui.sessionAccountId = accountId; A.ui.market
     h.input('#wf-ct-start', start); h.input('#wf-ct-end', end);
     A.features.contracts.form.pickPoint(p.id);
     const b = BP.building(p), f = BP.floor(p);
-    h.input('#wf-ct-building', b.id); h.input('#wf-ct-floor', f ? f.id : ''); h.input('#wf-ct-row', BP.row(p).id); h.input('#wf-ct-point', p.id);
+    h.input('#wf-ct-building', b.id); h.input('#wf-ct-floor', f ? f.id : ''); h.input('#wf-ct-row', BP.row(p).id); h.input('#wf-ct-areaType', p.areaTypeId); h.input('#wf-ct-point', p.id);
   };
   fill(candidates[0]);
   const before = A.db.contracts.length;

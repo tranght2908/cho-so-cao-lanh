@@ -150,8 +150,8 @@
   // với 1 account rỗng/không hợp lệ.
   A.currentAccount = function () {
     let acc = ui.currentDemoAccountId ? A.ACCOUNTS.get(ui.currentDemoAccountId) : null;
-    if (!acc || acc.status !== 'active') {
-      acc = A.ACCOUNTS.list().find(a => a.status === 'active') || null;
+    if (!acc || acc.status !== 'active' || !A.ACCOUNTS.isActive(acc)) {
+      acc = A.ACCOUNTS.list().find(a => a.status === 'active' && A.ACCOUNTS.isActive(a)) || null;
       ui.currentDemoAccountId = acc ? acc.id : null;
     }
     return acc;
@@ -167,6 +167,9 @@
   // features/markets/store.js); trước khi store đó nạp thì chỉ có D.MARKETS. Tạo chợ custom KHÔNG cấp
   // scope cho ai: 'ALL' tự bao gồm chợ mới, account giới hạn chỉ thấy khi có đúng id trong marketScopes.
   A.allowedMarkets = function (account) {
+    // A07 Tiểu thương: chợ = chợ của các hồ sơ liên kết (Account.traderIds). marketScopes KHÔNG quyết định phạm vi A07
+    // và chợ chỉ là ngữ cảnh — quyền bản ghi luôn theo traderId của hồ sơ đang xem.
+    if (account && A.ACCOUNTS && A.ACCOUNTS.primaryRole(account) === 'trader' && A.ACCOUNTS.traderMarketsOf) return A.ACCOUNTS.traderMarketsOf(account);
     const scopes = (account && account.marketScopes) || [];
     const markets = typeof A.effectiveMarkets === 'function' ? A.effectiveMarkets() : D.MARKETS;
     if (scopes.indexOf('ALL') !== -1) return markets.map(m => m.id);
@@ -184,17 +187,21 @@
   //              A.screenMarketOk()) nhưng A.render() hiện thông báo yêu cầu chọn 1 chợ cụ thể thay
   //              vì gọi renderer thật (A.marketRequiredHtml() — MARKET_SELECTOR_ALL_UNIFICATION).
   //   'CL'/'TTD' = chỉ áp dụng đúng 1 chợ cụ thể (nghiệp vụ đặc thù của riêng chợ đó trong prototype
-  //              — Tài sản chợ mới demo cho Chợ Cao Lãnh, Phiên chợ quê là đặc thù Chợ quê Tân Thuận
-  //              Đông — KHÔNG phải "giả định 2 chợ" cần tổng quát hoá, giữ nguyên). Cùng quy tắc
+  //              — Tài sản chợ mới demo cho Chợ Cao Lãnh — KHÔNG phải "giả định 2 chợ" cần tổng quát
+  //              hoá, giữ nguyên). Cùng quy tắc
   //              'ALL' như 'BOTH' ở trên.
   //   'SYSTEM' = không gate theo market (Tài khoản, Cài đặt = hệ thống).
   A.SCREEN_MARKET = {
     'tong-quan': 'CROSS', 'bao-cao': 'CROSS', 'danh-muc-cho': 'CROSS',
+    // Nhân sự & phân công: nhìn toàn bộ chợ trong phạm vi account (A.allowedMarkets), không theo selectedMarket.
+    'nhan-su-phan-cong': 'CROSS',
     'mat-bang': 'BOTH', 'tai-san': 'CL', 'diem-kd': 'BOTH', 'tieu-thuong': 'BOTH', 'hop-dong': 'BOTH',
     'cau-hinh-gia': 'BOTH',
+    // Danh sách tài khoản ngân hàng hiển thị theo chợ đang chọn (U.market(ui.market)) — cần 1 chợ cụ thể như
+    // các màn Tài chính khác; thiếu khai báo này thì route render cả khi chưa có chợ (ui.market ''/'ALL') và lỗi.
+    'tai-khoan-ngan-hang': 'BOTH',
     'phai-thu': 'BOTH', 'thu-tien': 'BOTH', 'doi-soat': 'BOTH', 'theo-doi-ky-doi-soat': 'CROSS', 'cong-no': 'BOTH',
     'su-co': 'BOTH', 'thong-bao': 'BOTH',
-    'phien-cho': 'TTD',
     'dien-nuoc': 'BOTH',
     'tai-khoan': 'SYSTEM', 'cai-dat': 'SYSTEM', 'mini-app': 'BOTH'
   };
@@ -260,26 +267,8 @@
   };
 
   A.saveUi = function () { try { localStorage.setItem(UIKEY, JSON.stringify({ schemaVersion: RBAC_SCHEMA, currentDemoAccountId: ui.currentDemoAccountId, market: ui.market })); } catch (e) { /* bỏ qua */ } };
-  // TRADER_PROFILE_AND_MINIAPP_WORKFLOW — demo case "hồ sơ đã có sẵn + Mini App ĐÃ LIÊN KẾT" (mục
-  // 37 Case 1): account.traderId không thể seed cứng trong js/accounts.js (module đó chạy TRƯỚC
-  // khi A.db tồn tại — data.js chỉ build() khi A.load()/A.fresh() được gọi ở init()) và tên 2
-  // account demo cũ (AC-TT01/02) không khớp bất kỳ trader nào (dữ liệu trader sinh ngẫu nhiên có
-  // seed riêng). Chạy ĐÚNG 1 lần, chỉ khi CHƯA account trader nào có traderId (idempotent — an toàn
-  // gọi lại mỗi lần load): liên kết AC-TT01 với ĐÚNG trader đang thuê KA-A01 thật (deterministic vì
-  // seed RNG trong data.js cố định) — đồng bộ luôn fullName/phone hiển thị của account demo cho
-  // khớp, tránh gây hiểu lầm "AC-TT01 tên khác nhưng lại đại diện cho 1 trader tên khác".
-  A.ensureMiniAppDemoLink = function () {
-    if (!A.ACCOUNTS || !A.db) return;
-    const acc = A.ACCOUNTS.get('AC-TT01');
-    const kaA01 = A.db.stalls && A.db.stalls.find(s => s.id === 'CL-KA-A01');
-    const trader = kaA01 && A.db.traders.find(t => t.id === kaA01.traderId);
-    if (acc && trader && !acc.traderId) {
-      A.ACCOUNTS.update(acc.id, { traderId: trader.id, fullName: trader.name, phone: trader.phone });
-    }
-  };
   A.load = function () {
     A.data.loadDb();
-    A.ensureMiniAppDemoLink();
     // RBAC V1 migration: ui state cũ (schema khác, hoặc còn giữ shape {role, market} kiểu cũ
     // không có currentDemoAccountId) không tương thích — bỏ qua, để currentDemoAccountId=null rồi
     // A.currentAccount()/A.syncAccountContext() bên dưới tự chọn 1 account ACTIVE + 1 market hợp
@@ -325,6 +314,9 @@
       };
       if (opts && opts.debtId) p.debtId = opts.debtId; // THU_HOI_NO: giao dịch thu nợ vẫn ghi vào khoản thu gốc
       db.payments.push(p);
+      A.addTraderNotification({ kind: 'PAYMENT_RECEIPT', traderId: inv.traderId, market: p.market, referenceId: p.id,
+        title: 'Thanh toán đã được ghi nhận', body: 'Đã ghi nhận ' + U.money(take) + ' cho khoản ' + inv.id + '. Biên lai ' + receipt + ' đã sẵn sàng.',
+        channels: ['Mini app'], eventKey: 'payment-receipt:' + p.id });
       out.push(p);
       if (method !== 'tm') {
         const bk = {
@@ -339,6 +331,20 @@
     });
     A.save();
     return out;
+  };
+
+  // Canonical shared notification source. A notification for an individual
+  // trader always carries traderId; market-only records remain broadcasts.
+  A.addTraderNotification = function (input) {
+    if (!input || !input.traderId) return null;
+    const db = A.db, key = input.eventKey || [input.kind || 'GENERAL', input.traderId, input.referenceId || ''].join(':');
+    db.notifications = Array.isArray(db.notifications) ? db.notifications : [];
+    const existing = db.notifications.find(n => n && n.eventKey === key);
+    if (existing) return existing;
+    const record = Object.assign({ id: 'TB-' + U.pad(32 + db.notifications.length, 3), at: U.today(), kind: 'GENERAL', market: '', traderId: input.traderId,
+      referenceId: null, title: 'Thông báo mới', body: '', group: 'Cá nhân', channels: ['Mini app'], sent: 1, delivered: 1, read: 0, auto: true, eventKey: key }, input);
+    db.notifications.unshift(record);
+    return record;
   };
 
   function receiptSessionPayment(p) {
@@ -422,6 +428,8 @@
       // thái) — KHÁC "Mặt bằng chợ" bên dưới (cấu trúc Khu/Tầng/Dãy/Điểm kinh doanh BÊN TRONG 1 chợ,
       // GIỮ NGUYÊN không đổi). Xem js/marketcatalog.js + js/v-danhmuccho.js.
       { id: 'danh-muc-cho', ico: U.icon('store'), label: 'Danh mục chợ' },
+      // Nhân sự Tổ Quản lý chợ + phân công Chợ cho NV thu phí (features/staff-assignment) — KHÁC "Tài khoản người dùng".
+      { id: 'nhan-su-phan-cong', ico: U.icon('users'), label: 'Nhân sự & phân công' },
       { sub: 'Hạ tầng chợ' },
       // Phase 7: UI "Thiết lập mặt bằng chợ" + "Sơ đồ mặt bằng" đã gộp thành 1 workspace "Mặt bằng
       // chợ" (MARKET_LAYOUT_UX_HOTFIX_REPORT.md) và nay RBAC cũng chuẩn hóa theo — 2 screen
@@ -430,8 +438,9 @@
       // MARKET_LAYOUT_SCREEN_PERMISSION_AUDIT.md + MARKET_LAYOUT_SCREEN_PERMISSION_IMPLEMENTATION_REPORT.md.
       { id: 'mat-bang', ico: U.icon('map'), label: 'Mặt bằng chợ' },
       { id: 'tai-san', ico: U.icon('settings'), label: 'Tài sản chợ' },
-      { id: 'diem-kd', ico: U.icon('store'), label: 'Điểm kinh doanh', hidden: true },
-      { id: 'phien-cho', ico: U.icon('store'), label: 'Phiên chợ quê' }
+      { id: 'diem-kd', ico: U.icon('store'), label: 'Điểm kinh doanh', hidden: true }
+      // "Phiên chợ quê" đã bỏ khỏi sản phẩm (quyết định 30/09/2026): không còn menu/route/view. Chợ quê Cù lao
+      // Tân Thuận Đông (TTD) vẫn là 1 chợ bình thường trong 12 chợ; dữ liệu phiên cũ trong A.db được giữ nguyên.
     ] },
     { group: 'Tiểu thương & hợp đồng', items: [
       { id: 'tieu-thuong', ico: U.icon('users'), label: 'Hồ sơ tiểu thương' },
@@ -455,9 +464,6 @@
       { id: 'bao-cao', ico: U.icon('chart'), label: 'Báo cáo thống kê' },
       { id: 'tai-khoan', ico: U.icon('users'), label: 'Tài khoản người dùng' },
       { id: 'cai-dat', ico: U.icon('settings'), label: 'Cài đặt & phân quyền' }
-    ] },
-    { group: 'Dành cho tiểu thương', items: [
-      { id: 'mini-app', ico: U.icon('warning'), label: 'Cổng tiểu thương' }
     ] }
   ];
   A.menuItem = id => { for (const g of A.MENU) for (const it of g.items) if (it.id === id) return it; return null; };
@@ -508,13 +514,14 @@
   //     12 chợ (mục 4).
   //   - selectedMarket=1 chợ cụ thể: thêm các nhóm MARKET-scoped account CÓ chợ đó trong marketScopes,
   //     xếp theo role (mục 5) — account KHÔNG thuộc chợ đang chọn không xuất hiện.
-  const DEMO_MARKET_ROLE_ORDER = ['market_manager', 'collector', 'market_accountant', 'technician', 'central_accountant', 'trader'];
+  const DEMO_MARKET_ROLE_ORDER = ['market_manager', 'collector', 'technician', 'central_accountant', 'trader'];
   function demoAccountBtnHtml(a, withRolePrefix) {
     const roleTxt = withRolePrefix ? (DEMO_ROLE_SHORT[A.ACCOUNTS.primaryRole(a)] || (A.PERM.role(A.ACCOUNTS.primaryRole(a)) || {}).name || '') : '';
     return `<button class="${ui.currentDemoAccountId === a.id ? 'on' : ''}" data-act="demo-account" data-id="${a.id}">${roleTxt ? U.esc(roleTxt) + ' — ' : ''}${U.esc(a.fullName)}</button>`;
   }
   function demoAccountBarHtml() {
-    const active = A.ACCOUNTS.list().filter(a => a.status === 'active');
+    // Chỉ tổ chức hiện hành: account legacy/retired đã lưu không xuất hiện trên thanh demo.
+    const active = A.ACCOUNTS.currentList().filter(a => a.status === 'active');
     const globals = active.filter(a => A.ACCOUNTS.scopeType(a) === 'GLOBAL');
     const globalGroup = globals.length ? `<span class="label-sm">Tài khoản toàn hệ thống</span><span class="seg">${globals.map(a => demoAccountBtnHtml(a, true)).join('')}</span>` : '';
     if (ui.market === 'ALL') {
@@ -617,8 +624,11 @@
     const view = A.current ? A.VIEWS[A.current] : null;
     const kind = A.current ? A.SCREEN_MARKET[A.current] : null;
     const needsMarket = (!ui.market || ui.market === 'ALL') && (kind === 'BOTH' || kind === 'CL' || kind === 'TTD');
+    // Màn liên chợ (CROSS) đọc ui.market làm phạm vi lọc ('ALL' hoặc 1 chợ). Tài khoản chưa được phân công chợ nào
+    // (ui.market '' — vd. NV thu phí mới, xem syncAccountContext) không có phạm vi dữ liệu → không gọi renderer.
+    const noMarketScope = !ui.market && kind === 'CROSS';
     $('#view').innerHTML = A.current
-      ? (needsMarket ? A.marketRequiredHtml(A.current) : (view ? view() : '<div class="empty">Đang xây dựng</div>'))
+      ? (noMarketScope ? '<div class="empty">Tài khoản chưa được phân công chợ nào nên chưa có dữ liệu để hiển thị.</div>' : needsMarket ? A.marketRequiredHtml(A.current) : (view ? view() : '<div class="empty">Đang xây dựng</div>'))
       : '<div class="empty">Tài khoản hiện chưa được cấp quyền truy cập chức năng.</div>';
     if (focusKey) {
       const el = document.querySelector(`[data-in="${focusKey}"]`);
@@ -657,6 +667,9 @@
       if (ui.mb) ui.mb.view = r === 'diem-kd' ? 'table' : 'grid';
       r = 'mat-bang';
     } else if (r === 'so-do' || r === 'cau-truc') r = 'mat-bang';
+    // #/phien-cho (Phiên chợ quê — module đã bỏ): không mở lại màn cũ, đưa về Mặt bằng chợ; account không có
+    // quyền 'mat-bang' tự rơi về screen hợp lệ đầu tiên như mọi route khác.
+    if (r === 'phien-cho') r = 'mat-bang';
     // NO SCREEN PERMISSION = NO SCREEN RENDER: route yêu cầu (từ hash, kể cả gõ thẳng URL) chỉ
     // được nhận nếu U.can(r) đúng — U.can() đã bao gồm cả permission LẪN market applicability
     // (Phase 2), nên 1 route trước đó hợp lệ (vd. phien-cho khi đang TTD) sẽ tự động bị chặn nếu
@@ -752,13 +765,43 @@
       </div><div class="modal-f"><button class="btn primary" data-act="close">Bắt đầu xem</button></div>`);
   };
 
+  // Shared localStorage is the prototype's cross-web transport. Refresh the
+  // in-memory snapshots on a storage signal or when a tab becomes active, but
+  // never re-render over an open modal/drawer because that would discard form
+  // drafts held in ui/DOM.
+  function sharedRefreshCanRender() {
+    return !document.querySelector('#modal-root .modal, #modal-root .drawer');
+  }
+  A.refreshSharedState = function () {
+    const state = A.data && A.data.reloadSharedState ? A.data.reloadSharedState() : { changed: false };
+    const accounts = A.ACCOUNTS && A.ACCOUNTS.reload ? A.ACCOUNTS.reload() : { changed: false };
+    if (!state.changed && !accounts.changed) return { changed: false };
+    if (A.syncAccountContext) A.syncAccountContext();
+    if (sharedRefreshCanRender() && A.render) A.render();
+    else ui.sharedStateRefreshPending = true;
+    return { changed: true, state, accounts };
+  };
+  function refreshSharedWhenSafe() {
+    const result = A.refreshSharedState();
+    if (ui.sharedStateRefreshPending && sharedRefreshCanRender()) {
+      ui.sharedStateRefreshPending = false;
+      if (A.render) A.render();
+    }
+    return result;
+  }
+  // A deferred external refresh is rendered once the user intentionally closes
+  // the draft container; it never closes or replaces that container itself.
+  const closeModalForSharedRefresh = A.closeModal;
+  A.closeModal = function () {
+    closeModalForSharedRefresh.apply(this, arguments);
+    if (ui.sharedStateRefreshPending && sharedRefreshCanRender()) {
+      ui.sharedStateRefreshPending = false;
+      if (A.render) A.render();
+    }
+  };
+
   function init() {
     A.load();
-    // Dữ liệu mẫu của cổng tiểu thương (tài khoản tiểu thương gắn hồ sơ thật, có khoản nợ và phản
-    // ánh) — dùng chung với /tieu-thuong/, idempotent nên chạy lại không nhân bản.
-    if (A.traderWebDemoSeed) A.traderWebDemoSeed();
-    // Hồ sơ sự cố mẫu gắn tài sản (SC-DEMO-*) — idempotent, để mở thẳng "Tài sản chợ" vẫn thấy lịch sử sự cố.
-    if (A.features.complaints && A.features.complaints.ensureDemoIncidents) A.features.complaints.ensureDemoIncidents();
     document.addEventListener('click', e => {
       const el = e.target.closest('[data-act]');
       if (!el) return;
@@ -769,6 +812,14 @@
     document.addEventListener('change', e => { const el = e.target.closest('[data-ch]'); if (el && A.CH[el.dataset.ch]) A.CH[el.dataset.ch](el); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape') A.closeModal(); });
     window.addEventListener('hashchange', A.route);
+    window.addEventListener('storage', e => {
+      if (e && ['choso-caolanh-state', 'choso-caolanh-accounts', 'choso-caolanh-accounts-schema'].indexOf(e.key) === -1) return;
+      A.refreshSharedState();
+    });
+    window.addEventListener('focus', refreshSharedWhenSafe);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) refreshSharedWhenSafe();
+    });
     A.route();
     let seen = false;
     try { seen = !!localStorage.getItem(GUIDEKEY); localStorage.setItem(GUIDEKEY, '1'); } catch (e) { /* bỏ qua */ }

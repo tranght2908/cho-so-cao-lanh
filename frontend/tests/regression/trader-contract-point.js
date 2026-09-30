@@ -120,7 +120,7 @@ function setup() {
   ok('contract screen has a shared menu entry for creating a contract without a fixed trader', () => {
     assert(/data-act="ct-new"/.test(h.view()) && /\+ Tạo hợp đồng/.test(h.view()));
     h.act('ct-new');
-    assert(/id="wf-ct-trader"/.test(h.modal()) && /data-act="wf-contract-save"/.test(h.modal()));
+    assert(/id="wf-ct-phone"/.test(h.modal()) && /data-act="wf-contract-save"/.test(h.modal()));
   });
   ok('trader detail offers the same fixed-trader form even when the trader already has a contract', () => {
     h.act('trader', { id: 'PX-010' });
@@ -150,6 +150,7 @@ function setup() {
     h.input('#wf-ct-building', building.id);
     if (floor) h.input('#wf-ct-floor', floor.id);
     h.input('#wf-ct-row', row.id);
+    h.input('#wf-ct-areaType', p.areaTypeId);
     h.input('#wf-ct-point', p.id);
   };
   const s1 = addDays(today, 10), e1 = addDays(today, 375);

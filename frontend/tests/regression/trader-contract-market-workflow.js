@@ -11,7 +11,7 @@ let passed = 0;
 const ok = (label, fn) => { try { fn(); passed++; } catch (error) { error.message = label + ': ' + error.message; throw error; } };
 const login = (account, market) => { A.ui.sessionAccountId = account.id; A.ui.market = market; A.syncAccountContext(); };
 const addDays = (day, days) => new Date(Date.parse(day) + days * 86400000).toISOString().slice(0, 10);
-const syncPointFields = point => { const row = BP.row(point), building = BP.building(point), floor = BP.floor(point); h.input('#wf-ct-building', building.id); if (floor) h.input('#wf-ct-floor', floor.id); h.input('#wf-ct-row', row.id); h.input('#wf-ct-point', point.id); };
+const syncPointFields = point => { const row = BP.row(point), building = BP.building(point), floor = BP.floor(point); h.input('#wf-ct-building', building.id); if (floor) h.input('#wf-ct-floor', floor.id); h.input('#wf-ct-row', row.id); h.input('#wf-ct-areaType', point.areaTypeId); h.input('#wf-ct-point', point.id); };
 
 assert(manager && collector, 'seed has canonical manager and collector');
 // Isolated HA hierarchy/point with a matching policy lets this regression exercise selected-market behavior.
