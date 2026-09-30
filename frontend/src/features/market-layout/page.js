@@ -355,7 +355,7 @@
       </div>
       <div class="field" style="margin-top:10px"><label>Ghi chú</label><textarea class="input" ${dis} rows="2" data-ch="qh-zone-field" data-zone="${z.key}" data-k="note">${U.esc(z.note || '')}</textarea></div>
       <div class="divider"></div>
-      <h4 style="margin:0;font-size:var(--font-size-sm)">Điểm kinh doanh trong Dãy</h4>
+      <h4 style="margin:0;font-size:var(--font-size-base);font-weight:600">Điểm kinh doanh trong Dãy</h4>
       <div class="small muted" style="margin:4px 0 8px">Mọi điểm trong Dãy kế thừa ngành hàng của Dãy; mỗi điểm có loại diện tích riêng.</div>
       <div>${U.table([{ t: 'Loại diện tích' }, { t: 'Số điểm', num: true }, { t: 'Diện tích (m²)', num: true }],
         byType.map(x => `<tr><td>${U.esc(U.areaTypeLabel(x.k))}</td><td class="num">${x.list.length}</td><td class="num">${fmt(U.sum(x.list, st => Number(st.area) || 0))}</td></tr>`), { empty: 'Dãy chưa có điểm kinh doanh' })}</div>

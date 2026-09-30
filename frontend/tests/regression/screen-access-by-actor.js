@@ -9,15 +9,17 @@ let passed = 0;
 const ok = (label, fn) => { try { fn(); passed++; } catch (e) { e.message = label + ': ' + e.message; throw e; } };
 const same = (a, b, msg) => assert.strictEqual(JSON.stringify(a), JSON.stringify(b), msg);
 
-const COMMON_FIN = ['tieu-thuong', 'hop-dong', 'cau-hinh-gia', 'tai-khoan-ngan-hang', 'dien-nuoc', 'phai-thu', 'thu-tien', 'doi-soat', 'cong-no'];
-// Thứ tự theo sidebar. A05 giữ thêm 'theo-doi-ky-doi-soat' (màn không nằm trong bảng yêu cầu → không đụng).
+// PHAM_VI_THU_KY: 'doi-soat' (Đối soát buổi thu) và 'cong-no' (Công nợ & nhắc nợ) không còn cấp cho actor nào.
+const COMMON_FIN = ['tieu-thuong', 'hop-dong', 'cau-hinh-gia', 'tai-khoan-ngan-hang', 'dien-nuoc', 'phai-thu', 'thu-tien'];
+// Thứ tự theo sidebar. A05: màn nghiệp vụ "Đối soát thu tiền" = 'theo-doi-ky-doi-soat'; từ DOI_SOAT_THU_TIEN v1 A05 không
+// còn vào 'doi-soat' (Đối soát buổi thu cũ) — thu hồi 1 lần qua migrateAccountantReconScreen.
 const EXPECTED = {
   'AC-QT01': ['tong-quan', 'danh-muc-cho', 'mat-bang', 'tai-san'].concat(COMMON_FIN, ['su-co', 'thong-bao', 'bao-cao', 'tai-khoan', 'cai-dat']),
   'AC-NV01': ['tong-quan', 'danh-muc-cho', 'nhan-su-phan-cong', 'mat-bang', 'tai-san'].concat(COMMON_FIN, ['su-co', 'thong-bao', 'bao-cao']),
   'AC-NV02': ['mat-bang'].concat(COMMON_FIN, ['thong-bao', 'bao-cao']),
   'AC-NV05': ['tai-san', 'su-co', 'thong-bao', 'bao-cao'],
-  'AC-KTTT01': ['tong-quan'].concat(['tieu-thuong', 'hop-dong', 'cau-hinh-gia', 'tai-khoan-ngan-hang', 'dien-nuoc', 'phai-thu', 'thu-tien', 'doi-soat', 'theo-doi-ky-doi-soat', 'cong-no'], ['thong-bao', 'bao-cao']),
-  'AC-LD01': ['tong-quan', 'danh-muc-cho', 'mat-bang', 'tieu-thuong', 'hop-dong', 'cau-hinh-gia', 'phai-thu', 'cong-no', 'su-co', 'bao-cao']
+  'AC-KTTT01': ['tong-quan'].concat(['tieu-thuong', 'hop-dong', 'cau-hinh-gia', 'tai-khoan-ngan-hang', 'dien-nuoc', 'phai-thu', 'thu-tien', 'theo-doi-ky-doi-soat'], ['thong-bao', 'bao-cao']),
+  'AC-LD01': ['tong-quan', 'danh-muc-cho', 'mat-bang', 'tieu-thuong', 'hop-dong', 'cau-hinh-gia', 'phai-thu', 'su-co', 'bao-cao']
 };
 // Ma trận screen mặc định TRƯỚC task (dựng state "đã lưu" cũ để kiểm tra migration).
 const OLD_SCREENS = {

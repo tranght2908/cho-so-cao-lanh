@@ -77,7 +77,7 @@
     { key: 'screen:phai-thu', kind: 'screen', group: 'Tài chính', label: 'Khoản phải thu' },
     { key: 'screen:thu-tien', kind: 'screen', group: 'Tài chính', label: 'Thu tiền & biên lai' },
     { key: 'screen:doi-soat', kind: 'screen', group: 'Tài chính', label: 'Đối soát buổi thu' },
-    { key: 'screen:theo-doi-ky-doi-soat', kind: 'screen', group: 'Tài chính', label: 'Theo dõi kỳ đối soát' },
+    { key: 'screen:theo-doi-ky-doi-soat', kind: 'screen', group: 'Tài chính', label: 'Đối soát thu tiền' },
     { key: 'screen:cong-no', kind: 'screen', group: 'Tài chính', label: 'Công nợ & nhắc nợ' },
     { key: 'screen:su-co', kind: 'screen', group: 'Vận hành', label: 'Phản ánh & sự cố' },
     { key: 'screen:thong-bao', kind: 'screen', group: 'Vận hành', label: 'Thông báo đa kênh' },
@@ -159,7 +159,7 @@
     { key: 'action:doi-soat.xac-nhan-phieu-nop', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Đối soát phiếu nộp tiền mặt theo buổi của NV thu phí' },
     { key: 'action:doi-soat.xem-truy-vet', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Xem lịch sử truy vết đối soát' },
     { key: 'action:doi-soat.xuat-excel', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Xuất Excel dữ liệu đối soát' },
-    { key: 'action:theo-doi-ky-doi-soat.xac-nhan-hoan-tat', kind: 'action', group: 'Tài chính', screenId: 'theo-doi-ky-doi-soat', label: 'Xác nhận hoàn tất đối soát kỳ' },
+    { key: 'action:theo-doi-ky-doi-soat.xac-nhan-hoan-tat', kind: 'action', group: 'Tài chính', screenId: 'theo-doi-ky-doi-soat', label: 'Xác nhận kết quả đối soát thu tiền (1 chợ · 1 kỳ)' },
     { key: 'action:cong-no.nhac-no', kind: 'action', group: 'Tài chính', screenId: 'cong-no', label: 'Nhắc nợ 1 tiểu thương' },
     { key: 'action:cong-no.nhac-no-hang-loat', kind: 'action', group: 'Tài chính', screenId: 'cong-no', label: 'Nhắc nợ hàng loạt' },
     // THU_HOI_NO (P chốt 29/09/2026): NV thu phí phụ trách gian thu nợ (không thu một phần).
@@ -314,8 +314,11 @@
     'dien-nuoc': ['system_admin', 'market_manager', 'collector', 'central_accountant'],
     'phai-thu': ['system_admin', 'market_manager', 'collector', 'central_accountant', 'ward_leader'],
     'thu-tien': ['system_admin', 'market_manager', 'collector', 'central_accountant'],
-    'doi-soat': ['system_admin', 'market_manager', 'collector', 'central_accountant'],
-    'cong-no': ['system_admin', 'market_manager', 'collector', 'central_accountant', 'ward_leader'],
+    // PHAM_VI_THU_KY (chốt): không quản lý Công nợ/nộp muộn và không còn màn Đối soát buổi thu độc lập. Chốt buổi nằm
+    // trong "Thu tiền & biên lai"; đối soát tiền bàn giao là "Đối soát thu tiền" (theo-doi-ky-doi-soat) của Kế toán.
+    // Route/code legacy giữ nguyên; không actor nào được cấp mặc định (thu hồi 1 lần: migrateRetiredWorkflowScreens).
+    'doi-soat': [],
+    'cong-no': [],
     'su-co': ['system_admin', 'market_manager', 'technician', 'ward_leader'],
     'thong-bao': ['system_admin', 'market_manager', 'collector', 'technician', 'central_accountant'],
     'bao-cao': ['system_admin', 'market_manager', 'collector', 'technician', 'central_accountant', 'ward_leader'],
@@ -562,6 +565,9 @@
   // không qua vòng "key mới → seed" chung để quyền quản trị viên thu hồi sau đó không bị cấp lại khi reload.
   const STAFF_ASSIGNMENT_PERM_VERSION = 1;
   const SCREEN_ACCESS_BY_ACTOR_VERSION = 1;
+  const ACCOUNTANT_RECON_SCREEN_VERSION = 1;
+  const RETIRED_WORKFLOW_SCREEN_VERSION = 1;
+  const RETIRED_WORKFLOW_SCREENS = ['screen:doi-soat', 'screen:cong-no'];
   const STAFF_ASSIGNMENT_PERM_KEYS = new Set(['screen:nhan-su-phan-cong', 'action:nhan-su-phan-cong.xem-phan-cong',
     'action:nhan-su-phan-cong.phan-cong', 'action:nhan-su-phan-cong.dieu-chuyen']);
   function freshState() {
@@ -585,6 +591,8 @@
       technicianScreenPermVersion: TECHNICIAN_SCREEN_PERM_VERSION,
       staffAssignmentPermVersion: STAFF_ASSIGNMENT_PERM_VERSION,
       screenAccessByActorVersion: SCREEN_ACCESS_BY_ACTOR_VERSION,
+      accountantReconScreenVersion: ACCOUNTANT_RECON_SCREEN_VERSION,
+      retiredWorkflowScreenVersion: RETIRED_WORKFLOW_SCREEN_VERSION,
       roles: defaultRoles(),
       rolePerms: defaultRolePermissions()
     };
@@ -721,6 +729,24 @@
     stored.screenAccessByActorVersion = SCREEN_ACCESS_BY_ACTOR_VERSION;
     return true;
   }
+  // DOI_SOAT_THU_TIEN v1 — chạy ĐÚNG 1 LẦN (marker): Kế toán Trung tâm chuyển sang màn "Đối soát thu tiền"
+  // (screen:theo-doi-ky-doi-soat) → thu hồi screen:doi-soat (Đối soát buổi thu cũ) của central_accountant. Không đụng
+  // role khác, không đụng action:*. Quản trị viên cấp lại sau đó thì giữ nguyên.
+  function migrateAccountantReconScreen(stored) {
+    if (stored.accountantReconScreenVersion >= ACCOUNTANT_RECON_SCREEN_VERSION) return false;
+    stored.rolePerms = stored.rolePerms.filter(r => !(r.roleId === 'central_accountant' && r.permKey === 'screen:doi-soat'));
+    stored.accountantReconScreenVersion = ACCOUNTANT_RECON_SCREEN_VERSION;
+    return true;
+  }
+  // PHAM_VI_THU_KY v1 — chạy ĐÚNG 1 LẦN (marker): thu hồi screen:doi-soat + screen:cong-no của 6 actor nội bộ
+  // (SCREEN_ACCESS_ROLE_IDS). Không đụng action:*, role legacy/tuỳ biến, dữ liệu Công nợ hay màn khác. Quản trị viên
+  // cấp lại sau đó thì giữ nguyên (không thu hồi lại).
+  function migrateRetiredWorkflowScreens(stored) {
+    if (stored.retiredWorkflowScreenVersion >= RETIRED_WORKFLOW_SCREEN_VERSION) return false;
+    stored.rolePerms = stored.rolePerms.filter(r => !(SCREEN_ACCESS_ROLE_IDS.indexOf(r.roleId) !== -1 && RETIRED_WORKFLOW_SCREENS.indexOf(r.permKey) !== -1));
+    stored.retiredWorkflowScreenVersion = RETIRED_WORKFLOW_SCREEN_VERSION;
+    return true;
+  }
   function migrateRatePolicyPerms(stored) {
     if (stored.ratePolicyPermVersion >= RATE_POLICY_PERM_VERSION) return false;
     if (!stored.rolePerms.some(r => r.roleId === 'system_admin' && r.permKey === 'screen:cau-hinh-gia')) {
@@ -830,6 +856,8 @@
     migrateTechnicianScreenPerms(stored);
     migrateStaffAssignmentPerms(stored);
     migrateScreenAccessByActor(stored); // sau mọi migration screen cũ (vd. migrateTechnicianScreenPerms)
+    migrateAccountantReconScreen(stored); // sau migrateCentralAccountantPerms v1 (từng cấp screen:doi-soat)
+    migrateRetiredWorkflowScreens(stored); // sau mọi migration từng cấp screen:doi-soat/cong-no
     stored.seedVersion = PERM_SEED_VERSION;
     return stored;
   }
@@ -903,6 +931,8 @@
     if (migrateTechnicianScreenPerms(s)) needSave = true;
     if (migrateStaffAssignmentPerms(s)) needSave = true;
     if (migrateScreenAccessByActor(s)) needSave = true; // sau mọi migration screen cũ
+    if (migrateAccountantReconScreen(s)) needSave = true;
+    if (migrateRetiredWorkflowScreens(s)) needSave = true;
     {
       const validKeys = new Set(CATALOG.map(p => p.key));
       const before = s.rolePerms.length;

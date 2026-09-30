@@ -128,7 +128,7 @@ ok('CASE 5: no sample/random fallback for an account without linked profiles', (
 
 ok('CASE 6: other portal screens still work', () => {
   login(PHONE);
-  [['home', 'Tổng quan'], ['contracts', 'Hợp đồng'], ['finance', 'Nghĩa vụ tài chính'], ['complaints', 'Phản ánh'], ['notice', 'Thông báo']].forEach(([id, label]) => {
+  [['home', 'Tổng quan'], ['contracts', 'Hợp đồng'], ['finance', 'Thanh toán'], ['complaints', 'Phản ánh'], ['notice', 'Thông báo']].forEach(([id, label]) => {
     ht.act('merchant-nav', { id });
     const html = twHtml(ht);
     assert(html.includes('class="merchant-sidebar"') && html.includes(label) && !html.includes('Không mở được'), id);
