@@ -575,6 +575,7 @@
     const blockingWarnings = billingWarnings.filter(x => x.severity === 'BLOCKING');
     const q = (f.ptSearch || '').toLowerCase();
     const scopeAll = ptScopeAll();
+    const meId = (A.currentAccount() || {}).id;
     // Lọc khu + Bản đồ thu chỉ bật cho chợ thu theo phần (cấu hình D.MARKETS[].receivableGrouping 'TRADER',
     // hiện là Chợ Cao Lãnh) — đọc cấu hình chợ, không hard-code mã chợ.
     const zoneMode = (U.market(ui.market) || {}).receivableGrouping === 'TRADER';
@@ -1060,7 +1061,9 @@
     return { rent: U.sum(its, x => x.amount) - elec - water, elec, water };
   }
   // meId = account đang xem: ô ghi chú đi thu hiện ghi chú của chính người đó (khớp thu-note-inline).
+  // Không truyền meId thì lấy an toàn từ A.currentAccount() (tránh ReferenceError meId).
   function thuRouteRows(p, meId) {
+    if (meId == null) meId = (A.currentAccount() || {}).id;
     const zones = ptZones(), zIdx = id => { const n = zones.findIndex(z => z.id === id); return n === -1 ? 999 : n; };
     const rows = [];
     A.db.invoices.filter(i => A.receivableMarket(i) === ui.market && (i.period === p || (i.period < p && i.status !== 'paid'))).forEach(i => {

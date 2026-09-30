@@ -406,7 +406,7 @@
   }
   function miniComplaintStatusClass(i) {
     if (!i) return '';
-    if (i.state === 'dong') return 'ok';
+    if (i.state === 'dong') return 'danger';
     if (i.state === 'hoanthanh') return 'warn';
     return 'info';
   }
@@ -462,7 +462,6 @@
   function miniComplaintRow(i, n) {
     const st = A.idx.stall.get(i.stallId);
     const canRate = i.state === 'hoanthanh' || i.state === 'dong';
-    const actionLabel = canRate && !i.rating ? 'Đánh giá' : 'Xem';
     return `<tr>
       <td>${n}</td>
       <td><b>${U.esc(i.id)}</b></td>
@@ -472,7 +471,10 @@
       <td>${U.esc(U.mShort(i.market))}<div class="small muted">${U.esc((st && (st.location || st.sectionName || st.code)) || 'Không xác định')}</div></td>
       <td><span class="merchant-status ${miniComplaintStatusClass(i)}">${U.esc(incidentStateLabel(i.state))}</span></td>
       <td>${U.esc(String((i.history && i.history.length && i.history[i.history.length - 1].at) || i.created || '').replace('T', ' · '))}</td>
-      <td><button class="btn sm merchant-view-btn" data-act="mini-complaint-open" data-id="${i.id}">${U.icon('dashboard')} ${actionLabel}</button></td>
+      <td><div class="row" style="gap:6px;flex-wrap:nowrap">
+        <button class="btn sm merchant-view-btn" data-act="mini-complaint-open" data-id="${i.id}">${U.icon('dashboard')} Xem</button>
+        ${canRate ? `<button class="btn sm primary" data-act="mini-complaint-rate-open" data-id="${i.id}">${U.icon('check')} ${i.rating ? 'Sửa đánh giá' : 'Đánh giá'}</button>` : ''}
+      </div></td>
     </tr>`;
   }
   function miniComplaintHistory(i) {
@@ -491,6 +493,17 @@
       <textarea class="input" data-in="mini-rate-comment" data-id="${i.id}" rows="3" maxlength="300" placeholder="Nhập ý kiến thêm về kết quả xử lý...">${U.esc(comment || '')}</textarea>
       <div class="row" style="justify-content:flex-end"><button class="btn primary" data-act="mini-rate-submit" data-id="${i.id}">${i.rating ? 'Cập nhật đánh giá' : 'Gửi đánh giá'}</button></div>
     </section>`;
+  }
+  function miniComplaintRateModal(i) {
+    const result = (i.work && i.work.result) || 'Ban Quản lý đã cập nhật hoàn thành xử lý phản ánh.';
+    A.modal(A.mHead('Đánh giá kết quả phản ánh') + `<div class="modal-b">
+      <dl class="kv">
+        <dt>Mã phản ánh</dt><dd>${U.esc(i.id)}</dd>
+        <dt>Tiêu đề</dt><dd>${U.esc(i.title)}</dd>
+        <dt>Kết quả xử lý</dt><dd>${U.esc(result)}</dd>
+      </dl>
+      ${miniComplaintRatingHtml(i)}
+    </div><div class="modal-f"><button class="btn" data-act="close">Đóng</button></div>`, true);
   }
   // Điều hướng của cổng tiểu thương trong trang quản lý. Mặc định 'home' (trước đây vào thẳng màn
   // gửi phản ánh). Lưu trong ui.mini nên giữ nguyên qua các lần render/đổi màn.
@@ -1335,11 +1348,15 @@
           <dt>Ngày gửi</dt><dd>${U.dmy(i.created)}</dd><dt>Hạn xử lý</dt><dd>${U.esc(String(i.deadline || '').replace('T', ' · '))}</dd>
           ${i.desc ? `<dt>Nội dung</dt><dd>${U.esc(i.desc)}</dd>` : ''}${i.photo || (i.images && i.images.report && i.images.report.length) ? '<dt>Ảnh</dt><dd><span class="tag info">Có ảnh đính kèm</span></dd>' : ''}
           ${i.work && i.work.result ? `<dt>Kết quả</dt><dd>${U.esc(i.work.result)}</dd>` : ''}${i.rating ? `<dt>Đánh giá</dt><dd>${'★'.repeat(i.rating)}${'☆'.repeat(5 - i.rating)}</dd>` : ''}${i.feedback && i.feedback.comment ? `<dt>Ý kiến</dt><dd>${U.esc(i.feedback.comment)}</dd>` : ''}</dl>
-        ${miniComplaintRatingHtml(i)}
         <div class="divider"></div><b class="small">Nhật ký xử lý</b>${miniComplaintHistory(i)}
       </div><div class="modal-f">
         <button class="btn" data-act="close">Đóng</button>
       </div>`, true);
+    },
+    'mini-complaint-rate-open': el => {
+      const t = trader(), i = A.db.incidents.find(x => x.id === el.dataset.id);
+      if (!miniComplaintAllowed(t, i) || (i.state !== 'hoanthanh' && i.state !== 'dong')) { U.toast('Không có quyền đánh giá phản ánh này.'); return; }
+      miniComplaintRateModal(i);
     },
     'mini-debt-pay': el => {
       const t = trader(), acc = A.currentAccount() || {}, d = (A.db.debts || []).find(x => x.id === el.dataset.id);
@@ -1411,7 +1428,7 @@
       if (!miniComplaintAllowed(t, i) || (i.state !== 'hoanthanh' && i.state !== 'dong')) { U.toast('Không có quyền đánh giá phản ánh này.'); return; }
       const drafts = mini().ratingDrafts || (mini().ratingDrafts = {});
       drafts[i.id] = Object.assign({}, drafts[i.id] || {}, { rating: Number(el.dataset.n) });
-      A.ACT['mini-complaint-open']({ dataset: { id: i.id } });
+      miniComplaintRateModal(i);
     },
     'mini-rate-submit': el => {
       const t = trader(), i = A.db.incidents.find(x => x.id === el.dataset.id);
@@ -1421,8 +1438,11 @@
       if (!rating) { U.toast('Vui lòng chọn số sao đánh giá.'); return; }
       i.rating = rating;
       i.feedback = { at: U.today(), by: t.id, comment: String(draft.comment || '').trim() };
-      if (i.state === 'hoanthanh') i.state = 'dong';
-      i.log.push({ at: U.today(), text: 'Tiểu thương đánh giá ' + i.rating + ' sao' + (i.feedback.comment ? ': ' + i.feedback.comment : '') });
+      const text = 'Tiểu thương đánh giá ' + i.rating + ' sao' + (i.feedback.comment ? ': ' + i.feedback.comment : '');
+      i.log = Array.isArray(i.log) ? i.log : [];
+      i.history = Array.isArray(i.history) ? i.history : [];
+      i.log.push({ at: U.today(), text });
+      i.history.push({ at: U.today(), action: 'Tiểu thương đánh giá kết quả', detail: i.rating + ' sao' + (i.feedback.comment ? ' · ' + i.feedback.comment : '') });
       if (mini().ratingDrafts) delete mini().ratingDrafts[i.id];
       A.save(); A.closeModal(); A.render(); U.toast('Cảm ơn bạn đã đánh giá kết quả xử lý.');
     },

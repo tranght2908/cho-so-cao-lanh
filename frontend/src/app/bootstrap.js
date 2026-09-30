@@ -201,7 +201,8 @@
     // các màn Tài chính khác; thiếu khai báo này thì route render cả khi chưa có chợ (ui.market ''/'ALL') và lỗi.
     'tai-khoan-ngan-hang': 'BOTH',
     'phai-thu': 'BOTH', 'thu-tien': 'BOTH', 'doi-soat': 'BOTH', 'theo-doi-ky-doi-soat': 'CROSS', 'cong-no': 'BOTH',
-    'su-co': 'BOTH', 'thong-bao': 'BOTH',
+    'su-co': 'CROSS', 'thong-bao': 'BOTH',
+    'phien-cho': 'TTD',
     'dien-nuoc': 'BOTH',
     'tai-khoan': 'SYSTEM', 'cai-dat': 'SYSTEM', 'mini-app': 'BOTH'
   };
@@ -477,7 +478,11 @@
     if (suCoTechMenuContext()) {
       const acc = A.currentAccount && A.currentAccount();
       const code = acc && acc.code;
-      return code ? A.db.incidents.filter(i => U.inM(i) && i.assignee === code && (i.state === 'phancong' || i.state === 'dangxuly')).length : 0;
+      return code ? A.db.incidents.filter(i => U.inM(i) && i.assignee === code).length : 0;
+    }
+    if (A.canDo('su-co.chi-dao', ui.market)) {
+      const scope = new Set(A.allowedMarkets(A.currentAccount()));
+      return A.db.incidents.filter(i => scope.has(i.market) && i.state === 'tiepnhan').length;
     }
     return A.db.incidents.filter(i => U.inM(i) && i.state === 'tiepnhan').length;
   }
@@ -486,9 +491,10 @@
     const code = acc && acc.code;
     const rows = code ? A.db.incidents.filter(i => U.inM(i) && i.assignee === code) : [];
     const items = [
-      { tab: 'assigned', icon: 'bell', label: 'Việc mới', count: rows.filter(i => i.state === 'phancong').length },
+      { tab: 'assigned', icon: 'bell', label: 'Phân công', count: rows.filter(i => i.state === 'phancong').length },
       { tab: 'doing', icon: 'settings', label: 'Đang xử lý', count: rows.filter(i => i.state === 'dangxuly').length },
-      { tab: 'done', icon: 'check', label: 'Kết quả đã gửi', count: rows.filter(i => ['hoanthanh', 'dong'].indexOf(i.state) !== -1).length },
+      { tab: 'waiting-acceptance', icon: 'check', label: 'Chờ nghiệm thu', count: rows.filter(i => i.state === 'chonghiemthu').length },
+      { tab: 'done', icon: 'file', label: 'Hoàn thành / Đóng', count: rows.filter(i => ['hoanthanh', 'dong'].indexOf(i.state) !== -1).length },
       { tab: 'all', icon: 'file', label: 'Tất cả công việc', count: rows.length }
     ];
     const active = ui.incFlowTab || 'assigned';
@@ -558,7 +564,6 @@
       if (!items.some(it => !it.sub)) return '';
       return `<div class="nav-group">${g.group}</div>` + items.map(it => {
         if (it.sub) return `<div class="nav-subgroup">${it.sub}</div>`;
-        if (it.id === 'su-co' && suCoTechMenuContext()) return suCoTechMenuItemsHtml();
         const b = it.badge ? it.badge() : 0;
         const label = it.id === 'mat-bang' && ui.market === 'CL' ? 'Mặt bằng & điểm kinh doanh' : (it.id === 'su-co' ? suCoMenuLabel() : it.label);
         return `<a href="#/${it.id}" class="${A.current === it.id ? 'active' : ''}"><span class="ico">${it.ico}</span>${label}${b ? `<span class="badge">${b}</span>` : ''}</a>`;
@@ -738,7 +743,7 @@
     'su-co-tech-menu': (el, e) => {
       if (e && e.preventDefault) e.preventDefault();
       if (!suCoTechMenuContext()) return;
-      ui.incFlowTab = el.dataset.tab || 'assigned';
+      ui.incFlowTab = 'all';
       A.go('su-co');
     },
     receipt: el => A.showReceipt(A.db.payments.filter(p => p.receipt === el.dataset.id && U.inM(p) && A.receiptBusinessStateOk(p))),

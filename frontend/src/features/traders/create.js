@@ -40,6 +40,7 @@
     renderProfile();
   };
   ['name', 'phone', 'idno', 'address'].forEach(k => { A.IN['wf-p-' + k] = el => { if (profileDraft) profileDraft[{ idno: 'idNo' }[k] || k] = el.value; }; });
+  A.IN['wf-p-cat'] = () => {};
   A.CH['wf-p-idtype'] = el => { if (profileDraft) profileDraft.idType = el.value; };
   A.ACT['wf-profile-file'] = el => {
     if (!profileDraft) return;

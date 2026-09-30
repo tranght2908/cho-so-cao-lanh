@@ -234,9 +234,10 @@ window.DATA = (function () {
   const METHOD = { tm: 'Tiền mặt', qr: 'Quét mã QR', ck: 'Chuyển khoản' };
 
   const INCIDENT_STATES = [
-    { id: 'tiepnhan', label: 'Chưa phân công' },
+    { id: 'tiepnhan', label: 'Tiếp nhận' },
     { id: 'phancong', label: 'Phân công' },
     { id: 'dangxuly', label: 'Đang xử lý' },
+    { id: 'chonghiemthu', label: 'Chờ nghiệm thu' },
     { id: 'hoanthanh', label: 'Hoàn thành' },
     { id: 'dong', label: 'Đóng' }
   ];
@@ -821,7 +822,7 @@ window.DATA = (function () {
       ['Điện', 'Ổ cắm quầy bị chập, có mùi khét'],
       ['Khác', 'Đề nghị bố trí thêm chỗ để xe cho khách']
     ];
-    const stateCycle = ['tiepnhan', 'phancong', 'dangxuly', 'dangxuly', 'hoanthanh', 'hoanthanh', 'dong', 'tiepnhan', 'phancong', 'dangxuly', 'hoanthanh', 'dong', 'tiepnhan', 'hoanthanh'];
+    const stateCycle = ['tiepnhan', 'phancong', 'dangxuly', 'chonghiemthu', 'hoanthanh', 'hoanthanh', 'dong', 'tiepnhan', 'phancong', 'dangxuly', 'chonghiemthu', 'dong', 'tiepnhan', 'hoanthanh'];
     const rented = stalls.filter(s => holder.has(s.id));
     const incidents = TPL.map((t, i) => {
       const st = i % 5 === 3 ? pick(rented.filter(s => s.market === 'TTD')) : pick(rented.filter(s => s.market === 'CL'));

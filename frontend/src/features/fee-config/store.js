@@ -38,6 +38,13 @@
     //   SERVICE = chia đều, thu như DỊCH VỤ CHỢ (khai báo ở tab Dịch vụ chợ) — không ghi chỉ số, bước
     //             tính/phát hành khoản thu KHÔNG tạo dòng tiền điện/nước theo công tơ.
     cfg.utilityModes = cfg.utilityModes && typeof cfg.utilityModes === 'object' ? cfg.utilityModes : {};
+    Object.keys(cfg.utilityModes).forEach(mid => {
+      if (cfg.utilityModes[mid] && cfg.utilityModes[mid].mode === 'SERVICE') {
+        cfg.utilityModes[mid].mode = 'METER';
+        cfg.utilityModes[mid].history = cfg.utilityModes[mid].history || [];
+        cfg.utilityModes[mid].history.unshift({ time: nowStrSafe(), user: 'Hệ thống', action: 'Chuẩn hóa hình thức thu', detail: 'Chia đều → Theo công tơ từng điểm kinh doanh' });
+      }
+    });
     cfg.waiverTypes = Array.isArray(cfg.waiverTypes) ? cfg.waiverTypes : clone(D.WAIVER_TYPES || []);
     ['stallPrices', 'utilities', 'extraServices'].forEach(cat => {
       cfg[cat] = Array.isArray(cfg[cat]) ? cfg[cat] : [];
@@ -45,6 +52,8 @@
     });
     return cfg;
   }
+
+  function nowStrSafe() { return new Date().toLocaleString('vi-VN'); }
 
   function defaultConfig() {
     const rateSeed = clone(D.RATE_POLICY_SEED || { stallPrices: [], utilities: [], extraServices: [] });
