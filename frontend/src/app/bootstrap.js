@@ -599,7 +599,8 @@
     // trong nội dung dashboard (cùng control, xem trên) — ẩn bản trên topbar CHỈ cho đúng màn này để
     // khỏi có 2 dropdown chọn chợ cùng lúc trên 1 màn. Các màn khác (kể cả 'mini-app', đã ẩn từ
     // trước) không đổi.
-    $('#market-wrap').style.display = (A.current === 'mini-app' || A.current === 'tong-quan') ? 'none' : '';
+    // Đối soát thu tiền có bộ lọc Chợ riêng trong màn (liên chợ, theo marketScopes) → ẩn bản trên topbar.
+    $('#market-wrap').style.display = (A.current === 'mini-app' || A.current === 'tong-quan' || A.current === 'theo-doi-ky-doi-soat') ? 'none' : '';
     const it = A.menuItem(A.current);
     const pageLabel = it && it.id === 'mat-bang' && ui.market === 'CL'
       ? 'Mặt bằng & điểm kinh doanh'

@@ -1815,12 +1815,13 @@
   const rcClosedAt = r => (r && (r.closedAt || r.completedAt)) || '';
   const rcClosedBy = r => (r && (r.closedBy || r.completedBy)) || '';
   const rcStatus = r => (r && r.reconciliationStatus) || 'WAITING';
-  const RC_RESULT = { MATCHED: ['Khớp', 'ok'], SHORTAGE: ['Thiếu', 'danger'], SURPLUS: ['Thừa', 'warn'] };
+  const RC_RESULT = { MATCHED: ['Đủ', 'ok'], SHORTAGE: ['Thiếu', 'danger'], SURPLUS: ['Thừa', 'warn'] };
+  // Trạng thái chỉ nêu kết quả Thiếu / Đủ / Thừa; số tiền chênh lệch xem ở chi tiết.
   function rcStatusTag(r) {
     if (!r) return '<span class="tag">Chưa chốt kỳ</span>';
     if (rcStatus(r) !== 'RECONCILED') return '<span class="tag warn">Chờ đối soát</span>';
     const res = RC_RESULT[r.result] || RC_RESULT.MATCHED;
-    return '<span class="tag ok">Đã đối soát</span>' + (r.result && r.result !== 'MATCHED' ? ` <span class="tag ${res[1]}">${res[0]} ${U.money(Math.abs(r.differenceAmount || 0))}</span>` : '');
+    return `<span class="tag ok">Đã đối soát</span> <span class="tag ${res[1]}">${res[0]}</span>`;
   }
   function ttPeriodState(p, market) {
     if (p.status === 'CLOSED') return { id: 'CLOSED', label: 'Đã chốt kỳ', cls: 'ok' };
@@ -2650,11 +2651,11 @@
   // Route giữ id 'theo-doi-ky-doi-soat' để dùng lại screen/action permission đã cấp cho central_accountant.
   const rcCanView = () => U.can('theo-doi-ky-doi-soat');
   const rcInScope = market => A.allowedMarkets(A.currentAccount()).indexOf(market) !== -1;
-  // Kế toán Trung tâm làm việc liên chợ nên có thể giữ bộ chọn chợ ở ALL. Phạm vi
-  // bản ghi vẫn được kiểm tra riêng qua rcInScope; chỉ không truyền market vào
-  // A.canDo khi ALL vì guard chung so sánh targetMarket với ui.market.
+  // Kế toán Trung tâm làm việc liên chợ: màn có bộ lọc Chợ riêng (topbar ẩn), nên KHÔNG ràng theo SelectedMarket.
+  // Quyền = action permission (A.canDo không truyền market, vì guard chung so targetMarket với ui.market)
+  // + phạm vi bản ghi kiểm tra riêng qua marketScopes (rcInScope).
   const rcCanConfirm = market => rcCanView() && rcInScope(market)
-    && A.canDo('theo-doi-ky-doi-soat.xac-nhan-hoan-tat', ui.market === 'ALL' ? null : market);
+    && A.canDo('theo-doi-ky-doi-soat.xac-nhan-hoan-tat');
   const rcKey = (periodId, market) => periodId + '|' + market;
   function rcMarkets() {
     const allowed = new Set(A.allowedMarkets(A.currentAccount()));
@@ -2692,7 +2693,7 @@
   function rcDiffHtml(ev) {
     if (!ev.valid) return '<div class="rc-diff"><span class="muted">Nhập số tiền mặt thực tế nhận để hệ thống tính chênh lệch.</span></div>';
     const sign = ev.diff > 0 ? '+' : ev.diff < 0 ? '−' : '';
-    if (ev.result === 'MATCHED') return `<div class="rc-diff is-ok"><b>✓ KHỚP</b><span>Chênh lệch: <b>0 đ</b></span></div>`;
+    if (ev.result === 'MATCHED') return `<div class="rc-diff is-ok"><b>✓ ĐỦ</b><span>Chênh lệch: <b>0 đ</b></span></div>`;
     return `<div class="rc-diff ${ev.result === 'SHORTAGE' ? 'is-bad' : 'is-warn'}"><b>⚠ ${ev.result === 'SHORTAGE' ? 'THIẾU' : 'THỪA'}</b><span>Chênh lệch: <b>${sign}${U.money(Math.abs(ev.diff))}</b> · ${ev.result === 'SHORTAGE' ? 'Thiếu' : 'Thừa'} ${U.money(Math.abs(ev.diff))}</span></div>`;
   }
   const rcSubmitLabel = ev => ev.valid && ev.diff !== 0 ? 'Xác nhận kết quả đối soát' : 'Xác nhận đối soát';
@@ -2715,13 +2716,21 @@
     const cp = own(sm.cashPaymentIds), tp = own(sm.transferPaymentIds), cash = U.sum(cp, x => x.amount), transfer = U.sum(tp, x => x.amount);
     return { cash, transfer, collected: cash + transfer, transferCount: tp.length, transferIds: tp.map(x => x.id) };
   }
-  function rcTransferList(r) {
-    const ids = rcFigures(r).transferIds;
-    if (!Array.isArray(ids)) return '<div class="small muted">Bản ghi chốt kỳ này không lưu danh sách giao dịch chuyển khoản.</div>';
-    const pays = ids.map(id => A.db.payments.find(x => x.id === id)).filter(Boolean);
-    return U.table([{ t: 'Thời gian' }, { t: 'Mã giao dịch' }, { t: 'Khoản phải thu' }, { t: 'Tiểu thương' }, { t: 'Phương thức' }, { t: 'Số tiền', num: true }],
-      pays.map(x => `<tr><td class="nowrap">${U.dmy(x.date)} ${U.esc(x.time || '')}</td><td>${U.esc(x.id)}</td><td>${U.esc(x.invoiceId || '')}</td><td>${U.esc((A.idx.trader.get(x.traderId) || {}).name || x.traderId || '')}</td><td>${U.esc(D.METHOD[x.method] || x.method)}</td><td class="num">${U.money(x.amount)}</td></tr>`),
-      { empty: 'Không có giao dịch chuyển khoản trong kỳ' });
+  // Đối soát chuyển khoản: tổng chuyển khoản hệ thống ghi nhận trong kỳ (snapshot chốt kỳ) so với tổng tiền vào tài
+  // khoản ngân hàng của chợ trong thời gian thu (sao kê db.bank, trừ tiền thu hồi công nợ — ngoài phạm vi kỳ, giống
+  // phần tiền của kỳ). Bản ghi đã đối soát dùng số đã lưu lúc xác nhận.
+  function rcBankCheck(p, m, r) {
+    const fig = rcFigures(r);
+    if (rcStatus(r) === 'RECONCILED' && r.bankInflowAmount != null) return { system: fig.transfer, systemCount: fig.transferCount, bank: r.bankInflowAmount, bankCount: r.bankInflowCount, diff: r.bankInflowAmount - fig.transfer };
+    const debtPay = id => !!id && !!(A.db.payments.find(x => x.id === id) || {}).debtId;
+    const lines = (A.db.bank || []).filter(b => b.market === m.id && b.date >= p.startDate && b.date <= p.endDate && !debtPay(b.paymentId) && !/^CHOSO CN-/.test(b.ref || ''));
+    const bank = U.sum(lines, b => Number(b.amount || 0));
+    return { system: fig.transfer, systemCount: fig.transferCount, bank, bankCount: lines.length, diff: bank - fig.transfer };
+  }
+  function rcBankHtml(bc) {
+    const ok = bc.diff === 0, sign = bc.diff > 0 ? '+' : bc.diff < 0 ? '−' : '';
+    return `<dl class="tt-sum"><div><dt>Chuyển khoản theo hệ thống</dt><dd>${U.money(bc.system)} <span class="small muted">· ${bc.systemCount || 0} giao dịch</span></dd></div><div><dt>Tiền vào tài khoản ngân hàng (sao kê)</dt><dd>${U.money(bc.bank)} <span class="small muted">· ${bc.bankCount || 0} giao dịch</span></dd></div></dl>
+      <div class="rc-diff ${ok ? 'is-ok' : 'is-bad'}"><b>${ok ? '✓ KHỚP' : '⚠ CHÊNH LỆCH'}</b><span>Chênh lệch: <b>${sign}${U.money(Math.abs(bc.diff))}</b>${ok ? '' : ' · Kiểm tra lại sao kê ngân hàng'}</span></div>`;
   }
   function rcDetailHtml(x) {
     const { p, m, r } = x, sm = rcSum(r), acc = A.currentAccount() || {}, done = rcStatus(r) === 'RECONCILED', can = !done && rcCanConfirm(m.id);
@@ -2746,8 +2755,8 @@
         <div><dt>Tổng phải thu</dt><dd>${U.money(sm.amount || 0)}</dd></div><div><dt>Tổng đã thu</dt><dd>${U.money(fig.collected)}</dd></div>${sm.remaining ? `<div class="is-total"><dt>Còn phải thu</dt><dd>${U.money(sm.remaining)}</dd></div>` : ''}</dl>
       <h4 class="tt-sec-title">2. Phân theo phương thức</h4>
       <dl class="tt-sum"><div><dt>Tiền mặt</dt><dd>${U.money(system)}</dd></div><div><dt>Chuyển khoản</dt><dd>${U.money(transfer)}</dd></div><div class="is-total"><dt>Tổng</dt><dd>${U.money(system + transfer)}</dd></div></dl>
-      <details class="tt-acc"><summary>Chuyển khoản đã ghi nhận: ${U.money(transfer)} · ${transferCount} giao dịch · Đã ghi nhận trong kỳ thu — Xem chi tiết</summary>${rcTransferList(r)}<div class="small muted">Chỉ tra cứu. Kế toán không sửa, xác nhận lại hay đổi trạng thái giao dịch.</div></details>
-      <h4 class="tt-sec-title">3. Đối soát tiền mặt bàn giao</h4>${cashBlock}</div>
+      <h4 class="tt-sec-title">3. Đối soát tiền mặt bàn giao</h4>${cashBlock}
+      <h4 class="tt-sec-title">4. Đối soát chuyển khoản</h4>${rcBankHtml(rcBankCheck(p, m, r))}</div>
       <div class="modal-f"><button class="btn" data-act="close">${can ? 'Hủy' : 'Đóng'}</button>${can ? `<button id="rc-submit" class="btn primary" data-act="rc-review" data-period="${U.esc(p.id)}" data-market="${U.esc(m.id)}" ${rcSubmitOk(ev, draft.note) ? '' : 'disabled'}>${rcSubmitLabel(ev)}</button>` : ''}</div>`;
   }
   function rcOpen(periodId, market) {
@@ -2756,7 +2765,8 @@
     A.modal(A.mHead('Đối soát thu tiền') + rcDetailHtml(x), true);
   }
   function rcView() {
-    const markets = rcMarkets(), periodId = ui.rcPeriod || rcDefaultPeriod(), marketF = markets.some(m => m.id === ui.rcMarket) ? ui.rcMarket : 'all';
+    // Bảng không có cột Kỳ thu nên bộ lọc luôn là 1 kỳ cụ thể.
+    const markets = rcMarkets(), periodId = rcPeriods().some(p => p.id === ui.rcPeriod) ? ui.rcPeriod : rcDefaultPeriod(), marketF = markets.some(m => m.id === ui.rcMarket) ? ui.rcMarket : 'all';
     const statusF = ['WAITING', 'DIFF', 'RECONCILED'].includes(ui.rcStatus) ? ui.rcStatus : 'all', q = String(ui.rcSearch || '').trim().toLowerCase();
     const base = rcRows(periodId).filter(x => marketF === 'all' || x.m.id === marketF);
     const rows = base.filter(x => (statusF === 'all' || (statusF === 'DIFF' ? x.diff : x.bucket === statusF))
@@ -2766,18 +2776,20 @@
     const body = rows.map(x => {
       const sm = x.r ? rcFigures(x.r) : null, act = !x.r ? '<span class="small muted">Chưa chốt kỳ</span>'
         : `<button class="btn sm ${x.bucket === 'WAITING' && rcCanConfirm(x.m.id) ? 'primary' : ''}" data-act="rc-open" data-period="${U.esc(x.p.id)}" data-market="${U.esc(x.m.id)}">${x.bucket === 'WAITING' && rcCanConfirm(x.m.id) ? 'Đối soát' : 'Xem'}</button>`;
-      return `<tr><td><b>${U.esc(x.m.name)}</b></td><td>${U.esc(ttPeriodLabel(x.p))}</td><td>${U.esc(x.collectorName)}</td><td class="nowrap">${x.r ? U.esc(rcClosedAt(x.r)) : '<span class="muted">—</span>'}</td>
+      // Ngày đối soát = ngày lưu kết quả đối soát (chỉ ngày; giờ xem ở chi tiết).
+      const rcDay = x.r && rcStatus(x.r) === 'RECONCILED' && x.r.reconciledAt ? String(x.r.reconciledAt).split(' ')[0] : '';
+      return `<tr><td><b>${U.esc(x.m.name)}</b></td><td>${U.esc(x.collectorName)}</td><td class="nowrap">${rcDay ? U.esc(rcDay) : '<span class="muted">—</span>'}</td>
         <td class="num">${sm ? U.money(sm.collected) : '—'}</td><td class="num">${sm ? U.money(sm.cash) : '—'}</td><td class="num">${sm ? U.money(sm.transfer) : '—'}</td>
-        <td>${rcStatusTag(x.r)}${x.r && x.r.prototypeBypass ? ' <span class="tag warn">Prototype</span>' : ''}</td><td class="nowrap">${act}</td></tr>`;
+        <td>${rcStatusTag(x.r)}</td><td class="nowrap">${act}</td></tr>`;
     });
     return `<div class="card"><div class="card-b"><h2 style="margin:0">Đối soát thu tiền</h2><div class="small muted">Đối chiếu và xác nhận số tiền do Nhân viên thu phí bàn giao từ các chợ.</div></div></div>
       <div class="kpis">${k('Tổng chợ', marketF === 'all' ? markets.length : 1)}${k('Chờ đối soát', cnt('WAITING'), cnt('WAITING') ? 'tt-bad' : '')}${k('Đã đối soát', cnt('RECONCILED'), 'tt-ok')}${k('Có chênh lệch', cnt('DIFF'), cnt('DIFF') ? 'tt-bad' : '')}</div>
       <div class="card"><div class="card-b tt-toolbar">
-        <label class="tt-f"><span>Kỳ thu</span><select class="input" data-ch="rc-period"><option value="all" ${periodId === 'all' ? 'selected' : ''}>Tất cả kỳ</option>${rcPeriods().map(p => `<option value="${U.esc(p.id)}" ${p.id === periodId ? 'selected' : ''}>${U.esc(ttPeriodLabel(p))}</option>`).join('')}</select></label>
+        <label class="tt-f"><span>Kỳ thu</span><select class="input" data-ch="rc-period">${rcPeriods().map(p => `<option value="${U.esc(p.id)}" ${p.id === periodId ? 'selected' : ''}>${U.esc(ttPeriodLabel(p))}</option>`).join('')}</select></label>
         <label class="tt-f"><span>Chợ</span><select class="input" data-ch="rc-market"><option value="all">Tất cả ${markets.length} chợ</option>${markets.map(m => `<option value="${m.id}" ${m.id === marketF ? 'selected' : ''}>${U.esc(m.name)}</option>`).join('')}</select></label>
         <div class="seg">${[['all', 'Tất cả'], ['WAITING', 'Chờ đối soát'], ['DIFF', 'Có chênh lệch'], ['RECONCILED', 'Đã đối soát']].map(s => `<button class="${statusF === s[0] ? 'on' : ''}" data-act="rc-status" data-id="${s[0]}">${s[1]}</button>`).join('')}</div>
-        <input class="input tt-search" data-in="rc-search" value="${U.esc(ui.rcSearch || '')}" placeholder="Tìm theo chợ, kỳ thu, nhân viên thu phí..."></div>
-      <div class="card-b">${U.table([{ t: 'Chợ' }, { t: 'Kỳ thu' }, { t: 'NV thu phí' }, { t: 'Ngày chốt kỳ' }, { t: 'Tổng đã thu', num: true }, { t: 'Tiền mặt bàn giao', num: true }, { t: 'Chuyển khoản', num: true }, { t: 'Trạng thái đối soát' }, { t: 'Thao tác' }], body,
+        <input class="input tt-search" data-in="rc-search" value="${U.esc(ui.rcSearch || '')}" placeholder="Tìm theo chợ, nhân viên thu phí..."></div>
+      <div class="card-b">${U.table([{ t: 'Chợ' }, { t: 'NV thu phí' }, { t: 'Ngày đối soát' }, { t: 'Tổng đã thu', num: true }, { t: 'Tiền mặt bàn giao', num: true }, { t: 'Chuyển khoản', num: true }, { t: 'Trạng thái đối soát' }, { t: 'Thao tác' }], body,
         { empty: 'Không có bản ghi đối soát phù hợp bộ lọc' })}
         <div class="small muted tt-foot">Bản ghi được tạo khi Nhân viên thu phí Chốt kỳ thu. Kế toán Trung tâm không chốt kỳ, không thu tiền và không sửa giao dịch.</div></div></div>`;
   }
@@ -2831,6 +2843,9 @@
     const c = rcCommitContext(el);
     if (c.err) { U.toast(c.err); A.closeModal(); A.render(); return; }
     // Chỉ ghi vào bản ghi đối soát; billingPeriod.status, payment, biên lai, khoản phải thu không đổi.
+    // Lưu snapshot đối soát chuyển khoản (tiền vào tài khoản ngân hàng tại thời điểm xác nhận).
+    const bc = rcBankCheck(c.p, c.m, c.r);
+    Object.assign(c.r, { bankInflowAmount: bc.bank, bankInflowCount: bc.bankCount, transferDifferenceAmount: bc.diff });
     Object.assign(c.r, { reconciliationStatus: 'RECONCILED', reconciledAt: nowStamp(), reconciledBy: c.acc.fullName || c.acc.code || c.acc.id, reconciledById: c.acc.id, reconciledByCode: c.acc.code || '',
       systemCashAmount: c.system, actualCashAmount: c.ev.actual, transferAmount: c.transfer, totalCollectedAmount: c.collected, differenceAmount: c.ev.diff, result: c.ev.result, note: String(c.d.note || '').trim() });
     ui.rcDraft = null;
