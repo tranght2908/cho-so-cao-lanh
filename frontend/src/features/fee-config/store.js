@@ -187,35 +187,8 @@
     resetDefault: () => { CFG = defaultConfig(); save(); }
   };
 
-  // Kỳ demo 10/2026 thuộc đúng nguồn dữ liệu Kỳ thu. Chỉ bổ sung khi thiếu,
-  // lấy các mốc từ cấu hình lịch hiện tại và tuyệt đối không được finance tạo thay.
-  function ensureOctoberCollectionPeriod() {
-    if (!A.db || !Array.isArray(A.db.billingPeriods) || A.db.billingPeriods.some(p => p.id === '2026-10')) return;
-    const c = SC.cycle(), day = (year, monthIndex, value) => {
-      const max = new Date(year, monthIndex + 1, 0).getDate();
-      const d = Math.min(Math.max(Number(value) || 1, 1), max);
-      return year + '-' + String(monthIndex + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
-    };
-    // `2026-10` là kỳ thu tháng 10: các mốc chuẩn bị/ghi/phát hành thuộc tháng 09;
-    // hạn nộp theo dueMonth của lịch cấu hình.
-    const year = 2026, month = 9;
-    const p = {
-      id: '2026-10', label: '10/2026', marketId: 'CL',
-      preparationDate: day(year, month - 1, c.preparationDay),
-      meterReadDate: day(year, month - 1, c.meterReadDay),
-      expectedIssueDate: day(year, month - 1, c.issueDay),
-      startDate: day(year, month - 1, c.collectionStartDay),
-      dueDate: day(year, c.dueMonth === 'current' ? month - 1 : month, c.dueDay),
-      endDate: day(year, month, 0), status: 'PREPARING', prototypeDemo: true
-    };
-    A.db.billingPeriods.push(p);
-    A.save();
-  }
-  SC.ensureDemoBillingPeriod = ensureOctoberCollectionPeriod;
-  ensureOctoberCollectionPeriod();
-  // bootstrap loads A.db on DOMContentLoaded after feature scripts are parsed.
-  // Run once more then so persisted state receives only this missing demo period.
-  document.addEventListener('DOMContentLoaded', ensureOctoberCollectionPeriod, { once: true });
+  // KY_09_DEN_GHI_CHI_SO (seed v29): không còn tự bổ sung kỳ demo 10/2026 — kỳ đang làm là 09/2026,
+  // mọi kỳ sau chỉ được tạo khi người dùng thao tác tiếp luồng thu phí.
 
   // Applied price helpers (from js/core.js, Phase 15.6).
   // Đơn giá hiện hành của điểm KD lấy từ "Chính sách thu và biểu phí", không phải

@@ -23,9 +23,9 @@ A.db.contracts = [
   { id: 'HĐ001', market: 'CL', traderId: 'TT0275', stallId: 'HS-A06', businessPointId: 'HS-A06', start: '2026-01-01', end: '2026-12-31', status: 'hieuluc', serviceApplicability: { electricity: true, water: true, marketService: true } },
   { id: 'HĐ002', market: 'CL', traderId: 'TT0275', stallId: 'HS-A07', businessPointId: 'HS-A07', start: '2026-01-01', end: '2026-12-31', status: 'hieuluc', serviceApplicability: { electricity: false, water: false, marketService: true } }
 ];
-A.db.readings = [{ stallId: 'HS-A06', period: '2026-10', elecPrev: 100, elecCur: 120, elecAvg: 15, waterPrev: 20, waterCur: 25, waterAvg: 4, status: 'RECORDED' }];
+A.db.readings = [{ stallId: 'HS-A06', period: '2026-09', elecPrev: 100, elecCur: 120, elecAvg: 15, waterPrev: 20, waterCur: 25, waterAvg: 4, status: 'RECORDED' }];
 A.db.traderVehicles = [{ id: 'VEH-001', traderId: 'TT0275', market: 'CL', type: 'MOTORBIKE', plateNumber: '66H1-12345', startDate: '2026-01-01', endDate: null, status: 'ACTIVE' }];
-A.db.billingPeriods = [{ id: '2026-10', label: '10/2026', startDate: '2026-10-01', endDate: '2026-10-31', dueDate: '2026-11-15', status: 'OPEN' }];
+A.db.billingPeriods = [{ id: '2026-09', label: '09/2026', startDate: '2026-09-01', endDate: '2026-09-30', dueDate: '2026-10-15', status: 'OPEN' }];
 A.db.issuedPeriods = [];
 A.reindex();
 
@@ -36,22 +36,22 @@ A.SERVICE_CFG.add('extraServices', { name: 'Vệ sinh', category: 'GENERAL', mar
 const vehiclePolicy = A.SERVICE_CFG.add('extraServices', { name: 'Phí xe máy', category: 'VEHICLE', vehicleType: 'MOTORBIKE', marketId: 'CL', calcMethod: 'fixed', amount: 70000, unit: 'đ/tháng', collectionCycle: 'MONTH', effectiveFrom: '2026-01-01', effectiveTo: null, status: 'active', legalBasis: { docNo: 'P-XE', effectiveDate: '2026-01-01' } }, 'test');
 const billing = A.features.finance.billing;
 
-let out = billing.calculatePeriod('CL', '2026-10');
+let out = billing.calculatePeriod('CL', '2026-09');
 assert.strictEqual(out.warnings.filter(x => x.severity === 'BLOCKING').length, 0);
 assert.strictEqual(out.drafts.length, 7, 'two land + electricity + water + two service policies + vehicle');
 assert.strictEqual(out.drafts.filter(x => x.items[0].chargeType === 'VEHICLE')[0].items[0].unitPrice, 70000);
 
 A.db.readings[0].elecCur = 130;
-out = billing.calculatePeriod('CL', '2026-10');
+out = billing.calculatePeriod('CL', '2026-09');
 assert(out.warnings.some(x => x.code === 'ABNORMAL_CONSUMPTION' && x.severity === 'WARNING'));
 assert.strictEqual(out.warnings.some(x => x.severity === 'BLOCKING'), false);
 A.db.readings[0].elecCur = 120;
 
 // A second calculation replaces only mutable drafts; it never duplicates them.
-out = billing.calculatePeriod('CL', '2026-10');
-assert.strictEqual(billing.drafts('CL', '2026-10').length, 7);
+out = billing.calculatePeriod('CL', '2026-09');
+assert.strictEqual(billing.drafts('CL', '2026-09').length, 7);
 
-const issued = billing.issue('CL', '2026-10', 'Trưởng BQL');
+const issued = billing.issue('CL', '2026-09', 'Trưởng BQL');
 assert.strictEqual(issued.issued.length, 7);
 assert.strictEqual(A.db.billingDrafts.length, 0);
 assert(A.db.invoices.every(x => x.billingStatus === 'ISSUED' && x.items[0].status === 'ISSUED'));
@@ -65,22 +65,22 @@ assert.strictEqual(payments.length, 7);
 assert.strictEqual(A.U.traderDebt('TT0275'), 0);
 
 const nextPeriod = billing.openNextPeriod();
-assert.strictEqual(nextPeriod.id, '2026-11');
-assert(A.db.meterPeriods.some(x => x.id === '2026-11' && x.status === 'RECORDING'));
+assert.strictEqual(nextPeriod.id, '2026-10');
+assert(A.db.meterPeriods.some(x => x.id === '2026-10' && x.status === 'RECORDING'));
 
 // Missing policy is non-blocking but does not invent a vehicle charge.
 A.db.invoices = []; A.db.payments = []; A.db.issuedPeriods = []; A.db.billingDrafts = []; A.db.billingWarnings = [];
 vehiclePolicy.status = 'inactive';
-out = billing.calculatePeriod('CL', '2026-10');
+out = billing.calculatePeriod('CL', '2026-09');
 assert(out.warnings.some(x => x.code === 'MISSING_VEHICLE_POLICY' && x.severity === 'WARNING'));
 assert.strictEqual(out.drafts.some(x => x.sourceKey === 'VEHICLE|VEH-001'), false);
 
 // Meter source failures block issuance for the affected period.
 A.db.readings[0].elecCur = null;
-out = billing.calculatePeriod('CL', '2026-10');
+out = billing.calculatePeriod('CL', '2026-09');
 assert(out.warnings.some(x => x.code === 'MISSING_METER_READING' && x.severity === 'BLOCKING'));
 A.db.readings[0].elecCur = 90;
-out = billing.calculatePeriod('CL', '2026-10');
+out = billing.calculatePeriod('CL', '2026-09');
 assert(out.warnings.some(x => x.code === 'INVALID_METER_READING' && x.severity === 'BLOCKING'));
 
 console.log('billing flow regression PASS');

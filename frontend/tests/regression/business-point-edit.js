@@ -102,6 +102,12 @@ ok('11 moving to dãy KB-A preserves only point-owned data (within the row alloc
   assert.strictEqual(snapshot(), before, 'moving the point still leaves contracts/invoices untouched');
 });
 ok('12 Nợ phí cannot be cleared from the popup', () => {
+  // Seed v29 không còn khoản quá hạn ở CL (kỳ 09 chưa phát hành) → tự tạo 1 khoản quá hạn cho điểm đang thuê.
+  if (!A.db.stalls.some(s => s.market === 'CL' && A.pointDisplayStatus(s) === 'no')) {
+    const st = A.db.stalls.find(s => s.market === 'CL' && s.id !== occupied.id && BP.contractOn(s.id, today)), c = BP.contractOn(st.id, today);
+    A.db.invoices.push({ id: 'PT-TEST-OVERDUE', period: '2026-08', market: 'CL', stallId: st.id, traderId: c.traderId, contractId: c.id, items: [], amount: 100000, paid: 0, due: '2026-08-15', status: 'unpaid' });
+    A.reindex();
+  }
   const debt = A.db.stalls.find(s => s.market === 'CL' && A.pointDisplayStatus(s) === 'no');
   open(debt);
   assert(/Nợ phí/.test(modal()) && !/<option value="no"/.test(modal()) && !/<option value="trong"/.test(modal()));

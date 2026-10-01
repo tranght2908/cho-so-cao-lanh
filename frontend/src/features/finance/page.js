@@ -409,25 +409,8 @@
   }
   function mrV4EnsureDemoPeriod() {
     const periods = A.db.meterPeriods || [], active = periods.filter(x => x.status !== 'CLOSED').sort((a, b) => b.id.localeCompare(a.id))[0];
-    if (active) return active;
-    let demo = periods.find(x => x.id === '2026-10');
-    if (!demo) {
-      demo = { id: '2026-10', month: 10, year: 2026, status: 'RECORDING', closeDate: '2026-10-25', prototypeDemo: true };
-      periods.push(demo);
-    }
-    mrV3EnsureRows(demo);
-    if (!demo.reviewDemoSeeded) {
-      const groups = mrV3Groups(demo), reasons = ['Điện tăng bất thường.', 'Nước tăng bất thường.', 'Chỉ số cần xác minh.'];
-      groups.forEach(g => {
-        if (g.r.elecCur == null) g.r.elecCur = Number(g.r.elecPrev || 0) + Math.max(Number(g.r.elecAvg) || 1, 1);
-        if (g.r.waterCur == null) g.r.waterCur = Number(g.r.waterPrev || 0) + Math.max(Number(g.r.waterAvg) || 1, 1);
-        g.r.status = 'RECORDED';
-      });
-      groups.slice(0, 3).forEach((g, i) => { g.r.reviewRequired = true; g.r.reviewReason = reasons[i]; g.r.reviewDemo = true; });
-      demo.reviewDemoSeeded = true;
-      A.save();
-    }
-    return demo;
+    // Không tự tạo kỳ demo mới: hết kỳ đang ghi thì hiển thị kỳ gần nhất; kỳ sau chỉ sinh từ luồng thu phí.
+    return active || periods.slice().sort((a, b) => b.id.localeCompare(a.id))[0] || null;
   }
   function mrV4CurrentPeriod() {
     const selected = f.mrPeriod && (A.db.meterPeriods || []).find(x => x.id === f.mrPeriod);
@@ -804,7 +787,7 @@
   }
   function ptNewPeriod() {
     const list = A.db.billingPeriods || [];
-    return list.find(p => p.id === f.ptPeriod) || list.find(p => p.id === '2026-10') || list.find(p => p.id === ui.period) || list[list.length - 1];
+    return list.find(p => p.id === f.ptPeriod) || list.find(p => p.id === ui.period) || list[list.length - 1];
   }
   function ptNewGroups(market, period) { const b = A.features.finance.billing; return b ? b.traderGroups(market, period) : []; }
   function ptNewAmount(rows, type) { return U.sum(rows.filter(r => r.items[0] && r.items[0].chargeType === type), r => r.amount); }
