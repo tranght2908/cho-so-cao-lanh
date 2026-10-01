@@ -794,21 +794,30 @@
   }
   function ptNewGroups(market, period) { const b = A.features.finance.billing; return b ? b.traderGroups(market, period) : []; }
   function ptNewAmount(rows, type) { return U.sum(rows.filter(r => r.items[0] && r.items[0].chargeType === type), r => r.amount); }
+  function ptReceivableCode(market, period, traderId, ordinal) {
+    const marketCode = String(market || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+    const periodCode = String(period || '').replace(/[^0-9]/g, '').slice(0, 6);
+    const traderCode = String(traderId || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+    return 'KPT-' + marketCode + '-' + periodCode + '-' + traderCode + (ordinal > 1 ? '-' + String(ordinal).padStart(2, '0') : '');
+  }
   function ptNewView() {
     const billing = A.features.finance.billing, p = ptNewPeriod();
     if (!p || !billing) return '<div class="empty">Chưa có kỳ thu hoặc chức năng tính khoản phải thu.</div>';
     const market = ui.market, meter = (A.db.meterPeriods || []).find(x => x.id === p.id), contracts = (A.db.contracts || []).filter(c => c.market === market && c.status === 'hieuluc' && c.start <= p.endDate && (!c.end || c.end >= p.startDate));
     const groups = ptNewGroups(market, p.id), warns = billing.warnings(market, p.id), published = (A.db.invoices || []).filter(i => i.market === market && i.period === p.id && i.billingStatus === 'PUBLISHED'), isPublished = !!published.length, q = (f.ptSearch || '').toLowerCase();
     const rowFilter = f.ptValidation || 'all';
-    const shown = (isPublished ? published.map(i => ({ traderId: i.traderId, rows: (i.items || []).map(item => ({ amount: item.amount, items: [item], contractId: item.contractId, stallId: item.stallId })), contractIds: i.contractIds || [], amount: i.amount, validationStatus: 'VALID', invoice: i, errors: [] })) : groups).filter(g => { const t = A.idx.trader.get(g.traderId) || {}; return (rowFilter === 'all' || (rowFilter === 'valid' ? g.validationStatus === 'VALID' : g.validationStatus === 'HAS_ERRORS')) && (!q || [t.name, t.id, ...(g.contractIds || [])].join(' ').toLowerCase().includes(q)); });
-    const total = U.sum(shown, g => g.amount), issueCount = groups.filter(g => g.validationStatus === 'HAS_ERRORS').length, canManage = A.canDo('phai-thu.phat-hanh', market), calculated = groups.length > 0 || warns.length > 0, ready = calculated && !!groups.length && A.meterPeriodIsClosed(meter, market) && !warns.some(w => w.severity === 'BLOCKING') && !issueCount;
+    const sourceRows = isPublished ? published.map(i => ({ traderId: i.traderId, rows: (i.items || []).map(item => ({ amount: item.amount, items: [item], contractId: item.contractId, stallId: item.stallId })), contractIds: i.contractIds || [], amount: i.amount, validationStatus: 'VALID', invoice: i, errors: [] })) : groups;
+    const codeCounts = {};
+    const withCodes = sourceRows.map(g => { const base = ptReceivableCode(market, p.id, g.traderId, 1), ordinal = (codeCounts[base] || 0) + 1; codeCounts[base] = ordinal; return Object.assign({}, g, { receivableCode: ptReceivableCode(market, p.id, g.traderId, ordinal) }); });
+  const shown = withCodes.filter(g => { const t = A.idx.trader.get(g.traderId) || {}; return (rowFilter === 'all' || (rowFilter === 'valid' ? g.validationStatus === 'VALID' : g.validationStatus === 'HAS_ERRORS')) && (!q || [t.name, t.id, g.receivableCode, ...(g.contractIds || [])].join(' ').toLowerCase().includes(q)); });
+  const total = U.sum(shown, g => g.amount), issueCount = groups.filter(g => g.validationStatus === 'HAS_ERRORS').length, canManage = A.canDo('phai-thu.phat-hanh', market), calculated = groups.length > 0 || warns.length > 0, ready = calculated && !!groups.length && A.meterPeriodIsClosed(meter, market) && !warns.some(w => String(w.severity || '').toUpperCase() === 'BLOCKING') && !issueCount;
     const state = isPublished ? 'PUBLISHED' : !calculated ? 'NOT_CALCULATED' : ready ? 'READY_TO_PUBLISH' : 'HAS_ERRORS';
     const periods = (A.db.billingPeriods || []).slice().sort((a,b) => b.id.localeCompare(a.id)).map(x => `<option value="${x.id}" ${x.id === p.id ? 'selected' : ''}>${U.esc(x.label || U.per(x.id))}</option>`).join('');
     const readiness = `<div class="row small" style="gap:12px;flex-wrap:wrap;margin-top:10px"><span>${A.meterPeriodIsClosed(meter, market) ? '✓' : '○'} Chỉ số điện, nước: <b>${A.meterPeriodIsClosed(meter, market) ? 'Đã hoàn tất' : 'Chưa hoàn tất'}</b>${A.meterPeriodIsClosed(meter, market) ? ' ' + (A.db.readings || []).filter(r => r.period === p.id && (A.idx.stall.get(r.stallId) || {}).market === market).length + ' điểm' : ''}</span><span>${warns.some(w => w.code && w.code.indexOf('POLICY') >= 0) ? '○' : '✓'} Biểu phí: <b>${warns.some(w => w.code && w.code.indexOf('POLICY') >= 0) ? 'Cần kiểm tra' : 'Đã cấu hình'}</b></span><span>✓ Hợp đồng hiệu lực: <b>${contracts.length} hợp đồng</b></span></div>`;
     return `<div class="card"><div class="card-b"><h2 style="margin:0">Khoản phải thu</h2><div class="row" style="gap:10px;flex-wrap:wrap;margin-top:12px"><label class="small">Kỳ thu</label><select class="input" data-ch="pt-period">${periods}</select><span class="tag">${U.esc((U.market(market) || {}).name || market)}</span><span>${ptNewStatus(state)}</span><span class="spacer"></span>${!isPublished && canManage ? `<button class="btn" data-act="pt-calc">${calculated ? 'Tính lại khoản phải thu' : 'Tính nháp khoản phải thu'}</button><button class="btn primary" data-act="pt-publish-open" ${ready ? '' : 'disabled'}>Phát hành ${groups.length} khoản phải thu</button>` : ''}</div>${readiness}${!isPublished && !ready ? `<div class="small muted" style="margin-top:8px">${!A.meterPeriodIsClosed(meter, market) ? 'Cần hoàn tất và khóa chỉ số điện, nước trước khi tính/phát hành.' : warns.length ? 'Có ' + warns.length + ' dữ liệu cần xử lý trước khi phát hành.' : 'Tính nháp để hệ thống kiểm tra dữ liệu nguồn.'}</div>` : ''}${isPublished ? `<div class="note info" style="margin-top:10px">Đã phát hành ${U.dmy(p.issuedAt || published[0].publishedAt || published[0].issuedAt)} · ${U.esc(p.issuedBy || published[0].publishedBy || '—')}. Snapshot số tiền đã được khóa; theo dõi thanh toán ở màn Thu tiền & biên lai.</div>` : ''}</div></div>
       <div class="kpis"><div class="card kpi"><div class="k-label">Tiểu thương</div><div class="k-value">${shown.length}</div></div><div class="card kpi"><div class="k-label">Hợp đồng / Điểm KD</div><div class="k-value">${isPublished ? U.sum(shown, g => (g.contractIds || []).length) : new Set(groups.flatMap(g => g.contractIds)).size}</div></div><div class="card kpi"><div class="k-label">Tổng dự kiến thu</div><div class="k-value">${U.moneyShort(total)}</div><div class="k-sub">${U.money(total)}</div></div><div class="card kpi"><div class="k-label">Cần xử lý</div><div class="k-value">${issueCount}</div><div class="k-sub">${issueCount ? '' : '✓ Sẵn sàng phát hành'}</div></div></div>
       ${warns.length ? `<div class="note warn"><b>Dữ liệu cần xử lý</b>${warns.map(w => `<div>${U.esc(w.message)}</div>`).join('')}</div>` : ''}
-      <div class="card"><div class="card-h"><h3>Danh sách khoản phải thu</h3><div class="seg">${[['all','Tất cả'],['valid','Hợp lệ'],['errors','Cần xử lý']].map(x => `<button class="${rowFilter === x[0] ? 'on' : ''}" data-act="pt-validation" data-id="${x[0]}">${x[1]}</button>`).join('')}</div><input class="input" data-in="pt-search" placeholder="Tìm tiểu thương, mã HĐ, mã điểm..." value="${U.esc(f.ptSearch || '')}"></div><div class="card-b">${U.table([{t:'Tiểu thương'},{t:'HĐ / Điểm KD',num:true},{t:'Mặt bằng',num:true},{t:'Điện',num:true},{t:'Nước',num:true},{t:'Dịch vụ',num:true},{t:'Tổng phải thu',num:true},{t:'Trạng thái'},{t:'Thao tác'}], shown.map(g => { const t = A.idx.trader.get(g.traderId) || {}, bad = g.validationStatus === 'HAS_ERRORS'; return `<tr><td><b>${U.esc(t.name || g.traderId)}</b><div class="small muted">${U.esc(t.id || g.traderId)}</div></td><td class="num">${(g.contractIds || []).length}</td><td class="num">${bad && !ptNewAmount(g.rows,'LAND') ? '—' : U.money(ptNewAmount(g.rows,'LAND'))}</td><td class="num">${U.money(ptNewAmount(g.rows,'ELECTRICITY'))}</td><td class="num">${U.money(ptNewAmount(g.rows,'WATER'))}</td><td class="num">${U.money(ptNewAmount(g.rows,'MARKET_SERVICE'))}</td><td class="num"><b>${U.money(g.amount)}</b></td><td>${ptNewStatus(bad ? 'INVALID' : 'VALID')}</td><td><button class="btn sm" data-act="pt-new-detail" data-trader="${U.esc(g.traderId)}" data-period="${p.id}">${bad ? 'Xem lỗi' : 'Xem chi tiết'}</button></td></tr>`; }), {empty:'Chưa có khoản phải thu nháp trong kỳ này.'})}</div></div>`;
+      <div class="card"><div class="card-h"><h3>Danh sách khoản phải thu</h3><div class="seg">${[['all','Tất cả'],['valid','Hợp lệ'],['errors','Cần xử lý']].map(x => `<button class="${rowFilter === x[0] ? 'on' : ''}" data-act="pt-validation" data-id="${x[0]}">${x[1]}</button>`).join('')}</div><input class="input" data-in="pt-search" placeholder="Tìm tiểu thương, mã khoản thu, mã HĐ, mã điểm..." value="${U.esc(f.ptSearch || '')}"></div><div class="card-b">${U.table([{t:'Tiểu thương'},{t:'Mã khoản thu'},{t:'HĐ / Điểm KD',num:true},{t:'Mặt bằng',num:true},{t:'Điện',num:true},{t:'Nước',num:true},{t:'Dịch vụ',num:true},{t:'Tổng phải thu',num:true},{t:'Trạng thái'},{t:'Thao tác'}], shown.map(g => { const t = A.idx.trader.get(g.traderId) || {}, bad = g.validationStatus === 'HAS_ERRORS'; return `<tr><td><b>${U.esc(t.name || g.traderId)}</b><div class="small muted">${U.esc(t.id || g.traderId)}</div></td><td class="small"><b>${U.esc(g.receivableCode)}</b></td><td class="num">${(g.contractIds || []).length}</td><td class="num">${bad && !ptNewAmount(g.rows,'LAND') ? '—' : U.money(ptNewAmount(g.rows,'LAND'))}</td><td class="num">${U.money(ptNewAmount(g.rows,'ELECTRICITY'))}</td><td class="num">${U.money(ptNewAmount(g.rows,'WATER'))}</td><td class="num">${U.money(ptNewAmount(g.rows,'MARKET_SERVICE'))}</td><td class="num"><b>${U.money(g.amount)}</b></td><td>${ptNewStatus(bad ? 'INVALID' : 'VALID')}</td><td><button class="btn sm" data-act="pt-new-detail" data-trader="${U.esc(g.traderId)}" data-period="${p.id}">${bad ? 'Xem lỗi' : 'Xem chi tiết'}</button></td></tr>`; }), {empty:'Chưa có khoản phải thu nháp trong kỳ này.'})}</div></div>`;
   }
   A.VIEWS['phai-thu'] = function () { return ptNewView();
     A.syncDebts();
@@ -912,7 +921,29 @@
       ${U.table([{ t: 'Tiểu thương' }, { t: 'Điểm KD' }, { t: 'Khoản thu' }, { t: 'Căn cứ tính' }, { t: 'Số tiền', num: true }], rows.map(d => { const i = d.items[0], t = A.idx.trader.get(d.traderId), st = A.idx.stall.get(d.stallId); return `<tr><td>${U.esc((t || {}).name || d.traderId)}<div class="small muted">${d.traderId}</div></td><td>${U.esc((st || {}).code || '—')}</td><td>${U.esc(i.name || 'Khoản thu')}</td><td class="small">${U.esc(i.explanation || '')}${i.policyReference ? `<div class="muted">${U.esc(i.policyReference)}</div>` : ''}</td><td class="num">${U.money(d.amount)}</td></tr>`; }), { empty: 'Chưa có khoản dự thảo' })}
       </div><div class="modal-f"><button class="btn" data-act="close">Đóng</button></div>`, true);
   };
+  function ptStyleDetailCards() {
+    setTimeout(() => {
+      const modal = document.querySelector('.modal');
+      if (!modal) return;
+      Array.from(modal.querySelectorAll('section')).filter(s => /^HỢP ĐỒNG\b/.test((s.querySelector('h4') || {}).textContent || '')).forEach(section => {
+        section.style.marginTop = '14px';
+        section.style.padding = '14px 16px';
+        section.style.border = '1px solid #dfe5ee';
+        section.style.borderRadius = '12px';
+        section.style.background = '#fbfcfe';
+        section.style.boxShadow = '0 2px 8px rgba(31, 41, 55, .05)';
+        const heading = section.querySelector('h4');
+        if (heading) {
+          heading.style.margin = '0 0 10px';
+          heading.style.paddingBottom = '9px';
+          heading.style.borderBottom = '1px solid #e7ebf2';
+          heading.style.color = '#25324a';
+        }
+      });
+    }, 0);
+  }
   function ptNewDetail(traderId, period) {
+    ptStyleDetailCards();
     const billing = A.features.finance.billing, p = (A.db.billingPeriods || []).find(x => x.id === period), group = billing && billing.traderGroups(ui.market, period).find(x => x.traderId === traderId), invoice = (A.db.invoices || []).find(i => i.market === ui.market && i.period === period && i.traderId === traderId), t = A.idx.trader.get(traderId) || {};
     const rows = group ? group.rows : (invoice ? (invoice.items || []).map(item => ({ contractId: item.contractId, stallId: item.stallId, amount: item.amount, items: [item], reviewStatus: 'PUBLISHED' })) : []);
     if (!p || !rows.length) return U.toast('Không tìm thấy chi tiết khoản phải thu.');
@@ -930,7 +961,7 @@
     A.modal(A.mHead('Trả lại kiểm tra khoản phải thu') + `<div class="modal-b"><div class="small muted">Tiểu thương: <b>${U.esc(t.name || el.dataset.trader)}</b></div><div class="field" style="margin-top:12px"><label>Hợp đồng/Điểm cần kiểm tra *</label>${choices}</div><div class="field"><label>Lý do trả lại *</label><textarea id="pt-reject-reason" class="input" rows="3"></textarea></div><div class="field"><label>Loại dữ liệu cần kiểm tra</label><label class="row" style="gap:7px"><input type="checkbox" data-pt-cat value="ELECTRICITY"> Chỉ số điện</label><label class="row" style="gap:7px"><input type="checkbox" data-pt-cat value="WATER"> Chỉ số nước</label><label class="row" style="gap:7px"><input type="checkbox" data-pt-cat value="CONTRACT"> Hợp đồng</label><label class="row" style="gap:7px"><input type="checkbox" data-pt-cat value="RATE"> Biểu phí</label><label class="row" style="gap:7px"><input type="checkbox" data-pt-cat value="OTHER"> Khác</label></div></div><div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="pt-review-reject" data-trader="${U.esc(el.dataset.trader)}" data-period="${el.dataset.period}">Lưu trả lại</button></div>`, true);
   };
   A.ACT['pt-review-reject'] = el => { const selected = Array.from(document.querySelectorAll('[data-pt-contract]:checked')).map(x => x.value), categories = Array.from(document.querySelectorAll('[data-pt-cat]:checked')).map(x => x.value), reason = (A.$('#pt-reject-reason') || {}).value.trim(), actor = (A.currentAccount() || {}).fullName || ''; if (!reason || !selected.length) return U.toast('Vui lòng chọn hợp đồng/điểm và nhập lý do trả lại.'); if (!A.features.finance.billing.review(ui.market, el.dataset.period, el.dataset.trader, 'REJECT', selected, { reason, categories }, actor)) return; A.closeModal(); A.render(); U.toast('Đã trả lại dữ liệu nguồn để kiểm tra; các hợp đồng khác được giữ nguyên.'); };
-  A.ACT['pt-publish-open'] = () => { const billing = A.features.finance.billing, p = ptNewPeriod(), groups = billing.traderGroups(ui.market, p.id), warns = billing.warnings(ui.market, p.id).filter(w => w.severity === 'BLOCKING'); if (!groups.length || warns.length || groups.some(g => g.validationStatus !== 'VALID')) return U.toast('Cần xử lý toàn bộ lỗi dữ liệu trước khi phát hành.'); A.modal(A.mHead('Phát hành khoản phải thu kỳ ' + U.esc(p.label || U.per(p.id))) + `<div class="modal-b"><dl class="kv"><dt>Chợ</dt><dd>${U.esc((U.market(ui.market) || {}).name || ui.market)}</dd><dt>Tiểu thương</dt><dd>${groups.length}</dd><dt>Hợp đồng/Điểm KD</dt><dd>${new Set(groups.flatMap(g => g.contractIds)).size}</dd><dt>Tổng phải thu</dt><dd><b>${U.money(U.sum(groups, g => g.amount))}</b></dd><dt>Cần xử lý</dt><dd>0</dd></dl><div class="note info">Sau khi phát hành, snapshot số tiền được khóa. Prototype chỉ tạo payment reference/QR metadata và sự kiện thông báo; không tạo thanh toán hay biên lai.</div></div><div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="pt-publish-confirm" data-period="${p.id}">Xác nhận phát hành</button></div>`, true); };
+  A.ACT['pt-publish-open'] = () => { const billing = A.features.finance.billing, p = ptNewPeriod(), groups = billing.traderGroups(ui.market, p.id), warns = billing.warnings(ui.market, p.id).filter(w => String(w.severity || 'BLOCKING').toUpperCase() === 'BLOCKING'); if (!groups.length || warns.length || groups.some(g => g.validationStatus !== 'VALID')) return U.toast('Cần xử lý toàn bộ lỗi dữ liệu trước khi phát hành.'); A.modal(A.mHead('Phát hành khoản phải thu kỳ ' + U.esc(p.label || U.per(p.id))) + `<div class="modal-b"><dl class="kv"><dt>Chợ</dt><dd>${U.esc((U.market(ui.market) || {}).name || ui.market)}</dd><dt>Tiểu thương</dt><dd>${groups.length}</dd><dt>Hợp đồng/Điểm KD</dt><dd>${new Set(groups.flatMap(g => g.contractIds)).size}</dd><dt>Tổng phải thu</dt><dd><b>${U.money(U.sum(groups, g => g.amount))}</b></dd><dt>Cần xử lý</dt><dd>0</dd></dl><div class="note info">Sau khi phát hành, snapshot số tiền được khóa. Prototype chỉ tạo payment reference/QR metadata và sự kiện thông báo; không tạo thanh toán hay biên lai.</div></div><div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="pt-publish-confirm" data-period="${p.id}">Xác nhận phát hành</button></div>`, true); };
   A.ACT['pt-publish-confirm'] = el => { const billing = A.features.finance.billing, actor = (A.currentAccount() || {}).fullName || '', out = billing.issue(ui.market, el.dataset.period, actor); if (!out.issued.length) return U.toast('Chưa đủ điều kiện phát hành khoản phải thu.'); U.log('Phát hành ' + out.issued.length + ' khoản phải thu kỳ ' + el.dataset.period); A.closeModal(); A.render(); U.toast('Đã phát hành ' + out.issued.length + ' khoản phải thu.'); };
   // Chi tiết khoản gộp nhiều điểm KD: nhóm dòng theo điểm, mỗi điểm có dòng tiêu đề + tạm tính.
   const ptStaffName = accId => { const a = accId && A.ACCOUNTS.get(accId); return a ? a.fullName : 'Chưa phân công NV thu phí'; };
@@ -1849,11 +1880,14 @@
     return map;
   }
   function ttRows(p, market) {
+    const codeCounts = {};
     return A.db.invoices.filter(i => A.receivableMarket(i) === market && i.period === p.id).map(i => {
       const pays = ttSorted(A.db.payments.filter(x => x.invoiceId === i.id && A.receiptBusinessStateOk(x)));
       const paid = i.status === 'paid';
+      const baseCode = ptReceivableCode(market, p.id, i.traderId, 1), ordinal = (codeCounts[baseCode] || 0) + 1;
+      codeCounts[baseCode] = ordinal;
       return { inv: i, t: A.idx.trader.get(i.traderId) || { id: i.traderId, name: i.traderId }, pays, last: pays[pays.length - 1] || null,
-        status: paid ? 'PAID' : 'UNPAID', remaining: paid ? 0 : Math.max(0, U.due(i)), stallIds: U.invStallIds(i) };
+        status: paid ? 'PAID' : 'UNPAID', remaining: paid ? 0 : Math.max(0, U.due(i)), stallIds: U.invStallIds(i), receivableCode: ptReceivableCode(market, p.id, i.traderId, ordinal) };
     });
   }
   // KẾT QUẢ THU của kỳ (market + period) dùng cho Chốt kỳ thu và Đối soát thu tiền: payment thành công của các khoản phải
@@ -1959,6 +1993,20 @@
       : (a, b) => order[a.status] - order[b.status] || String(a.t.name).localeCompare(String(b.t.name), 'vi'));
     return { base, rows, flt, cnt: k => base.filter(r => k === 'all' || r.status === k).length };
   }
+  function ttReplaceTraderCodeColumn(rows) {
+    setTimeout(() => {
+      const header = Array.from(document.querySelectorAll('th')).find(x => x.textContent.trim() === 'Mã TT');
+      if (!header) return;
+      header.textContent = 'Mã khoản thu';
+      const table = header.closest('table');
+      if (!table) return;
+      Array.from(table.querySelectorAll('tbody tr')).forEach((tr, index) => {
+        const cell = tr.children[1], row = rows[index];
+        if (!cell || !row) return;
+        cell.innerHTML = '<b>' + U.esc(row.receivableCode) + '</b><div class="small muted">' + U.esc(row.inv.id) + '</div>';
+      });
+    }, 0);
+  }
   function ttListHtml(c) {
     const { base, rows, flt, cnt } = ttListRows(c), pg = U.pager('ttList', rows.length, 20);
     const canCollect = ttCanCollect(c.market) && c.state.id === 'COLLECTING', dayClosed = c.code && ttDayClosed(c.market, c.code, U.today()), dayLocked = c.code && ttDayLocked(c.market, c.code, U.today());
@@ -1973,6 +2021,7 @@
         <td>${codes.length} điểm<div class="small muted">${U.esc(codes.join(', '))}</div></td><td class="num">${U.money(r.inv.amount)}</td><td class="num">${U.money(r.inv.amount - r.remaining)}</td><td class="num"><b>${U.money(r.remaining)}</b></td>
         <td>${U.dmy(r.inv.due)}</td><td>${ttTag(st[0], st[1])}</td><td>${method}</td><td class="nowrap tt-actions">${action}${detail}</td></tr>`;
     });
+    ttReplaceTraderCodeColumn(rows.slice(pg.start, pg.end));
     return `<div class="card-b tt-toolbar">
         <input class="input tt-search" data-in="tt-search" placeholder="Tìm tiểu thương, mã TT, mã khoản, điểm KD..." value="${U.esc(f.ttSearch || '')}">
         <div class="seg">${[['all', 'Tất cả'], ['UNPAID', 'Chưa thu'], ['PAID', 'Đã thu đủ']].map(x => `<button class="${flt === x[0] ? 'on' : ''}" data-act="tt-status" data-id="${x[0]}">${x[1]} (${cnt(x[0])})</button>`).join('')}</div>
@@ -1984,11 +2033,32 @@
       <div class="card-b">${U.table([{ t: 'Tiểu thương' }, { t: 'Mã TT' }, { t: 'Điểm KD' }, { t: 'Tổng phải thu', num: true }, { t: 'Đã thu', num: true }, { t: 'Còn lại', num: true }, { t: 'Hạn nộp' }, { t: 'Trạng thái' }, { t: 'Phương thức' }, { t: 'Thao tác' }],
         body, { empty: c.rows.length ? 'Không có khoản phù hợp bộ lọc' : 'Chưa có khoản phải thu đã phát hành trong kỳ này' })}${pg.html}</div>`;
   }
+  function ttReorderTransactionColumns() {
+    setTimeout(() => {
+      const header = Array.from(document.querySelectorAll('th')).find(x => x.textContent.trim() === 'Thời gian');
+      if (!header) return;
+      const table = header.closest('table'), head = table && header.parentElement;
+      if (!table || !head) return;
+      const labels = Array.from(head.children).map(x => x.textContent.trim());
+      const order = ['Mã giao dịch', 'Mã khoản phải thu', 'Tiểu thương', 'Số tiền', 'Phương thức', 'Mã biên lai', 'Trạng thái', 'Thao tác'];
+      const timeIndex = labels.indexOf('Thời gian');
+      if (timeIndex >= 0) {
+        head.children[timeIndex].remove();
+        table.querySelectorAll('tbody tr').forEach(row => { if (row.children[timeIndex]) row.children[timeIndex].remove(); });
+      }
+      const currentLabels = Array.from(head.children).map(x => x.textContent.trim());
+      const indexes = order.map(label => currentLabels.indexOf(label)).filter(index => index >= 0);
+      const reorder = row => indexes.map(index => row.children[index]).filter(Boolean).forEach(cell => row.appendChild(cell));
+      reorder(head);
+      Array.from(table.querySelectorAll('tbody tr')).forEach(reorder);
+    }, 0);
+  }
   function ttTxHtml(c) {
     const q = (f.ttTxSearch || '').trim().toLowerCase(), m = ['tm', 'transfer'].includes(f.ttTxMethod) ? f.ttTxMethod : 'all', handedBy = ttHandedBy(c.market);
     const all = c.rows.flatMap(r => r.pays.map(p => ({ p, r }))).sort((a, b) => (b.p.date + b.p.time).localeCompare(a.p.date + a.p.time));
     const list = all.filter(x => (m === 'all' || (m === 'tm' ? !ttIsTransfer(x.p) : ttIsTransfer(x.p))) && (!q || [x.p.id, x.p.receipt, x.r.inv.id, x.r.t.name, x.r.t.id].join(' ').toLowerCase().includes(q)));
     const pg = U.pager('ttTx', list.length, 20);
+    ttReorderTransactionColumns();
     const status = x => ttIsTransfer(x.p) ? ttTag('Đã ghi nhận', 'ok')
       : handedBy[x.p.id] ? `${ttTag('Đã chốt buổi', 'ok')}<div class="small muted">${U.esc(handedBy[x.p.id].id)}</div>` : ttTag('Chưa chốt buổi', 'warn');
     const cnt = k => all.filter(x => k === 'all' || (k === 'tm' ? !ttIsTransfer(x.p) : ttIsTransfer(x.p))).length;
@@ -2162,7 +2232,29 @@
       <div class="tt-rc-ref">Mã tra cứu: <b>${U.esc(pay.lookup || '')}</b>${inv && inv.paymentReference ? ` · Tham chiếu thanh toán: <b>${U.esc(inv.paymentReference)}</b>` : ''}</div>
       <div class="small muted">Biên lai điện tử của bản mẫu (prototype) — không phải chứng từ phát hành qua hệ thống chính thức.</div></div>`;
   }
+  function ttStyleReceipt() {
+    setTimeout(() => {
+      const receipt = document.querySelector('.tt-receipt');
+      if (!receipt) return;
+      Object.assign(receipt.style, { maxWidth: '760px', margin: '0 auto', padding: '28px 34px', border: '1px solid #d8dee8', borderRadius: '4px', background: '#fff', boxShadow: '0 3px 12px rgba(31,41,55,.08)', color: '#172033' });
+      const org = receipt.querySelector('.tt-rc-org');
+      if (org) Object.assign(org.style, { textAlign: 'center', lineHeight: '1.55', fontSize: '13px', textTransform: 'uppercase' });
+      const title = receipt.querySelector('h4');
+      if (title) Object.assign(title.style, { margin: '22px 0 4px', textAlign: 'center', fontSize: '20px', letterSpacing: '.04em' });
+      const sub = receipt.querySelector('.sub');
+      if (sub) Object.assign(sub.style, { textAlign: 'center', color: '#596579', marginBottom: '22px' });
+      const facts = receipt.querySelector('.kv');
+      if (facts) Object.assign(facts.style, { display: 'grid', gridTemplateColumns: '150px 1fr 150px 1fr', gap: '8px 14px', padding: '16px 0', borderTop: '1px solid #e5e9f0', borderBottom: '1px solid #e5e9f0' });
+      const table = receipt.querySelector('table');
+      if (table) { Object.assign(table.style, { marginTop: '20px', width: '100%', borderCollapse: 'collapse' }); table.querySelectorAll('th').forEach(x => Object.assign(x.style, { background: '#f3f5f8', fontWeight: '700', borderBottom: '1px solid #cfd6e2' })); table.querySelectorAll('th,td').forEach(x => Object.assign(x.style, { padding: '10px 12px', borderBottom: '1px solid #e5e9f0' })); }
+      const total = receipt.querySelector('.tt-rc-total');
+      if (total) Object.assign(total.style, { display: 'flex', justifyContent: 'flex-end', gap: '28px', marginTop: '18px', padding: '14px 0', borderTop: '2px solid #172033', fontSize: '17px' });
+      const ref = receipt.querySelector('.tt-rc-ref');
+      if (ref) Object.assign(ref.style, { marginTop: '18px', padding: '12px 14px', background: '#f7f9fc', border: '1px dashed #b8c2d1', textAlign: 'center' });
+    }, 0);
+  }
   function ttReceiptModal(pay) {
+    ttStyleReceipt();
     A.modal(A.mHead('Biên lai điện tử') + `<div class="modal-b">${ttReceiptHtml(pay)}</div>
       <div class="modal-f"><button class="btn" data-act="tt-receipt-print" data-id="${U.esc(pay.receipt)}">In biên lai</button><button class="btn" data-act="tt-receipt-send" data-id="${U.esc(pay.receipt)}">Gửi qua Zalo / Mini app</button><button class="btn primary" data-act="close">Đóng</button></div>`, true);
   }

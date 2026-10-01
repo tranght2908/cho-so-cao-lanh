@@ -108,8 +108,12 @@
     });
     return Array.from(byTrader.entries()).map(([traderId, rows]) => {
       const errors = warnings(market, period).filter(w => w.traderId === traderId || (w.contractId && (A.db.contracts || []).find(c => c.id === w.contractId && c.traderId === traderId)));
+      // Chỉ cảnh báo BLOCKING mới làm hồ sơ không hợp lệ và chặn phát hành.
+      // Các cảnh báo mức thấp vẫn cần hiển thị để rà soát nhưng không được biến
+      // một hồ sơ đang hợp lệ thành lỗi chặn ở màn Khoản phải thu.
+      const blockingErrors = errors.filter(w => String(w.severity || 'BLOCKING').toUpperCase() === 'BLOCKING');
       const contractIds = Array.from(new Set(rows.map(x => x.contractId).concat(errors.map(x => x.contractId).filter(Boolean))));
-      return { traderId, rows, contractIds, amount: rows.reduce((sum, x) => sum + Number(x.amount || 0), 0), validationStatus: errors.length ? 'HAS_ERRORS' : 'VALID', errors };
+      return { traderId, rows, contractIds, amount: rows.reduce((sum, x) => sum + Number(x.amount || 0), 0), validationStatus: blockingErrors.length ? 'HAS_ERRORS' : 'VALID', errors, blockingErrors };
     });
   }
   function review(market, period, traderId, action, contractIds, meta, actor) {
