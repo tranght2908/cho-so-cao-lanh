@@ -35,6 +35,54 @@
     }
     return rec;
   }
+  // DON_GIA_MAT_BANG_DUNG_CHUNG (01/10/2026): đơn giá mặt bằng áp dụng chung nhiều chợ — scope 'SHARED',
+  // marketId null, danh sách chợ ở marketIds[] (market applicability). QĐ 480/QĐ-UBND ngày 14/02/2026 của UBND
+  // tỉnh Đồng Tháp, Phụ lục STT 7–17: 11 chợ phường Cao Lãnh cùng 3 mức. Seed 10 chợ; TTD (NEED_CONFIRMATION: chưa
+  // rõ có phải "Chợ Tân Thuận Đông" trong QĐ) và CL (không có trong QĐ 480) KHÔNG gán. Bổ sung đúng 1 lần theo id
+  // cố định (marker qd480LandSeed) cho cấu hình đã lưu. Bản ghi SHARED chưa nối vào tính khoản phải thu: billing
+  // vẫn lọc theo marketId một chợ cho tới khi điểm KD được gán loại diện tích theo QĐ 480.
+  const QD480_MARKETS = ['HA', 'TVH', 'TTT', 'TL', 'TT', 'TTH', 'MN', 'LH', 'XB', 'SQ'];
+  const QD480_LEGAL = { docNo: '480/QĐ-UBND', docDate: '2026-02-14', issuer: 'UBND tỉnh Đồng Tháp', summary: 'Ban hành giá dịch vụ sử dụng diện tích bán hàng tại chợ được đầu tư từ nguồn vốn nhà nước trên địa bàn tỉnh Đồng Tháp', effectiveDate: '2026-02-15', note: 'Phụ lục STT 7–17 (các chợ phường Cao Lãnh). Giá đã bao gồm thuế VAT.' };
+  // v2: loại điểm kinh doanh lấy từ danh mục loại diện tích (U.AREA_TYPE_CODES, khai báo ở Danh mục chợ) thay
+  // cho tên tự nhập; bản ghi v1 đã lưu được gán areaTypeId tương ứng và bỏ landTypeName.
+  const QD480_LAND = [
+    ['sp-qd480-mai-che', 'covered', 2000],
+    ['sp-qd480-khong-mai-che', 'uncovered', 1500],
+    ['sp-qd480-tu-san-tu-tieu', 'self_produced', 1000]
+  ];
+  function ensureQd480LandPrices(cfg) {
+    if (cfg.qd480LandSeed >= 2) return;
+    QD480_LAND.forEach(([id, areaTypeId]) => {
+      const r = cfg.stallPrices.find(x => x.id === id);
+      if (r && !r.areaTypeId) { r.areaTypeId = areaTypeId; delete r.landTypeName; }
+    });
+    QD480_LAND.forEach(([id, areaTypeId, amount]) => {
+      if (cfg.stallPrices.some(r => r.id === id)) return;
+      cfg.stallPrices.push(normalizeRecord('stallPrices', { id, scope: 'SHARED', marketId: null, marketIds: QD480_MARKETS.slice(), areaTypeId, marketGrades: [2, 3],
+        amount, unit: 'đ/m²/ngày', effectiveFrom: '2026-02-15', effectiveTo: null, status: 'active', legalBasis: clone(QD480_LEGAL), attachments: [],
+        history: [{ time: '14/02/2026 00:00', user: 'Hệ thống', action: 'Tạo cấu hình', detail: 'Khai báo theo QĐ 480/QĐ-UBND · ' + amount.toLocaleString('vi-VN') + ' đ/m²/ngày · ' + QD480_MARKETS.length + ' chợ' }] }));
+    });
+    cfg.qd480LandSeed = 2;
+  }
+  // DON_GIA_DIEN_NUOC_RIENG (01/10/2026): mỗi bản ghi utilities cũ chứa CẢ giá điện lẫn giá nước → tách thành 2 bản
+  // ghi kind 'ELECTRICITY' / 'WATER' (cùng chợ, hiệu lực, trạng thái, căn cứ, lịch sử) để tab Điện / Nước có danh
+  // sách, vô hiệu hóa và lịch sử riêng. Chạy đúng 1 lần (marker utilitiesSplitV1); billing chọn giá theo kind.
+  function splitUtilityRecords(cfg) {
+    if (cfg.utilitiesSplitV1 >= 1) return;
+    const out = [];
+    cfg.utilities.forEach(r => {
+      if (r.kind) { out.push(r); return; }
+      [['ELECTRICITY', '-dien', 'elecPrice', 'waterPrice', 'điện'], ['WATER', '-nuoc', 'waterPrice', 'elecPrice', 'nước']].forEach(([kind, suffix, keep, drop, label]) => {
+        if (r[keep] == null) return;
+        const x = clone(r);
+        x.id = r.id + suffix; x.kind = kind; x[drop] = null; x.splitFromId = r.id;
+        x.history = [{ time: nowStrSafe(), user: 'Hệ thống', action: 'Tách đơn giá', detail: 'Tách đơn giá ' + label + ' khỏi bản ghi điện, nước chung ' + r.id }].concat(x.history || []);
+        out.push(x);
+      });
+    });
+    cfg.utilities = out;
+    cfg.utilitiesSplitV1 = 1;
+  }
   function normalizeConfig(cfg) {
     // HINH_THUC_THU_DIEN_NUOC: mỗi chợ chọn 1 trong 2 hình thức (mặc định METER — giữ hành vi cũ):
     //   METER   = theo công tơ từng điểm KD, ghi chỉ số hằng tháng, khoản phải thu tính theo chỉ số;
@@ -53,6 +101,8 @@
       cfg[cat] = Array.isArray(cfg[cat]) ? cfg[cat] : [];
       cfg[cat].forEach(rec => normalizeRecord(cat, rec));
     });
+    ensureQd480LandPrices(cfg);
+    splitUtilityRecords(cfg);
     // Lịch kỳ thu mới giữ các field cũ để dữ liệu localStorage đã có tiếp tục dùng được.
     // Các mốc mới chỉ là cấu hình lịch mặc định; không kích hoạt phát hành khoản phải thu.
     const cycle = cfg.billingCycle || {};
