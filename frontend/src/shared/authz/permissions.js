@@ -389,7 +389,8 @@
       // Người dùng chốt 29/09/2026: chỉ NV thu phí được phân công khu ghi chỉ số khu đó (kiểm tra thêm
       // stall.collectorId ở handler). Trưởng Ban xem/chốt kỳ, không ghi thay.
       'dien-nuoc.ghi-chi-so': ['collector'],
-      'dien-nuoc.chot-ky': ['market_manager'],
+      // HOAN_TAT_GHI_CHI_SO_NV (01/10/2026): NV thu phí tự bấm "Hoàn tất ghi chỉ số" để khóa số đã ghi.
+      'dien-nuoc.chot-ky': ['market_manager', 'collector'],
       'dien-nuoc.yeu-cau-dieu-chinh': ['market_manager', 'collector'],
       // accountant cũ không có role kế thừa 1:1 — "phát hành khoản phải thu tự động" thuộc "mở/chốt
       // kỳ thu" (mục 3.C) nên gộp về market_manager, KHÔNG tái lập accountant dưới tên khác.
@@ -555,6 +556,7 @@
   const UTILITY_MODE_PERM_VERSION = 1;
   const UTILITY_MODE_KEY = 'action:cau-hinh-gia.hinh-thuc-dien-nuoc';
   const METER_RECORD_PERM_VERSION = 1;
+  const METER_COMPLETE_PERM_VERSION = 1;
   const CASH_HANDOVER_PERM_VERSION = 1;
   const PHAI_THU_MAP_PERM_VERSION = 1;
   const PHAI_THU_MAP_KEY = 'action:phai-thu.ban-do-thu';
@@ -584,6 +586,7 @@
       phaiThuScopePermVersion: PHAI_THU_SCOPE_PERM_VERSION,
       utilityModePermVersion: UTILITY_MODE_PERM_VERSION,
       meterRecordPermVersion: METER_RECORD_PERM_VERSION,
+      meterCompletePermVersion: METER_COMPLETE_PERM_VERSION,
       cashHandoverPermVersion: CASH_HANDOVER_PERM_VERSION,
       phaiThuMapPermVersion: PHAI_THU_MAP_PERM_VERSION,
       traderContractCreationPermVersion: TRADER_CONTRACT_CREATION_PERM_VERSION,
@@ -642,6 +645,14 @@
     if (stored.meterRecordPermVersion >= METER_RECORD_PERM_VERSION) return false;
     stored.rolePerms = stored.rolePerms.filter(r => !(r.roleId === 'market_manager' && r.permKey === 'action:dien-nuoc.ghi-chi-so'));
     stored.meterRecordPermVersion = METER_RECORD_PERM_VERSION;
+    return true;
+  }
+  // v1 (HOAN_TAT_GHI_CHI_SO_NV): key action:dien-nuoc.chot-ky đã tồn tại nên vòng bổ sung mặc định không tự
+  // thêm — cấp cho collector trong state đã lưu, đúng 1 lần (marker); sau đó Quản trị có thể thu hồi ở Phân quyền.
+  function migrateMeterCompletePerms(stored) {
+    if (stored.meterCompletePermVersion >= METER_COMPLETE_PERM_VERSION) return false;
+    if (!stored.rolePerms.some(r => r.roleId === 'collector' && r.permKey === 'action:dien-nuoc.chot-ky')) stored.rolePerms.push({ roleId: 'collector', permKey: 'action:dien-nuoc.chot-ky', grantedAt: 'migrate-meter-complete', grantedBy: 'Hệ thống' });
+    stored.meterCompletePermVersion = METER_COMPLETE_PERM_VERSION;
     return true;
   }
   // v1 (DOI_SOAT_CUOI_NGAY): state đã lưu — cấp cho role mới market_accountant screen:doi-soat +
@@ -849,6 +860,7 @@
     migratePhaiThuScopePerms(stored);
     migrateUtilityModePerms(stored);
     migrateMeterRecordPerms(stored);
+    migrateMeterCompletePerms(stored);
     migrateCashHandoverPerms(stored);
     migratePhaiThuMapPerms(stored);
     migrateTraderContractCreationPerms(stored);
@@ -926,6 +938,7 @@
     if (migratePhaiThuScopePerms(s)) needSave = true;
     if (migrateUtilityModePerms(s)) needSave = true;
     if (migrateMeterRecordPerms(s)) needSave = true;
+    if (migrateMeterCompletePerms(s)) needSave = true;
     if (migrateCashHandoverPerms(s)) needSave = true;
     if (migrateCentralAccountantPerms(s)) needSave = true;
     if (migrateTechnicianScreenPerms(s)) needSave = true;
