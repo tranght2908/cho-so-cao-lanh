@@ -81,10 +81,13 @@
       // nào xác định AN TOÀN chúng "là" trader nào trong A.db.traders vì tên/SĐT hoàn toàn độc lập
       // với dữ liệu mẫu sinh ngẫu nhiên có seed riêng; auto-link case demo LINKED thật lấy trực tiếp
       // từ A.db khi Management tạo/link tài khoản; bootstrap không tự liên kết hồ sơ demo.
-      { id: 'AC-TT01', code: 'TT-DEMO1', fullName: 'Nguyễn Thị Hoa', phone: '0909345678', accountType: roleName('trader'), title: 'Tiểu thương mẫu', roleIds: ['trader'], organization: 'Chợ Cao Lãnh', marketScopes: ['CL'], status: 'active', traderId: null },
+      { id: 'AC-TT01', code: 'TT-DEMO1', fullName: 'Nguyễn Thị Hoa', phone: '0909345678', accountType: roleName('trader'), title: 'Tiểu thương mẫu', roleIds: ['trader'], organization: 'Chợ Cao Lãnh', marketScopes: ['CL'], status: 'active', traderId: 'TT0001', demoTraderLinkVersion: 1 },
       // Tài khoản Mini App của TT0003 Trần Thị Kim Nhung (thuê 4 điểm KA-A03/KA-A04/HS-A01/TG-A01, Chợ
       // Cao Lãnh) — SĐT trùng hồ sơ tiểu thương trong data.js; liên kết đúng 1 hồ sơ qua traderId.
       { id: 'AC-TT03', code: 'TT0003', fullName: 'Trần Thị Kim Nhung', phone: '0918320516', accountType: roleName('trader'), title: 'Tiểu thương (thuê 4 điểm)', roleIds: ['trader'], organization: 'Chợ Cao Lãnh', marketScopes: ['CL'], status: 'active', linkedTraderId: 'TT0003', traderId: 'TT0003' },
+      // Tài khoản web tiểu thương của TT0009 Bùi Thị Bích Xuân (điểm HS-B01, HS-B02, Chợ Cao Lãnh) — SĐT trùng
+      // hồ sơ trong data.js; bổ sung 01/10/2026, mergeSeedAccounts tự thêm vào danh sách account đã lưu.
+      { id: 'AC-TT09', code: 'TT0009', fullName: 'Bùi Thị Bích Xuân', phone: '0998387443', accountType: roleName('trader'), title: 'Tiểu thương (thuê 2 điểm)', roleIds: ['trader'], organization: 'Chợ Cao Lãnh', marketScopes: ['CL'], status: 'active', linkedTraderId: 'TT0009', traderId: 'TT0009' },
       { id: 'AC-TT02', code: 'TT-DEMO2', fullName: 'Trần Văn Sáu', phone: '0909456789', accountType: roleName('trader'), title: 'Tiểu thương mẫu (đã tạm khoá minh hoạ)', roleIds: ['trader'], organization: 'Chợ quê Tân Thuận Đông', marketScopes: ['TTD'], status: 'disabled', traderId: null }
     );
     return list;

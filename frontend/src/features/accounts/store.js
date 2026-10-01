@@ -92,6 +92,18 @@
     if (!a.traderId && a.traderIds.length === 1 && (a.roleIds || [])[0] === 'trader') a.traderId = a.traderIds[0];
     return JSON.stringify([a.traderIds, a.traderId]) !== before;
   }
+  // LIEN_KET_AC_TT01 (01/10/2026): account demo AC-TT01 (Nguyễn Thị Hoa, 0909345678) trước đây seed traderId null
+  // → cổng tiểu thương báo "chưa liên kết hồ sơ" và phạm vi chợ trống. Liên kết đúng 1 lần với hồ sơ TT0001 (cùng
+  // tên, cùng SĐT, Chợ Cao Lãnh) nếu account chưa có hồ sơ nào và hồ sơ chưa thuộc account khác; sau đó tôn trọng
+  // mọi thay đổi liên kết của Quản trị.
+  function linkDemoTraderAccounts(list) {
+    const a = list.find(x => x.id === 'AC-TT01');
+    if (!a || a.demoTraderLinkVersion >= 1) return false;
+    const taken = list.some(o => o !== a && traderIdsOf(o).indexOf('TT0001') !== -1);
+    if (!traderIdsOf(a).length && !taken) { a.traderId = 'TT0001'; a.traderIds = ['TT0001']; }
+    a.demoTraderLinkVersion = 1;
+    return true;
+  }
   function ensureTraderIdsField(list) {
     let changed = false;
     list.forEach(a => { if (normalizeTraderLinks(a)) changed = true; });
@@ -176,8 +188,8 @@
           loadedFromStorage = true;
           const schemaMismatch = localStorage.getItem(ASCHEMA_KEY) !== String(A.RBAC_SCHEMA);
           const merged = mergeSeedAccounts(x);
-          const traderField = ensureTraderIdField(merged), traderLinks = ensureTraderIdsField(merged), fixedAll = normalizeFixedAllScopes(merged);
-          if (schemaMismatch || traderField || traderLinks || fixedAll) {
+          const traderField = ensureTraderIdField(merged), demoLink = linkDemoTraderAccounts(merged), traderLinks = ensureTraderIdsField(merged), fixedAll = normalizeFixedAllScopes(merged);
+          if (schemaMismatch || traderField || demoLink || traderLinks || fixedAll) {
             try {
               localStorage.setItem(AKEY, JSON.stringify(merged));
               localStorage.setItem(ASCHEMA_KEY, String(A.RBAC_SCHEMA));

@@ -64,7 +64,11 @@ window.DATA = (function () {
   // (row.collectorId), TT0003 thuê 3 điểm ở 3 Dãy của 3 NV, kỳ 09 phát hành đủ + hạn 30/09, 10 khoản quá hạn
   // (hạn 28/25/22/20 tháng 9) để demo công nợ / thu hồi nợ, số biên lai gắn mã khoản, ngày dữ liệu 29/09/2026.
   // (Nhánh Tài chính trước đó dùng VERSION 17–27 trên mô hình khu cũ — lấy 28 để mọi cache cũ đều dựng lại.)
-  const VERSION = 28;
+  // 28 → 29 (KY_09_DEN_GHI_CHI_SO, 01/10/2026): kỳ 09/2026 dừng ở bước "NV thu phí đã ghi đủ chỉ số điện, nước"
+  // — kỳ ghi chỉ số chưa hoàn tất, chưa tính nháp/phát hành/thu/chốt/đối soát; không có dữ liệu kỳ 10.
+  // 29 → 30 (BO_KY_10): gỡ mọi dữ liệu/công cụ demo kỳ 10/2026; cache v29 có thể đã sinh kỳ 10 → dựng lại.
+  // 30 → 31 (KY_11_DEN_HOAN_TAT_GHI_CHI_SO): mở kỳ thu 11/2026, NV thu phí đã ghi đủ chỉ số; hôm nay = 29/10/2026.
+  const VERSION = 31;
   const TODAY = new Date(2026, 8, 13); // 13/09/2026
 
   // Giá dịch vụ sử dụng diện tích bán hàng – QĐ 480/QĐ-UBND ngày 14/02/2026 (đ/m²/ngày, đã gồm VAT)
@@ -433,7 +437,9 @@ window.DATA = (function () {
         id: 'HĐ-' + st.market + '-' + start.slice(0, 4) + '-' + pad(++cSeq, 4),
         stallId: st.id, traderId: t.id, market: st.market,
         kind: 'Hợp đồng thuê cố định quầy tháng/quý',
-        start, end, unit, monthly, deposit: monthly, status: 'hieuluc', scanned: chance(0.8)
+        start, end, unit, monthly, deposit: monthly, status: 'hieuluc', scanned: chance(0.8),
+        // Dịch vụ áp dụng (như hợp đồng tạo trên UI): điểm có công tơ tính điện, nước; chợ TTD thu thêm dịch vụ chợ.
+        serviceApplicability: { electricity: !!st.hasMeter, water: !!st.hasMeter, marketService: st.market === 'TTD' }
       }, extra || {});
       contracts.push(c);
       return c;
@@ -444,7 +450,7 @@ window.DATA = (function () {
       let start, end;
       if (st.market === 'TTD') { start = '2026-01-01'; end = '2026-12-31'; }
       else if (EXPIRING[st.id]) {
-        const e = addDays(new Date(2026, 8, 29), EXPIRING[st.id]); // tính theo ngày dữ liệu 29/09/2026 (db.today)
+        const e = addDays(new Date(2026, 9, 29), EXPIRING[st.id]); // tính theo ngày dữ liệu 29/10/2026 (db.today)
         end = iso(e); start = iso(addDays(addMonths(e, -36), 1));
       } else {
         // bắt đầu từ 11/2023 đến 07/2026 để hợp đồng còn hiệu lực sau ngày 13/09/2026
@@ -1257,10 +1263,61 @@ window.DATA = (function () {
       BILLING_PERIODS.filter(b => b.id === P).forEach(b => { b.calculationStatus = 'ISSUED'; b.issuedAt = '01/09/2026 08:00'; b.issuedBy = 'Trần Minh Khoa'; });
     })();
 
+    // KY_09_DEN_GHI_CHI_SO (v29): đưa kỳ 09/2026 của mọi chợ về đúng bước đầu luồng thu phí — NV thu phí đã ghi
+    // đủ chỉ số điện, nước (giữ nguyên readings, kể cả 3 điểm tăng bất thường → "Cần kiểm tra"). Mọi dữ liệu
+    // của các bước sau (khoản phải thu, thanh toán, sao kê, thông báo phát hành, nhật ký thu) bị gỡ để thao tác lại.
+    (function resetPeriod09ToMeterRecorded() {
+      const P = '2026-09', dropInv = new Set(invoices.filter(i => i.period === P).map(i => i.id));
+      const dropPay = new Set(payments.filter(p => dropInv.has(p.invoiceId)).map(p => p.id));
+      const keep = (arr, pred) => { for (let n = arr.length - 1; n >= 0; n--) if (!pred(arr[n])) arr.splice(n, 1); };
+      keep(invoices, i => !dropInv.has(i.id));
+      keep(payments, p => !dropPay.has(p.id));
+      // Toàn bộ sao kê mẫu là giao dịch thu kỳ 09 (13/09) — chưa phát hành thì chưa có tiền về.
+      keep(bank, b => b.date < P + '-01');
+      keep(notifications, n => !(n.period === P && /^RECEIVABLE_/.test(n.kind || '')));
+      keep(audit, a => !/kỳ 09\/2026|BL2609-|sao kê ngân hàng ngày 12\/09/.test(a.what || ''));
+      // Chỉ số lùi (syncUtilityChargesWithReadings) ghi "08/<tháng sau>" → kỳ 09 phải ghi trong tháng 09.
+      readings.filter(r => r.period === P && r.recordedAt && !/\/09\/2026/.test(r.recordedAt)).forEach(r => { r.recordedAt = '11/09/2026 09:00'; });
+      const mp = METER_PERIODS.find(x => x.id === P);
+      if (mp) {
+        ['closedBy', 'closedAt', 'completedBy', 'completedAt', 'completionByMarket'].forEach(k => delete mp[k]);
+        // reviewDemoSeeded chặn mrV4DemoReviews gắn thêm 3 cảnh báo giả: chỉ giữ cảnh báo thật theo số liệu.
+        Object.assign(mp, { status: 'RECORDING', reviewDemoSeeded: true });
+      }
+      const bp = BILLING_PERIODS.find(x => x.id === P);
+      if (bp) { ['issuedAt', 'issuedBy'].forEach(k => delete bp[k]); Object.assign(bp, { status: 'PREPARING', calculationStatus: 'DATA_ENTRY' }); }
+    })();
+
+    // KY_11_DEN_HOAN_TAT_GHI_CHI_SO (v31): mở kỳ thu 11/2026 như thao tác "Tạo kỳ thu" với lịch mặc định
+    // (chuẩn bị/ghi 25/10, phát hành 28/10, bắt đầu thu 29/10, hạn 03/11). NV thu phí phụ trách Dãy đã ghi đủ
+    // chỉ số mọi điểm có công tơ + hợp đồng hiệu lực (sản lượng 85–115% mức trung bình, không điểm bất thường)
+    // → màn Chỉ số điện, nước dừng ở "Sẵn sàng hoàn tất"; Tổ trưởng bấm "Hoàn tất ghi chỉ số" để đi tiếp.
+    (function openPeriod11WithMeterRecorded() {
+      const P = '2026-11', hash = v => String(v).split('').reduce((n, ch) => ((n * 31) + ch.charCodeAt(0)) >>> 0, 7);
+      BILLING_PERIODS.push({ id: P, label: '11/2026', preparationDate: '2026-10-25', meterReadDate: '2026-10-25', expectedIssueDate: '2026-10-28',
+        startDate: '2026-10-29', dueDate: '2026-11-03', endDate: '2026-11-30', status: 'PREPARING', calculationStatus: 'DATA_ENTRY' });
+      // reviewDemoSeeded: không để mrV4DemoReviews gắn cảnh báo giả làm khóa nút Hoàn tất.
+      METER_PERIODS.push({ id: P, month: 11, year: 2026, status: 'RECORDING', closeDate: '2026-10-25', reviewDemoSeeded: true });
+      stalls.filter(st => st.hasMeter && contracts.some(c => (c.businessPointId || c.stallId) === st.id && c.status === 'hieuluc')).forEach(st => {
+        const prior = readings.filter(r => r.stallId === st.id && r.period < P && r.elecCur != null && r.waterCur != null).sort((a, b) => b.period.localeCompare(a.period))[0];
+        const elecAvg = prior && prior.elecAvg > 0 ? prior.elecAvg : 100, waterAvg = prior && prior.waterAvg > 0 ? prior.waterAvg : 5, h = hash(st.id);
+        const elecPrev = prior ? prior.elecCur : 0, waterPrev = prior ? prior.waterCur : 0, day = 20 + h % 6;
+        readings.push({
+          stallId: st.id, period: P, elecPrev, elecCur: elecPrev + Math.max(1, Math.round(elecAvg * (0.85 + (h % 31) / 100))), elecAvg,
+          waterPrev, waterCur: waterPrev + Math.max(1, Math.round(waterAvg * (0.85 + (h % 29) / 100))), waterAvg, status: 'RECORDED',
+          recordedBy: collectorOfStall(st).replace(/^AC-/, '') || (st.market === 'TTD' ? 'NV09' : 'NV05'),
+          recordedAt: day + '/10/2026 ' + pad(7 + h % 9) + ':' + pad(h % 60),
+          elecPhoto: { name: st.code + '-dien-11-2026.jpg', type: 'image/jpeg', size: 300000, mock: true },
+          waterPhoto: { name: st.code + '-nuoc-11-2026.jpg', type: 'image/jpeg', size: 300000, mock: true }
+        });
+      });
+    })();
+
     return {
-      // QUA_HAN_KY_09: "hôm nay" của prototype = 29/09/2026 (dữ liệu mẫu vẫn sinh theo mốc TODAY 13/09).
-      version: VERSION, today: '2026-09-29', buildings, floors, rows, stalls, traders, contracts, invoices, payments, readings, incidents, marketAssets,
-      notifications, sessions, marketSessions, sessionRegistrations, sessionPayments, sessionReceipts, sessionNotifications, sessionAttendances, sessionReplacements, bank, months, audit, issuedPeriods: PERIODS.slice(), extraLog: [],
+      // KY_11_DEN_HOAN_TAT_GHI_CHI_SO: "hôm nay" = 29/10/2026 (ngày bắt đầu thu kỳ 11) để các bước thu tiền/chốt
+      // buổi ghi nhận giao dịch trong khoảng thời gian thu của kỳ. Dữ liệu mẫu vẫn sinh theo mốc TODAY 13/09.
+      version: VERSION, today: '2026-10-29', buildings, floors, rows, stalls, traders, contracts, invoices, payments, readings, incidents, marketAssets,
+      notifications, sessions, marketSessions, sessionRegistrations, sessionPayments, sessionReceipts, sessionNotifications, sessionAttendances, sessionReplacements, bank, months, audit, issuedPeriods: PERIODS.filter(p => p !== '2026-09'), extraLog: [],
       meterPeriods: METER_PERIODS, meterAdjustRequests: [], receivableAdjustRequests: [],
       cashDeposits, cashConfirms, billingPeriods: BILLING_PERIODS,
       // Metadata trình bày của actor. Identity/name/roleId tiếp tục chỉ thuộc DATA.ACTORS;

@@ -108,7 +108,6 @@
     };
     invoice('PT-DEMO-TTDCQ-01', '2026-09', 'Phí sử dụng điểm kinh doanh', 360000, 0, '2026-09-10');
     invoice('PT-DEMO-TTDCQ-02', '2026-09', 'Phí vệ sinh', 50000, 20000, '2026-09-30');
-    invoice('PT-DEMO-TTDCQ-03', '2026-10', 'Phí sử dụng điểm kinh doanh', 360000, 0, '2026-10-10');
     if (!A.db.payments.some(p => p.id === 'GD-DEMO-TTDCQ-01') && A.db.invoices.some(i => i.id === 'PT-DEMO-TTDCQ-02')) {
       A.db.payments.push({ id: 'GD-DEMO-TTDCQ-01', invoiceId: 'PT-DEMO-TTDCQ-02', market: st.market, traderId: t.id, amount: 20000, method: 'ck',
         date: '2026-09-12', time: '09:00', by: 'Hệ thống', receipt: 'BL-DEMO-TTDCQ-01', lookup: 'DEMOCQ', reconciled: true, demoSeed: TAG });

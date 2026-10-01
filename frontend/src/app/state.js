@@ -40,7 +40,7 @@ window.APP = (function () {
       // selector (dropdown "Chợ" trên thanh top, xem chrome()) để tránh 2 điều khiển cho cùng 1 khái
       // niệm "đang xem chợ nào" (yêu cầu "không tạo selector thứ hai").
       market: 'ALL', planMarket: 'CL', floor: { CL: 'T1', TTD: 'KHU' }, hidden: {}, sel: null, planSearch: '',
-      page: {}, f: {}, contractTab: 'all', period: '2026-09', report: 'lapday', readingsFilter: 'all', incCat: '',
+      page: {}, f: {}, contractTab: 'all', period: '2026-11', report: 'lapday', readingsFilter: 'all', incCat: '',
       dsTab: null, dsBankFilter: 'all', dsBankSearch: '', dsFrom: null, dsTo: null,
       mini: { traderId: null, step: 'login', tab: 'home', pay: null, lastPays: null, attach: false, bill: null }
     }

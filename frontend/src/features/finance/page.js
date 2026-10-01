@@ -12,7 +12,7 @@
     const list = A.db.billingPeriods, idx = list.findIndex(p => p.id === ui.period);
     return idx >= 0 ? list[idx] : list[list.length - 1];
   }
-  function financeStatusBadge(p) { return p.status === 'COLLECTING' ? '<span class="tag info">● Đang thu</span>' : p.status === 'OPEN' ? '<span class="tag warn">◌ Đã mở · chưa phát hành</span>' : '<span class="tag">◻ Kỳ trước</span>'; }
+  function financeStatusBadge(p) { return p.status === 'COLLECTING' ? '<span class="tag info">● Đang thu</span>' : p.status === 'OPEN' || p.status === 'PREPARING' ? '<span class="tag warn">◌ Đã mở · chưa phát hành</span>' : '<span class="tag">◻ Kỳ trước</span>'; }
   function financeTimeBarRow(label) {
     const p = financePeriod(), list = A.db.billingPeriods, idx = list.findIndex(x => x.id === p.id);
     return `<div class="row" style="flex-wrap:wrap">
@@ -409,25 +409,8 @@
   }
   function mrV4EnsureDemoPeriod() {
     const periods = A.db.meterPeriods || [], active = periods.filter(x => x.status !== 'CLOSED').sort((a, b) => b.id.localeCompare(a.id))[0];
-    if (active) return active;
-    let demo = periods.find(x => x.id === '2026-10');
-    if (!demo) {
-      demo = { id: '2026-10', month: 10, year: 2026, status: 'RECORDING', closeDate: '2026-10-25', prototypeDemo: true };
-      periods.push(demo);
-    }
-    mrV3EnsureRows(demo);
-    if (!demo.reviewDemoSeeded) {
-      const groups = mrV3Groups(demo), reasons = ['Điện tăng bất thường.', 'Nước tăng bất thường.', 'Chỉ số cần xác minh.'];
-      groups.forEach(g => {
-        if (g.r.elecCur == null) g.r.elecCur = Number(g.r.elecPrev || 0) + Math.max(Number(g.r.elecAvg) || 1, 1);
-        if (g.r.waterCur == null) g.r.waterCur = Number(g.r.waterPrev || 0) + Math.max(Number(g.r.waterAvg) || 1, 1);
-        g.r.status = 'RECORDED';
-      });
-      groups.slice(0, 3).forEach((g, i) => { g.r.reviewRequired = true; g.r.reviewReason = reasons[i]; g.r.reviewDemo = true; });
-      demo.reviewDemoSeeded = true;
-      A.save();
-    }
-    return demo;
+    // Không tự tạo kỳ demo mới: hết kỳ đang ghi thì hiển thị kỳ gần nhất; kỳ sau chỉ sinh từ luồng thu phí.
+    return active || periods.slice().sort((a, b) => b.id.localeCompare(a.id))[0] || null;
   }
   function mrV4CurrentPeriod() {
     const selected = f.mrPeriod && (A.db.meterPeriods || []).find(x => x.id === f.mrPeriod);
@@ -560,9 +543,12 @@
     const periods = (A.db.meterPeriods || []).slice().sort((a,b)=>b.id.localeCompare(a.id)).map(x => `<option value="${x.id}" ${x.id === p.id ? 'selected' : ''}>${U.per(x.id)}</option>`).join('');
     const kpi = (label, value, filter) => `<button class="card kpi" data-act="mr-status" data-id="${filter}" style="text-align:left"><div class="k-label">${label}</div><div class="k-value">${value}</div></button>`;
     const helper = mrV4Helper(display, stats), blocked = stats.unrecorded || stats.review;
-    return `<div class="card meter-title"><div class="card-b"><h2>Chỉ số điện, nước</h2><p>Ghi nhận chỉ số điện, nước theo từng điểm kinh doanh trong kỳ thu.</p><div class="row" style="margin-top:12px"><label class="small">Kỳ thu</label><select class="input" style="min-width:130px" data-ch="mp-select">${periods}</select></div><dl class="kv" style="margin-top:12px"><dt>Kỳ thu</dt><dd><b>${U.per(p.id)}</b></dd><dt>Chợ</dt><dd>${U.esc(market.name || ui.market)}</dd><dt>Ngày ghi chỉ số</dt><dd>${U.dmy(p.closeDate)}</dd><dt>NV thu phí phụ trách</dt><dd>${U.esc(mrV4Responsible())}</dd><dt>Trạng thái</dt><dd>${mrV4StateTag(display)}</dd>${display === 'CLOSED' ? `<dt>Hoàn tất bởi</dt><dd>${U.esc(p.completedBy || p.closedBy || '—')} · ${U.esc(p.completedAt || p.closedAt || '—')}</dd>` : ''}</dl><div class="small muted" style="margin-top:8px">${helper}</div></div></div><div class="kpis">${kpi('Điểm cần ghi',stats.total,'all')}${kpi('Đã ghi',stats.recorded,'RECORDED')}${kpi('Chưa ghi',stats.unrecorded,'NOT_RECORDED')}${kpi('Cần kiểm tra',stats.review,'NEEDS_REVIEW')}</div><div class="card"><div class="card-h"><div class="seg">${[['all','Tất cả'],['NOT_RECORDED','Chưa ghi'],['RECORDED','Đã ghi'],['NEEDS_REVIEW','Cần kiểm tra']].map(x=>`<button class="${state===x[0]?'on':''}" data-act="mr-status" data-id="${x[0]}">${x[1]}</button>`).join('')}</div><span class="spacer"></span><input class="input meter-search" data-in="mr-search" placeholder="Tìm mã điểm, tiểu thương, mã hợp đồng..." value="${U.esc(f.mrSearch || '')}">${editable && canClose ? `<button class="btn primary" data-act="mr-v4-complete-open" ${!blocked && stats.total ? '' : 'disabled'}>Hoàn tất ghi chỉ số</button>` : ''}</div><div class="card-b">${blocked && editable ? `<div class="small muted" style="margin-bottom:10px">${stats.unrecorded && stats.review ? `Còn ${stats.unrecorded} điểm chưa ghi và ${stats.review} điểm cần kiểm tra.` : stats.unrecorded ? `Còn ${stats.unrecorded} điểm chưa ghi chỉ số.` : `Còn ${stats.review} điểm cần kiểm tra trước khi có thể hoàn tất ghi chỉ số.`}</div>` : ''}${U.table([{t:'Điểm KD'},{t:'Tiểu thương'},{t:'Điện kỳ trước',num:true},{t:'Điện kỳ này',num:true},{t:'Tiêu thụ điện',num:true},{t:'Nước kỳ trước',num:true},{t:'Nước kỳ này',num:true},{t:'Tiêu thụ nước',num:true},{t:'Cảnh báo'},{t:'Trạng thái'},{t:'Thao tác'}],rows.map(g=>{const s=mrV3State(g),tr=A.idx.trader.get(g.st.traderId),action=p.status==='CLOSED'?`<button class="btn sm" data-act="mr-v3-open" data-id="${g.st.id}" data-period="${p.id}">Xem</button>`:s==='NOT_RECORDED'?`<button class="btn sm primary" data-act="mr-v3-open" data-id="${g.st.id}" data-period="${p.id}">Ghi chỉ số</button>`:s==='NEEDS_REVIEW'?`<button class="btn sm primary" data-act="mr-v5-review-open" data-id="${g.st.id}" data-period="${p.id}">Kiểm tra</button>`:`<button class="btn sm" data-act="mr-v3-open" data-id="${g.st.id}" data-period="${p.id}">Xem</button>`;return `<tr><td><b>${U.esc(g.st.code)}</b></td><td>${tr?U.esc(tr.name):'—'}</td><td class="num">${mrV3Number(g.elec.previous)}</td><td class="num">${mrV3Number(g.elec.current)}</td><td class="num">${mrV3Consumption(g.elec)}</td><td class="num">${mrV3Number(g.water.previous)}</td><td class="num">${mrV3Number(g.water.current)}</td><td class="num">${mrV3Consumption(g.water)}</td><td>${s==='NEEDS_REVIEW'?`<span class="tag warn">${U.esc(mrV5WarningText(g))}</span>`:'<span class="muted">—</span>'}</td><td>${mrV3Tag(s)}</td><td>${action}</td></tr>`;}),{empty:'Không có điểm kinh doanh cần ghi chỉ số trong phạm vi này.'})}</div></div>`;
+    return `<div class="card meter-title"><div class="card-b"><h2>Chỉ số điện, nước</h2><p>Ghi nhận chỉ số điện, nước theo từng điểm kinh doanh trong kỳ thu.</p><div class="row" style="margin-top:12px"><label class="small">Kỳ thu</label><select class="input" style="min-width:130px" data-ch="mp-select">${periods}</select></div><dl class="kv" style="margin-top:12px"><dt>Kỳ thu</dt><dd><b>${U.per(p.id)}</b></dd><dt>Chợ</dt><dd>${U.esc(market.name || ui.market)}</dd><dt>Ngày ghi chỉ số</dt><dd>${U.dmy(p.closeDate)}</dd><dt>NV thu phí phụ trách</dt><dd>${U.esc(mrV4Responsible())}</dd><dt>Trạng thái</dt><dd>${mrV4StateTag(display)}</dd>${display === 'CLOSED' ? `<dt>Hoàn tất bởi</dt><dd>${U.esc(p.completedBy || p.closedBy || '—')} · ${U.esc(p.completedAt || p.closedAt || '—')}</dd>` : ''}</dl><div class="small muted" style="margin-top:8px">${helper}</div></div></div><div class="kpis">${kpi('Điểm cần ghi',stats.total,'all')}${kpi('Đã ghi',stats.recorded,'RECORDED')}${kpi('Chưa ghi',stats.unrecorded,'NOT_RECORDED')}${kpi('Cần kiểm tra',stats.review,'NEEDS_REVIEW')}</div><div class="card"><div class="card-h"><div class="seg">${[['all','Tất cả'],['NOT_RECORDED','Chưa ghi'],['RECORDED','Đã ghi'],['NEEDS_REVIEW','Cần kiểm tra']].map(x=>`<button class="${state===x[0]?'on':''}" data-act="mr-status" data-id="${x[0]}">${x[1]}</button>`).join('')}</div><span class="spacer"></span><input class="input meter-search" data-in="mr-search" placeholder="Tìm mã điểm, tiểu thương, mã hợp đồng..." value="${U.esc(f.mrSearch || '')}">${editable && canClose ? `<button class="btn primary" data-act="mr-v4-complete-open" ${!blocked && stats.total ? '' : 'disabled'}>Hoàn tất ghi chỉ số</button>` : ''}</div><div class="card-b">${blocked && editable ? `<div class="small muted" style="margin-bottom:10px">${stats.unrecorded && stats.review ? `Còn ${stats.unrecorded} điểm chưa ghi và ${stats.review} điểm cần kiểm tra.` : stats.unrecorded ? `Còn ${stats.unrecorded} điểm chưa ghi chỉ số.` : `Còn ${stats.review} điểm cần kiểm tra trước khi có thể hoàn tất ghi chỉ số.`}</div>` : ''}${U.table([{t:'Điểm KD'},{t:'Tiểu thương'},{t:'Điện kỳ trước',num:true},{t:'Điện kỳ này',num:true},{t:'Tiêu thụ điện',num:true},{t:'Nước kỳ trước',num:true},{t:'Nước kỳ này',num:true},{t:'Tiêu thụ nước',num:true},{t:'Cảnh báo'},{t:'Trạng thái'},{t:'Thao tác'}],rows.map(g=>{const s=mrV3State(g),tr=A.idx.trader.get(g.st.traderId),action=p.status==='CLOSED'?`<button class="btn sm" data-act="mr-v3-open" data-id="${g.st.id}" data-period="${p.id}">Xem</button>`:s==='NOT_RECORDED'?`<button class="btn sm primary" data-act="mr-v3-open" data-id="${g.st.id}" data-period="${p.id}">Ghi chỉ số</button>`:s==='NEEDS_REVIEW'?`<button class="btn sm primary" data-act="mr-v5-review-open" data-id="${g.st.id}" data-period="${p.id}">Kiểm tra</button>`:mrCanRecord(g.st)?`<button class="btn sm" data-act="mr-v5-edit-open" data-id="${g.st.id}" data-period="${p.id}">Cập nhật</button>`:`<button class="btn sm" data-act="mr-v3-open" data-id="${g.st.id}" data-period="${p.id}">Xem</button>`;return `<tr><td><b>${U.esc(g.st.code)}</b></td><td>${tr?U.esc(tr.name):'—'}</td><td class="num">${mrV3Number(g.elec.previous)}</td><td class="num">${mrV3Number(g.elec.current)}</td><td class="num">${mrV3Consumption(g.elec)}</td><td class="num">${mrV3Number(g.water.previous)}</td><td class="num">${mrV3Number(g.water.current)}</td><td class="num">${mrV3Consumption(g.water)}</td><td>${s==='NEEDS_REVIEW'?`<span class="tag warn">${U.esc(mrV5WarningText(g))}</span>`:'<span class="muted">—</span>'}</td><td>${mrV3Tag(s)}</td><td>${action}</td></tr>`;}),{empty:'Không có điểm kinh doanh cần ghi chỉ số trong phạm vi này.'})}</div></div>`;
   };
 
+  // Trước khi hoàn tất, điểm đã ghi mở thẳng form sửa (kể cả điểm đã qua kiểm tra); mrV3Open/mr-v3-save tự
+  // khóa khi kỳ đã hoàn tất hoặc người dùng không được ghi chỉ số điểm này.
+  A.ACT['mr-v5-edit-open'] = el => mrV3Open(el.dataset.id, el.dataset.period);
   // Meter screen keeps its selected reading period locally; it does not change the shared finance period.
   A.CH['mp-select'] = el => { f.mrPeriod = el.value; f.mrStatus = 'all'; A.render(); };
 
@@ -804,7 +790,7 @@
   }
   function ptNewPeriod() {
     const list = A.db.billingPeriods || [];
-    return list.find(p => p.id === f.ptPeriod) || list.find(p => p.id === '2026-10') || list.find(p => p.id === ui.period) || list[list.length - 1];
+    return list.find(p => p.id === f.ptPeriod) || list.find(p => p.id === ui.period) || list[list.length - 1];
   }
   function ptNewGroups(market, period) { const b = A.features.finance.billing; return b ? b.traderGroups(market, period) : []; }
   function ptNewAmount(rows, type) { return U.sum(rows.filter(r => r.items[0] && r.items[0].chargeType === type), r => r.amount); }
@@ -815,11 +801,11 @@
     const groups = ptNewGroups(market, p.id), warns = billing.warnings(market, p.id), published = (A.db.invoices || []).filter(i => i.market === market && i.period === p.id && i.billingStatus === 'PUBLISHED'), isPublished = !!published.length, q = (f.ptSearch || '').toLowerCase();
     const rowFilter = f.ptValidation || 'all';
     const shown = (isPublished ? published.map(i => ({ traderId: i.traderId, rows: (i.items || []).map(item => ({ amount: item.amount, items: [item], contractId: item.contractId, stallId: item.stallId })), contractIds: i.contractIds || [], amount: i.amount, validationStatus: 'VALID', invoice: i, errors: [] })) : groups).filter(g => { const t = A.idx.trader.get(g.traderId) || {}; return (rowFilter === 'all' || (rowFilter === 'valid' ? g.validationStatus === 'VALID' : g.validationStatus === 'HAS_ERRORS')) && (!q || [t.name, t.id, ...(g.contractIds || [])].join(' ').toLowerCase().includes(q)); });
-    const total = U.sum(shown, g => g.amount), issueCount = groups.filter(g => g.validationStatus === 'HAS_ERRORS').length, canManage = A.canDo('phai-thu.phat-hanh', market), calculated = groups.length > 0 || warns.length > 0, ready = calculated && !!groups.length && meter && meter.status === 'CLOSED' && !warns.some(w => w.severity === 'BLOCKING') && !issueCount;
+    const total = U.sum(shown, g => g.amount), issueCount = groups.filter(g => g.validationStatus === 'HAS_ERRORS').length, canManage = A.canDo('phai-thu.phat-hanh', market), calculated = groups.length > 0 || warns.length > 0, ready = calculated && !!groups.length && A.meterPeriodIsClosed(meter, market) && !warns.some(w => w.severity === 'BLOCKING') && !issueCount;
     const state = isPublished ? 'PUBLISHED' : !calculated ? 'NOT_CALCULATED' : ready ? 'READY_TO_PUBLISH' : 'HAS_ERRORS';
     const periods = (A.db.billingPeriods || []).slice().sort((a,b) => b.id.localeCompare(a.id)).map(x => `<option value="${x.id}" ${x.id === p.id ? 'selected' : ''}>${U.esc(x.label || U.per(x.id))}</option>`).join('');
-    const readiness = `<div class="row small" style="gap:12px;flex-wrap:wrap;margin-top:10px"><span>${meter && meter.status === 'CLOSED' ? '✓' : '○'} Chỉ số điện, nước: <b>${meter && meter.status === 'CLOSED' ? 'Đã hoàn tất' : 'Chưa hoàn tất'}</b>${meter && meter.status === 'CLOSED' ? ' ' + (A.db.readings || []).filter(r => r.period === p.id && (A.idx.stall.get(r.stallId) || {}).market === market).length + ' điểm' : ''}</span><span>${warns.some(w => w.code && w.code.indexOf('POLICY') >= 0) ? '○' : '✓'} Biểu phí: <b>${warns.some(w => w.code && w.code.indexOf('POLICY') >= 0) ? 'Cần kiểm tra' : 'Đã cấu hình'}</b></span><span>✓ Hợp đồng hiệu lực: <b>${contracts.length} hợp đồng</b></span></div>`;
-    return `<div class="card"><div class="card-b"><h2 style="margin:0">Khoản phải thu</h2><div class="row" style="gap:10px;flex-wrap:wrap;margin-top:12px"><label class="small">Kỳ thu</label><select class="input" data-ch="pt-period">${periods}</select><span class="tag">${U.esc((U.market(market) || {}).name || market)}</span><span>${ptNewStatus(state)}</span><span class="spacer"></span>${!isPublished && canManage ? `<button class="btn" data-act="pt-calc">${calculated ? 'Tính lại khoản phải thu' : 'Tính nháp khoản phải thu'}</button><button class="btn primary" data-act="pt-publish-open" ${ready ? '' : 'disabled'}>Phát hành ${groups.length} khoản phải thu</button>` : ''}</div>${readiness}${!isPublished && !ready ? `<div class="small muted" style="margin-top:8px">${!meter || meter.status !== 'CLOSED' ? 'Cần hoàn tất và khóa chỉ số điện, nước trước khi tính/phát hành.' : warns.length ? 'Có ' + warns.length + ' dữ liệu cần xử lý trước khi phát hành.' : 'Tính nháp để hệ thống kiểm tra dữ liệu nguồn.'}</div>` : ''}${isPublished ? `<div class="note info" style="margin-top:10px">Đã phát hành ${U.dmy(p.issuedAt || published[0].publishedAt || published[0].issuedAt)} · ${U.esc(p.issuedBy || published[0].publishedBy || '—')}. Snapshot số tiền đã được khóa; theo dõi thanh toán ở màn Thu tiền & biên lai.</div>` : ''}</div></div>
+    const readiness = `<div class="row small" style="gap:12px;flex-wrap:wrap;margin-top:10px"><span>${A.meterPeriodIsClosed(meter, market) ? '✓' : '○'} Chỉ số điện, nước: <b>${A.meterPeriodIsClosed(meter, market) ? 'Đã hoàn tất' : 'Chưa hoàn tất'}</b>${A.meterPeriodIsClosed(meter, market) ? ' ' + (A.db.readings || []).filter(r => r.period === p.id && (A.idx.stall.get(r.stallId) || {}).market === market).length + ' điểm' : ''}</span><span>${warns.some(w => w.code && w.code.indexOf('POLICY') >= 0) ? '○' : '✓'} Biểu phí: <b>${warns.some(w => w.code && w.code.indexOf('POLICY') >= 0) ? 'Cần kiểm tra' : 'Đã cấu hình'}</b></span><span>✓ Hợp đồng hiệu lực: <b>${contracts.length} hợp đồng</b></span></div>`;
+    return `<div class="card"><div class="card-b"><h2 style="margin:0">Khoản phải thu</h2><div class="row" style="gap:10px;flex-wrap:wrap;margin-top:12px"><label class="small">Kỳ thu</label><select class="input" data-ch="pt-period">${periods}</select><span class="tag">${U.esc((U.market(market) || {}).name || market)}</span><span>${ptNewStatus(state)}</span><span class="spacer"></span>${!isPublished && canManage ? `<button class="btn" data-act="pt-calc">${calculated ? 'Tính lại khoản phải thu' : 'Tính nháp khoản phải thu'}</button><button class="btn primary" data-act="pt-publish-open" ${ready ? '' : 'disabled'}>Phát hành ${groups.length} khoản phải thu</button>` : ''}</div>${readiness}${!isPublished && !ready ? `<div class="small muted" style="margin-top:8px">${!A.meterPeriodIsClosed(meter, market) ? 'Cần hoàn tất và khóa chỉ số điện, nước trước khi tính/phát hành.' : warns.length ? 'Có ' + warns.length + ' dữ liệu cần xử lý trước khi phát hành.' : 'Tính nháp để hệ thống kiểm tra dữ liệu nguồn.'}</div>` : ''}${isPublished ? `<div class="note info" style="margin-top:10px">Đã phát hành ${U.dmy(p.issuedAt || published[0].publishedAt || published[0].issuedAt)} · ${U.esc(p.issuedBy || published[0].publishedBy || '—')}. Snapshot số tiền đã được khóa; theo dõi thanh toán ở màn Thu tiền & biên lai.</div>` : ''}</div></div>
       <div class="kpis"><div class="card kpi"><div class="k-label">Tiểu thương</div><div class="k-value">${shown.length}</div></div><div class="card kpi"><div class="k-label">Hợp đồng / Điểm KD</div><div class="k-value">${isPublished ? U.sum(shown, g => (g.contractIds || []).length) : new Set(groups.flatMap(g => g.contractIds)).size}</div></div><div class="card kpi"><div class="k-label">Tổng dự kiến thu</div><div class="k-value">${U.moneyShort(total)}</div><div class="k-sub">${U.money(total)}</div></div><div class="card kpi"><div class="k-label">Cần xử lý</div><div class="k-value">${issueCount}</div><div class="k-sub">${issueCount ? '' : '✓ Sẵn sàng phát hành'}</div></div></div>
       ${warns.length ? `<div class="note warn"><b>Dữ liệu cần xử lý</b>${warns.map(w => `<div>${U.esc(w.message)}</div>`).join('')}</div>` : ''}
       <div class="card"><div class="card-h"><h3>Danh sách khoản phải thu</h3><div class="seg">${[['all','Tất cả'],['valid','Hợp lệ'],['errors','Cần xử lý']].map(x => `<button class="${rowFilter === x[0] ? 'on' : ''}" data-act="pt-validation" data-id="${x[0]}">${x[1]}</button>`).join('')}</div><input class="input" data-in="pt-search" placeholder="Tìm tiểu thương, mã HĐ, mã điểm..." value="${U.esc(f.ptSearch || '')}"></div><div class="card-b">${U.table([{t:'Tiểu thương'},{t:'HĐ / Điểm KD',num:true},{t:'Mặt bằng',num:true},{t:'Điện',num:true},{t:'Nước',num:true},{t:'Dịch vụ',num:true},{t:'Tổng phải thu',num:true},{t:'Trạng thái'},{t:'Thao tác'}], shown.map(g => { const t = A.idx.trader.get(g.traderId) || {}, bad = g.validationStatus === 'HAS_ERRORS'; return `<tr><td><b>${U.esc(t.name || g.traderId)}</b><div class="small muted">${U.esc(t.id || g.traderId)}</div></td><td class="num">${(g.contractIds || []).length}</td><td class="num">${bad && !ptNewAmount(g.rows,'LAND') ? '—' : U.money(ptNewAmount(g.rows,'LAND'))}</td><td class="num">${U.money(ptNewAmount(g.rows,'ELECTRICITY'))}</td><td class="num">${U.money(ptNewAmount(g.rows,'WATER'))}</td><td class="num">${U.money(ptNewAmount(g.rows,'MARKET_SERVICE'))}</td><td class="num"><b>${U.money(g.amount)}</b></td><td>${ptNewStatus(bad ? 'INVALID' : 'VALID')}</td><td><button class="btn sm" data-act="pt-new-detail" data-trader="${U.esc(g.traderId)}" data-period="${p.id}">${bad ? 'Xem lỗi' : 'Xem chi tiết'}</button></td></tr>`; }), {empty:'Chưa có khoản phải thu nháp trong kỳ này.'})}</div></div>`;
@@ -1829,18 +1815,19 @@
   const rcClosedAt = r => (r && (r.closedAt || r.completedAt)) || '';
   const rcClosedBy = r => (r && (r.closedBy || r.completedBy)) || '';
   const rcStatus = r => (r && r.reconciliationStatus) || 'WAITING';
-  const RC_RESULT = { MATCHED: ['Khớp', 'ok'], SHORTAGE: ['Thiếu', 'danger'], SURPLUS: ['Thừa', 'warn'] };
+  const RC_RESULT = { MATCHED: ['Đủ', 'ok'], SHORTAGE: ['Thiếu', 'danger'], SURPLUS: ['Thừa', 'warn'] };
+  // Trạng thái chỉ nêu kết quả Thiếu / Đủ / Thừa; số tiền chênh lệch xem ở chi tiết.
   function rcStatusTag(r) {
     if (!r) return '<span class="tag">Chưa chốt kỳ</span>';
     if (rcStatus(r) !== 'RECONCILED') return '<span class="tag warn">Chờ đối soát</span>';
     const res = RC_RESULT[r.result] || RC_RESULT.MATCHED;
-    return '<span class="tag ok">Đã đối soát</span>' + (r.result && r.result !== 'MATCHED' ? ` <span class="tag ${res[1]}">${res[0]} ${U.money(Math.abs(r.differenceAmount || 0))}</span>` : '');
+    return `<span class="tag ok">Đã đối soát</span> <span class="tag ${res[1]}">${res[0]}</span>`;
   }
   function ttPeriodState(p, market) {
     if (p.status === 'CLOSED') return { id: 'CLOSED', label: 'Đã chốt kỳ', cls: 'ok' };
     if (ttHandoff(p, market)) return { id: 'CLOSED', label: 'Đã chốt kỳ', cls: 'ok' };
     if (p.status === 'COLLECTING') return { id: 'COLLECTING', label: 'Đang thu', cls: 'info' };
-    if (p.status === 'OPEN') return { id: 'OPEN', label: 'Chưa phát hành', cls: '' };
+    if (p.status === 'OPEN' || p.status === 'PREPARING') return { id: 'OPEN', label: 'Chưa phát hành', cls: '' };
     return { id: 'PAST', label: 'Kỳ trước', cls: '' };
   }
   function ttCanCollect(market) { return receivableCollectAllowedForMarket(market) && !ptScopeAll(); }
@@ -2664,11 +2651,11 @@
   // Route giữ id 'theo-doi-ky-doi-soat' để dùng lại screen/action permission đã cấp cho central_accountant.
   const rcCanView = () => U.can('theo-doi-ky-doi-soat');
   const rcInScope = market => A.allowedMarkets(A.currentAccount()).indexOf(market) !== -1;
-  // Kế toán Trung tâm làm việc liên chợ nên có thể giữ bộ chọn chợ ở ALL. Phạm vi
-  // bản ghi vẫn được kiểm tra riêng qua rcInScope; chỉ không truyền market vào
-  // A.canDo khi ALL vì guard chung so sánh targetMarket với ui.market.
+  // Kế toán Trung tâm làm việc liên chợ: màn có bộ lọc Chợ riêng (topbar ẩn), nên KHÔNG ràng theo SelectedMarket.
+  // Quyền = action permission (A.canDo không truyền market, vì guard chung so targetMarket với ui.market)
+  // + phạm vi bản ghi kiểm tra riêng qua marketScopes (rcInScope).
   const rcCanConfirm = market => rcCanView() && rcInScope(market)
-    && A.canDo('theo-doi-ky-doi-soat.xac-nhan-hoan-tat', ui.market === 'ALL' ? null : market);
+    && A.canDo('theo-doi-ky-doi-soat.xac-nhan-hoan-tat');
   const rcKey = (periodId, market) => periodId + '|' + market;
   function rcMarkets() {
     const allowed = new Set(A.allowedMarkets(A.currentAccount()));
@@ -2706,7 +2693,7 @@
   function rcDiffHtml(ev) {
     if (!ev.valid) return '<div class="rc-diff"><span class="muted">Nhập số tiền mặt thực tế nhận để hệ thống tính chênh lệch.</span></div>';
     const sign = ev.diff > 0 ? '+' : ev.diff < 0 ? '−' : '';
-    if (ev.result === 'MATCHED') return `<div class="rc-diff is-ok"><b>✓ KHỚP</b><span>Chênh lệch: <b>0 đ</b></span></div>`;
+    if (ev.result === 'MATCHED') return `<div class="rc-diff is-ok"><b>✓ ĐỦ</b><span>Chênh lệch: <b>0 đ</b></span></div>`;
     return `<div class="rc-diff ${ev.result === 'SHORTAGE' ? 'is-bad' : 'is-warn'}"><b>⚠ ${ev.result === 'SHORTAGE' ? 'THIẾU' : 'THỪA'}</b><span>Chênh lệch: <b>${sign}${U.money(Math.abs(ev.diff))}</b> · ${ev.result === 'SHORTAGE' ? 'Thiếu' : 'Thừa'} ${U.money(Math.abs(ev.diff))}</span></div>`;
   }
   const rcSubmitLabel = ev => ev.valid && ev.diff !== 0 ? 'Xác nhận kết quả đối soát' : 'Xác nhận đối soát';
@@ -2729,13 +2716,21 @@
     const cp = own(sm.cashPaymentIds), tp = own(sm.transferPaymentIds), cash = U.sum(cp, x => x.amount), transfer = U.sum(tp, x => x.amount);
     return { cash, transfer, collected: cash + transfer, transferCount: tp.length, transferIds: tp.map(x => x.id) };
   }
-  function rcTransferList(r) {
-    const ids = rcFigures(r).transferIds;
-    if (!Array.isArray(ids)) return '<div class="small muted">Bản ghi chốt kỳ này không lưu danh sách giao dịch chuyển khoản.</div>';
-    const pays = ids.map(id => A.db.payments.find(x => x.id === id)).filter(Boolean);
-    return U.table([{ t: 'Thời gian' }, { t: 'Mã giao dịch' }, { t: 'Khoản phải thu' }, { t: 'Tiểu thương' }, { t: 'Phương thức' }, { t: 'Số tiền', num: true }],
-      pays.map(x => `<tr><td class="nowrap">${U.dmy(x.date)} ${U.esc(x.time || '')}</td><td>${U.esc(x.id)}</td><td>${U.esc(x.invoiceId || '')}</td><td>${U.esc((A.idx.trader.get(x.traderId) || {}).name || x.traderId || '')}</td><td>${U.esc(D.METHOD[x.method] || x.method)}</td><td class="num">${U.money(x.amount)}</td></tr>`),
-      { empty: 'Không có giao dịch chuyển khoản trong kỳ' });
+  // Đối soát chuyển khoản: tổng chuyển khoản hệ thống ghi nhận trong kỳ (snapshot chốt kỳ) so với tổng tiền vào tài
+  // khoản ngân hàng của chợ trong thời gian thu (sao kê db.bank, trừ tiền thu hồi công nợ — ngoài phạm vi kỳ, giống
+  // phần tiền của kỳ). Bản ghi đã đối soát dùng số đã lưu lúc xác nhận.
+  function rcBankCheck(p, m, r) {
+    const fig = rcFigures(r);
+    if (rcStatus(r) === 'RECONCILED' && r.bankInflowAmount != null) return { system: fig.transfer, systemCount: fig.transferCount, bank: r.bankInflowAmount, bankCount: r.bankInflowCount, diff: r.bankInflowAmount - fig.transfer };
+    const debtPay = id => !!id && !!(A.db.payments.find(x => x.id === id) || {}).debtId;
+    const lines = (A.db.bank || []).filter(b => b.market === m.id && b.date >= p.startDate && b.date <= p.endDate && !debtPay(b.paymentId) && !/^CHOSO CN-/.test(b.ref || ''));
+    const bank = U.sum(lines, b => Number(b.amount || 0));
+    return { system: fig.transfer, systemCount: fig.transferCount, bank, bankCount: lines.length, diff: bank - fig.transfer };
+  }
+  function rcBankHtml(bc) {
+    const ok = bc.diff === 0, sign = bc.diff > 0 ? '+' : bc.diff < 0 ? '−' : '';
+    return `<dl class="tt-sum"><div><dt>Chuyển khoản theo hệ thống</dt><dd>${U.money(bc.system)} <span class="small muted">· ${bc.systemCount || 0} giao dịch</span></dd></div><div><dt>Tiền vào tài khoản ngân hàng (sao kê)</dt><dd>${U.money(bc.bank)} <span class="small muted">· ${bc.bankCount || 0} giao dịch</span></dd></div></dl>
+      <div class="rc-diff ${ok ? 'is-ok' : 'is-bad'}"><b>${ok ? '✓ KHỚP' : '⚠ CHÊNH LỆCH'}</b><span>Chênh lệch: <b>${sign}${U.money(Math.abs(bc.diff))}</b>${ok ? '' : ' · Kiểm tra lại sao kê ngân hàng'}</span></div>`;
   }
   function rcDetailHtml(x) {
     const { p, m, r } = x, sm = rcSum(r), acc = A.currentAccount() || {}, done = rcStatus(r) === 'RECONCILED', can = !done && rcCanConfirm(m.id);
@@ -2760,8 +2755,8 @@
         <div><dt>Tổng phải thu</dt><dd>${U.money(sm.amount || 0)}</dd></div><div><dt>Tổng đã thu</dt><dd>${U.money(fig.collected)}</dd></div>${sm.remaining ? `<div class="is-total"><dt>Còn phải thu</dt><dd>${U.money(sm.remaining)}</dd></div>` : ''}</dl>
       <h4 class="tt-sec-title">2. Phân theo phương thức</h4>
       <dl class="tt-sum"><div><dt>Tiền mặt</dt><dd>${U.money(system)}</dd></div><div><dt>Chuyển khoản</dt><dd>${U.money(transfer)}</dd></div><div class="is-total"><dt>Tổng</dt><dd>${U.money(system + transfer)}</dd></div></dl>
-      <details class="tt-acc"><summary>Chuyển khoản đã ghi nhận: ${U.money(transfer)} · ${transferCount} giao dịch · Đã ghi nhận trong kỳ thu — Xem chi tiết</summary>${rcTransferList(r)}<div class="small muted">Chỉ tra cứu. Kế toán không sửa, xác nhận lại hay đổi trạng thái giao dịch.</div></details>
-      <h4 class="tt-sec-title">3. Đối soát tiền mặt bàn giao</h4>${cashBlock}</div>
+      <h4 class="tt-sec-title">3. Đối soát tiền mặt bàn giao</h4>${cashBlock}
+      <h4 class="tt-sec-title">4. Đối soát chuyển khoản</h4>${rcBankHtml(rcBankCheck(p, m, r))}</div>
       <div class="modal-f"><button class="btn" data-act="close">${can ? 'Hủy' : 'Đóng'}</button>${can ? `<button id="rc-submit" class="btn primary" data-act="rc-review" data-period="${U.esc(p.id)}" data-market="${U.esc(m.id)}" ${rcSubmitOk(ev, draft.note) ? '' : 'disabled'}>${rcSubmitLabel(ev)}</button>` : ''}</div>`;
   }
   function rcOpen(periodId, market) {
@@ -2770,7 +2765,8 @@
     A.modal(A.mHead('Đối soát thu tiền') + rcDetailHtml(x), true);
   }
   function rcView() {
-    const markets = rcMarkets(), periodId = ui.rcPeriod || rcDefaultPeriod(), marketF = markets.some(m => m.id === ui.rcMarket) ? ui.rcMarket : 'all';
+    // Bảng không có cột Kỳ thu nên bộ lọc luôn là 1 kỳ cụ thể.
+    const markets = rcMarkets(), periodId = rcPeriods().some(p => p.id === ui.rcPeriod) ? ui.rcPeriod : rcDefaultPeriod(), marketF = markets.some(m => m.id === ui.rcMarket) ? ui.rcMarket : 'all';
     const statusF = ['WAITING', 'DIFF', 'RECONCILED'].includes(ui.rcStatus) ? ui.rcStatus : 'all', q = String(ui.rcSearch || '').trim().toLowerCase();
     const base = rcRows(periodId).filter(x => marketF === 'all' || x.m.id === marketF);
     const rows = base.filter(x => (statusF === 'all' || (statusF === 'DIFF' ? x.diff : x.bucket === statusF))
@@ -2780,18 +2776,20 @@
     const body = rows.map(x => {
       const sm = x.r ? rcFigures(x.r) : null, act = !x.r ? '<span class="small muted">Chưa chốt kỳ</span>'
         : `<button class="btn sm ${x.bucket === 'WAITING' && rcCanConfirm(x.m.id) ? 'primary' : ''}" data-act="rc-open" data-period="${U.esc(x.p.id)}" data-market="${U.esc(x.m.id)}">${x.bucket === 'WAITING' && rcCanConfirm(x.m.id) ? 'Đối soát' : 'Xem'}</button>`;
-      return `<tr><td><b>${U.esc(x.m.name)}</b></td><td>${U.esc(ttPeriodLabel(x.p))}</td><td>${U.esc(x.collectorName)}</td><td class="nowrap">${x.r ? U.esc(rcClosedAt(x.r)) : '<span class="muted">—</span>'}</td>
+      // Ngày đối soát = ngày lưu kết quả đối soát (chỉ ngày; giờ xem ở chi tiết).
+      const rcDay = x.r && rcStatus(x.r) === 'RECONCILED' && x.r.reconciledAt ? String(x.r.reconciledAt).split(' ')[0] : '';
+      return `<tr><td><b>${U.esc(x.m.name)}</b></td><td>${U.esc(x.collectorName)}</td><td class="nowrap">${rcDay ? U.esc(rcDay) : '<span class="muted">—</span>'}</td>
         <td class="num">${sm ? U.money(sm.collected) : '—'}</td><td class="num">${sm ? U.money(sm.cash) : '—'}</td><td class="num">${sm ? U.money(sm.transfer) : '—'}</td>
-        <td>${rcStatusTag(x.r)}${x.r && x.r.prototypeBypass ? ' <span class="tag warn">Prototype</span>' : ''}</td><td class="nowrap">${act}</td></tr>`;
+        <td>${rcStatusTag(x.r)}</td><td class="nowrap">${act}</td></tr>`;
     });
     return `<div class="card"><div class="card-b"><h2 style="margin:0">Đối soát thu tiền</h2><div class="small muted">Đối chiếu và xác nhận số tiền do Nhân viên thu phí bàn giao từ các chợ.</div></div></div>
       <div class="kpis">${k('Tổng chợ', marketF === 'all' ? markets.length : 1)}${k('Chờ đối soát', cnt('WAITING'), cnt('WAITING') ? 'tt-bad' : '')}${k('Đã đối soát', cnt('RECONCILED'), 'tt-ok')}${k('Có chênh lệch', cnt('DIFF'), cnt('DIFF') ? 'tt-bad' : '')}</div>
       <div class="card"><div class="card-b tt-toolbar">
-        <label class="tt-f"><span>Kỳ thu</span><select class="input" data-ch="rc-period"><option value="all" ${periodId === 'all' ? 'selected' : ''}>Tất cả kỳ</option>${rcPeriods().map(p => `<option value="${U.esc(p.id)}" ${p.id === periodId ? 'selected' : ''}>${U.esc(ttPeriodLabel(p))}</option>`).join('')}</select></label>
+        <label class="tt-f"><span>Kỳ thu</span><select class="input" data-ch="rc-period">${rcPeriods().map(p => `<option value="${U.esc(p.id)}" ${p.id === periodId ? 'selected' : ''}>${U.esc(ttPeriodLabel(p))}</option>`).join('')}</select></label>
         <label class="tt-f"><span>Chợ</span><select class="input" data-ch="rc-market"><option value="all">Tất cả ${markets.length} chợ</option>${markets.map(m => `<option value="${m.id}" ${m.id === marketF ? 'selected' : ''}>${U.esc(m.name)}</option>`).join('')}</select></label>
         <div class="seg">${[['all', 'Tất cả'], ['WAITING', 'Chờ đối soát'], ['DIFF', 'Có chênh lệch'], ['RECONCILED', 'Đã đối soát']].map(s => `<button class="${statusF === s[0] ? 'on' : ''}" data-act="rc-status" data-id="${s[0]}">${s[1]}</button>`).join('')}</div>
-        <input class="input tt-search" data-in="rc-search" value="${U.esc(ui.rcSearch || '')}" placeholder="Tìm theo chợ, kỳ thu, nhân viên thu phí..."></div>
-      <div class="card-b">${U.table([{ t: 'Chợ' }, { t: 'Kỳ thu' }, { t: 'NV thu phí' }, { t: 'Ngày chốt kỳ' }, { t: 'Tổng đã thu', num: true }, { t: 'Tiền mặt bàn giao', num: true }, { t: 'Chuyển khoản', num: true }, { t: 'Trạng thái đối soát' }, { t: 'Thao tác' }], body,
+        <input class="input tt-search" data-in="rc-search" value="${U.esc(ui.rcSearch || '')}" placeholder="Tìm theo chợ, nhân viên thu phí..."></div>
+      <div class="card-b">${U.table([{ t: 'Chợ' }, { t: 'NV thu phí' }, { t: 'Ngày đối soát' }, { t: 'Tổng đã thu', num: true }, { t: 'Tiền mặt bàn giao', num: true }, { t: 'Chuyển khoản', num: true }, { t: 'Trạng thái đối soát' }, { t: 'Thao tác' }], body,
         { empty: 'Không có bản ghi đối soát phù hợp bộ lọc' })}
         <div class="small muted tt-foot">Bản ghi được tạo khi Nhân viên thu phí Chốt kỳ thu. Kế toán Trung tâm không chốt kỳ, không thu tiền và không sửa giao dịch.</div></div></div>`;
   }
@@ -2845,6 +2843,9 @@
     const c = rcCommitContext(el);
     if (c.err) { U.toast(c.err); A.closeModal(); A.render(); return; }
     // Chỉ ghi vào bản ghi đối soát; billingPeriod.status, payment, biên lai, khoản phải thu không đổi.
+    // Lưu snapshot đối soát chuyển khoản (tiền vào tài khoản ngân hàng tại thời điểm xác nhận).
+    const bc = rcBankCheck(c.p, c.m, c.r);
+    Object.assign(c.r, { bankInflowAmount: bc.bank, bankInflowCount: bc.bankCount, transferDifferenceAmount: bc.diff });
     Object.assign(c.r, { reconciliationStatus: 'RECONCILED', reconciledAt: nowStamp(), reconciledBy: c.acc.fullName || c.acc.code || c.acc.id, reconciledById: c.acc.id, reconciledByCode: c.acc.code || '',
       systemCashAmount: c.system, actualCashAmount: c.ev.actual, transferAmount: c.transfer, totalCollectedAmount: c.collected, differenceAmount: c.ev.diff, result: c.ev.result, note: String(c.d.note || '').trim() });
     ui.rcDraft = null;
