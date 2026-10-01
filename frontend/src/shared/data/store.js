@@ -113,6 +113,16 @@
       if (broken) { A.db = null; try { localStorage.removeItem(KEY); } catch (e) { /* bỏ qua */ } }
     }
     if (A.db) A.reindex(); else A.fresh();
+    // Hợp đồng seed cũ thiếu serviceApplicability → tính nháp bỏ qua điện, nước, dịch vụ. Bổ sung đúng như seed
+    // hiện tại (điểm có công tơ: điện + nước; chợ TTD: dịch vụ), không đụng hợp đồng đã khai báo trên UI.
+    let serviceMigrated = false;
+    (A.db.contracts || []).forEach(c => {
+      if (c.serviceApplicability) return;
+      const st = A.idx.stall.get(c.businessPointId || c.stallId) || {};
+      c.serviceApplicability = { electricity: !!st.hasMeter, water: !!st.hasMeter, marketService: c.market === 'TTD' };
+      serviceMigrated = true;
+    });
+    if (serviceMigrated) A.save();
     // QUA_HAN_CHUYEN_CONG_NO: khoản quá hạn chưa thu → hệ thống tự chuyển công nợ (idempotent).
     if (A.syncDebts) A.syncDebts({ save: false });
     // Hồ sơ/tài khoản: collection nghiệp vụ đổi số điện thoại, cùng state prototype A.db.

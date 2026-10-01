@@ -437,7 +437,9 @@ window.DATA = (function () {
         id: 'HĐ-' + st.market + '-' + start.slice(0, 4) + '-' + pad(++cSeq, 4),
         stallId: st.id, traderId: t.id, market: st.market,
         kind: 'Hợp đồng thuê cố định quầy tháng/quý',
-        start, end, unit, monthly, deposit: monthly, status: 'hieuluc', scanned: chance(0.8)
+        start, end, unit, monthly, deposit: monthly, status: 'hieuluc', scanned: chance(0.8),
+        // Dịch vụ áp dụng (như hợp đồng tạo trên UI): điểm có công tơ tính điện, nước; chợ TTD thu thêm dịch vụ chợ.
+        serviceApplicability: { electricity: !!st.hasMeter, water: !!st.hasMeter, marketService: st.market === 'TTD' }
       }, extra || {});
       contracts.push(c);
       return c;

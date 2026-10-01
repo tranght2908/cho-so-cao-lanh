@@ -178,6 +178,8 @@
     }
     A.db.billingDrafts = A.db.billingDrafts.filter(x => !(x.market === market && x.period === period)); if (!A.db.issuedPeriods.includes(period)) A.db.issuedPeriods.push(period);
     bp.calculationStatus = 'PUBLISHED'; bp.issuedAt = stamp(); bp.issuedBy = actor || ''; A.reindex();
+    // Đã phát hành → Đang thu: không có thao tác "Bắt đầu thu" riêng, Thu tiền chỉ mở khi kỳ ở COLLECTING.
+    if (bp.status !== 'CLOSED') bp.status = 'COLLECTING';
     notifyIssued(market, period, issued, actor); A.save(); return { issued, blocking: [] };
   }
   Object.assign(billing, { ensure, calculatePeriod, drafts, warnings, traderGroups, review, issue, openNextPeriod, nextMonth, daysInPeriod });
