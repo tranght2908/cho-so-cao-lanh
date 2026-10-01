@@ -106,17 +106,38 @@
     });
     ensureQd480LandPrices(cfg);
     splitUtilityRecords(cfg);
-    // Lịch kỳ thu mới giữ các field cũ để dữ liệu localStorage đã có tiếp tục dùng được.
-    // Các mốc mới chỉ là cấu hình lịch mặc định; không kích hoạt phát hành khoản phải thu.
+    // Lịch kỳ thu chỉ cấu hình các mốc vận hành; không kích hoạt phát hành khoản phải thu.
     const cycle = cfg.billingCycle || {};
     cycle.preparationDay = Number(cycle.preparationDay) || Number(cycle.meterCutoffDay) || 25;
     cycle.meterReadDay = Number(cycle.meterReadDay) || Number(cycle.meterCutoffDay) || 25;
     cycle.collectionStartDay = Number(cycle.collectionStartDay) || 29;
+    // Offset tháng tách template lịch khỏi các ngày snapshot trên từng billing period.
+    // Record cũ không có các field này tiếp tục đọc theo defaults tương thích.
+    ['preparationMonth', 'meterReadMonth', 'collectionStartMonth', 'reminder1Month', 'reminder2Month'].forEach(key => {
+      const fallback = key === 'preparationMonth' || key === 'meterReadMonth' ? 'previous' : key === 'reminder1Month' || key === 'reminder2Month' ? 'next' : 'current';
+      cycle[key] = ['previous', 'current', 'next'].includes(cycle[key]) ? cycle[key] : fallback;
+    });
+    cycle.reminder1Day = Number(cycle.reminder1Day) || 1;
+    cycle.reminder2Day = Number(cycle.reminder2Day) || 3;
+    if (cycle.autoCreatePeriods === undefined) cycle.autoCreatePeriods = true;
     cycle.dueMonth = cycle.dueMonth === 'current' ? 'current' : 'next';
     if (cycle.prepareNotification === undefined) cycle.prepareNotification = true;
     // autoIssue là field legacy không còn được UI/handler dùng; luôn vô hiệu theo luồng mới.
     cycle.autoIssue = false;
+    // Mốc dự kiến phát hành đã được bỏ khỏi lịch thu mặc định. Việc phát hành vẫn
+    // được thực hiện độc lập tại module Khoản phải thu, nên các key này không còn
+    // là một phần của cấu hình lịch và được loại bỏ an toàn khi cấu hình được lưu lại.
+    delete cycle.issueDay;
+    delete cycle.issueMonth;
     cfg.billingCycle = cycle;
+    // Per-market templates; billingCycle remains the legacy fallback only.
+    cfg.defaultSchedules = cfg.defaultSchedules && typeof cfg.defaultSchedules === 'object' ? cfg.defaultSchedules : {};
+    Object.keys(cfg.defaultSchedules).forEach(mid => {
+      const schedule = cfg.defaultSchedules[mid] || {};
+      cfg.defaultSchedules[mid] = Object.assign({}, cycle, schedule, { issueDay: undefined, issueMonth: undefined });
+      delete cfg.defaultSchedules[mid].issueDay;
+      delete cfg.defaultSchedules[mid].issueMonth;
+    });
     return cfg;
   }
 
@@ -127,11 +148,11 @@
     return normalizeConfig(Object.assign(rateSeed, {
       waiverTypes: clone(D.WAIVER_TYPES || []),
       billingCycle: {
-        cycle: 'monthly', preparationDay: 25, meterReadDay: 25, meterCutoffDay: 25, issueDay: 28, collectionStartDay: 29, dueDay: 3, dueMonth: 'next', prepareNotification: true,
+        cycle: 'monthly', preparationDay: 28, preparationMonth: 'previous', meterReadDay: 28, meterReadMonth: 'previous', meterCutoffDay: 28, collectionStartDay: 1, collectionStartMonth: 'current', reminder1Day: 5, reminder1Month: 'current', reminder2Day: 10, reminder2Month: 'current', dueDay: 15, dueMonth: 'current', autoCreatePeriods: true, prepareNotification: true,
         // Field legacy: giữ nguyên để không làm mất dữ liệu/policy đang được module khác đọc.
         reminder1Days: 3, reminder2Days: 7, autoIssue: false, autoRemind: true,
-        legalBasis: { docNo: '', docDate: '', issuer: 'Ban Quản lý chợ', summary: 'Quy định kỳ thu, ngày phát hành và hạn nộp', effectiveDate: '2026-01-01', note: '' },
-        attachments: [], history: [{ time: '01/01/2026 08:00', user: 'Trần Minh Khoa', action: 'Tạo cấu hình', detail: 'Kỳ thu hằng tháng · phát hành ngày 01 · hạn nộp ngày 15' }]
+        legalBasis: { docNo: '', docDate: '', issuer: 'Ban Quản lý chợ', summary: 'Quy định kỳ thu và hạn thanh toán', effectiveDate: '2026-01-01', note: '' },
+        attachments: [], history: [{ time: '01/01/2026 08:00', user: 'Trần Minh Khoa', action: 'Tạo cấu hình', detail: 'Kỳ thu hằng tháng · hạn thanh toán ngày 15' }]
       },
       billingRules: {
         allowAdjust: true, allowWaiver: true, requireReason: true, waiverApprovalThreshold: 10, approverRoleId: 'bql',
@@ -222,7 +243,13 @@
       return cur;
     },
     cycle: () => CFG.billingCycle,
+    cycleFor: marketId => {
+      if (!marketId) return CFG.billingCycle;
+      if (!CFG.defaultSchedules[marketId]) CFG.defaultSchedules[marketId] = clone(CFG.billingCycle);
+      return CFG.defaultSchedules[marketId];
+    },
     updateCycle: (patch, user, detail) => { Object.assign(CFG.billingCycle, patch); SC.log(CFG.billingCycle, user, 'Cập nhật kỳ thu', detail || ''); },
+    updateCycleFor: (marketId, patch, user, detail) => { const cycle = SC.cycleFor(marketId); Object.assign(cycle, patch); SC.log(cycle, user, 'Cập nhật lịch thu mặc định', detail || ''); },
     rules: () => CFG.billingRules,
     updateRules: (patch, user, detail) => { Object.assign(CFG.billingRules, patch); SC.log(CFG.billingRules, user, 'Cập nhật quy tắc thu phí', detail || ''); },
     complaintRules: () => CFG.complaintRules,
@@ -246,8 +273,8 @@
     resetDefault: () => { CFG = defaultConfig(); save(); }
   };
 
-  // KY_09_DEN_GHI_CHI_SO (seed v29): không còn tự bổ sung kỳ demo 10/2026 — kỳ đang làm là 09/2026,
-  // mọi kỳ sau chỉ được tạo khi người dùng thao tác tiếp luồng thu phí.
+  // KY_09_DEN_GHI_CHI_SO (seed v29): không tự bổ sung kỳ demo 10/2026.
+  // Mọi kỳ sau chỉ được tạo từ dữ liệu/luồng Kỳ thu; finance không được tự tạo thay.
 
   // Applied price helpers (from js/core.js, Phase 15.6).
   // Đơn giá hiện hành của điểm KD lấy từ "Chính sách thu và biểu phí", không phải
