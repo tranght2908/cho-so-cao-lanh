@@ -97,6 +97,9 @@
       }
     });
     cfg.waiverTypes = Array.isArray(cfg.waiverTypes) ? cfg.waiverTypes : clone(D.WAIVER_TYPES || []);
+    cfg.complaintRules = cfg.complaintRules && typeof cfg.complaintRules === 'object' ? cfg.complaintRules : {};
+    if (cfg.complaintRules.ratingAutoCloseDays === undefined) cfg.complaintRules.ratingAutoCloseDays = null;
+    if (!Array.isArray(cfg.complaintRules.history)) cfg.complaintRules.history = [];
     ['stallPrices', 'utilities', 'extraServices'].forEach(cat => {
       cfg[cat] = Array.isArray(cfg[cat]) ? cfg[cat] : [];
       cfg[cat].forEach(rec => normalizeRecord(cat, rec));
@@ -135,6 +138,10 @@
         allowPartialPay: true, allowVoidReceipt: true, requireNoteOnAdjust: true,
         legalBasis: { docNo: '', docDate: '', issuer: 'Ban Quản lý chợ', summary: 'Quy tắc điều chỉnh, miễn giảm khoản phải thu', effectiveDate: '2026-01-01', note: '' },
         attachments: [], history: [{ time: '01/01/2026 08:00', user: 'Trần Minh Khoa', action: 'Tạo cấu hình', detail: 'Ngưỡng phê duyệt miễn giảm 10%' }]
+      },
+      complaintRules: {
+        ratingAutoCloseDays: null,
+        history: [{ time: '01/01/2026 08:00', user: 'Hệ thống', action: 'Tạo cấu hình', detail: 'Chưa cấu hình thời gian chờ đánh giá phản ánh' }]
       }
     }));
   }
@@ -218,6 +225,8 @@
     updateCycle: (patch, user, detail) => { Object.assign(CFG.billingCycle, patch); SC.log(CFG.billingCycle, user, 'Cập nhật kỳ thu', detail || ''); },
     rules: () => CFG.billingRules,
     updateRules: (patch, user, detail) => { Object.assign(CFG.billingRules, patch); SC.log(CFG.billingRules, user, 'Cập nhật quy tắc thu phí', detail || ''); },
+    complaintRules: () => CFG.complaintRules,
+    updateComplaintRules: (patch, user, detail) => { Object.assign(CFG.complaintRules, patch); SC.log(CFG.complaintRules, user, 'Cập nhật quy tắc phản ánh', detail || ''); },
     log: (rec, user, action, detail) => {
       rec.history = rec.history || [];
       rec.history.unshift({ time: nowStr(), user: user, action: action, detail: detail || '' });

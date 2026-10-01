@@ -25,7 +25,6 @@
     return `<div class="kpis">
       <div class="card kpi"><div class="k-label">Đang xử lý</div><div class="k-value">${all.filter(isOpen).length}</div><div class="k-sub">trên tổng ${all.length} phản ánh</div></div>
       <div class="card kpi"><div class="k-label">Quá hạn</div><div class="k-value" style="color:var(--danger)">${all.filter(late).length}</div><div class="k-sub">Điện, PCCC: 24 giờ · khác: 3 ngày</div></div>
-      <div class="card kpi"><div class="k-label">Vượt cấp lên phường</div><div class="k-value">${all.filter(i => i.escalated).length}</div><div class="k-sub">Lãnh đạo phường theo dõi</div></div>
       <div class="card kpi"><div class="k-label">Hài lòng của tiểu thương</div><div class="k-value">${done.length ? (U.sum(done, i => i.rating) / done.length).toFixed(1) : '–'}/5</div><div class="k-sub">${done.length} lượt đánh giá</div></div></div>
     <div class="card"><div class="card-h"><h3>Bảng theo dõi xử lý (6 trạng thái)</h3>
       <select class="input" data-ch="inc-cat"><option value="">Mọi nhóm</option>${cats.map(c => `<option ${ui.incCat === c ? 'selected' : ''}>${c}</option>`).join('')}</select>
@@ -33,7 +32,7 @@
       <div class="card-b"><div class="kanban">${ST.map(s => {
         const xs = all.filter(i => i.state === s.id);
         return `<div class="kcol"><h4>${s.label}<span class="muted">${xs.length}</span></h4>${xs.map(i => `<div class="kcard ${late(i) ? 'late' : ''}" data-act="inc-open" data-id="${i.id}">
-          <div class="row small"><span class="muted">${i.id}</span>${i.escalated ? '<span class="tag purple">Vượt cấp</span>' : ''}${late(i) ? '<span class="tag danger">Quá hạn</span>' : ''}</div>
+          <div class="row small"><span class="muted">${i.id}</span>${late(i) ? '<span class="tag danger">Quá hạn</span>' : ''}</div>
           <div class="t">${U.esc(i.title)}</div><div class="small muted">${i.cat} · ${A.idx.stall.get(i.stallId).code} · ${U.mShort(i.market)}</div>
           <div class="small muted">${U.icon(i.source === 'Mini app tiểu thương' ? 'phone' : 'dashboard')} ${U.dmy(i.created)}${i.assignee ? ' · ' + U.esc(U.staffName(i.assignee)) : ''}</div></div>`).join('')}</div>`;
       }).join('')}</div></div></div>`;
@@ -43,11 +42,9 @@
     const i = A.db.incidents.find(x => x.id === el.dataset.id), t = A.idx.trader.get(i.traderId);
     const idx = ST.findIndex(s => s.id === i.state), next = ST[idx + 1];
     const canPhanCong = A.canDo('su-co.phan-cong', i.market);
-    const canVuotCap = A.canDo('su-co.vuot-cap', i.market);
-    const canChiDao = A.canDo('su-co.chi-dao', i.market);
     const canChuyenTT = A.canDo('su-co.chuyen-trang-thai', i.market);
     A.modal(A.mHead(i.id + ' · ' + U.esc(i.title)) + `<div class="modal-b">
-      <dl class="kv"><dt>Trạng thái</dt><dd><span class="tag info">${stLabel(i.state)}</span> ${late(i) ? '<span class="tag danger">Quá hạn</span>' : ''} ${i.escalated ? '<span class="tag purple">Vượt cấp</span>' : ''}</dd>
+      <dl class="kv"><dt>Trạng thái</dt><dd><span class="tag info">${stLabel(i.state)}</span> ${late(i) ? '<span class="tag danger">Quá hạn</span>' : ''}</dd>
         <dt>Nhóm</dt><dd>${i.cat}</dd><dt>Nguồn</dt><dd>${i.source}</dd>
         <dt>Tiểu thương</dt><dd>${U.esc(t ? t.name : '')} · ${A.idx.stall.get(i.stallId).code} · ${U.mShort(i.market)}</dd>
         <dt>Tiếp nhận / hạn</dt><dd>${U.dmy(i.created)} · hạn ${U.dmy(i.deadline)}</dd>
@@ -55,10 +52,7 @@
         <dt>Người xử lý</dt><dd>${canPhanCong ? `<select class="input" data-ch="inc-assign" data-id="${i.id}"><option value="">– Chưa phân công –</option>${D.STAFF.filter(s => s.market === i.market).map(s => `<option value="${s.id}" ${i.assignee === s.id ? 'selected' : ''}>${s.name} (${s.role})</option>`).join('')}</select>` : U.esc(U.staffName(i.assignee) || 'Chưa phân công')}</dd>
         ${i.rating ? `<dt>Đánh giá</dt><dd>${'★'.repeat(i.rating)}${'☆'.repeat(5 - i.rating)}</dd>` : ''}</dl>
       <div class="divider"></div><b class="small">Nhật ký xử lý</b>${i.log.map(l => `<div class="small"><span class="muted">${U.dmy(l.at)}</span> · ${U.esc(l.text)}</div>`).join('')}
-      ${canChiDao && i.escalated ? '<div class="field" style="margin-top:12px"><label>Ý kiến chỉ đạo của lãnh đạo phường</label><textarea class="input" id="inc-cmt" rows="2" placeholder="VD: Giao BQL phối hợp Công an phường xử lý trong 2 ngày"></textarea></div>' : ''}
       </div><div class="modal-f">
-      ${canVuotCap && !i.escalated && isOpen(i) ? `<button class="btn" data-act="inc-escalate" data-id="${i.id}">Chuyển vượt cấp lên phường</button>` : ''}
-      ${canChiDao && i.escalated ? `<button class="btn primary" data-act="inc-comment" data-id="${i.id}">Gửi ý kiến chỉ đạo</button>` : ''}
       ${canChuyenTT && next ? `<button class="btn primary" data-act="inc-next" data-id="${i.id}">Chuyển sang: ${next.label}</button>` : ''}
       <button class="btn" data-act="close">Đóng</button></div>`, true);
   };
@@ -81,20 +75,6 @@
     i.state = n.id; incLog(i, 'Chuyển trạng thái: ' + n.label);
     A.render(); A.ACT['inc-open']({ dataset: { id: i.id } });
     if (n.id === 'hoanthanh') U.toast('Đã hoàn thành – tiểu thương nhận thông báo và được mời đánh giá');
-  };
-  A.ACT['inc-escalate'] = el => {
-    const i = A.db.incidents.find(x => x.id === el.dataset.id);
-    if (!i || !A.canDo('su-co.vuot-cap', i.market) || i.escalated || !isOpen(i)) return;
-    i.escalated = true; incLog(i, 'Chuyển vượt cấp lên UBND phường');
-    A.render(); A.closeModal(); U.toast('Đã chuyển ' + i.id + ' lên cổng giám sát cấp phường');
-  };
-  A.ACT['inc-comment'] = el => {
-    const i = A.db.incidents.find(x => x.id === el.dataset.id);
-    if (!i || !A.canDo('su-co.chi-dao', i.market) || !i.escalated) return;
-    const txt = (A.$('#inc-cmt').value || '').trim();
-    if (!txt) { U.toast('Vui lòng nhập ý kiến chỉ đạo'); return; }
-    incLog(i, 'Lãnh đạo phường chỉ đạo: ' + txt);
-    A.closeModal(); U.toast('Đã gửi ý kiến chỉ đạo tới Ban Quản lý chợ');
   };
   A.ACT['inc-new'] = () => {
     if (!A.canDo('su-co.tao-phan-anh', ui.market)) return;
@@ -257,6 +237,49 @@
     }
     return incAddLeaderReminderNotification(i) || changed;
   }
+  function incRatingWaitDays() {
+    const rules = A.SERVICE_CFG && A.SERVICE_CFG.complaintRules ? A.SERVICE_CFG.complaintRules() : null;
+    const n = rules && Number(rules.ratingAutoCloseDays);
+    return n > 0 ? n : 0;
+  }
+  function incAcceptedAt(i) {
+    return (i && i.acceptance && i.acceptance.at) || (i && i.work && i.work.completedAt) || (i && i.updatedAt) || (i && i.created);
+  }
+  function incAutoCloseCompletedIncident(i) {
+    const waitDays = incRatingWaitDays();
+    if (!waitDays || !i || i.state !== 'hoanthanh' || i.rating || i.closeInfo) return false;
+    const base = String(incAcceptedAt(i) || '').slice(0, 10);
+    if (!base || U.days(base, U.today()) < waitDays) return false;
+    i.closeInfo = { at: incNow(), by: 'Hệ thống', reason: 'RATING_WAIT_TIMEOUT', note: 'Tự động đóng sau ' + waitDays + ' ngày chờ tiểu thương đánh giá.' };
+    i.state = 'dong';
+    incHistory(i, 'Hệ thống tự động đóng phản ánh', i.closeInfo.note);
+    return true;
+  }
+  function incSubmitTraderRating(i, trader, rating, comment, source) {
+    const n = Number(rating);
+    if (!i || i.state !== 'hoanthanh' || !(n >= 1 && n <= 5)) return false;
+    i.rating = n;
+    i.feedback = { at: incNow(), by: trader && trader.id || null, comment: String(comment || '').trim(), source: source || 'Cổng tiểu thương' };
+    i.log = Array.isArray(i.log) ? i.log : [];
+    i.history = Array.isArray(i.history) ? i.history : [];
+    const detail = i.rating + ' sao' + (i.feedback.comment ? ' · ' + i.feedback.comment : '');
+    i.log.push({ at: U.today(), text: 'Tiểu thương đánh giá ' + detail });
+    i.history.push({ at: incNow(), action: 'Tiểu thương đánh giá kết quả', detail });
+    i.closeInfo = { at: incNow(), by: 'Hệ thống', reason: 'TRADER_RATED', note: 'Tự động đóng sau khi tiểu thương hoàn tất đánh giá.' };
+    i.state = 'dong';
+    i.history.push({ at: i.closeInfo.at, action: 'Đóng phản ánh', detail: i.closeInfo.note });
+    A.save();
+    return true;
+  }
+  complaints.canRate = i => !!i && i.state === 'hoanthanh';
+  complaints.ratingWaitDays = incRatingWaitDays;
+  complaints.submitTraderRating = incSubmitTraderRating;
+  complaints.autoCloseCompletedIncidents = function () {
+    let changed = false;
+    (A.db.incidents || []).forEach(i => { if (incAutoCloseCompletedIncident(i)) changed = true; });
+    if (changed) A.save();
+    return changed;
+  };
   function ensureIncidentV2() {
     let changed = false;
     (A.db.incidents || []).forEach(i => {
@@ -284,6 +307,7 @@
       if (!Array.isArray(i.acceptanceHistory)) { i.acceptanceHistory = i.acceptance ? [i.acceptance] : []; changed = true; }
       if (!i.images) { i.images = { report: i.photo ? ['Ảnh phản ánh (mock)'] : [], inspection: [], work: [] }; changed = true; }
       if (!i.deadline) { i.deadline = incDefaultDeadline(i.cat, i.created || U.today(), String(i.created || '').indexOf('T') !== -1); changed = true; }
+      if (incAutoCloseCompletedIncident(i)) changed = true;
       if (incEnsureLeaderReminder(i)) changed = true;
     });
     if (changed) A.save();
@@ -325,11 +349,11 @@
   function incAssetPreview(asset) { const loc = asset && incAssetLoc(asset); return asset ? `<div class="inc-asset-preview"><b>${U.esc(asset.code)} · ${U.esc(asset.name)}</b><span>${U.esc(loc.label)} · ${U.esc(asset.status)}</span>${loc.secondary ? `<span>${U.esc(loc.secondary)}</span>` : ''}</div>` : ''; }
   function incModal(title, body, footer) { A.modal(`<div class="modal-h inc-modal-h"><h3>${title}</h3><button class="x" data-act="close">×</button></div><div class="modal-b inc-modal-b">${body}</div><div class="modal-f inc-modal-f">${footer}</div>`, true); }
   function incHeader(i) { return `<div class="inc-case"><b>${i.id}</b><span>${U.esc(i.title)}</span></div>`; }
-  function incReadonly(i) { const st=A.idx.stall.get(i.stallId)||{}, t=A.idx.trader.get(i.traderId), imgs=(i.images||{}).report||[]; return `<section class="inc-section"><h4>Thông tin phản ánh</h4><dl class="kv"><dt>Nguồn</dt><dd>${U.esc(i.source)}</dd><dt>Người phản ánh</dt><dd>${U.esc(t ? t.name : (i.reporterName || '—'))}</dd><dt>Điểm kinh doanh</dt><dd>${U.esc(st.code || '—')}</dd><dt>Thời gian tiếp nhận</dt><dd>${incFmt(i.created)}</dd><dt>Nội dung</dt><dd>${U.esc(i.desc || '—')}</dd></dl></section><section class="inc-section"><h4>Hình ảnh phản ánh</h4>${incImages(imgs)}</section>`; }
+  function incReadonly(i) { const st=A.idx.stall.get(i.stallId)||{}, t=A.idx.trader.get(i.traderId), imgs=(i.images||{}).report||[]; return `<section class="inc-section"><h4>Thông tin phản ánh</h4><dl class="kv"><dt>Nguồn</dt><dd>${U.esc(i.source)}</dd><dt>Người phản ánh</dt><dd>${U.esc(t ? t.name : (i.reporterName || '—'))}</dd><dt>Vị trí</dt><dd>${U.esc(st.code || i.locationText || '—')}</dd><dt>Thời gian tiếp nhận</dt><dd>${incFmt(i.created)}</dd><dt>Nội dung</dt><dd>${U.esc(i.desc || '—')}</dd></dl></section><section class="inc-section"><h4>Hình ảnh phản ánh</h4>${incImages(imgs)}</section>`; }
   function incDetail(i) {
     const tab=ui.incDetailTab||'overview', a=incAsset(i), st=A.idx.stall.get(i.stallId)||{}, t=A.idx.trader.get(i.traderId), action=incAction(i);
     let body='';
-    if(tab==='overview') body=`<dl class="kv"><dt>Mã sự cố</dt><dd>${i.id}</dd><dt>Tên sự cố</dt><dd>${U.esc(i.title)}</dd><dt>Trạng thái</dt><dd><span class="tag info">${stLabel(i.state)}</span>${late(i)?` <span class="tag danger">Quá hạn ${incOverdueDays(i)} ngày</span>`:''}${i.leaderReminder?' <span class="tag warn">Đã nhắc Trưởng BQL</span>':''}</dd><dt>Nhóm</dt><dd>${U.esc(i.cat)} <span class="small muted">(${incDeadlineRuleText(i.cat)})</span></dd><dt>Nguồn</dt><dd>${U.esc(i.source)}</dd><dt>Người phản ánh</dt><dd>${U.esc(t?t.name:'—')}</dd><dt>Điểm KD</dt><dd>${U.esc(st.code||'—')}</dd><dt>Ngày tiếp nhận</dt><dd>${incFmt(i.created)}</dd><dt>Hạn xử lý</dt><dd>${incFmt(i.deadline)}</dd>${i.leaderReminder?`<dt>Nhắc quá hạn</dt><dd>Hệ thống đã nhắc ${U.esc(i.leaderReminder.targetLabel)} lúc ${incFmt(i.leaderReminder.at)}</dd>`:''}<dt>Người xử lý</dt><dd>${U.esc(incStaff(i))}</dd></dl>${a?`<section class="inc-section"><h4>Tài sản liên quan</h4>${incAssetPreview(a)}<button class="btn sm" data-act="asset-open" data-id="${a.id}">Xem tài sản</button></section>`:''}`;
+    if(tab==='overview') body=`<dl class="kv"><dt>Mã sự cố</dt><dd>${i.id}</dd><dt>Tên sự cố</dt><dd>${U.esc(i.title)}</dd><dt>Trạng thái</dt><dd><span class="tag info">${stLabel(i.state)}</span>${late(i)?` <span class="tag danger">Quá hạn ${incOverdueDays(i)} ngày</span>`:''}${i.leaderReminder?' <span class="tag warn">Đã nhắc Trưởng BQL</span>':''}</dd><dt>Nhóm</dt><dd>${U.esc(i.cat)} <span class="small muted">(${incDeadlineRuleText(i.cat)})</span></dd><dt>Nguồn</dt><dd>${U.esc(i.source)}</dd><dt>Người phản ánh</dt><dd>${U.esc(t?t.name:(i.reporterName||'—'))}</dd><dt>Vị trí</dt><dd>${U.esc(st.code||i.locationText||'—')}</dd><dt>Ngày tiếp nhận</dt><dd>${incFmt(i.created)}</dd><dt>Hạn xử lý</dt><dd>${incFmt(i.deadline)}</dd>${i.leaderReminder?`<dt>Nhắc quá hạn</dt><dd>Hệ thống đã nhắc ${U.esc(i.leaderReminder.targetLabel)} lúc ${incFmt(i.leaderReminder.at)}</dd>`:''}<dt>Người xử lý</dt><dd>${U.esc(incStaff(i))}</dd></dl>${a?`<section class="inc-section"><h4>Tài sản liên quan</h4>${incAssetPreview(a)}<button class="btn sm" data-act="asset-open" data-id="${a.id}">Xem tài sản</button></section>`:''}`;
     if(tab==='inspection') body=i.receive?`<dl class="kv"><dt>Thời gian nhận xử lý</dt><dd>${incFmt(i.receive.at)}</dd><dt>Người xử lý</dt><dd>${U.esc(incActorLabel(i.receive.by))}</dd><dt>Ghi chú khi nhận</dt><dd>${U.esc(i.receive.note||'—')}</dd></dl>${i.inspection?`<div class="divider"></div><dl class="kv"><dt>Kiểm tra hiện trường</dt><dd>${U.esc(i.inspection.condition||'—')}</dd><dt>Ghi chú kỹ thuật</dt><dd>${U.esc(i.inspection.note||'—')}</dd></dl>${incImages(i.images.inspection)}`:''}`:(i.inspection?`<dl class="kv"><dt>Thời gian kiểm tra</dt><dd>${incFmt(i.inspection.at)}</dd><dt>Người xử lý</dt><dd>${U.esc(incActorLabel(i.inspection.by))}</dd><dt>Hiện trạng thực tế</dt><dd>${U.esc(i.inspection.condition)}</dd><dt>Ghi chú kỹ thuật</dt><dd>${U.esc(i.inspection.note||'—')}</dd></dl>${incImages(i.images.inspection)}`:'<div class="empty">Chưa có thông tin nhận xử lý.</div>');
     if(tab==='work') body=i.work?`<dl class="kv"><dt>Người xử lý</dt><dd>${U.esc(incStaff(i))}</dd><dt>Người hoàn thành</dt><dd>${U.esc(incActorLabel(i.work.completedBy || i.assignee))}</dd><dt>Nội dung xử lý</dt><dd>${U.esc(i.work.content)}</dd><dt>Kết quả sau xử lý</dt><dd>${U.esc(i.work.result)}</dd><dt>Thời gian hoàn thành</dt><dd>${incFmt(i.work.completedAt)}</dd><dt>Ghi chú</dt><dd>${U.esc(i.work.note||'—')}</dd></dl>${incImages(i.images.work)}`:'<div class="empty">Chưa có kết quả xử lý.</div>';
     if(tab==='rating') body=i.rating?`<dl class="kv"><dt>Mức đánh giá</dt><dd><span class="stars readonly">${'★'.repeat(i.rating)}${'☆'.repeat(5 - i.rating)}</span></dd><dt>Người đánh giá</dt><dd>${U.esc(t?t.name:(i.reporterName||'Tiểu thương'))}</dd><dt>Thời gian</dt><dd>${incFmt((i.feedback||{}).at)}</dd><dt>Ý kiến</dt><dd>${U.esc((i.feedback||{}).comment||'—')}</dd></dl>`:'<div class="empty">Tiểu thương chưa đánh giá kết quả sau phản ánh.</div>';
@@ -359,7 +383,7 @@
   function incRoleDesc(ctx, marketName) {
     if (ctx === 'tech') return 'Nhận xử lý, cập nhật tiến độ và gửi kết quả chờ nghiệm thu cho phản ánh đã được phân công tại ' + marketName + '.';
     if (ctx === 'manager') return 'Tiếp nhận, phân công, nghiệm thu và theo dõi xử lý phản ánh tại ' + marketName + '.';
-    if (ctx === 'leader') return 'Theo dõi phản ánh quá hạn, vượt cấp và kết quả xử lý tại ' + marketName + '.';
+    if (ctx === 'leader') return 'Theo dõi phản ánh quá hạn và kết quả xử lý tại ' + marketName + '.';
     return 'Theo dõi tình hình phản ánh, quá hạn và kết quả xử lý tại ' + marketName + '.';
   }
   function incScopeLabel(ctx) {
@@ -373,14 +397,13 @@
     const waiting = all.filter(i => i.state === 'chonghiemthu');
     const intake = all.filter(i => i.state === 'tiepnhan');
     const reminded = overdue.filter(i => i.leaderReminder);
-    const escalated = all.filter(i => i.escalated);
     const needsAction = ctx === 'tech'
       ? all.filter(i => i.state === 'phancong' || i.state === 'dangxuly')
       : (ctx === 'manager' ? intake : overdue);
     return `<div class="kpis inc-kpis">
       <div class="card kpi"><div class="k-label">${ctx === 'tech' ? 'Đang mở của tôi' : 'Đang mở'}</div><div class="k-value">${open.length}</div><div class="k-sub">trên tổng ${all.length} hồ sơ</div></div>
       <div class="card kpi"><div class="k-label">Quá hạn</div><div class="k-value" style="color:var(--danger)">${overdue.length}</div><div class="k-sub">Điện/PCCC 1 ngày · nhóm khác 3 ngày</div></div>
-      <div class="card kpi"><div class="k-label">${ctx === 'leader' ? 'Vượt cấp' : 'Chờ nghiệm thu'}</div><div class="k-value">${ctx === 'leader' ? escalated.length : waiting.length}</div><div class="k-sub">${ctx === 'leader' ? 'cần theo dõi cấp phường' : 'chờ Tổ trưởng xác nhận'}</div></div>
+      <div class="card kpi"><div class="k-label">Chờ nghiệm thu</div><div class="k-value">${waiting.length}</div><div class="k-sub">chờ Tổ trưởng xác nhận</div></div>
       <div class="card kpi"><div class="k-label">${ctx === 'manager' ? 'Tiếp nhận' : (ctx === 'tech' ? 'Cần thao tác' : 'Đã nhắc BQL')}</div><div class="k-value">${ctx === 'leader' ? reminded.length : needsAction.length}</div><div class="k-sub">${ctx === 'leader' ? 'hồ sơ quá hạn đã nhắc' : 'hồ sơ cần xử lý tiếp'}</div></div>
     </div>`;
   }
@@ -391,8 +414,8 @@
     return `<span class="inc-avatar" title="${U.esc(text)}">${U.esc(initials)}</span>`;
   }
   function incIssueIcon(i) {
-    const cls = i.escalated ? 'escalated' : (incUrgentCats.has(i.cat) ? 'urgent' : 'normal');
-    const icon = i.escalated || incUrgentCats.has(i.cat) ? 'warning' : 'bell';
+    const cls = incUrgentCats.has(i.cat) ? 'urgent' : 'normal';
+    const icon = incUrgentCats.has(i.cat) ? 'warning' : 'bell';
     return `<span class="inc-issue-icon ${cls}">${U.icon(icon)}</span>`;
   }
   function incBoardToolbarHtml(rows, options) {
@@ -419,11 +442,10 @@
         const source = i.source === 'Mini app tiểu thương' ? 'Mini app' : (i.source || 'Ban Quản lý');
         return `<div class="kcard inc-jira-card ${late(i) ? 'late' : ''}" data-act="inc-open" data-id="${i.id}" data-readonly="${readOnly ? '1' : '0'}">
           <div class="t">${U.esc(i.title)}</div>
-          <div class="inc-card-loc small muted">${U.esc(i.cat)} · ${U.esc(U.mShort(i.market))} · ${U.esc(st.code || '—')}${a ? ' · ' + U.esc(a.code) : ''}</div>
+          <div class="inc-card-loc small muted">${U.esc(i.cat)} · ${U.esc(U.mShort(i.market))} · ${U.esc(st.code || i.locationText || '—')}${a ? ' · ' + U.esc(a.code) : ''}</div>
           <div class="inc-card-foot">
             <span class="inc-code">${incIssueIcon(i)}${U.esc(i.id)}</span>
             ${late(i) ? '<span class="inc-pill danger">Quá hạn</span>' : ''}
-            ${i.escalated ? '<span class="inc-pill purple">Vượt cấp</span>' : ''}
             <span class="spacer"></span>
             <span class="inc-card-source">${U.esc(source)}</span>
             ${i.assignee ? incAvatar(U.staffName(i.assignee)) : ''}
@@ -451,7 +473,6 @@
     return `<div class="kpis">
       <div class="card kpi"><div class="k-label">Đang xử lý</div><div class="k-value">${all.filter(isOpen).length}</div><div class="k-sub">trên tổng ${all.length} phản ánh</div></div>
       <div class="card kpi"><div class="k-label">Quá hạn</div><div class="k-value" style="color:var(--danger)">${all.filter(late).length}</div><div class="k-sub">Điện, PCCC: 24 giờ · khác: 3 ngày</div></div>
-      <div class="card kpi"><div class="k-label">Vượt cấp lên phường</div><div class="k-value">${all.filter(i => i.escalated).length}</div><div class="k-sub">Lãnh đạo phường theo dõi</div></div>
       <div class="card kpi"><div class="k-label">Hài lòng của tiểu thương</div><div class="k-value">${done.length ? (U.sum(done, i => i.rating) / done.length).toFixed(1) : '–'}/5</div><div class="k-sub">${done.length} lượt đánh giá</div></div></div>
     <div class="card"><div class="card-h"><h3>Bảng theo dõi xử lý</h3>
       <select class="input" data-ch="inc-cat"><option value="">Mọi nhóm</option>${cats.map(c => `<option ${ui.incCat === c ? 'selected' : ''}>${U.esc(c)}</option>`).join('')}</select></div>
@@ -475,14 +496,6 @@
         mk('accept', 'Chờ nghiệm thu', ['chonghiemthu']),
         mk('overdue', 'Theo dõi phản ánh quá hạn', null, late),
         mk('results', 'Xem kết quả phản ánh', null, i => !!i.work || i.state === 'chonghiemthu' || i.state === 'hoanthanh' || i.state === 'dong')
-      ];
-    } else if (A.canDo('su-co.chi-dao', ui.market)) {
-      tabs = [
-        mk('overdue', 'Quá hạn', null, late),
-        mk('escalated', 'Vượt cấp', null, i => !!i.escalated),
-        mk('open', 'Đang mở', ['tiepnhan', 'phancong', 'dangxuly', 'chonghiemthu', 'hoanthanh']),
-        mk('done', 'Đã đóng', ['dong']),
-        mk('all', 'Tất cả', null)
       ];
     } else {
       tabs = [
@@ -525,8 +538,8 @@
       return `<tr>
         <td><b>${i.id}</b><div class="small muted">${incFmt(i.created)}</div></td>
         <td><b>${U.esc(i.title)}</b><div class="small muted">${U.esc(i.cat)} · ${U.esc(i.source || '')}</div></td>
-        <td>${U.esc(U.mShort(i.market))} · ${U.esc(st.code || '—')}${a ? `<div class="small muted">${U.esc(a.code)} · ${U.esc(a.name)}</div>` : ''}</td>
-        <td><span class="tag info">${stLabel(i.state)}</span>${late(i)?' <span class="tag danger">Quá hạn</span>':''}${i.leaderReminder?' <span class="tag warn">Đã nhắc BQL</span>':''}${i.escalated?' <span class="tag purple">Vượt cấp</span>':''}</td>
+        <td>${U.esc(U.mShort(i.market))} · ${U.esc(st.code || i.locationText || '—')}${a ? `<div class="small muted">${U.esc(a.code)} · ${U.esc(a.name)}</div>` : ''}</td>
+        <td><span class="tag info">${stLabel(i.state)}</span>${late(i)?' <span class="tag danger">Quá hạn</span>':''}${i.leaderReminder?' <span class="tag warn">Đã nhắc BQL</span>':''}</td>
         <td>${U.esc(incStaff(i))}<div class="small muted">Hạn: ${incFmt(i.deadline)}</div></td>
         <td class="nowrap">${showView ? `<button class="btn sm" data-act="inc-open" data-id="${i.id}" data-readonly="${viewReadOnly ? '1' : '0'}">Xem</button>` : ''}${!hideActions&&canAct?`${showView ? ' ' : ''}<button class="btn sm primary" data-act="${act[0]}" data-id="${i.id}">${act[1]}</button>`:''}</td>
       </tr>`;
@@ -543,7 +556,7 @@
       return `<tr>
         <td><b>${U.esc(i.id)}</b><div class="small muted">${incFmt(i.created)}</div></td>
         <td><b>${U.esc(i.title)}</b><div class="small muted">${U.esc(i.cat)} · ${U.esc(t ? t.name : (i.reporterName || '—'))}</div></td>
-        <td>${U.esc(U.mShort(i.market))} · ${U.esc(st.code || '—')}${a ? `<div class="small muted">${U.esc(a.code)} · ${U.esc(a.name)}</div>` : ''}</td>
+        <td>${U.esc(U.mShort(i.market))} · ${U.esc(st.code || i.locationText || '—')}${a ? `<div class="small muted">${U.esc(a.code)} · ${U.esc(a.name)}</div>` : ''}</td>
         <td><b>${U.esc(work.result || 'Chưa có kết quả chi tiết')}</b><div class="small muted">${work.completedAt ? 'Hoàn thành: ' + incFmt(work.completedAt) : 'Trạng thái: ' + stLabel(i.state)}</div></td>
         <td><span class="tag info">${U.esc(stLabel(i.state))}</span>${acceptance.result === 'accepted' ? ' <span class="tag ok">Đã nghiệm thu</span>' : ''}${acceptance.result === 'rejected' ? ' <span class="tag danger">Không đạt</span>' : ''}${rating}</td>
         <td>${U.esc(incStaff(i))}<div class="small muted">${work.completedBy ? 'Người hoàn thành: ' + U.esc(incActorLabel(work.completedBy)) : 'Hạn: ' + incFmt(i.deadline)}</div></td>
@@ -580,7 +593,7 @@
         <dl class="inc-tech-kv">
           <dt>Người gửi</dt><dd>${U.esc(t ? t.name : (i.reporterName || '—'))}${t && t.phone ? `<small>${U.maskPhone(t.phone)}</small>` : ''}</dd>
           <dt>Nhóm vấn đề</dt><dd>${U.esc(i.cat)}</dd>
-          <dt>Vị trí</dt><dd>${U.esc(st.code || '—')}${a ? `<small>${U.esc(incAssetLoc(a).fullPath || a.name)}</small>` : ''}</dd>
+          <dt>Vị trí</dt><dd>${U.esc(st.code || i.locationText || '—')}${a ? `<small>${U.esc(incAssetLoc(a).fullPath || a.name)}</small>` : ''}</dd>
           <dt>Thời gian gửi</dt><dd>${incFmt(i.created)}</dd>
           <dt>Hạn xử lý</dt><dd>${incFmt(i.deadline)}${late(i) ? `<small class="danger-text">Quá hạn ${incOverdueDays(i)} ngày</small>` : ''}</dd>
           <dt>Trạng thái</dt><dd>${incTechStateTag(i)}</dd>
@@ -601,7 +614,7 @@
             <h4>${U.esc(i.title)}</h4>
             <p>${U.esc(i.cat)} · ${U.esc(i.source || '')}</p>
             <div class="inc-tech-meta">
-              <span>${U.esc(st.code || 'Chưa xác định vị trí')}</span>
+              <span>${U.esc(st.code || i.locationText || 'Chưa xác định vị trí')}</span>
               ${a ? `<span>${U.esc(a.code)} · ${U.esc(a.name)}</span>` : ''}
               <span>Hạn: ${incFmt(i.deadline)}</span>
             </div>
@@ -680,7 +693,7 @@
   };
   function incShortSummaryHtml(all) {
     const done = all.filter(i => i.rating);
-    const bits = [all.length + ' phản ánh', all.filter(late).length + ' quá hạn', all.filter(i => i.escalated).length + ' vượt cấp'];
+    const bits = [all.length + ' phản ánh', all.filter(late).length + ' quá hạn'];
     if (done.length) bits.push('hài lòng ' + (U.sum(done, i => i.rating) / done.length).toFixed(1) + '/5');
     return `<div class="inc-summary-line">${bits.map(x => `<span>${U.esc(x)}</span>`).join('<i></i>')}</div>`;
   }
@@ -754,7 +767,7 @@
       if (ui.incBoardMarket && i.market !== ui.incBoardMarket) return false;
       if (ui.incBoardCat && i.cat !== ui.incBoardCat) return false;
       if (ui.incBoardAssignee && (ui.incBoardAssignee === '__none' ? !!i.assignee : i.assignee !== ui.incBoardAssignee)) return false;
-      if (ui.incBoardArea && String(st.code || '').toLowerCase().indexOf(String(ui.incBoardArea).toLowerCase()) === -1) return false;
+      if (ui.incBoardArea && String(st.code || i.locationText || '').toLowerCase().indexOf(String(ui.incBoardArea).toLowerCase()) === -1) return false;
       if (ui.incBoardSource && i.source !== ui.incBoardSource) return false;
       if (ui.incBoardState && (ui.incBoardState === '__done' ? !['hoanthanh', 'dong'].includes(i.state) : i.state !== ui.incBoardState)) return false;
       if (ui.incBoardFrom && String(i.created || '').slice(0, 10) < ui.incBoardFrom) return false;
@@ -852,7 +865,7 @@
     return `<article class="kcard inc-jira-card ${late(i) ? 'late' : ''}" data-act="inc-open" data-id="${i.id}" data-readonly="${readOnly ? '1' : '0'}" ${incCanDrag(i, readOnly) ? 'draggable="true" data-drag-id="' + i.id + '"' : ''}>
       <div class="inc-card-title">${U.esc(i.title)}</div>
       <div class="inc-card-tags"><span class="inc-code">${U.esc(i.id)}</span><span class="inc-chip ${incCatClass(i.cat)}">${U.esc(i.cat)}</span></div>
-      <div class="inc-card-loc">${U.icon('map')} ${U.esc(U.mShort(i.market))} · ${U.esc(st.code || 'Chưa xác định')}${st.rowId ? ' · ' + U.esc(st.rowId) : ''}</div>
+      <div class="inc-card-loc">${U.icon('map')} ${U.esc(U.mShort(i.market))} · ${U.esc(st.code || i.locationText || 'Chưa xác định')}${st.rowId ? ' · ' + U.esc(st.rowId) : ''}</div>
       <div class="inc-card-bottom">
         <button class="inc-inline ${incStateClass(i.state)} ${stateEditable ? 'editable' : ''}" ${stateEditable ? `data-act="inc-quick-status" data-id="${i.id}"` : ''}>${U.esc(stLabel(i.state))}</button>
         <button class="inc-inline ${priorityEditable ? 'editable' : ''}" ${priorityEditable ? `data-act="inc-quick-priority" data-id="${i.id}"` : ''}>${U.esc(incPriorityLabel(i))}</button>
@@ -915,7 +928,7 @@
     return `<div class="drawer-h inc-drawer-head"><div><div class="small muted">${U.esc(i.id)}</div><h3>${U.esc(i.title)}</h3></div><span class="spacer"></span>${canAct ? `<button class="btn primary" data-act="${action[0]}" data-id="${i.id}">${action[1]}</button>` : ''}<button class="btn sm" data-act="inc-open" data-id="${i.id}" data-readonly="1">...</button><button class="x" data-act="close">×</button></div>
       <div class="drawer-b inc-drawer-body">
         ${incDetailSection('Thông tin xử lý', `<dl class="kv inc-detail-kv"><dt>Trạng thái</dt><dd><span class="tag info">${U.esc(stLabel(i.state))}</span>${late(i) ? ` <span class="tag danger">Quá hạn ${incOverdueDays(i)} ngày</span>` : ''}</dd><dt>Người xử lý</dt><dd>${U.esc(incStaff(i))}</dd><dt>Mức ưu tiên</dt><dd>${U.esc(incPriorityLabel(i))}</dd><dt>Hạn xử lý</dt><dd>${incFmt(i.deadline)}</dd></dl>`)}
-        ${incDetailSection('Thông tin phản ánh', `<dl class="kv inc-detail-kv"><dt>Người gửi</dt><dd>${U.esc(reporter)}</dd><dt>Nhóm vấn đề</dt><dd>${U.esc(i.cat)}</dd><dt>Nguồn phản ánh</dt><dd>${U.esc(i.source || '—')}</dd><dt>Thời gian gửi</dt><dd>${incFmt(i.created)}</dd><dt>Vị trí</dt><dd>${U.esc(st.code || '—')}</dd><dt>Nội dung</dt><dd>${U.esc(i.desc || '—')}</dd></dl>`)}
+        ${incDetailSection('Thông tin phản ánh', `<dl class="kv inc-detail-kv"><dt>Người gửi</dt><dd>${U.esc(reporter)}</dd><dt>Nhóm vấn đề</dt><dd>${U.esc(i.cat)}</dd><dt>Nguồn phản ánh</dt><dd>${U.esc(i.source || '—')}</dd><dt>Thời gian gửi</dt><dd>${incFmt(i.created)}</dd><dt>Vị trí</dt><dd>${U.esc(st.code || i.locationText || '—')}</dd><dt>Nội dung</dt><dd>${U.esc(i.desc || '—')}</dd></dl>`)}
         ${a ? incDetailSection('Tài sản liên quan', `${incAssetPreview(a)}<button class="btn sm" data-act="asset-open" data-id="${a.id}">Xem tài sản</button>`) : ''}
         ${incDetailSection('Tiến độ xử lý', incWorkUpdatesHtml(i))}
         ${incAcceptanceHistoryHtml(i) ? incDetailSection('Lịch sử nghiệm thu', incAcceptanceHistoryHtml(i)) : ''}
@@ -1019,7 +1032,7 @@
         <dl class="kv">
           <dt>Người xử lý</dt><dd>${U.esc(incStaff(i))}</dd>
           <dt>Hạn xử lý</dt><dd>${incFmt(i.deadline)}${late(i) ? ' <span class="tag danger">Quá hạn</span>' : ''}</dd>
-          <dt>Vị trí</dt><dd>${U.esc(st.code || '—')}${a ? '<br><span class="small muted">' + U.esc(incAssetLoc(a).fullPath || a.name) + '</span>' : ''}</dd>
+          <dt>Vị trí</dt><dd>${U.esc(st.code || i.locationText || '—')}${a ? '<br><span class="small muted">' + U.esc(incAssetLoc(a).fullPath || a.name) + '</span>' : ''}</dd>
           <dt>Tài sản liên quan</dt><dd>${a ? U.esc(a.code + ' · ' + a.name) : '—'}</dd>
           <dt>Nội dung phản ánh</dt><dd>${U.esc(i.desc || i.title || '—')}</dd>
         </dl>
@@ -1113,7 +1126,8 @@
         <div class="field"><label>Người phản ánh</label><input class="input" id="in2-reporter-name" placeholder="Tên tiểu thương / người dân"></div>
         <div class="field"><label>Số điện thoại</label><input class="input" id="in2-reporter-phone" placeholder="Số điện thoại liên hệ"></div>
         <div class="field"><label>Nhóm *</label><select class="input" id="in2-cat">${incCats().map(c=>`<option>${c}</option>`).join('')}</select></div>
-        <div class="field"><label>Điểm KD</label><select class="input" id="in2-stall">${incCreateStallOptions(selectedMarket)}</select></div>
+        <div class="field"><label>Điểm KD <span class="muted small">(không bắt buộc)</span></label><select class="input" id="in2-stall">${incCreateStallOptions(selectedMarket)}</select></div>
+        <div class="field"><label>Vị trí phản ánh</label><input class="input" id="in2-location" placeholder="VD: cổng phụ, nhà vệ sinh khu A, lối đi dãy B"></div>
         <div class="field"><label>Tài sản liên quan</label><select class="input" id="in2-asset">${incCreateAssetOptions(selectedMarket)}</select></div>
       </div>
       <div class="field"><label>Tiêu đề *</label><input class="input" id="in2-title"></div>
@@ -1131,6 +1145,7 @@
     const desc = (A.$('#in2-desc') && A.$('#in2-desc').value.trim()) || '';
     const reporterName = (A.$('#in2-reporter-name') && A.$('#in2-reporter-name').value.trim()) || '';
     const reporterPhone = (A.$('#in2-reporter-phone') && A.$('#in2-reporter-phone').value.trim()) || '';
+    const locationText = (A.$('#in2-location') && A.$('#in2-location').value.trim()) || '';
     const stall = A.idx.stall.get(A.$('#in2-stall').value);
     const cat = A.$('#in2-cat').value;
     const assetEl = A.$('#in2-asset'), assetId = assetEl ? (assetEl.value || null) : null;
@@ -1140,7 +1155,7 @@
     if (stall && stall.market !== market) { U.toast('Điểm kinh doanh không thuộc chợ đã chọn.'); return; }
     if (assetId && !(A.db.marketAssets || []).some(a => a.id === assetId && a.market === market)) { U.toast('Tài sản liên quan không thuộc chợ đã chọn.'); return; }
     const id = 'SC-' + U.pad(101 + A.db.incidents.length, 4), created = incNow(), due = incDefaultDeadline(cat, created, true);
-    const i = { id, market, stallId: stall && stall.id, traderId: stall && stall.traderId, assetId, cat, title, desc, source: 'Nhập tại Ban Quản lý', reporterName, reporterPhone, state: 'tiepnhan', created, deadline: due, assignee: null, rating: null, escalated: false, images: { report: incDraftNames('report').slice(0, 3), inspection: [], work: [] }, history: [{ at: created, action: 'Tiếp nhận phản ánh', detail: 'Nguồn: Nhập tại Ban Quản lý · Chợ: ' + U.mShort(market) + (reporterName ? ' · Người phản ánh: ' + reporterName : '') + ' · hạn mặc định ' + incDeadlineRuleText(cat) }], log: [] };
+    const i = { id, market, stallId: stall ? stall.id : null, traderId: stall ? stall.traderId : null, assetId, cat, title, desc, source: 'Nhập tại Ban Quản lý', reporterName, reporterPhone, locationText, state: 'tiepnhan', created, deadline: due, assignee: null, rating: null, escalated: false, images: { report: incDraftNames('report').slice(0, 3), inspection: [], work: [] }, history: [{ at: created, action: 'Tiếp nhận phản ánh', detail: 'Nguồn: Nhập tại Ban Quản lý · Chợ: ' + U.mShort(market) + (reporterName ? ' · Người phản ánh: ' + reporterName : '') + (locationText ? ' · Vị trí: ' + locationText : '') + ' · hạn mặc định ' + incDeadlineRuleText(cat) }], log: [] };
     A.db.incidents.push(i);
     ui.incImageDraft = {};
     A.save(); A.closeModal(); A.render(); U.toast('Đã tạo ' + id);
