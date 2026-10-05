@@ -282,9 +282,12 @@
     if (!rate.policy) return U.toast('Điểm kinh doanh chưa có chính sách thu đang hiệu lực. Vui lòng cấu hình biểu phí trước khi tạo hợp đồng.');
     const checked = key => { const input = A.$('#wf-ct-service-' + key); return input ? !!input.checked : !!draft.services[key]; };
     const serviceApplicability = { electricity: checked('electricity'), water: checked('water'), marketService: checked('market') };
+    const billing = A.features.finance && A.features.finance.billing;
+    const priceTerms = billing && billing.buildPriceTerms ? billing.buildPriceTerms(s.market, s, s.area, start, serviceApplicability, 'CONTRACT') : null;
+    if (!priceTerms || !priceTerms.land) return U.toast('Điểm kinh doanh chưa có chính sách thu đang áp dụng tại ngày bắt đầu hợp đồng. Vui lòng cấu hình biểu phí trước khi tạo hợp đồng.');
     const utilityPolicy = (serviceApplicability.electricity || serviceApplicability.water) ? activePolicy('utilities', s.market) : null;
     const market = ui.market; // Contract.market lấy từ chợ đang chọn (đã khớp hồ sơ + điểm ở trên)
-    const c = { id: nextContractId(market), traderId: t.id, stallId: s.id, businessPointId: s.id, market, kind: 'Hợp đồng thuê điểm kinh doanh', signedDate: start, start, end, monthly: rate.monthly, unit: rate.unit, unitLabel: rate.policy.unit || '', feePolicy: policySnapshot(rate), serviceApplicability, utilityPolicyId: utilityPolicy ? utilityPolicy.id : null, deposit: 0, signedCopies: contractFiles.slice(), history: [], status: 'ACTIVE', endReason: null };
+    const c = { id: nextContractId(market), traderId: t.id, stallId: s.id, businessPointId: s.id, market, kind: 'Hợp đồng thuê điểm kinh doanh', signedDate: start, start, end, monthly: priceTerms.land.monthly, unit: priceTerms.land.amount, unitLabel: priceTerms.land.unit || '', feePolicy: policySnapshot(rate), priceTerms, serviceApplicability, utilityPolicyId: utilityPolicy ? utilityPolicy.id : null, deposit: 0, signedCopies: contractFiles.slice(), history: [], status: 'ACTIVE', endReason: null };
     c.history.unshift({ at: U.dmy(U.today()) + ' ' + U.nowTime(), action: 'Khởi tạo hợp đồng', detail: 'Tạo từ luồng hồ sơ tiểu thương' });
     // Contract + point occupancy + trader link + point history + single save (Phase 9 use case).
     const saved = contracts.createWithPointAllocation({ contract: c, traderId: t.id, pointId: s.id, pointHistoryEntry: U.dmy(U.today()) + ': ký ' + c.id + ' với ' + t.name + ' (' + U.dmy(start) + ' → ' + U.dmy(end) + ')', beforeSave: () => A.WORKFLOW.markRecentPoint(s.id) });
