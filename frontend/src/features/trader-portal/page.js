@@ -1052,7 +1052,7 @@
     const focus = mini().payFocus;
     return `<div class="tbl-wrap"><table class="tbl tp-pay-table"><thead><tr><th>Kỳ thu</th><th>Chợ</th><th>Điểm kinh doanh</th><th class="num">Tổng cần thanh toán</th><th>Hạn thanh toán</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>${list.map(i => `<tr class="${focus === i.id ? 'tp-pay-focus' : ''}">
       <td><b>${U.per(i.period)}</b></td><td>${U.esc(payMarketName(i.market))}</td><td>${payPointsCell(i)}</td><td class="num"><b>${U.money(U.due(i))}</b></td><td>${U.dmy(i.due)}</td><td>${payBadge(i)}</td>
-      <td><div class="tp-pay-actions">${payState(i) === 'pending' ? `<button class="btn sm primary" data-act="tp-pay-pending" data-id="${U.esc(i.id)}">Xem trạng thái</button>` : `<button class="btn sm primary" data-act="tp-pay-detail" data-id="${U.esc(i.id)}">Thanh toán</button>`}<button class="btn sm" data-act="tp-pay-detail" data-id="${U.esc(i.id)}">Xem chi tiết</button></div></td></tr>`).join('')}</tbody></table></div>`;
+      <td><div class="tp-pay-actions">${payState(i) === 'pending' ? `<button class="btn sm primary" data-act="tp-pay-pending" data-id="${U.esc(i.id)}">Xem trạng thái</button>` : `<button class="btn sm primary" data-act="tp-pay-method" data-id="${U.esc(i.id)}">Thanh toán</button>`}<button class="btn sm" data-act="tp-pay-detail" data-id="${U.esc(i.id)}">Xem chi tiết</button></div></td></tr>`).join('')}</tbody></table></div>`;
   }
   function payHistoryHtml(t) {
     const all = payHistory(t), period = mini().payPeriod || 'all', q = String(mini().paySearch || '').trim().toLowerCase();
@@ -1082,7 +1082,7 @@
         ${tab === 'due' ? payDueTable(t, open) : payHistoryHtml(t)}
       </section>`;
   }
-  // ---- Modal: chi tiết → chọn phương thức → QR / tiền mặt → chờ ghi nhận → thành công → biên lai ----
+  // ---- Modal: chi tiết → mã QR (tự thanh toán chỉ bằng QR chuyển khoản, trả đủ khoản thu) → chờ ghi nhận → thành công → biên lai ----
   function payDetailModal(i) {
     const paid = i.status === 'paid', p = paid ? payLastPayment(i) : null;
     A.modal(A.mHead('Chi tiết khoản thu') + `<div class="modal-b tp-pay-modal">
@@ -1092,21 +1092,10 @@
       ${payAmountBox(paid ? 'Đã thanh toán' : 'Tổng cần thanh toán', paid ? i.amount : U.due(i), paid ? '' : 'Hạn thanh toán: ' + U.dmy(i.due))}
     </div><div class="modal-f"><button class="btn" data-act="close">Đóng</button>${paid ? (p ? `<button class="btn primary" data-act="tp-pay-receipt" data-id="${U.esc(p.id)}">Xem biên lai</button>` : '') : payState(i) === 'pending' ? `<button class="btn primary" data-act="tp-pay-pending" data-id="${U.esc(i.id)}">Xem trạng thái chuyển khoản</button>` : `<button class="btn primary tp-pay-cta" data-act="tp-pay-method" data-id="${U.esc(i.id)}">Thanh toán ${U.money(U.due(i))}</button>`}</div>`, true);
   }
-  function payMethodModal(i) {
-    const method = (mini().payMethod || {})[i.id] === 'cash' ? 'cash' : 'transfer';
-    const opt = (id, title, desc) => `<button class="tp-pay-option ${method === id ? 'selected' : ''}" data-act="tp-pay-choose" data-id="${U.esc(i.id)}" data-method="${id}" aria-pressed="${method === id}"><i></i><span><b>${title}</b><small>${desc}</small></span></button>`;
-    A.modal(A.mHead('Thanh toán khoản thu') + `<div class="modal-b tp-pay-modal">
-      <div class="small muted">Kỳ ${U.per(i.period)} · ${U.esc(payMarketName(i.market))}</div>
-      ${payAmountBox('Tổng cần thanh toán', U.due(i))}
-      <h4 class="tp-pay-sub">Chọn phương thức</h4>
-      <div class="tp-pay-options">${opt('transfer', 'Chuyển khoản / QR', 'Thanh toán trực tuyến. Hệ thống sẽ tự động ghi nhận giao dịch.')}${opt('cash', 'Tiền mặt', 'Thanh toán trực tiếp cho Nhân viên thu phí tại chợ.')}</div>
-      <div class="note warn">Khoản thu phải được thanh toán đủ. Hệ thống không hỗ trợ thanh toán một phần.</div>
-    </div><div class="modal-f"><button class="btn" data-act="tp-pay-detail" data-id="${U.esc(i.id)}">Quay lại</button><button class="btn primary" data-act="tp-pay-continue" data-id="${U.esc(i.id)}">Tiếp tục</button></div>`);
-  }
   function payTransferModal(i) {
     const ref = payReference(i), amount = U.due(i), bank = payBankAccount(i.market);
-    A.modal(A.mHead('Thanh toán qua chuyển khoản') + `<div class="modal-b tp-pay-modal">
-      ${payAmountBox('Số tiền', amount, 'Kỳ ' + U.per(i.period) + ' · ' + U.esc(payMarketName(i.market)))}
+    A.modal(A.mHead('Thanh toán bằng mã QR') + `<div class="modal-b tp-pay-modal">
+      ${payAmountBox('Tổng cần thanh toán', amount, 'Kỳ ' + U.per(i.period) + ' · ' + U.esc(payMarketName(i.market)))}
       ${bank ? `<div class="tp-pay-transfer">
         <div class="tp-pay-qr"><b>Quét mã QR</b>${U.qr(ref + ' ' + amount, 176)}<small>Mã QR minh họa (prototype) — chưa kết nối ngân hàng/VietQR thật.</small></div>
         <div class="tp-pay-bank"><b>Thông tin chuyển khoản</b>
@@ -1117,8 +1106,8 @@
           <div class="tp-pay-ref"><span>Nội dung chuyển khoản</span><b>${U.esc(ref)}</b><button class="btn sm" data-act="tp-pay-copy" data-id="${U.esc(i.id)}">Sao chép</button></div>
         </div></div>
         <div class="note warn">Vui lòng chuyển đúng <b>${U.money(amount)}</b> và giữ nguyên nội dung chuyển khoản để hệ thống có thể nhận diện giao dịch.</div>`
-        : '<div class="note warn">Chợ chưa khai báo tài khoản nhận chuyển khoản. Vui lòng chọn thanh toán tiền mặt hoặc liên hệ Ban Quản lý chợ.</div>'}
-    </div><div class="modal-f"><button class="btn" data-act="tp-pay-method" data-id="${U.esc(i.id)}">Quay lại</button>${bank ? `<button class="btn primary" data-act="tp-pay-transfer-start" data-id="${U.esc(i.id)}">Tôi sẽ chuyển khoản ngay</button>` : ''}</div>`, true);
+        : '<div class="note warn">Chợ chưa khai báo tài khoản nhận chuyển khoản. Vui lòng liên hệ Ban Quản lý chợ.</div>'}
+    </div><div class="modal-f"><button class="btn" data-act="tp-pay-detail" data-id="${U.esc(i.id)}">Xem chi tiết khoản thu</button>${bank ? `<button class="btn primary" data-act="tp-pay-transfer-start" data-id="${U.esc(i.id)}">Tôi sẽ chuyển khoản ngay</button>` : ''}</div>`, true);
   }
   function payPendingModal(i) {
     const x = transferIntent(i.id) || {};
@@ -1134,15 +1123,6 @@
       <div class="tp-pay-state is-ok"><b>✓ Thanh toán thành công</b><p>Hệ thống đã ghi nhận giao dịch của bạn.</p></div>
       <div class="tp-pay-meta"><div><span>Số tiền</span><b>${U.money(p.amount)}</b></div><div><span>Phương thức</span><b>${U.esc(payMethodLabel(p.method))}</b></div><div><span>Mã giao dịch</span><b>${U.esc(p.id)}</b></div><div><span>Mã biên lai</span><b>${U.esc(p.receipt)}</b></div><div><span>Thời gian</span><b>${U.dmy(p.date)} ${U.esc(p.time || '')}</b></div><div><span>Khoản thu</span><b>${U.esc(i.id)} · Kỳ ${U.per(i.period)}</b></div></div>
     </div><div class="modal-f"><button class="btn" data-act="tp-pay-back-list">Về danh sách thanh toán</button><button class="btn primary" data-act="tp-pay-receipt" data-id="${U.esc(p.id)}">Xem biên lai</button></div>`);
-  }
-  function payCashModal(i) {
-    const c = A.ACCOUNTS && A.ACCOUNTS.getMarketCollector ? A.ACCOUNTS.getMarketCollector(i.market) : null;
-    A.modal(A.mHead('Thanh toán trực tiếp tại chợ') + `<div class="modal-b tp-pay-modal">
-      ${payAmountBox('Số tiền cần thanh toán', U.due(i), 'Kỳ ' + U.per(i.period) + ' · ' + U.esc(payMarketName(i.market)))}
-      <p>Vui lòng thanh toán <b>toàn bộ số tiền</b> cho Nhân viên thu phí phụ trách tại chợ.</p>
-      ${c ? `<div class="tp-pay-meta"><div><span>NV thu phí</span><b>${U.esc(c.fullName || c.name || '—')}</b></div></div>` : ''}
-      <div class="note info">Sau khi Nhân viên thu phí xác nhận đã nhận tiền, trạng thái thanh toán và biên lai của bạn sẽ tự động cập nhật.</div>
-    </div><div class="modal-f"><button class="btn primary" data-act="close">Đã hiểu</button></div>`);
   }
   // Biên lai phía Tiểu thương: render từ CHÍNH bản ghi A.db.payments mà NV thu phí/ngân hàng đã tạo.
   function payReceiptModal(p) {
@@ -1171,7 +1151,7 @@
   function portalHelp() {
     return portalPanel('warning', 'Hướng dẫn sử dụng', 'Các việc tiểu thương thường làm trên hệ thống.', `<ol class="script">
       <li><div><b>Xem khoản phí</b><div class="small muted">Vào mục Thanh toán để xem khoản cần thanh toán theo kỳ, hạn thanh toán và chi tiết theo điểm kinh doanh.</div></div></li>
-      <li><div><b>Thanh toán</b><div class="small muted">Chuyển khoản/QR hoặc thanh toán tiền mặt cho Nhân viên thu phí; biên lai hiện trong tab Lịch sử thanh toán của mục Thanh toán.</div></div></li>
+      <li><div><b>Thanh toán</b><div class="small muted">Bấm Thanh toán để mở mã QR, quét bằng ứng dụng ngân hàng và chuyển đủ số tiền của khoản thu; biên lai hiện trong tab Lịch sử thanh toán của mục Thanh toán.</div></div></li>
       <li><div><b>Gửi phản ánh</b><div class="small muted">Vào mục Phản ánh & xử lý, chọn nhóm vấn đề, mô tả và đính kèm ảnh; theo dõi tiến độ tại tab Xem phản ánh.</div></div></li>
       <li><div><b>Tra cứu hợp đồng</b><div class="small muted">Mục Hợp đồng & điểm kinh doanh hiển thị số hợp đồng, thời hạn, giá dịch vụ và thông tin điểm kinh doanh.</div></div></li>
       <li><div><b>Cần hỗ trợ thêm</b><div class="small muted">Liên hệ trực tiếp Ban Quản lý chợ nơi bạn kinh doanh để được hướng dẫn.</div></div></li>
@@ -1361,13 +1341,8 @@
       const i = payGuard(el); if (!i) return;
       if (i.status === 'paid') { payDetailModal(i); U.toast('Khoản thu đã được thanh toán.'); return; }
       if (payPending()[i.id]) { payPendingModal(i); return; }
-      payMethodModal(i);
-    },
-    'tp-pay-choose': el => { const i = payGuard(el); if (!i) return; (mini().payMethod || (mini().payMethod = {}))[i.id] = el.dataset.method === 'cash' ? 'cash' : 'transfer'; payMethodModal(i); },
-    'tp-pay-continue': el => {
-      const i = payGuard(el); if (!i) return;
-      if (i.status === 'paid') { payDetailModal(i); return; }
-      if ((mini().payMethod || {})[i.id] === 'cash') payCashModal(i); else payTransferModal(i);
+      // Tự thanh toán chỉ bằng QR chuyển khoản, trả đủ khoản thu → mở thẳng mã QR + tổng tiền (không chọn phương thức).
+      payTransferModal(i);
     },
     // Chỉ chuyển giao diện sang "Chờ ghi nhận" (trạng thái UI trong phiên) — KHÔNG tạo payment, KHÔNG đổi khoản thu.
     'tp-pay-transfer-start': el => {
