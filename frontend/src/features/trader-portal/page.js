@@ -412,17 +412,21 @@
   }
   function miniCanRateComplaint(i) {
     const api = A.features.complaints || {};
-    return api.canRate ? api.canRate(i) : !!i && i.state === 'hoanthanh';
+    return A.canDo('mini-app.danh-gia-phan-anh', i && i.market) && (api.canRate ? api.canRate(i) : !!i && i.state === 'hoanthanh');
   }
   const MINI_ISSUE_META = [
-    { key: 'Điện', label: 'Điện, chiếu sáng', desc: 'Mất điện, chập điện, đèn chiếu sáng...', icon: 'bolt', tone: 'warn' },
-    { key: 'Cấp thoát nước', label: 'Cấp thoát nước', desc: 'Mất nước, rò rỉ, nghẹt thoát nước...', icon: 'settings', tone: 'blue' },
-    { key: 'Hạ tầng', label: 'Hạ tầng, cơ sở vật chất', desc: 'Sửa chữa, hư hỏng, xuống cấp...', icon: 'settings', tone: 'blue' },
-    { key: 'Vệ sinh', label: 'Vệ sinh môi trường', desc: 'Rác thải, vệ sinh khu vực...', icon: 'warning', tone: 'green' },
-    { key: 'PCCC', label: 'PCCC', desc: 'Thiết bị, lối thoát hiểm, an toàn cháy nổ...', icon: 'warning', tone: 'slate' }
+    { key: 'Điện', label: 'Điện', desc: 'Mất điện, chập điện, đèn chiếu sáng...', icon: 'bolt', tone: 'warn' },
+    { key: 'Nước', label: 'Nước', desc: 'Mất nước, rò rỉ, nghẹt thoát nước...', icon: 'settings', tone: 'blue' },
+    { key: 'Khác', label: 'Khác', desc: 'Hạ tầng, vệ sinh, PCCC, an ninh trật tự...', icon: 'warning', tone: 'slate' }
   ];
+  function miniIssueGroup(cat) {
+    const text = String(cat || '').toLowerCase();
+    if (text.indexOf('điện') !== -1 || text.indexOf('dien') !== -1) return 'Điện';
+    if (text.indexOf('nước') !== -1 || text.indexOf('nuoc') !== -1 || text.indexOf('thoát') !== -1 || text.indexOf('thoat') !== -1) return 'Nước';
+    return 'Khác';
+  }
   function miniIssueMeta(cat) {
-    return MINI_ISSUE_META.find(x => x.key === cat) || MINI_ISSUE_META[2];
+    return MINI_ISSUE_META.find(x => x.key === miniIssueGroup(cat)) || MINI_ISSUE_META[2];
   }
   function miniIssueOptions() {
     const seen = new Set();
@@ -451,7 +455,7 @@
     const m = mini();
     const text = A.$('#mr-text'), cat = A.$('#mr-cat'), stall = A.$('#mr-stall');
     if (text) m.complaintText = text.value;
-    if (cat) m.complaintCat = cat.value;
+    if (cat) m.complaintCat = miniIssueGroup(cat.value);
     if (stall) m.complaintStall = stall.value;
   }
   function miniAttachmentSummary() {
@@ -590,7 +594,15 @@
   // Card "Điểm kinh doanh của tôi" (mục 3 yêu cầu bổ sung) — style m-card/m-list/kv sẵn có, KHÔNG tạo
   // component mới. "Xem chi tiết" tái dùng NGUYÊN action mini-tab có sẵn (chuyển sang tab Hợp đồng,
   // nơi đã có đủ thông tin hợp đồng chi tiết của điểm) — không tạo màn/route mới chỉ để xem thêm.
-  const miniOwnsStall = (t, st) => t.stalls.indexOf(st.id) !== -1;
+  const miniOwnsStall = (t, st) => {
+    if (!t || !st) return false;
+    if (Array.isArray(t.stalls) && t.stalls.indexOf(st.id) !== -1) return true;
+    if (st.traderId === t.id) return true;
+    return (A.db.contracts || []).some(c =>
+      c && c.traderId === t.id && (c.stallId === st.id || c.businessPointId === st.id) &&
+      ['hieuluc', 'current', 'active'].indexOf(String(c.status || '').toLowerCase()) !== -1
+    );
+  };
   // THU_HOI_NO — làn Tiểu thương của swimlane (P chốt 29/09/2026): nhận nhắc nợ / thông báo cắt điện, quét QR thu
   // nợ (trả ĐỦ nợ còn lại, nội dung CHOSO CN-… PT-…), nhận biên lai. Quyền: action:mini-app.tra-no-qr (trader) +
   // sở hữu (account.traderId === debt.traderId) + chợ trong marketScopes — kiểm tra lại trong handler.
@@ -830,10 +842,10 @@
     return `<div class="m-card"><b>Thông báo</b><div class="m-list">${notisFor(t).map(n => `<div class="it" style="flex-direction:column;gap:2px"><b style="font-weight:600">${U.esc(n.title)}</b><span class="small muted">${U.dmy(n.at)} · Ban Quản lý ${U.esc(U.market(t.market).name)}</span>${n.body ? `<span class="small">${U.esc(n.body)}</span>` : ''}</div>`).join('')}</div></div>`;
   }
   function tabReport(t) {
-    const m = mini(), mine = A.db.incidents.filter(i => i.traderId === t.id).reverse();
+    const m = mini(), mine = A.db.incidents.filter(i => i.traderId === t.id).reverse(), points = portalStalls(t);
     return `<div class="m-card"><b>Gửi phản ánh, kiến nghị</b>
-      <div class="field" style="margin-top:8px"><label>Nhóm</label><select class="input" id="mr-cat" data-ch="mini-complaint-cat">${['Điện', 'Cấp thoát nước', 'Vệ sinh', 'An ninh trật tự', 'PCCC', 'Hạ tầng', 'Khác'].map(c => `<option ${m.complaintCat === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
-      <div class="field" style="margin-top:8px"><label>Điểm kinh doanh</label><select class="input" id="mr-stall" data-ch="mini-complaint-stall">${t.stalls.map(id => `<option value="${id}" ${m.complaintStall === id ? 'selected' : ''}>${A.idx.stall.get(id).code}</option>`).join('')}</select></div>
+      <div class="field" style="margin-top:8px"><label>Nhóm</label><select class="input" id="mr-cat" data-ch="mini-complaint-cat">${miniIssueOptions().map(c => `<option value="${U.esc(c.key)}" ${miniIssueGroup(m.complaintCat) === c.key ? 'selected' : ''}>${U.esc(c.label)}</option>`).join('')}</select></div>
+      <div class="field" style="margin-top:8px"><label>Điểm kinh doanh</label><select class="input" id="mr-stall" data-ch="mini-complaint-stall">${points.map(st => `<option value="${st.id}" ${m.complaintStall === st.id ? 'selected' : ''}>${U.esc(st.code || st.id)}</option>`).join('')}</select></div>
       <div class="field" style="margin-top:8px"><label>Nội dung</label><textarea class="input" id="mr-text" data-in="mini-complaint-text" rows="3">${U.esc(m.complaintText || 'Đèn chiếu sáng trước quầy bị hỏng từ tối qua, nhờ Ban Quản lý kiểm tra.')}</textarea></div>
       <button class="btn" style="margin-top:8px" data-act="mini-attach" ${miniComplaintAttachments().length >= 3 ? 'disabled' : ''}>${miniAttachmentSummary()}</button>${miniAttachmentListHtml()}
       <button class="m-btn solid" style="margin-top:10px" data-act="mini-report">Gửi phản ánh</button></div>
@@ -957,7 +969,17 @@
   // Các màn Tổng quan của tôi / Hợp đồng & điểm kinh doanh / Thanh toán / Thông báo dùng ĐÚNG dữ liệu
   // nghiệp vụ đang có (A.db.invoices, contracts, stalls, incidents, notifications) như trang quản lý
   // và cổng /tieu-thuong/ — không tạo nguồn dữ liệu riêng, không tự sinh số liệu.
-  const portalStalls = t => t.stalls.map(id => A.idx.stall.get(id)).filter(Boolean);
+  const portalStalls = t => {
+    if (!t) return [];
+    const ids = new Set(Array.isArray(t.stalls) ? t.stalls : []);
+    (A.db.stalls || []).forEach(st => { if (st && st.traderId === t.id) ids.add(st.id); });
+    (A.db.contracts || []).forEach(c => {
+      if (!c || c.traderId !== t.id || ['hieuluc', 'current', 'active'].indexOf(String(c.status || '').toLowerCase()) === -1) return;
+      if (c.stallId) ids.add(c.stallId);
+      if (c.businessPointId) ids.add(c.businessPointId);
+    });
+    return Array.from(ids).map(id => A.idx.stall.get(id)).filter(Boolean).filter(st => miniOwnsStall(t, st));
+  };
   const portalContractPhaseOrder = { current: 0, upcoming: 1, expired: 2, terminated: 3, liquidated: 4, ended: 5 };
   const portalContractService = () => A.features.contracts && A.features.contracts.service;
   const portalContractPhase = c => (portalContractService() && portalContractService().presentationStatus(c)) || 'ended';
@@ -1321,8 +1343,8 @@
     const mine = A.db.incidents.filter(i => i.traderId === t.id && inMiniScopeMarket(i.market)).reverse();
     const tab = mini().complaintTab === 'list' ? 'list' : 'send';
     const stats = miniComplaintStats(mine);
-    const selectedStalls = t.stalls.map(id => A.idx.stall.get(id)).filter(Boolean);
-    if (!mini().complaintCat) mini().complaintCat = miniIssueOptions()[0].key;
+    const selectedStalls = portalStalls(t);
+    mini().complaintCat = miniIssueGroup(mini().complaintCat || miniIssueOptions()[0].key);
     if (!mini().complaintStall && selectedStalls[0]) mini().complaintStall = selectedStalls[0].id;
     const status = mini().complaintStatus || 'all';
     const q = String(mini().complaintSearch || '').trim().toLowerCase();
@@ -1355,7 +1377,7 @@
       ${tab === 'send' ? `<div class="merchant-send-layout">
         <section class="merchant-panel merchant-form-panel">
           <div class="merchant-title-row">${U.icon('warning')}<div><h2>Gửi phản ánh</h2><p>Gửi phản ánh để Ban Quản lý chợ nắm bắt và xử lý kịp thời</p></div></div>
-          <div class="field"><label>Nhóm vấn đề <b>*</b></label><select class="input" id="mr-cat" data-ch="mini-complaint-cat">${miniIssueOptions().map(c => `<option value="${U.esc(c.key)}" ${mini().complaintCat === c.key ? 'selected' : ''}>${U.esc(c.label)}</option>`).join('')}</select></div>
+          <div class="field"><label>Nhóm vấn đề <b>*</b></label><select class="input" id="mr-cat" data-ch="mini-complaint-cat">${miniIssueOptions().map(c => `<option value="${U.esc(c.key)}" ${miniIssueGroup(mini().complaintCat) === c.key ? 'selected' : ''}>${U.esc(c.label)}</option>`).join('')}</select></div>
           <div class="field"><label>Mô tả <b>*</b></label><textarea class="input merchant-textarea" id="mr-text" data-in="mini-complaint-text" rows="8" maxlength="500" placeholder="Nhập mô tả chi tiết về vấn đề gặp phải...">${U.esc(mini().complaintText || '')}</textarea><div class="merchant-count">${String(mini().complaintText || '').length}/500</div></div>
           <select id="mr-stall" data-ch="mini-complaint-stall" hidden>${selectedStalls.map(s => `<option value="${s.id}" ${mini().complaintStall === s.id ? 'selected' : ''}>${U.esc(s.code || s.id)}</option>`).join('')}</select>
           <div class="field"><label>Đính kèm ảnh <span>(tối đa 3 ảnh)</span></label><button class="merchant-upload" data-act="mini-attach" ${miniComplaintAttachments().length >= 3 ? 'disabled' : ''}>${U.icon('camera')}<span>${miniAttachmentSummary()}<small>Hỗ trợ: JPG, PNG (tối đa 3 ảnh trong prototype)</small></span></button>${miniAttachmentListHtml()}</div>
@@ -1387,7 +1409,7 @@
   };
   A.IN['tp-pay-search'] = el => { mini().paySearch = el.value; A.render(); };
   A.CH['tp-pay-period'] = el => { mini().payPeriod = el.value || 'all'; A.render(); };
-  A.CH['mini-complaint-cat'] = el => { mini().complaintCat = el.value; };
+  A.CH['mini-complaint-cat'] = el => { mini().complaintCat = miniIssueGroup(el.value); };
   A.CH['mini-complaint-stall'] = el => { mini().complaintStall = el.value; };
   Object.assign(A.ACT, {
     // Tra cứu Trader Profile theo SĐT (mục 11 yêu cầu correction) — KHÔNG tạo trader/account ở bước
@@ -1561,9 +1583,10 @@
     'mini-complaint-tab': el => { mini().complaintTab = el.dataset.id === 'list' ? 'list' : 'send'; A.render(); },
     'mini-complaint-status': el => { mini().complaintStatus = el.dataset.id || 'all'; A.render(); },
     'mini-issue-pick': el => {
-      const cat = el.dataset.cat;
+      const cat = miniIssueGroup(el.dataset.cat);
       const sel = A.$('#mr-cat');
       if (sel && cat) sel.value = cat;
+      if (cat) mini().complaintCat = cat;
     },
     'mini-complaint-open': el => {
       const t = trader(), i = A.db.incidents.find(x => x.id === el.dataset.id);
@@ -1571,7 +1594,7 @@
       const st = A.idx.stall.get(i.stallId);
       A.modal(A.mHead(i.id + ' · ' + U.esc(i.title)) + `<div class="modal-b">
         <dl class="kv"><dt>Trạng thái</dt><dd><span class="tag ${miniComplaintStatusClass(i)}">${U.esc(incidentStateLabel(i.state))}</span></dd>
-          <dt>Nhóm</dt><dd>${U.esc(i.cat)}</dd><dt>Điểm kinh doanh</dt><dd>${U.esc((st && st.code) || 'Không xác định')}</dd>
+          <dt>Nhóm</dt><dd>${U.esc(miniIssueGroup(i.cat))}</dd><dt>Điểm kinh doanh</dt><dd>${U.esc((st && st.code) || 'Không xác định')}</dd>
           <dt>Ngày gửi</dt><dd>${U.dmy(i.created)}</dd><dt>Hạn xử lý</dt><dd>${U.esc(String(i.deadline || '').replace('T', ' · '))}</dd>
           ${i.desc ? `<dt>Nội dung</dt><dd>${U.esc(i.desc)}</dd>` : ''}${i.photo || (i.images && i.images.report && i.images.report.length) ? '<dt>Ảnh</dt><dd><span class="tag info">Có ảnh đính kèm</span></dd>' : ''}
           ${i.work && i.work.result ? `<dt>Kết quả</dt><dd>${U.esc(i.work.result)}</dd>` : ''}${i.rating ? `<dt>Đánh giá</dt><dd>${'★'.repeat(i.rating)}${'☆'.repeat(5 - i.rating)}</dd>` : ''}${i.feedback && i.feedback.comment ? `<dt>Ý kiến</dt><dd>${U.esc(i.feedback.comment)}</dd>` : ''}</dl>
@@ -1597,7 +1620,7 @@
     },
     'mini-report': () => {
       const t = trader(), stall = A.idx.stall.get(A.$('#mr-stall').value);
-      if (!U.can('mini-app') || !isTraderMini() || !t || !stall || !miniOwnsStall(t, stall) || !inMiniScopeMarket(stall.market) || (t.profileStatus && t.profileStatus !== 'ACTIVE')) {
+      if (!U.can('mini-app') || !A.canDo('mini-app.gui-phan-anh', stall && stall.market) || !isTraderMini() || !t || !stall || !miniOwnsStall(t, stall) || !inMiniScopeMarket(stall.market) || (t.profileStatus && t.profileStatus !== 'ACTIVE')) {
         U.toast('Không có quyền gửi phản ánh cho điểm kinh doanh này.');
         return;
       }
@@ -1605,7 +1628,7 @@
       if (!text) { U.toast('Vui lòng nhập nội dung'); return; }
       const titleBase = text;
       const title = titleBase.length > 60 ? titleBase.slice(0, 57) + '…' : titleBase;
-      const i = A.addIncident(stall.id, A.$('#mr-cat').value, title, text, 'Mini app tiểu thương', miniComplaintAttachments().slice(0, 3));
+      const i = A.addIncident(stall.id, miniIssueGroup(A.$('#mr-cat').value), title, text, 'Mini app tiểu thương', miniComplaintAttachments().slice(0, 3));
       Object.assign(mini(), { attach: false, attachments: [], complaintText: '', complaintCat: '', complaintStall: '', complaintTab: 'list' });
       A.render();
       U.toast('Đã gửi ' + i.id + '. Ban Quản lý đã tiếp nhận phản ánh của bạn.');

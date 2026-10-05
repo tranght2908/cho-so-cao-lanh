@@ -14,7 +14,13 @@
   const D = A.D, U = A.U, $ = A.$, ui = A.ui;
   const SKEY = A.ACCOUNTS.TRADER_WEB_SESSION_KEY; // dùng chung với web quản lý (chuyển A07 sang đây)
   const SOURCE = 'Web app tiểu thương';
-  const CATS = ['Điện', 'Cấp thoát nước', 'Vệ sinh', 'An ninh trật tự', 'PCCC', 'Hạ tầng', 'Khác'];
+  const CATS = ['Điện', 'Nước', 'Khác'];
+  function issueGroup(cat) {
+    const text = String(cat || '').toLowerCase();
+    if (text.indexOf('điện') !== -1 || text.indexOf('dien') !== -1) return 'Điện';
+    if (text.indexOf('nước') !== -1 || text.indexOf('nuoc') !== -1 || text.indexOf('thoát') !== -1 || text.indexOf('thoat') !== -1) return 'Nước';
+    return 'Khác';
+  }
 
   // ---------- trạng thái giao diện của trang (không phải dữ liệu nghiệp vụ) ----------
   // accountId = tài khoản đăng nhập (A07); traderId = HỒ SƠ ĐANG XEM (activeTraderProfile) — thuộc Account.traderIds.
@@ -381,7 +387,7 @@
     const inc = myIncidents(t);
     return `<div class="tw-hello tw-hello-a"><div><h2>Phản ánh, kiến nghị</h2><div class="small muted">Gửi tới Ban Quản lý chợ và theo dõi kết quả xử lý.</div></div>${t.stalls.length ? '<button class="btn primary" data-act="tw-report-new">+ Gửi phản ánh</button>' : ''}</div>
       <section class="card tw-sec"><div class="card-b">${inc.map(i => `<div class="tw-item click" data-act="tw-inc" data-id="${i.id}"><span class="tw-dot">${U.icon('warning')}</span>
-        <div class="tw-item-m"><b>${U.esc(i.title)}</b><span class="small muted">${U.esc(i.id)} · ${U.esc(i.cat)} · ${U.dmy(i.created)}${reportImages(i).length ? ' · ' + reportImages(i).length + ' ảnh' : ''}</span>
+        <div class="tw-item-m"><b>${U.esc(i.title)}</b><span class="small muted">${U.esc(i.id)} · ${U.esc(issueGroup(i.cat))} · ${U.dmy(i.created)}${reportImages(i).length ? ' · ' + reportImages(i).length + ' ảnh' : ''}</span>
         ${(i.state === 'hoanthanh' || i.state === 'dong') ? `<span class="small">${i.rating ? '★'.repeat(i.rating) + ' Đã đánh giá' : (i.state === 'hoanthanh' ? 'Đã xử lý xong · chạm để xem kết quả và đánh giá' : 'Đã đóng')}</span>` : ''}</div>${incTag(i)}</div>`).join('') || empty('Bạn chưa gửi phản ánh nào.')}</div></section>`;
   }
   const MAX_IMG = 5, MAX_MB = 10;
@@ -405,7 +411,7 @@
     const comment = draft.comment != null ? draft.comment : ((i.feedback || {}).comment || '');
     const when = v => U.esc(String(v || '').replace('T', ' · '));
     A.modal(A.mHead('Phản ánh ' + U.esc(i.id)) + `<div class="modal-b">
-      <dl class="kv"><dt>Nội dung</dt><dd><b>${U.esc(i.title)}</b>${i.desc && i.desc !== i.title ? `<div class="small">${U.esc(i.desc)}</div>` : ''}</dd><dt>Nhóm</dt><dd>${U.esc(i.cat)}</dd>
+      <dl class="kv"><dt>Nội dung</dt><dd><b>${U.esc(i.title)}</b>${i.desc && i.desc !== i.title ? `<div class="small">${U.esc(i.desc)}</div>` : ''}</dd><dt>Nhóm</dt><dd>${U.esc(issueGroup(i.cat))}</dd>
         <dt>Điểm kinh doanh</dt><dd>${U.esc((stallOf(i.stallId) || {}).code || '—')}</dd><dt>Ngày gửi</dt><dd>${when(i.created)}</dd><dt>Trạng thái</dt><dd>${incTag(i)}</dd></dl>
       <h4 style="margin:16px 0 8px">Ảnh bạn gửi</h4>${thumbs(reportImages(i), S.sessionImages[i.id])}
       ${i.work ? `<h4 style="margin:16px 0 8px">Kết quả xử lý</h4><dl class="kv"><dt>Nội dung xử lý</dt><dd>${U.esc(i.work.content || '—')}</dd><dt>Kết quả</dt><dd>${U.esc(i.work.result || '—')}</dd><dt>Hoàn thành lúc</dt><dd>${when(i.work.completedAt)}</dd></dl><div style="margin-top:8px">${thumbs((i.images && i.images.work) || [])}</div>` : ''}
@@ -678,7 +684,7 @@
       if (!text) { U.toast('Vui lòng nhập nội dung phản ánh'); return; }
       const title = text.length > 60 ? text.slice(0, 57) + '…' : text;
       const imgs = S.draftImages.slice();
-      const i = A.addIncident(stall.id, $('#tw-cat').value, title, text, SOURCE, imgs.length > 0);
+      const i = A.addIncident(stall.id, issueGroup($('#tw-cat').value), title, text, SOURCE, imgs.length > 0);
       // Giống màn quản lý: chỉ lưu tên ảnh vào images.report (không lưu base64); ảnh thật xem được trong phiên.
       i.images = { report: imgs.map(x => x.name), inspection: [], work: [] };
       if (imgs.length) S.sessionImages[i.id] = imgs.map(x => x.url);

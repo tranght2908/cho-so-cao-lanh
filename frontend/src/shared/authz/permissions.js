@@ -376,6 +376,8 @@
       'phien-cho.xem-bao-cao': ['ward_leader', 'market_manager', 'collector'],
       'mini-app.stall-registration.create': ['trader'],
       'mini-app.tra-no-qr': ['trader'],
+      'mini-app.gui-phan-anh': ['trader'],
+      'mini-app.danh-gia-phan-anh': ['trader'],
       // Hồ sơ tiểu thương/hợp đồng: Tổ trưởng Tổ Quản lý chợ tạo và quản lý theo market scope.
       // Collector chỉ thực hiện nghiệp vụ thu phí, không tạo hồ sơ hoặc hợp đồng.
       'tieu-thuong.them-moi': ['market_manager'],
@@ -543,7 +545,7 @@
   //        lệch khiến loadState() đi thẳng nhánh RESEED TOÀN BỘ (freshState(), không qua
   //        mergeIntoCurrentSeed()), nên seedVersion v15 ở đây chỉ còn ý nghĩa tài liệu/đánh dấu, không
   //        phải cơ chế migrate chính cho lần đổi này (xem RBAC_MARKET_SCOPE_MIGRATION_REPORT.md).
-  const PERM_SEED_VERSION = 20; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: action:phai-thu.ban-do-thu; 19: trader/contract creation belongs to market_manager; 20: đối soát chuyển sang central_accountant (A05), A05 xem/xuất số liệu thu, technician bỏ màn Mặt bằng/Tài sản
+  const PERM_SEED_VERSION = 21; // 21: cấp lại quyền mini-app gửi/đánh giá phản ánh cho role trader
   const RATE_POLICY_PERM_VERSION = 1;
   const BANK_ACCOUNT_PERM_VERSION = 1;
   const PC3A_SESSION_PERM_VERSION = 1;

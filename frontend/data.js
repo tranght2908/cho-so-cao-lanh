@@ -68,7 +68,10 @@ window.DATA = (function () {
   // — kỳ ghi chỉ số chưa hoàn tất, chưa tính nháp/phát hành/thu/chốt/đối soát; không có dữ liệu kỳ 10.
   // 29 → 30 (BO_KY_10): gỡ mọi dữ liệu/công cụ demo kỳ 10/2026; cache v29 có thể đã sinh kỳ 10 → dựng lại.
   // 30 → 31 (KY_11_DEN_HOAN_TAT_GHI_CHI_SO): mở kỳ thu 11/2026, NV thu phí đã ghi đủ chỉ số; hôm nay = 29/10/2026.
-  const VERSION = 31;
+  // 31 → 32 (INCIDENT_DEMO_FLOW_DATA): lọc lại phản ánh/sự cố thành bộ demo cố định theo từng bước luồng xử lý.
+  // 32 → 33 (INCIDENT_DEMO_FLOW_VOLUME): tăng số hồ sơ đã phân công cho NV kỹ thuật để demo màn Công việc kỹ thuật.
+  // 33 → 34: đảm bảo riêng màn NV kỹ thuật đang đăng nhập có đúng 17 hồ sơ được giao.
+  const VERSION = 34;
   const TODAY = new Date(2026, 8, 13); // 13/09/2026
 
   // Giá dịch vụ sử dụng diện tích bán hàng – QĐ 480/QĐ-UBND ngày 14/02/2026 (đ/m²/ngày, đã gồm VAT)
@@ -812,38 +815,51 @@ window.DATA = (function () {
     readings.forEach(r => { if (!r.recordedBy) return; const st = stalls.find(x => x.id === r.stallId); const c = collectorOfStall(st); if (c) r.recordedBy = c.replace(/^AC-/, ''); });
 
     // ---- Phản ánh, sự cố ----
-    const TPL = [
-      ['Điện', 'Mất điện dãy ki-ốt, cần kiểm tra CB tổng'],
-      ['Cấp thoát nước', 'Nước tràn khu thủy hải sản, cống thoát bị nghẹt'],
-      ['Vệ sinh', 'Rác chưa được thu gom cuối buổi chiều'],
-      ['An ninh trật tự', 'Buôn bán lấn chiếm lối đi chung'],
-      ['PCCC', 'Bình chữa cháy hết hạn kiểm định'],
-      ['Điện', 'Đèn chiếu sáng lối đi bị hỏng'],
-      ['Hạ tầng', 'Mái che bị dột khi mưa lớn'],
-      ['Cấp thoát nước', 'Đồng hồ nước chạy bất thường'],
-      ['Vệ sinh', 'Nhà vệ sinh công cộng xuống cấp'],
-      ['Khác', 'Đề nghị gia hạn thời gian nộp phí do tạm nghỉ ốm'],
-      ['An ninh trật tự', 'Mất trộm hàng hóa ban đêm'],
-      ['Hạ tầng', 'Nền gạch bong tróc trước quầy'],
-      ['Điện', 'Ổ cắm quầy bị chập, có mùi khét'],
-      ['Khác', 'Đề nghị bố trí thêm chỗ để xe cho khách']
-    ];
-    const stateCycle = ['tiepnhan', 'phancong', 'dangxuly', 'chonghiemthu', 'hoanthanh', 'hoanthanh', 'dong', 'tiepnhan', 'phancong', 'dangxuly', 'chonghiemthu', 'dong', 'tiepnhan', 'hoanthanh'];
+    // Bộ demo cố định, dễ trình diễn: tạo mới → phân công → kỹ thuật nhận/xử lý
+    // → phát sinh vật tư → chờ nghiệm thu → hoàn thành/đánh giá.
     const rented = stalls.filter(s => holder.has(s.id));
-    const incidents = TPL.map((t, i) => {
-      const st = i % 5 === 3 ? pick(rented.filter(s => s.market === 'TTD')) : pick(rented.filter(s => s.market === 'CL'));
-      const created = addDays(TODAY, -between(0, 9));
-      const state = stateCycle[i];
-      return {
-        id: 'SC-' + pad(i + 101, 4), market: st.market, stallId: st.id, traderId: holder.get(st.id).id,
-        cat: t[0], title: t[1], state, source: i % 3 === 0 ? 'Nhập tại Ban Quản lý' : 'Mini app tiểu thương',
-        escalated: i === 3 || i === 10,
-        created: iso(created), deadline: iso(addDays(created, t[0] === 'PCCC' || t[0] === 'Điện' ? 1 : 3)),
-        assignee: state === 'tiepnhan' ? null : (st.market === 'TTD' ? 'NV06' : 'NV05'),
-        rating: state === 'dong' ? between(4, 5) : null,
-        log: [{ at: iso(created), text: 'Tiếp nhận phản ánh' }]
+    const demoStalls = rented.filter(s => s.market === 'CL').slice(0, 17);
+    const demoStall = n => demoStalls[n % demoStalls.length] || rented[n % rented.length];
+    const makeIncident = (n, cfg) => {
+      const st = demoStall(n), created = cfg.created, trader = holder.get(st.id);
+      const i = {
+        id: 'SC-DEMO-' + pad(n + 1, 2), market: st.market, stallId: st.id, traderId: trader && trader.id,
+        cat: cfg.cat, title: cfg.title, desc: cfg.desc || cfg.title, state: cfg.state, source: cfg.source || 'Mini app tiểu thương',
+        assetId: cfg.assetId || null, escalated: false, created, deadline: cfg.deadline, assignee: cfg.assignee || null,
+        rating: cfg.rating || null, images: { report: cfg.reportImages || [], inspection: cfg.inspectionImages || [], work: cfg.workImages || [] },
+        inspection: cfg.inspection || null, receive: cfg.receive || null, work: cfg.work || null,
+        workUpdates: cfg.workUpdates || [], acceptance: cfg.acceptance || null,
+        acceptanceHistory: cfg.acceptance ? [cfg.acceptance] : [], materialRequest: cfg.materialRequest || { hasMaterial: false, status: 'none' },
+        feedback: cfg.feedback || null, closeInfo: cfg.closeInfo || null,
+        history: [{ at: created, action: 'Tiếp nhận phản ánh', detail: 'Nguồn: ' + (cfg.source || 'Mini app tiểu thương') }]
+          .concat(cfg.history || []),
+        log: [{ at: created.slice(0, 10), text: 'Tiếp nhận phản ánh' }]
       };
-    });
+      if (cfg.leaderReminder) i.leaderReminder = cfg.leaderReminder;
+      return i;
+    };
+    const incidents = [
+      makeIncident(0, { state:'tiepnhan', cat:'Nước', title:'Đồng hồ nước quầy A12 chạy bất thường', desc:'Tiểu thương phản ánh đồng hồ nước vẫn quay dù đã khóa vòi.', created:'2026-10-29T08:20', deadline:'2026-11-01T17:00', assetId:'AST-CL-003', reportImages:['dong-ho-nuoc-a12.jpg'] }),
+      makeIncident(1, { state:'tiepnhan', cat:'Điện', title:'Ổ cắm quầy B05 có mùi khét', desc:'Cần Tổ trưởng phân công gấp, hồ sơ đang quá hạn chưa giao kỹ thuật.', source:'Nhập tại Ban Quản lý', created:'2026-10-27T09:10', deadline:'2026-10-28T17:00', assetId:'AST-CL-014', reportImages:['o-cam-b05.jpg'], leaderReminder:{ at:'2026-10-29T08:00', targetRole:'market_manager', targetLabel:'Trưởng Ban Quản lý', reason:'OVERDUE_UNASSIGNED' }, history:[{ at:'2026-10-29T08:00', action:'Hệ thống nhắc Tổ trưởng Ban Quản lý', detail:'Phản ánh quá hạn chưa phân công.' }] }),
+      makeIncident(2, { state:'phancong', cat:'Điện', title:'Đèn lối đi khu B không hoạt động', desc:'Đã phân công NV kỹ thuật, chờ nhận xử lý.', created:'2026-10-28T08:30', deadline:'2026-10-29T17:00', assetId:'AST-CL-002', assignee:'NV05', history:[{ at:'2026-10-28T09:00', action:'Phân công xử lý', detail:'Nguyễn Văn A · Hạn: 29/10/2026 17:00' }] }),
+      makeIncident(3, { state:'dangxuly', cat:'Nước', title:'Rò nước tại tuyến chính khu A', desc:'Kỹ thuật đã nhận, có phát sinh vật tư chờ Tổ trưởng duyệt.', created:'2026-10-25T08:45', deadline:'2026-10-28T17:00', assetId:'AST-CL-003', assignee:'NV05', receive:{ at:'2026-10-25T09:20', by:'NV05', note:'Đã xuống hiện trường.' }, inspection:{ at:'2026-10-25T09:40', by:'NV05', condition:'Rò tại mối nối tuyến chính khu A.', note:'Cần thay đoạn ống và keo nối.' }, materialRequest:{ hasMaterial:true, itemName:'Ống PVC D34 và keo nối', quantity:'2 m ống, 1 hộp keo', estimatedCost:180000, actualCost:0, proposedBy:'NV05', proposedAt:'2026-10-25T10:10', confirmedBy:null, confirmedAt:'', status:'pending', note:'Chờ duyệt trước khi hoàn tất xử lý.', evidence:'bao-gia-ong-pvc.pdf' }, workUpdates:[{ at:'2026-10-25T10:10', by:'NV05', content:'Đã khóa van khu vực và đề xuất vật tư thay thế.', result:'', note:'Chờ duyệt vật tư', materialRequest:{ hasMaterial:true, itemName:'Ống PVC D34 và keo nối', quantity:'2 m ống, 1 hộp keo', status:'pending' }, submitForAcceptance:false }], history:[{ at:'2026-10-25T09:20', action:'Nhận xử lý', detail:'Nhân viên kỹ thuật đã nhận việc.' }, { at:'2026-10-25T10:10', action:'Cập nhật tiến độ xử lý', detail:'Phát sinh vật tư/chi phí: Ống PVC D34 và keo nối.' }] }),
+      makeIncident(4, { state:'chonghiemthu', cat:'Điện', title:'Thay bóng đèn lối đi khu C', desc:'Kỹ thuật đã xử lý xong, chờ Tổ trưởng nghiệm thu.', created:'2026-10-28T07:40', deadline:'2026-10-29T17:00', assetId:'AST-CL-001', assignee:'NV05', receive:{ at:'2026-10-28T08:00', by:'NV05', note:'Nhận xử lý trong ca sáng.' }, inspection:{ at:'2026-10-28T08:20', by:'NV05', condition:'Bóng đèn hỏng, nguồn cấp ổn định.', note:'' }, work:{ content:'Thay bóng đèn LED tại lối đi khu C.', result:'Đèn sáng bình thường, khu vực đảm bảo chiếu sáng.', completedAt:'2026-10-28T10:30', completedBy:'NV05', note:'' }, workUpdates:[{ at:'2026-10-28T10:30', by:'NV05', completedBy:'NV05', content:'Thay bóng đèn LED tại lối đi khu C.', result:'Đèn sáng bình thường.', note:'', submitForAcceptance:true }], workImages:['den-khu-c-sau-xu-ly.jpg'], history:[{ at:'2026-10-28T08:00', action:'Nhận xử lý', detail:'Nhân viên kỹ thuật đã nhận việc.' }, { at:'2026-10-28T10:30', action:'Gửi kết quả chờ nghiệm thu', detail:'Đèn sáng bình thường.' }] }),
+      makeIncident(5, { state:'hoanthanh', cat:'Khác', title:'Vệ sinh lại lối đi khu thủy sản', desc:'Đã nghiệm thu, chờ tiểu thương đánh giá.', created:'2026-10-27T14:00', deadline:'2026-10-30T17:00', assignee:'NV05', receive:{ at:'2026-10-27T14:30', by:'NV05', note:'' }, inspection:{ at:'2026-10-27T14:45', by:'NV05', condition:'Lối đi đọng rác và nước bẩn.', note:'' }, work:{ content:'Vệ sinh và khơi thông rãnh thoát nước lối đi.', result:'Lối đi sạch, nước thoát bình thường.', completedAt:'2026-10-27T16:00', completedBy:'NV05', note:'' }, acceptance:{ at:'2026-10-27T16:30', by:'BQL', note:'Đạt yêu cầu.', result:'accepted' }, history:[{ at:'2026-10-27T14:30', action:'Nhận xử lý', detail:'' }, { at:'2026-10-27T16:00', action:'Gửi kết quả chờ nghiệm thu', detail:'Lối đi sạch.' }, { at:'2026-10-27T16:30', action:'Nghiệm thu hoàn thành', detail:'Đạt yêu cầu.' }, { at:'2026-10-27T16:31', action:'Thông báo kết quả cho người phản ánh', detail:'Tiểu thương có thể đánh giá kết quả xử lý.' }] }),
+      makeIncident(6, { state:'dong', cat:'Điện', title:'Camera cổng phụ cần hiệu chỉnh', desc:'Hồ sơ đã hoàn thành, tiểu thương đã đánh giá.', created:'2026-10-24T09:00', deadline:'2026-10-25T17:00', assetId:'AST-CL-008', assignee:'NV05', rating:5, receive:{ at:'2026-10-24T09:30', by:'NV05', note:'' }, inspection:{ at:'2026-10-24T09:45', by:'NV05', condition:'Camera lệch góc quan sát.', note:'' }, work:{ content:'Hiệu chỉnh góc camera và kiểm tra tín hiệu.', result:'Camera quan sát rõ lối vào cổng phụ.', completedAt:'2026-10-24T11:00', completedBy:'NV05', note:'' }, acceptance:{ at:'2026-10-24T11:20', by:'BQL', note:'Đạt yêu cầu.', result:'accepted' }, feedback:{ at:'2026-10-24T14:00', by:null, comment:'Xử lý nhanh, hình ảnh rõ hơn.', source:'Mini app tiểu thương' }, closeInfo:{ at:'2026-10-24T14:00', by:'Hệ thống', reason:'TRADER_RATED', note:'Tự động đóng sau khi tiểu thương đánh giá.' }, history:[{ at:'2026-10-24T09:30', action:'Nhận xử lý', detail:'' }, { at:'2026-10-24T11:00', action:'Gửi kết quả chờ nghiệm thu', detail:'Camera hoạt động ổn định.' }, { at:'2026-10-24T11:20', action:'Nghiệm thu hoàn thành', detail:'Đạt yêu cầu.' }, { at:'2026-10-24T14:00', action:'Tiểu thương đánh giá kết quả', detail:'5 sao · Xử lý nhanh, hình ảnh rõ hơn.' }, { at:'2026-10-24T14:00', action:'Đóng phản ánh', detail:'Tự động đóng sau khi tiểu thương đánh giá.' }] })
+      ,
+      makeIncident(7, { state:'phancong', cat:'Nước', title:'Vòi nước khu C chảy yếu', desc:'Đã phân công, chờ kỹ thuật nhận xử lý.', created:'2026-10-29T09:15', deadline:'2026-11-01T17:00', assetId:'AST-CL-004', assignee:'NV05', history:[{ at:'2026-10-29T09:30', action:'Phân công xử lý', detail:'NV05 · Hạn: 01/11/2026 17:00' }] }),
+      makeIncident(8, { state:'phancong', cat:'Khác', title:'Mái che dãy ngoài bị dột nhẹ', desc:'Đã giao kỹ thuật kiểm tra trong ca chiều.', created:'2026-10-29T10:00', deadline:'2026-11-01T17:00', assetId:'AST-CL-013', assignee:'NV05', history:[{ at:'2026-10-29T10:20', action:'Phân công xử lý', detail:'NV05 · Kiểm tra mái che dãy ngoài.' }] }),
+      makeIncident(9, { state:'phancong', cat:'Điện', title:'Quạt thông gió nhà lồng B kêu lớn', desc:'Chờ kỹ thuật nhận việc.', created:'2026-10-28T15:40', deadline:'2026-10-29T17:00', assetId:'AST-CL-010', assignee:'NV05', history:[{ at:'2026-10-28T16:00', action:'Phân công xử lý', detail:'NV05 · Ưu tiên xử lý trong ngày.' }] }),
+      makeIncident(10, { state:'dangxuly', cat:'Khác', title:'Thùng rác khu C đầy vào cuối buổi', desc:'Kỹ thuật/đội vận hành đang phối hợp xử lý.', created:'2026-10-28T11:00', deadline:'2026-10-31T17:00', assetId:'AST-CL-011', assignee:'NV05', receive:{ at:'2026-10-28T11:20', by:'NV05', note:'Đã nhận kiểm tra vị trí.' }, inspection:{ at:'2026-10-28T11:45', by:'NV05', condition:'Thùng rác quá tải sau giờ cao điểm.', note:'Đề xuất tăng lượt thu gom.' }, workUpdates:[{ at:'2026-10-28T15:00', by:'NV05', content:'Đã liên hệ tổ vệ sinh tăng lượt gom cuối ngày.', result:'', note:'Theo dõi thêm một buổi.', submitForAcceptance:false }], history:[{ at:'2026-10-28T11:20', action:'Nhận xử lý', detail:'' }, { at:'2026-10-28T15:00', action:'Cập nhật tiến độ xử lý', detail:'Tăng lượt thu gom cuối ngày.' }] }),
+      makeIncident(11, { state:'dangxuly', cat:'Điện', title:'Tủ báo cháy khu B báo lỗi', desc:'Đang kiểm tra nguồn và cảm biến.', created:'2026-10-27T08:10', deadline:'2026-10-28T17:00', assetId:'AST-CL-006', assignee:'NV05', receive:{ at:'2026-10-27T08:40', by:'NV05', note:'Nhận xử lý khẩn.' }, inspection:{ at:'2026-10-27T09:10', by:'NV05', condition:'Tủ báo lỗi cảm biến khu B.', note:'Cần test từng đầu báo.' }, workUpdates:[{ at:'2026-10-27T11:00', by:'NV05', content:'Đã reset tủ và kiểm tra 3 đầu báo.', result:'', note:'Còn 1 đầu báo cần kiểm tra lại.', submitForAcceptance:false }], history:[{ at:'2026-10-27T08:40', action:'Nhận xử lý', detail:'' }, { at:'2026-10-27T11:00', action:'Cập nhật tiến độ xử lý', detail:'Đã reset tủ báo cháy.' }] }),
+      makeIncident(12, { state:'dangxuly', cat:'Nước', title:'Bồn rửa tay khu A rò van cấp', desc:'Đang xử lý, đã xác định cần siết lại van.', created:'2026-10-29T07:50', deadline:'2026-11-01T17:00', assetId:'AST-CL-012', assignee:'NV05', receive:{ at:'2026-10-29T08:05', by:'NV05', note:'' }, inspection:{ at:'2026-10-29T08:30', by:'NV05', condition:'Van cấp nước bị lỏng.', note:'' }, workUpdates:[{ at:'2026-10-29T09:10', by:'NV05', content:'Đã khóa nước cục bộ và chuẩn bị siết lại van.', result:'', note:'', submitForAcceptance:false }], history:[{ at:'2026-10-29T08:05', action:'Nhận xử lý', detail:'' }, { at:'2026-10-29T09:10', action:'Cập nhật tiến độ xử lý', detail:'Đã khóa nước cục bộ.' }] }),
+      makeIncident(13, { state:'chonghiemthu', cat:'Khác', title:'Sửa gạch bong trước quầy C03', desc:'Đã xử lý, chờ nghiệm thu.', created:'2026-10-26T13:15', deadline:'2026-10-29T17:00', assignee:'NV05', receive:{ at:'2026-10-26T13:40', by:'NV05', note:'' }, inspection:{ at:'2026-10-26T14:00', by:'NV05', condition:'Gạch bong 3 viên, gây vấp.', note:'' }, work:{ content:'Dán lại gạch bong và vệ sinh khu vực.', result:'Mặt nền phẳng, đi lại an toàn.', completedAt:'2026-10-26T16:20', completedBy:'NV05', note:'' }, workUpdates:[{ at:'2026-10-26T16:20', by:'NV05', completedBy:'NV05', content:'Dán lại gạch bong.', result:'Mặt nền phẳng.', note:'', submitForAcceptance:true }], history:[{ at:'2026-10-26T13:40', action:'Nhận xử lý', detail:'' }, { at:'2026-10-26T16:20', action:'Gửi kết quả chờ nghiệm thu', detail:'Mặt nền phẳng.' }] }),
+      makeIncident(14, { state:'chonghiemthu', cat:'Nước', title:'Khơi thông rãnh thoát nước khu thủy sản', desc:'Đã hoàn tất khơi thông, chờ nghiệm thu.', created:'2026-10-27T09:30', deadline:'2026-10-30T17:00', assetId:'AST-CL-003', assignee:'NV05', receive:{ at:'2026-10-27T10:00', by:'NV05', note:'' }, inspection:{ at:'2026-10-27T10:20', by:'NV05', condition:'Rãnh thoát nước nghẹt rác.', note:'' }, work:{ content:'Khơi thông rãnh và vệ sinh khu vực.', result:'Nước thoát bình thường.', completedAt:'2026-10-27T12:00', completedBy:'NV05', note:'' }, workUpdates:[{ at:'2026-10-27T12:00', by:'NV05', completedBy:'NV05', content:'Khơi thông rãnh.', result:'Nước thoát bình thường.', note:'', submitForAcceptance:true }], history:[{ at:'2026-10-27T10:00', action:'Nhận xử lý', detail:'' }, { at:'2026-10-27T12:00', action:'Gửi kết quả chờ nghiệm thu', detail:'Nước thoát bình thường.' }] }),
+      makeIncident(15, { state:'hoanthanh', cat:'Điện', title:'Kiểm tra tủ điện tổng khu A', desc:'Đã nghiệm thu, chờ phản hồi tiểu thương.', created:'2026-10-26T08:00', deadline:'2026-10-27T17:00', assetId:'AST-CL-014', assignee:'NV05', receive:{ at:'2026-10-26T08:30', by:'NV05', note:'' }, inspection:{ at:'2026-10-26T09:00', by:'NV05', condition:'CB nhánh lỏng tiếp điểm.', note:'' }, work:{ content:'Siết lại tiếp điểm và đo tải.', result:'Tủ điện hoạt động ổn định.', completedAt:'2026-10-26T10:30', completedBy:'NV05', note:'' }, acceptance:{ at:'2026-10-26T11:00', by:'BQL', note:'Đạt yêu cầu.', result:'accepted' }, history:[{ at:'2026-10-26T08:30', action:'Nhận xử lý', detail:'' }, { at:'2026-10-26T10:30', action:'Gửi kết quả chờ nghiệm thu', detail:'Tủ điện hoạt động ổn định.' }, { at:'2026-10-26T11:00', action:'Nghiệm thu hoàn thành', detail:'Đạt yêu cầu.' }] }),
+      makeIncident(16, { state:'dong', cat:'Khác', title:'Bổ sung biển cảnh báo nền trơn', desc:'Đã đóng sau khi tiểu thương đánh giá.', created:'2026-10-23T15:00', deadline:'2026-10-26T17:00', assignee:'NV05', rating:4, receive:{ at:'2026-10-23T15:30', by:'NV05', note:'' }, inspection:{ at:'2026-10-23T15:50', by:'NV05', condition:'Khu vực nền ướt dễ trơn trượt.', note:'' }, work:{ content:'Bổ sung biển cảnh báo và nhám chống trượt tạm thời.', result:'Khu vực có cảnh báo rõ ràng.', completedAt:'2026-10-23T17:00', completedBy:'NV05', note:'' }, acceptance:{ at:'2026-10-23T17:20', by:'BQL', note:'Đạt yêu cầu.', result:'accepted' }, feedback:{ at:'2026-10-24T08:00', by:null, comment:'Đã có biển cảnh báo, cần theo dõi thêm.', source:'Mini app tiểu thương' }, closeInfo:{ at:'2026-10-24T08:00', by:'Hệ thống', reason:'TRADER_RATED', note:'Tự động đóng sau khi tiểu thương đánh giá.' }, history:[{ at:'2026-10-23T15:30', action:'Nhận xử lý', detail:'' }, { at:'2026-10-23T17:00', action:'Gửi kết quả chờ nghiệm thu', detail:'Đã bổ sung biển cảnh báo.' }, { at:'2026-10-23T17:20', action:'Nghiệm thu hoàn thành', detail:'Đạt yêu cầu.' }, { at:'2026-10-24T08:00', action:'Tiểu thương đánh giá kết quả', detail:'4 sao · Đã có biển cảnh báo, cần theo dõi thêm.' }, { at:'2026-10-24T08:00', action:'Đóng phản ánh', detail:'Tự động đóng sau khi tiểu thương đánh giá.' }] }),
+      makeIncident(17, { state:'phancong', cat:'Nước', title:'Nước đọng trước dãy rau củ', desc:'Đã phân công kỹ thuật kiểm tra nguyên nhân nước đọng.', created:'2026-10-29T11:10', deadline:'2026-11-01T17:00', assetId:'AST-CL-003', assignee:'NV05', history:[{ at:'2026-10-29T11:25', action:'Phân công xử lý', detail:'NV05 · Kiểm tra nước đọng trước dãy rau củ.' }] }),
+      makeIncident(18, { state:'dangxuly', cat:'Điện', title:'Đèn nhà lồng A chập chờn', desc:'Kỹ thuật đã nhận và đang kiểm tra bộ nguồn.', created:'2026-10-29T06:50', deadline:'2026-10-30T17:00', assetId:'AST-CL-001', assignee:'NV05', receive:{ at:'2026-10-29T07:15', by:'NV05', note:'Nhận trong ca sáng.' }, inspection:{ at:'2026-10-29T07:45', by:'NV05', condition:'Đèn chập chờn khi tải cao.', note:'Kiểm tra bộ nguồn và đầu nối.' }, workUpdates:[{ at:'2026-10-29T08:30', by:'NV05', content:'Đã kiểm tra đầu nối, tiếp tục theo dõi bộ nguồn.', result:'', note:'Chưa gửi nghiệm thu.', submitForAcceptance:false }], history:[{ at:'2026-10-29T07:15', action:'Nhận xử lý', detail:'' }, { at:'2026-10-29T08:30', action:'Cập nhật tiến độ xử lý', detail:'Đã kiểm tra đầu nối.' }] })
+    ];
 
     // Tài sản chợ V1 — prototype FE cho Chợ Cao Lãnh. NEED_CONFIRMATION: danh mục
     // và taxonomy trạng thái chính thức cần được xác nhận với khách hàng.
@@ -1327,5 +1343,38 @@ window.DATA = (function () {
     };
   }
 
-  return { VERSION, TODAY, UNIT, SESSION_FEE, ELEC, WATER, RATE_MARKET_MODEL, RATE_COLLECTION_CYCLE, RATE_TAX_CLASS, WAIVER_TYPES, RATE_POLICY_SEED, BANK_BY_MARKET, BANKS, BANK_ACCOUNT_SEED, MARKETS, INDUSTRIES, INDUSTRY_CODES, POINT_STATUS, LAYOUT_SEED, STATUS, METHOD, INCIDENT_STATES, STAFF, ROLES, ACTORS, build };
+  // Additive prototype fixtures: never overwrite a test that has already been processed.
+  function ensureReassignmentDemo(db) {
+    if (!db || !Array.isArray(db.incidents)) return false;
+    const stall = (db.stalls || []).find(s => s.market === 'CL' && s.traderId);
+    if (!stall) return false;
+    let changed = false;
+    [
+      { id: 'SC-TEST-QH2-01', state: 'phancong', title: '[TEST quá hạn lần 2] Đèn lối đi chưa được xử lý', cat: 'Điện', created: '2026-09-20T08:00', deadline: '2026-09-21T17:00', assetId: 'AST-CL-002' },
+      { id: 'SC-TEST-QH2-02', state: 'dangxuly', title: '[TEST quá hạn lần 2] Rò nước đang xử lý cần chuyển nhân viên', cat: 'Nước', created: '2026-09-20T08:00', deadline: '2026-09-23T17:00', assetId: 'AST-CL-003' }
+    ].forEach(def => {
+      if (db.incidents.some(i => i.id === def.id)) return;
+      const i = Object.assign({}, def, {
+        market: stall.market, stallId: stall.id, traderId: stall.traderId,
+        assignee: 'NV05', source: 'Nhập tại Ban Quản lý',
+        desc: 'Dữ liệu mẫu kiểm thử phân công lại từ NV05 sang nhân viên kỹ thuật khác. Giữ nguyên hạn xử lý và lịch sử công việc.',
+        escalated: false, rating: null, images: { report: [], inspection: [], work: [] },
+        materialRequest: { hasMaterial: false, status: 'none' },
+        history: [
+          { at: def.created, action: 'Tiếp nhận phản ánh', detail: 'Hồ sơ mẫu kiểm thử quá hạn lần 2' },
+          { at: '2026-09-20T08:30', action: 'Phân công xử lý', detail: 'Võ Hoàng Tuấn (NV05) · Hạn: ' + def.deadline }
+        ], log: []
+      });
+      if (def.state === 'dangxuly') {
+        i.receive = { at: '2026-09-20T09:00', by: 'NV05', note: 'Đã nhận kiểm tra tuyến nước.' };
+        i.inspection = { at: '2026-09-20T09:30', by: 'NV05', condition: 'Rò nước tại đầu nối.', note: 'Đã khóa nước cục bộ.' };
+        i.workUpdates = [{ at: '2026-09-20T10:00', by: 'NV05', content: 'Đã kiểm tra và khóa nước cục bộ.', result: '', note: 'Chưa hoàn tất sửa chữa.', submitForAcceptance: false }];
+        i.history.push({ at: '2026-09-20T10:00', action: 'Cập nhật tiến độ xử lý', detail: 'NV05 đã khóa nước cục bộ, chưa hoàn tất.' });
+      }
+      db.incidents.push(i); changed = true;
+    });
+    return changed;
+  }
+
+  return { VERSION, TODAY, UNIT, SESSION_FEE, ELEC, WATER, RATE_MARKET_MODEL, RATE_COLLECTION_CYCLE, RATE_TAX_CLASS, WAIVER_TYPES, RATE_POLICY_SEED, BANK_BY_MARKET, BANKS, BANK_ACCOUNT_SEED, MARKETS, INDUSTRIES, INDUSTRY_CODES, POINT_STATUS, LAYOUT_SEED, STATUS, METHOD, INCIDENT_STATES, STAFF, ROLES, ACTORS, build, ensureReassignmentDemo };
 })();

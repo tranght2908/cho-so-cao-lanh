@@ -202,6 +202,7 @@
       if (broken) { A.db = null; try { localStorage.removeItem(KEY); } catch (e) { /* bỏ qua */ } }
     }
     if (A.db) A.reindex(); else A.fresh();
+    const migratedReassignmentDemo = D.ensureReassignmentDemo ? D.ensureReassignmentDemo(A.db) : false;
     // Hợp đồng seed cũ thiếu serviceApplicability → tính nháp bỏ qua điện, nước, dịch vụ. Bổ sung đúng như seed
     // hiện tại (điểm có công tơ: điện + nước; chợ TTD: dịch vụ), không đụng hợp đồng đã khai báo trên UI.
     let serviceMigrated = false;
@@ -230,7 +231,7 @@
       }
     });
     A.db.actorMetadata = actorMetadata;
-    if (serviceMigrated || migratedActorMetadata || migratedPeriods) A.save();
+    if (serviceMigrated || migratedActorMetadata || migratedPeriods || migratedReassignmentDemo) A.save();
   };
   // External-tab refresh: never seed, clear, or write localStorage. UI callers
   // decide separately whether it is safe to render (for example, no open form).

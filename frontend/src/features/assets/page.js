@@ -3,8 +3,7 @@
   'use strict';
   const D = A.D, U = A.U, ui = A.ui;
   const CATEGORIES = {
-    ELECTRICAL: 'Điện', WATER: 'Cấp nước', FIRE_SAFETY: 'PCCC', SECURITY: 'An ninh',
-    VENTILATION: 'Thông gió', SANITATION: 'Vệ sinh', OTHER: 'Khác'
+    ELECTRICAL: 'Điện', WATER: 'Nước', OTHER: 'Khác'
   };
   const STATUSES = { ACTIVE: ['Hoạt động', 'ok'], ISSUE: ['Có sự cố', 'danger'], MAINTENANCE: ['Đang bảo trì', 'warn'], INACTIVE: ['Ngừng hoạt động', ''] };
   // Trạng thái quản lý do BQL thiết lập. ISSUE ("Có sự cố") chỉ là trạng thái hiển thị dẫn xuất từ sự cố đang mở.
@@ -26,7 +25,12 @@
   }
   function assets() { ensureAssets(); return (A.db.marketAssets || []).filter(x => x.market === 'CL'); }
   function asset(id) { return assets().find(x => x.id === id); }
-  function categoryLabel(key) { return CATEGORIES[key] || key || 'Khác'; }
+  function categoryGroupKey(key) {
+    if (key === 'ELECTRICAL') return 'ELECTRICAL';
+    if (key === 'WATER') return 'WATER';
+    return 'OTHER';
+  }
+  function categoryLabel(key) { return CATEGORIES[categoryGroupKey(key)] || 'Khác'; }
   function statusTag(status) { const x = STATUSES[status] || ['Chưa xác định', '']; return `<span class="tag ${x[1]}">${x[0]}</span>`; }
   // Hồ sơ phản ánh/sự cố (A.db.incidents) là nguồn dữ liệu duy nhất; tài sản chỉ đọc qua incident.assetId.
   // Trường legacy asset.incidents (mock cũ) không còn được đọc.
@@ -96,8 +100,8 @@
   function filterState() { return ui.assetFilter || (ui.assetFilter = { search: '', category: '', location: '', status: '' }); }
   function filteredAssets() {
     const f = filterState(), q = String(f.search || '').trim().toLowerCase();
-    return assets().filter(a => (!q || [a.code, a.name, resolveLocation(a).fullPath].join(' ').toLowerCase().includes(q)) &&
-      (!f.category || a.category === f.category) && (!f.location || locationKey(a) === f.location) && (!f.status || currentStatus(a) === f.status));
+    return assets().filter(a => (!q || [a.code, a.name, categoryLabel(a.category), resolveLocation(a).fullPath].join(' ').toLowerCase().includes(q)) &&
+      (!f.category || categoryGroupKey(a.category) === f.category) && (!f.location || locationKey(a) === f.location) && (!f.status || currentStatus(a) === f.status));
   }
   function nextId() { return 'AST-CL-' + String(Math.max(0, ...assets().map(a => Number((a.id.match(/(\d+)$/) || [0, 0])[1]))) + 1).padStart(3, '0'); }
   function locations() {
