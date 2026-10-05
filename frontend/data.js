@@ -71,7 +71,9 @@ window.DATA = (function () {
   // 31 → 32 (KHOA_GIA_THEO_HOP_DONG): thêm đơn giá ki-ốt CL v2 (2.500 đ từ 01/09/2026); HĐ khóa bảng giá tại
   // ngày bắt đầu (billing.freezeContractTerms) nên HĐ cũ vẫn giữ giá v1.
   // 32 → 33 (KHOA_GIA_THEO_HOP_DONG): HĐ mẫu ký 01/09/2026 (TT0049, điểm mới cuối Dãy KB-A) khóa đơn giá ki-ốt v2.
-  const VERSION = 33;
+  // 33 → 34 (KY_11_DA_PHAT_HANH): kỳ 11/2026 được phát hành khi nạp (qua luồng thật, xem marketPeriod.applySeedIssue)
+  // để tiểu thương có thông báo phát hành + khoản cần thanh toán QR.
+  const VERSION = 34;
   const TODAY = new Date(2026, 8, 13); // 13/09/2026
 
   // Giá dịch vụ sử dụng diện tích bán hàng – QĐ 480/QĐ-UBND ngày 14/02/2026 (đ/m²/ngày, đã gồm VAT)
@@ -1340,6 +1342,8 @@ window.DATA = (function () {
     return {
       // KY_11_DEN_HOAN_TAT_GHI_CHI_SO: "hôm nay" = 29/10/2026 (ngày bắt đầu thu kỳ 11) để các bước thu tiền/chốt
       // buổi ghi nhận giao dịch trong khoảng thời gian thu của kỳ. Dữ liệu mẫu vẫn sinh theo mốc TODAY 13/09.
+      // KY_11_DA_PHAT_HANH: yêu cầu dữ liệu mẫu — chạy 1 lần khi nạp bằng đúng luồng nghiệp vụ (không tự viết khoản phải thu).
+      seedIssue: { month: '2026-11', status: 'PENDING' },
       version: VERSION, today: '2026-10-29', buildings, floors, rows, stalls, traders, contracts, invoices, payments, readings, incidents, marketAssets,
       notifications, sessions, marketSessions, sessionRegistrations, sessionPayments, sessionReceipts, sessionNotifications, sessionAttendances, sessionReplacements, bank, months, audit, issuedPeriods: PERIODS.filter(p => p !== '2026-09'), extraLog: [],
       meterPeriods: METER_PERIODS, meterAdjustRequests: [], receivableAdjustRequests: [],

@@ -64,6 +64,8 @@ function createApp(root, opts) {
     getComputedStyle: () => ({})
   };
   ctx.window = ctx; ctx.self = ctx; ctx.globalThis = ctx;
+  // KY_11_DA_PHAT_HANH: test hồi quy giữ kỳ 11 ở bước ghi chỉ số; opts.seedIssue = true để nạp như trình duyệt.
+  if (!opts.seedIssue) ctx.__SKIP_SEED_ISSUE = true;
   ctx.addEventListener = (ev, fn) => { (winListeners[ev] = winListeners[ev] || []).push(fn); };
   vm.createContext(ctx);
   if (opts.storage) Object.keys(opts.storage).forEach(k => localStorage.setItem(k, opts.storage[k]));
