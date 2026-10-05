@@ -340,7 +340,7 @@
   // KY_11_DA_PHAT_HANH (dữ liệu mẫu v34): đưa kỳ seedIssue.month tới "Đã phát hành" bằng ĐÚNG luồng thật, chạy 1 lần:
   // NV thu phí phụ trách từng chợ (marketScopes) hoàn tất ghi chỉ số → hệ thống tự tính nháp → Tổ trưởng phát hành kỳ
   // (issueMonth: sinh mã PT-, gửi thông báo phát hành cho từng tiểu thương). Đây là bước dựng dữ liệu, không phải thao tác
-  // người dùng nên không qua permission handler. Trang chưa nạp billing/lifecycle (vd. cổng tiểu thương) → để nguyên PENDING; mở trang quản lý 1 lần là phát hành.
+  // người dùng nên không qua permission handler. Trang chưa nạp billing/lifecycle → để nguyên PENDING (cổng tiểu thương đã nạp cả hai nên mở trang nào trước cũng phát hành).
   // window.__SKIP_SEED_ISSUE: test hồi quy giữ kỳ ở bước ghi chỉ số để kiểm tra luồng từ đầu.
   svc.applySeedIssue = function () {
     const req = A.db && A.db.seedIssue;
