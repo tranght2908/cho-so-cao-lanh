@@ -7,6 +7,8 @@ const { createApp } = require('./harness');
 const h = createApp(path.resolve(__dirname, '../..'));
 const A = h.A, SC = A.SERVICE_CFG, billing = A.features.finance.billing;
 const login = (id, market) => { A.ui.sessionAccountId = id; A.ui.market = market; A.syncAccountContext(); };
+// Danh sách HĐ trong chi tiết mặc định thu gọn — bấm nút mới sổ ra.
+const expand = (cat, id) => { assert(h.modal().includes('data-act="price-ct-toggle"')); h.act('price-ct-toggle', { cat, id }); };
 const oldLand = SC.get('stallPrices', 'sp-cl-kiot-v1'), newLand = SC.get('stallPrices', 'sp-cl-kiot-v2');
 assert(oldLand && newLand);
 assert.strictEqual(oldLand.effectiveTo, '2026-08-31');
@@ -42,10 +44,32 @@ const used = A.db.contracts.filter(c => (c.status === 'ACTIVE' || c.status === '
 assert(used > 0);
 assert(h.modal().includes('Hợp đồng đang dùng: <b>' + used + ' hợp đồng</b>'));
 assert(h.modal().includes('HỢP ĐỒNG ĐANG ÁP DỤNG MỨC GIÁ NÀY (' + used + ')'));
-assert(h.modal().includes(kiot.id));
+assert(!h.modal().includes(kiot.id), 'mặc định thu gọn');
+expand('stallPrices', oldLand.id);
+assert(h.modal().includes(kiot.id) && h.modal().includes('data-ch="price-ct-market"') && h.modal().includes('data-in="price-ct-q"'));
+// Tìm theo tên tiểu thương (không dấu) / lọc chợ: chỉ còn dòng khớp; bộ lọc chợ ngoài danh sách → không còn dòng nào.
+const kiotTrader = A.idx.trader.get(kiot.traderId);
+A.IN['price-ct-q']({ value: kiot.id });
+// Harness dùng DOM giả: vẽ lại (thu gọn rồi mở lại, giữ bộ lọc) để đếm dòng hiển thị.
+const visible = () => { h.act('price-ct-toggle', { cat: 'stallPrices', id: oldLand.id }); h.act('price-ct-toggle', { cat: 'stallPrices', id: oldLand.id }); return (h.modal().match(/<tr data-market="[^"]*" data-q="[^"]*">/g) || []).length };
+assert.strictEqual(visible(), 1);
+A.IN['price-ct-q']({ value: kiotTrader.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').toLowerCase() });
+assert(visible() >= 1 && visible() < used);
+A.IN['price-ct-q']({ value: '' });
+A.CH['price-ct-market']({ value: 'CL' });
+assert.strictEqual(visible(), used);
+A.IN['price-ct-q']({ value: 'khong-co-hop-dong-nay' });
+assert.strictEqual(visible(), 0);
+assert(h.modal().includes('data-ct-empty style="margin-top:6px"'), 'hiện thông báo không có HĐ phù hợp');
+A.IN['price-ct-q']({ value: '' }); A.CH['price-ct-market']({ value: '' });
+assert.strictEqual(visible(), used);
+h.act('price-ct-toggle', { cat: 'stallPrices', id: oldLand.id });
+assert(!h.modal().includes(kiot.id), 'thu gọn lại');
 assert(!h.modal().includes('Vô hiệu hóa') && !h.modal().includes('price-cancel-open'), 'mức có HĐ dùng: không có nút Hủy');
 h.act('policy-land-view', { id: newLand.id });
-assert(h.modal().includes(fresh2.id) && h.modal().includes('HỢP ĐỒNG ĐANG ÁP DỤNG MỨC GIÁ NÀY (1)'));
+assert(h.modal().includes('HỢP ĐỒNG ĐANG ÁP DỤNG MỨC GIÁ NÀY (1)') && !h.modal().includes(fresh2.id));
+expand('stallPrices', newLand.id);
+assert(h.modal().includes(fresh2.id));
 
 // Hủy mức đang có HĐ dùng → bị chặn (gọi thẳng handler).
 h.act('price-cancel', { cat: 'stallPrices', id: oldLand.id });
@@ -72,7 +96,9 @@ assert.strictEqual(elecRecord.status, 'active');
 assert(h.view().includes('Ngừng áp dụng từ 01/11/2026'));
 h.act('fee-view', { cat: 'utilities', id: elecRecord.id });
 assert(h.modal().includes('Ngừng áp dụng từ 01/11/2026'));
-assert(h.modal().includes(kiot.id) && /HỢP ĐỒNG ĐANG ÁP DỤNG MỨC GIÁ NÀY \([1-9]/.test(h.modal()));
+assert(/HỢP ĐỒNG ĐANG ÁP DỤNG MỨC GIÁ NÀY \([1-9]/.test(h.modal()));
+expand('utilities', elecRecord.id);
+assert(h.modal().includes(kiot.id));
 
 const bp = A.db.billingPeriods.find(p => p.marketId === 'CL' && p.period === '2026-11');
 assert(bp);
@@ -114,6 +140,7 @@ outside.priceTerms.land = Object.assign({}, outside.priceTerms.land, { policyId:
 const acc = A.currentAccount(), scopes = acc.marketScopes;
 acc.marketScopes = ['CL']; A.syncAccountContext();
 h.act('policy-land-view', { id: oldLand.id });
+expand('stallPrices', oldLand.id);
 assert(h.modal().includes(kiot.id) && !h.modal().includes(outside.id));
 acc.marketScopes = scopes; A.syncAccountContext();
 

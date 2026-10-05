@@ -629,14 +629,47 @@
   const priceScope = (cat, r) => cat === 'stallPrices' ? landAllowed() : new Set(r && r.marketId && landAllowed().has(r.marketId) ? [r.marketId] : []);
   const priceContractCount = (cat, r) => priceContracts(cat, r, priceScope(cat, r)).length;
   const priceInUse = (cat, r) => priceContracts(cat, r, null).length > 0;
+  // Danh sách HĐ thu gọn mặc định; bấm nút mới sổ ra. Lọc theo chợ + tìm theo mã HĐ / tiểu thương / điểm KD lọc ngay
+  // trên DOM (không vẽ lại modal nên ô tìm kiếm không mất con trỏ). Trạng thái giữ trong ui.priceCt theo từng mức giá.
+  const ctFold = x => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
+  const ctKey = (cat, r) => cat + '|' + (r && r.id);
+  const ctState = (cat, r) => (ui.priceCt && ui.priceCt.key === ctKey(cat, r)) ? ui.priceCt : (ui.priceCt = { key: ctKey(cat, r), open: false, market: '', q: '' });
+  const ctMatch = (st, market, hay) => (!st.market || market === st.market) && (!st.q || hay.indexOf(ctFold(st.q)) >= 0);
   function priceContractsHtml(cat, r) {
-    const list = priceContracts(cat, r, priceScope(cat, r));
+    const list = priceContracts(cat, r, priceScope(cat, r)), st = ctState(cat, r);
+    const head = `<div class="row" style="align-items:center;gap:8px;margin:16px 0 6px"><h4 style="margin:0">HỢP ĐỒNG ĐANG ÁP DỤNG MỨC GIÁ NÀY (${list.length})</h4><span class="spacer"></span>${list.length ? `<button class="btn sm" data-act="price-ct-toggle" data-cat="${cat}" data-id="${U.esc(r.id)}" aria-expanded="${st.open}" title="${st.open ? 'Thu gọn danh sách' : 'Xem danh sách hợp đồng'}">${st.open ? '▴ Thu gọn' : '▾ Xem danh sách'}</button>` : ''}</div>`;
+    if (!list.length) return head + '<div class="small muted">Chưa có hợp đồng nào áp dụng mức giá này.</div>';
+    if (!st.open) return head;
+    const marketIds = Array.from(new Set(list.map(x => x.c.market)));
+    if (st.market && !marketIds.includes(st.market)) st.market = '';
+    const mName = id => (landMarkets().find(m => m.id === id) || {}).name || id;
+    let shown = 0;
     const rows = list.map(({ c, amendment }) => {
-      const t = A.idx.trader.get(c.traderId) || {}, st = A.idx.stall.get(c.businessPointId || c.stallId) || {}, mk = (landMarkets().find(m => m.id === c.market) || {}).name || c.market;
-      return `<tr><td><b>${U.esc(c.id)}</b><div class="small muted">${amendment ? 'Phụ lục' : 'Hợp đồng'}</div></td><td>${U.esc(t.name || '—')}<div class="small muted">${U.esc(c.traderId || '')}</div></td><td>${U.esc(st.code || c.stallId || '—')}<div class="small muted">${U.esc(mk)}</div></td><td class="num">${st.area != null ? Number(st.area).toLocaleString('vi-VN') + ' m²' : '—'}</td><td>${U.dmy(c.start)} → ${c.end ? U.dmy(c.end) : '—'}</td></tr>`;
+      const t = A.idx.trader.get(c.traderId) || {}, pt = A.idx.stall.get(c.businessPointId || c.stallId) || {};
+      const hay = ctFold([c.id, t.name, c.traderId, pt.code, c.stallId].join(' ')), ok = ctMatch(st, c.market, hay);
+      if (ok) shown++;
+      return `<tr data-market="${U.esc(c.market)}" data-q="${U.esc(hay)}"${ok ? '' : ' style="display:none"'}><td><b>${U.esc(c.id)}</b><div class="small muted">${amendment ? 'Phụ lục' : 'Hợp đồng'}</div></td><td>${U.esc(t.name || '—')}<div class="small muted">${U.esc(c.traderId || '')}</div></td><td>${U.esc(pt.code || c.stallId || '—')}<div class="small muted">${U.esc(mName(c.market))}</div></td><td class="num">${pt.area != null ? Number(pt.area).toLocaleString('vi-VN') + ' m²' : '—'}</td><td>${U.dmy(c.start)} → ${c.end ? U.dmy(c.end) : '—'}</td></tr>`;
     });
-    return `<h4 style="margin:16px 0 6px">HỢP ĐỒNG ĐANG ÁP DỤNG MỨC GIÁ NÀY (${list.length})</h4>${list.length ? U.table([{t:'Hợp đồng'},{t:'Tiểu thương'},{t:'Điểm KD'},{t:'Diện tích',num:true},{t:'Thời hạn HĐ'}], rows) : '<div class="small muted">Chưa có hợp đồng nào áp dụng mức giá này.</div>'}`;
+    const tools = `<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:8px"><select class="input" style="min-width:180px;flex:0 0 auto" data-ch="price-ct-market" aria-label="Lọc theo chợ"><option value="">Tất cả chợ</option>${marketIds.map(id => `<option value="${U.esc(id)}" ${st.market === id ? 'selected' : ''}>${U.esc(mName(id))}</option>`).join('')}</select><input class="input" style="flex:1;min-width:200px" data-in="price-ct-q" value="${U.esc(st.q)}" placeholder="Tìm mã hợp đồng, tên / mã tiểu thương, điểm KD" aria-label="Tìm hợp đồng"><span class="small muted" style="align-self:center">Hiển thị <b data-ct-count>${shown}</b> / ${list.length}</span></div>`;
+    return head + `<div id="price-ct">${tools}${U.table([{t:'Hợp đồng'},{t:'Tiểu thương'},{t:'Điểm KD'},{t:'Diện tích',num:true},{t:'Thời hạn HĐ'}], rows)}<div class="small muted" data-ct-empty style="margin-top:6px${shown ? ';display:none' : ''}">Không có hợp đồng phù hợp bộ lọc.</div></div>`;
   }
+  function priceCtApply() {
+    const box = A.$('#price-ct'), st = ui.priceCt;
+    if (!box || !st) return;
+    let shown = 0;
+    box.querySelectorAll('tr[data-q]').forEach(tr => { const ok = ctMatch(st, tr.dataset.market, tr.dataset.q); tr.style.display = ok ? '' : 'none'; if (ok) shown++; });
+    const cnt = box.querySelector('[data-ct-count]'), empty = box.querySelector('[data-ct-empty]');
+    if (cnt) cnt.textContent = shown;
+    if (empty) empty.style.display = shown ? 'none' : '';
+  }
+  A.ACT['price-ct-toggle'] = el => {
+    const cat = el.dataset.cat, r = A.SERVICE_CFG.get(cat, el.dataset.id);
+    if (!r || !U.can('cau-hinh-gia')) return;
+    const st = ctState(cat, r); st.open = !st.open;
+    priceReopen(cat, r.id);
+  };
+  A.CH['price-ct-market'] = el => { if (ui.priceCt) { ui.priceCt.market = el.value; priceCtApply(); } };
+  A.IN['price-ct-q'] = el => { if (ui.priceCt) { ui.priceCt.q = el.value; priceCtApply(); } };
   // Hủy (nhập sai): dùng lại action:cau-hinh-gia.khoa-mo-phi (market_manager) + MỌI chợ của dòng giá thuộc marketScopes.
   // Chỉ hủy được khi không có HĐ nào dùng (kiểm tra trên toàn bộ HĐ, kể cả ngoài phạm vi hiển thị).
   const landCanCancel = r => !!r && r.status !== 'cancelled' && U.can('cau-hinh-gia') && A.canDo('cau-hinh-gia.khoa-mo-phi') && landMarketIds(r).length > 0 && landMarketIds(r).every(id => landAllowed().has(id));
@@ -696,7 +729,7 @@
     const canCancel = landCanCancel(r) && !priceInUse('stallPrices', r);
     A.modal(A.mHead('Chi tiết đơn giá mặt bằng') + `<div class="modal-b">${priceUsageHtml('stallPrices', r)}<dl class="kv"><dt>Loại điểm kinh doanh</dt><dd><b>${U.esc(landName(r))}</b></dd><dt>Đơn giá</dt><dd>${landPriceHtml(r)}</dd><dt>Hạng chợ áp dụng</dt><dd>${landGradeText(r)}</dd><dt>Các chợ đang áp dụng</dt><dd>${names.length} chợ: ${names.map(U.esc).join(', ')}</dd><dt>Trạng thái áp dụng</dt><dd>${cfgPriceStatusTag(r)}</dd><dt>Có hiệu lực từ</dt><dd>${U.dmy(r.effectiveFrom)}</dd><dt>Ngày kết thúc</dt><dd>${r.effectiveTo ? U.dmy(r.effectiveTo) : 'Chưa kết thúc'}</dd></dl>${priceContractsHtml('stallPrices', r)}<h4 style="margin:16px 0 6px">Căn cứ quyết định / công văn</h4>${landEvidenceHtml(r, canEdit, draft)}<h4 style="margin:16px 0 6px">Lịch sử thay đổi</h4>${cfgHistoryHtml(r)}</div><div class="modal-f">${canCancel ? `<button class="btn danger" data-act="price-cancel-open" data-cat="stallPrices" data-id="${U.esc(r.id)}">Hủy mức giá</button>` : ''}<span class="spacer"></span><button class="btn" data-act="close">Đóng</button>${canEdit && draft.length ? `<button class="btn primary" data-act="policy-land-evidence-save" data-id="${U.esc(r.id)}">Lưu</button>` : ''}</div>`, true);
   }
-  A.ACT['policy-land-view'] = el => { if (!U.can('cau-hinh-gia')) return; ui.landEvidenceDraft = null; landDetail(el.dataset.id); };
+  A.ACT['policy-land-view'] = el => { if (!U.can('cau-hinh-gia')) return; ui.landEvidenceDraft = null; ui.priceCt = null; landDetail(el.dataset.id); };
   // Chọn tệp chỉ đưa vào bản nháp; bấm "Lưu" mới ghi vào đơn giá + lịch sử.
   A.CH['land-att-add'] = el => {
     const file = el.files && el.files[0], r = A.SERVICE_CFG.get('stallPrices', el.dataset.id);
@@ -824,7 +857,7 @@
     const evidence = `${rowsHtml || '<div class="small muted">Chưa có tệp căn cứ.</div>'}${canEdit ? `<label class="btn sm" style="cursor:pointer;margin-top:8px;display:inline-flex">${rowsHtml ? 'Chọn thêm tệp căn cứ' : '+ Chọn tệp căn cứ (PDF / ảnh)'}<input type="file" accept="${LAND_FILE_ACCEPT}" style="display:none" data-ch="fee-att-add" data-cat="${cat}" data-id="${U.esc(r.id)}"></label>` : ''}`;
     A.modal(A.mHead('Chi tiết ' + c.title.toLowerCase()) + `<div class="modal-b">${priceUsageHtml(cat, r)}<dl class="kv"><dt>Chợ</dt><dd><b>${U.esc(feeMarketName(r.marketId))}</b></dd>${svc ? `<dt>Tên dịch vụ</dt><dd>${U.esc(r.name || '—')}</dd><dt>Cách tính</dt><dd>${U.esc((FEE_CALC[r.calcMethod] || [r.calcMethod || '—'])[0])}</dd>` : ''}<dt>Đơn giá</dt><dd>${feePriceHtml(tab, r)}</dd><dt>Trạng thái áp dụng</dt><dd>${cfgPriceStatusTag(r)}</dd><dt>Có hiệu lực từ</dt><dd>${U.dmy(r.effectiveFrom)}</dd><dt>Ngày kết thúc</dt><dd>${r.effectiveTo ? U.dmy(r.effectiveTo) : 'Chưa kết thúc'}</dd></dl>${priceContractsHtml(cat, r)}<h4 style="margin:16px 0 6px">Căn cứ quyết định / công văn</h4>${evidence}<h4 style="margin:16px 0 6px">Lịch sử thay đổi</h4>${cfgHistoryHtml(r)}</div><div class="modal-f">${canCancel ? `<button class="btn danger" data-act="price-cancel-open" data-cat="${cat}" data-id="${U.esc(r.id)}">Hủy mức giá</button>` : ''}<span class="spacer"></span><button class="btn" data-act="close">Đóng</button>${canEdit && draft.length ? `<button class="btn primary" data-act="fee-evidence-save" data-cat="${cat}" data-id="${U.esc(r.id)}">Lưu</button>` : ''}</div>`, true);
   }
-  A.ACT['fee-view'] = el => { if (!U.can('cau-hinh-gia')) return; ui.feeEvidenceDraft = null; feeDetail(el.dataset.cat, el.dataset.id); };
+  A.ACT['fee-view'] = el => { if (!U.can('cau-hinh-gia')) return; ui.feeEvidenceDraft = null; ui.priceCt = null; feeDetail(el.dataset.cat, el.dataset.id); };
   A.CH['fee-att-add'] = el => {
     const file = el.files && el.files[0], r = A.SERVICE_CFG.get(el.dataset.cat, el.dataset.id);
     if (!file || !r) return;
