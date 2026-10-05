@@ -2189,9 +2189,13 @@
     const inp = A.$('#tt-pay-amount'), amount = inp ? (inp.value === '' ? NaN : Number(inp.value)) : (st.amount == null ? c.remaining : st.amount);
     if (!Number.isFinite(amount) || amount !== c.remaining) return U.toast('Số tiền nhận phải bằng đúng ' + U.money(c.remaining) + '. Hệ thống không hỗ trợ thu một phần.');
     st.amount = amount; st.note = String((A.$('#tt-pay-note') || {}).value || st.note || '').trim();
+    const receiptPreview = {
+      invoiceId: c.inv.id, traderId: c.t.id, market: ui.market, amount, method: 'tm', by: c.code
+    };
     A.modal(A.mHead('Xác nhận đã nhận tiền') + `<div class="modal-b tt-pay">
       <dl class="tt-sum"><div><dt>Tiểu thương</dt><dd>${U.esc(c.t.name)} (${U.esc(c.t.id)})</dd></div><div><dt>Kỳ thu</dt><dd>${U.esc(ttPeriodLabel(c.p))}</dd></div><div><dt>Phương thức</dt><dd>Tiền mặt</dd></div><div class="is-total"><dt>Số tiền</dt><dd>${U.money(amount)}</dd></div></dl>
       ${st.note ? `<div class="small muted" style="margin-top:8px">Ghi chú: ${U.esc(st.note)}</div>` : ''}
+      <h4 class="tt-sec-title">Biên lai dự kiến</h4><div class="tt-receipt-preview">${ttReceiptHtml(receiptPreview, true)}</div>
       <div class="note" style="margin-top:12px">Vui lòng kiểm đếm tiền trước khi xác nhận. Sau khi xác nhận, hệ thống sẽ ghi nhận giao dịch và phát hành biên lai.</div></div>
       <div class="modal-f"><button class="btn" data-act="tt-pay-back">Hủy</button><button class="btn primary" data-act="tt-pay-commit">Xác nhận</button></div>`);
   };
@@ -2216,21 +2220,21 @@
 
   // ---- Biên lai điện tử (prototype: không phải chứng từ phát hành qua hệ thống chính thức) ----
   function ttPayByReceipt(no) { return A.db.payments.find(x => x.receipt === no && x.market === ui.market && A.receiptBusinessStateOk(x)) || null; }
-  function ttReceiptHtml(pay) {
+  function ttReceiptHtml(pay, preview) {
     const inv = A.idx.invoice.get(pay.invoiceId), t = A.idx.trader.get(pay.traderId) || {}, mk = U.market(pay.market) || {};
     const bp = inv && (A.db.billingPeriods || []).find(x => x.id === inv.period);
     const lines = inv && !pay.debtId && Number(pay.amount) === Number(inv.amount) && (inv.items || []).length
       ? inv.items.map(x => `<tr><td>${U.esc(x.name || 'Khoản thu')}${x.stallId ? `<div class="small muted">Điểm ${U.esc((A.idx.stall.get(x.stallId) || {}).code || x.stallId)}</div>` : ''}</td><td class="num">${U.money(x.amount)}</td></tr>`)
       : [`<tr><td>Thu khoản ${U.esc(inv ? inv.id : pay.invoiceId || '')}</td><td class="num">${U.money(pay.amount)}</td></tr>`];
     return `<div class="receipt tt-receipt"><div class="tt-rc-org"><b>UBND PHƯỜNG CAO LÃNH</b><div>${U.esc(String(mk.name || pay.market).toLocaleUpperCase('vi'))}</div></div>
-      <h4>BIÊN LAI THU TIỀN</h4><div class="sub">Số: <b>${U.esc(pay.receipt)}</b></div>
+      <h4>BIÊN LAI THU TIỀN</h4><div class="sub">Số: <b>${preview ? 'Cấp sau khi xác nhận' : U.esc(pay.receipt)}</b></div>
       <dl class="kv"><dt>Tiểu thương</dt><dd>${U.esc(t.name || pay.traderId)}</dd><dt>Mã TT</dt><dd>${U.esc(t.id || pay.traderId)}</dd><dt>Kỳ thu</dt><dd>${U.esc(bp ? ttPeriodLabel(bp) : inv ? U.per(inv.period) : '')}</dd>
-        <dt>Ngày thu</dt><dd>${U.dmy(pay.date)} ${U.esc(pay.time || '')}</dd><dt>NV thu phí</dt><dd>${U.esc(A.paymentActorLabel(pay))}</dd><dt>Phương thức</dt><dd>${U.esc(D.METHOD[pay.method] || pay.method)}</dd>
-        <dt>Mã giao dịch</dt><dd>${U.esc(pay.id)}</dd><dt>Mã khoản phải thu</dt><dd>${U.esc(pay.invoiceId || '')}</dd></dl>
+        <dt>Ngày thu</dt><dd>${preview ? 'Ghi nhận sau khi xác nhận' : U.dmy(pay.date) + ' ' + U.esc(pay.time || '')}</dd><dt>NV thu phí</dt><dd>${U.esc(A.paymentActorLabel(pay))}</dd><dt>Phương thức</dt><dd>${U.esc(D.METHOD[pay.method] || pay.method)}</dd>
+        <dt>Mã giao dịch</dt><dd>${preview ? 'Cấp sau khi xác nhận' : U.esc(pay.id)}</dd><dt>Mã khoản phải thu</dt><dd>${U.esc(pay.invoiceId || '')}</dd></dl>
       ${U.table([{ t: 'Nội dung thu' }, { t: 'Số tiền', num: true }], lines)}
       <div class="tt-rc-total"><span>Tổng cộng</span><b>${U.money(pay.amount)}</b></div>
-      <div class="tt-rc-ref">Mã tra cứu: <b>${U.esc(pay.lookup || '')}</b>${inv && inv.paymentReference ? ` · Tham chiếu thanh toán: <b>${U.esc(inv.paymentReference)}</b>` : ''}</div>
-      <div class="small muted">Biên lai điện tử của bản mẫu (prototype) — không phải chứng từ phát hành qua hệ thống chính thức.</div></div>`;
+      <div class="tt-rc-ref">Mã tra cứu: <b>${preview ? 'Cấp sau khi xác nhận' : U.esc(pay.lookup || '')}</b>${inv && inv.paymentReference ? ` · Tham chiếu thanh toán: <b>${U.esc(inv.paymentReference)}</b>` : ''}</div>
+      <div class="small muted">${preview ? 'Bản xem trước — mã biên lai, giao dịch và tra cứu được cấp sau khi xác nhận thu.' : 'Biên lai điện tử của bản mẫu (prototype) — không phải chứng từ phát hành qua hệ thống chính thức.'}</div></div>`;
   }
   function ttStyleReceipt() {
     setTimeout(() => {

@@ -2037,6 +2037,13 @@ button.mb-chip.on { outline: 2px solid currentColor; outline-offset: -2px; }
 .tt-receipt .tt-rc-org { text-align: center; font-size: var(--font-size-sm); margin-bottom: 10px; line-height: 1.4; }
 .tt-receipt h4 { margin-top: 4px; }
 .tt-receipt .kv { margin-bottom: 10px; }
+.tt-receipt-preview { max-height: 300px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.tt-receipt-preview .tt-receipt { max-width: none; margin: 0; padding: 12px; border: 0; border-radius: 0; box-shadow: none; }
+.tt-receipt-preview .tt-receipt .kv { grid-template-columns: 110px minmax(0, 1fr); gap: 4px 8px; padding: 8px 0; }
+.tt-receipt-preview .tt-receipt h4 { margin: 10px 0 4px; font-size: var(--font-size-base); }
+.tt-receipt-preview .tt-receipt .sub { margin-bottom: 10px; }
+.tt-receipt-preview .tt-receipt .tbl-wrap { overflow-x: auto; }
+.tt-receipt-preview .tt-receipt .tbl { min-width: 0; margin-top: 8px; }
 .tt-rc-total { display: flex; justify-content: space-between; padding: 10px 0; border-top: 2px solid var(--ink); margin-top: 6px; font-size: 16px; }
 .tt-rc-ref { font-size: var(--font-size-sm); margin-bottom: 6px; }
 @media (max-width: 1280px) { .tt-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
