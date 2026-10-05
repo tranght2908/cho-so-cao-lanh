@@ -70,7 +70,8 @@ window.DATA = (function () {
   // 30 → 31 (KY_11_DEN_HOAN_TAT_GHI_CHI_SO): mở kỳ thu 11/2026, NV thu phí đã ghi đủ chỉ số; hôm nay = 29/10/2026.
   // 31 → 32 (KHOA_GIA_THEO_HOP_DONG): thêm đơn giá ki-ốt CL v2 (2.500 đ từ 01/09/2026); HĐ khóa bảng giá tại
   // ngày bắt đầu (billing.freezeContractTerms) nên HĐ cũ vẫn giữ giá v1.
-  const VERSION = 32;
+  // 32 → 33 (KHOA_GIA_THEO_HOP_DONG): HĐ mẫu ký 01/09/2026 (TT0049, điểm mới cuối Dãy KB-A) khóa đơn giá ki-ốt v2.
+  const VERSION = 33;
   const TODAY = new Date(2026, 8, 13); // 13/09/2026
 
   // Giá dịch vụ sử dụng diện tích bán hàng – QĐ 480/QĐ-UBND ngày 14/02/2026 (đ/m²/ngày, đã gồm VAT)
@@ -1214,6 +1215,25 @@ window.DATA = (function () {
     // Giữ 10 khoản kỳ 08/2026 chưa thu (quá hạn 15/08 → hệ thống tự chuyển công nợ lúc chạy), chia đều các NV thu
     // phí; mọi khoản chưa thu khác của kỳ 05–08 coi như đã thu tiền mặt đúng kỳ (1 biên lai / khoản, người thu =
     // NV phụ trách gian). Không dùng RNG; không đụng ngày hôm nay nên sao kê / nộp quỹ không đổi.
+    // KHOA_GIA_THEO_HOP_DONG (v33): 1 HĐ ki-ốt ký 01/09/2026 (khóa đơn giá v2 2.500 đ/m²/ngày) trên 1 điểm MỚI cuối Dãy
+    // KB-A — không dùng 8 điểm trống hồi quy, Dãy vẫn còn ≥ 2 m² trống. Điểm không có công tơ, HĐ không đăng ký điện/nước/
+    // dịch vụ nên không cần chỉ số kỳ 09/11. Không dùng RNG.
+    (function seedContractPriceLock() {
+      const row = rows.find(r => r.market === 'CL' && r.code === 'KB-A');
+      if (!row || stalls.some(s => s.id === 'CL-KB-A05') || traders.some(t => t.id === 'TT0049')) return;
+      const sib = stalls.filter(s => s.rowId === row.id), area = 0.5, used = sib.reduce((sum, s) => sum + Number(s.area || 0), 0);
+      if (used + area > row.allocatedArea - 2) return;
+      const num = sib.reduce((m, s) => Math.max(m, s.num), 0) + 1, code = 'KB-A' + pad(num);
+      const st = { id: 'CL-' + code, code, market: 'CL', rowId: row.id, num, area, areaTypeId: 'covered', status: 'active', hasMeter: false, type: 'kiot', note: '', history: [] };
+      const t = { id: 'TT0049', name: 'Lê Thị Minh Anh', gender: 'Nữ', phone: '0934567849', idNo: '087190004949', birth: 1990,
+        address: 'Khóm Mỹ Tây, phường Cao Lãnh', market: 'CL', cat: 'Ki-ốt tổng hợp', hkd: true, since: '2026-09-01', app: false, bank: false,
+        stalls: [st.id], profileStatus: 'ACTIVE', source: 'STAFF', supplementNote: '', licenseNo: null, licenseDate: null };
+      const unit = 2500, monthly = Math.round(area * unit * 30 / 1000) * 1000;
+      stalls.push(st); traders.push(t);
+      contracts.push({ id: 'HĐ-CL-2026-' + pad(++cSeq, 4), stallId: st.id, businessPointId: st.id, traderId: t.id, market: 'CL', kind: 'Hợp đồng thuê cố định quầy tháng/quý',
+        signedDate: '2026-09-01', start: '2026-09-01', end: '2029-08-31', unit, monthly, deposit: monthly, status: 'hieuluc', scanned: true,
+        serviceApplicability: { electricity: false, water: false, marketService: false } });
+    })();
     (function seedDemoDebts() {
       const grouped = new Set(MARKETS.filter(m => m.receivableGrouping === 'TRADER').map(m => m.id));
       const old = invoices.filter(i => grouped.has(i.market) && i.period < '2026-09' && i.status !== 'paid').sort((a, b) => a.id.localeCompare(b.id));

@@ -23,11 +23,56 @@ const fresh = billing.buildPriceTerms('CL', st, st.area, '2026-09-15', { electri
 assert.strictEqual(fresh.land.policyId, newLand.id);
 assert.strictEqual(fresh.land.amount, 2500);
 
-// Giá điện mới từ kỳ 11 không làm đổi khoản của HĐ đã khóa giá điện cũ.
-const oldElec = kiot.priceTerms.electricity;
-assert(oldElec && oldElec.price > 0);
-const elecRecord = SC.get('utilities', oldElec.policyId);
-SC.add('utilities', Object.assign({}, elecRecord, { id: undefined, history: [], attachments: [], elecPrice: oldElec.price + 900, effectiveFrom: '2026-11-01', effectiveTo: null, status: 'active' }), 'test');
+
+// HĐ mẫu ký 01/09/2026 (TT0049) khóa đơn giá v2.
+const fresh2 = A.db.contracts.find(c => c.traderId === 'TT0049');
+assert(fresh2 && fresh2.priceTerms.land.policyId === newLand.id);
+
+// Màn Mặt bằng: chỉ 2 trạng thái, không còn Khóa / Mở khóa / Vô hiệu hóa.
+login('AC-NV01', 'CL');
+h.go('cau-hinh-gia');
+A.ui.cfgTab = 'land'; A.render();
+assert(h.view().includes('Ngừng áp dụng từ 01/09/2026'));
+assert(h.view().includes('Đang áp dụng'));
+assert(!/Vô hiệu hóa|Mở khóa|>Khóa<|Hết hiệu lực/.test(h.view()));
+
+// Xem dòng 2.000: liệt kê HĐ ki-ốt cũ; dòng 2.500: liệt kê HĐ ký 01/09/2026. Không có nút Vô hiệu hóa.
+h.act('policy-land-view', { id: oldLand.id });
+const used = A.db.contracts.filter(c => (c.status === 'ACTIVE' || c.status === 'hieuluc') && c.end >= (A.db.today || A.U.today()) && c.priceTerms.land && c.priceTerms.land.policyId === oldLand.id).length;
+assert(used > 0);
+assert(h.modal().includes('Hợp đồng đang dùng: <b>' + used + ' hợp đồng</b>'));
+assert(h.modal().includes('HỢP ĐỒNG ĐANG ÁP DỤNG MỨC GIÁ NÀY (' + used + ')'));
+assert(h.modal().includes(kiot.id));
+assert(!h.modal().includes('Vô hiệu hóa') && !h.modal().includes('price-cancel-open'), 'mức có HĐ dùng: không có nút Hủy');
+h.act('policy-land-view', { id: newLand.id });
+assert(h.modal().includes(fresh2.id) && h.modal().includes('HỢP ĐỒNG ĐANG ÁP DỤNG MỨC GIÁ NÀY (1)'));
+
+// Hủy mức đang có HĐ dùng → bị chặn (gọi thẳng handler).
+h.act('price-cancel', { cat: 'stallPrices', id: oldLand.id });
+assert.strictEqual(oldLand.status, 'active');
+assert(h.trace.toasts.some(x => /đang có hợp đồng áp dụng/.test(x)));
+
+// Giá điện mới từ 01/11/2026 qua form: giá cũ "Ngừng áp dụng từ 01/11/2026", vẫn active; HĐ cũ vẫn tính giá cũ.
+const oldElec = kiot.priceTerms.electricity, elecRecord = SC.get('utilities', oldElec.policyId);
+assert(oldElec && elecRecord && elecRecord.marketId === 'CL');
+const file = { name: 'qd-dien.pdf', type: 'application/pdf', size: 1, mock: true };
+const elecCount = () => SC.list('utilities').length;
+A.ui.cfgTab = 'electricity'; A.render();
+const before = elecCount();
+A.ui.feeForm = { tab: 'electricity', marketId: 'CL', name: '', calcMethod: 'fixed', amount: oldElec.price + 900, effectiveFrom: '2026-11-15', effectiveTo: '', file };
+h.act('fee-save', {});
+assert.strictEqual(elecCount(), before, 'ngày hiệu lực khác 01 bị chặn');
+A.ui.feeForm = { tab: 'electricity', marketId: 'CL', name: '', calcMethod: 'fixed', amount: oldElec.price + 900, effectiveFrom: '2026-11-01', effectiveTo: '', file };
+h.act('fee-save', {});
+assert.strictEqual(elecCount(), before + 1);
+const newElec = SC.list('utilities').find(x => x.previousVersionId === elecRecord.id && x.status === 'active');
+assert(newElec);
+assert.strictEqual(elecRecord.effectiveTo, '2026-10-31');
+assert.strictEqual(elecRecord.status, 'active');
+assert(h.view().includes('Ngừng áp dụng từ 01/11/2026'));
+h.act('fee-view', { cat: 'utilities', id: elecRecord.id });
+assert(h.modal().includes('Ngừng áp dụng từ 01/11/2026'));
+assert(h.modal().includes(kiot.id) && /HỢP ĐỒNG ĐANG ÁP DỤNG MỨC GIÁ NÀY \([1-9]/.test(h.modal()));
 
 const bp = A.db.billingPeriods.find(p => p.marketId === 'CL' && p.period === '2026-11');
 assert(bp);
@@ -38,21 +83,38 @@ const land = mine.find(d => d.items[0].chargeType === 'LAND');
 assert(land, 'phải có dòng mặt bằng của HĐ');
 assert.strictEqual(land.items[0].policyId, oldLand.id);
 assert.strictEqual(land.items[0].unitPrice, 2000);
+const land2 = out.drafts.find(d => d.contractId === fresh2.id && d.items[0].chargeType === 'LAND');
+assert(land2 && land2.items[0].unitPrice === 2500, 'HĐ mới tính 2.500');
 const elec = mine.find(d => d.items[0].chargeType === 'ELECTRICITY');
 if (elec) assert.strictEqual(elec.items[0].unitPrice, oldElec.price);
 
-// Chi tiết đơn giá: "Hợp đồng đang dùng: n hợp đồng" ở đầu; mặt bằng không còn nút Vô hiệu hóa.
+// Tài khoản không có quyền gọi thẳng handler → không đổi dữ liệu.
+login('AC-LD01', 'CL');
+h.act('price-cancel', { cat: 'utilities', id: newElec.id });
+assert.strictEqual(newElec.status, 'active');
+const n0 = elecCount();
+A.ui.feeForm = { tab: 'electricity', marketId: 'CL', name: '', calcMethod: 'fixed', amount: 9999, effectiveFrom: '2026-12-01', effectiveTo: '', file };
+h.act('fee-save', {});
+assert.strictEqual(elecCount(), n0);
+
+// Hủy mức nhập sai (chưa HĐ nào dùng) → mức cũ áp dụng lại.
 login('AC-NV01', 'CL');
-h.go('cau-hinh-gia');
-A.ui.cfgTab = 'land'; A.render();
+h.act('fee-view', { cat: 'utilities', id: newElec.id });
+assert(h.modal().includes('price-cancel-open'));
+h.act('price-cancel', { cat: 'utilities', id: newElec.id });
+assert.strictEqual(newElec.status, 'cancelled');
+assert.strictEqual(elecRecord.effectiveTo, null);
+A.ui.cfgTab = 'electricity'; A.render();
+assert(!h.view().includes('data-id="' + newElec.id + '"'), 'mức đã hủy ẩn khỏi bảng');
+
+// Danh sách HĐ trong drawer không chứa HĐ ngoài marketScopes.
+const outside = A.db.contracts.find(c => c.market === 'TTD' && (c.status === 'ACTIVE' || c.status === 'hieuluc') && c.priceTerms);
+assert(outside);
+outside.priceTerms.land = Object.assign({}, outside.priceTerms.land, { policyId: oldLand.id });
+const acc = A.currentAccount(), scopes = acc.marketScopes;
+acc.marketScopes = ['CL']; A.syncAccountContext();
 h.act('policy-land-view', { id: oldLand.id });
-const used = A.db.contracts.filter(c => (c.status === 'ACTIVE' || c.status === 'hieuluc') && c.end >= (A.db.today || A.U.today()) && c.priceTerms.land && c.priceTerms.land.policyId === oldLand.id).length;
-assert(used > 0);
-assert(h.modal().includes('Hợp đồng đang dùng: <b>' + used + ' hợp đồng</b>'));
-assert(!h.modal().includes('policy-land-disable-open'));
-h.act('policy-land-view', { id: newLand.id });
-assert(h.modal().includes('Hợp đồng đang dùng: <b>0 hợp đồng</b>'));
-h.act('fee-view', { cat: 'utilities', id: oldElec.policyId });
-assert(/Hợp đồng đang dùng: <b>[1-9]\d* hợp đồng<\/b>/.test(h.modal()));
+assert(h.modal().includes(kiot.id) && !h.modal().includes(outside.id));
+acc.marketScopes = scopes; A.syncAccountContext();
 
 console.log('contract price lock regression PASS');
