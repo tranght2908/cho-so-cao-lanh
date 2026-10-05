@@ -1097,7 +1097,7 @@
     A.modal(A.mHead('Thanh toán bằng mã QR') + `<div class="modal-b tp-pay-modal">
       ${payAmountBox('Tổng cần thanh toán', amount, 'Kỳ ' + U.per(i.period) + ' · ' + U.esc(payMarketName(i.market)))}
       ${bank ? `<div class="tp-pay-transfer">
-        <div class="tp-pay-qr"><b>Quét mã QR</b>${U.qr(ref + ' ' + amount, 176)}<small>Mã QR minh họa (prototype) — chưa kết nối ngân hàng/VietQR thật.</small></div>
+        <div class="tp-pay-qr"><b>Quét mã QR</b>${U.qr(ref + ' ' + amount, 260)}<small>Mã QR minh họa (prototype) — chưa kết nối ngân hàng/VietQR thật.</small></div>
         <div class="tp-pay-bank"><b>Thông tin chuyển khoản</b>
           <div><span>Ngân hàng</span><b>${U.esc(bank.bankName || A.BANK_ACCOUNTS.bankName(bank.bankCode))}</b></div>
           <div><span>Số tài khoản</span><b>${U.esc(bank.accountNumber)}</b></div>
@@ -1107,7 +1107,7 @@
         </div></div>
         <div class="note warn">Vui lòng chuyển đúng <b>${U.money(amount)}</b> và giữ nguyên nội dung chuyển khoản để hệ thống có thể nhận diện giao dịch.</div>`
         : '<div class="note warn">Chợ chưa khai báo tài khoản nhận chuyển khoản. Vui lòng liên hệ Ban Quản lý chợ.</div>'}
-    </div><div class="modal-f"><button class="btn" data-act="tp-pay-detail" data-id="${U.esc(i.id)}">Xem chi tiết khoản thu</button>${bank ? `<button class="btn primary" data-act="tp-pay-transfer-start" data-id="${U.esc(i.id)}">Tôi sẽ chuyển khoản ngay</button>` : ''}</div>`, true);
+    </div><div class="modal-f"><button class="btn" data-act="tp-pay-detail" data-id="${U.esc(i.id)}">Xem chi tiết khoản thu</button>${bank ? `<button class="btn primary" data-act="tp-pay-transfer-start" data-id="${U.esc(i.id)}">Tôi sẽ chuyển khoản ngay</button>` : ''}</div>`);
   }
   function payPendingModal(i) {
     const x = transferIntent(i.id) || {};
