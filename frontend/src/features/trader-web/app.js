@@ -38,7 +38,7 @@
     return acc && A.ACCOUNTS.primaryRole(acc) === 'trader' && A.ACCOUNTS.authStatus(acc) === 'ACTIVE' ? acc : null;
   }
   // Hồ sơ được xem = hồ sơ liên kết với CHÍNH tài khoản (Account.traderIds) và còn hiệu lực. KHÔNG dùng marketScopes.
-  const profileUsable = t => !!t && (!t.profileStatus || t.profileStatus === 'ACTIVE');
+  const profileUsable = t => !!t && (!A.features.traders || !A.features.traders.service || A.features.traders.service.deriveBusinessStatus(t) !== 'INACTIVE');
   function myProfiles(acc) { return acc ? A.ACCOUNTS.traderProfilesOf(acc).filter(profileUsable) : []; }
   // Tương thích các handler cũ: tài khoản của phiên nếu `t` là một hồ sơ của nó.
   function traderAccount(t) {
@@ -143,7 +143,7 @@
   const contractService = () => A.features.contracts && A.features.contracts.service;
   const contractPointId = c => c && (c.businessPointId || c.stallId);
   const contractPhase = c => (contractService() && contractService().presentationStatus(c)) || 'ended';
-  const contractOrder = { current: 0, upcoming: 1, expired: 2, terminated: 3, liquidated: 4, ended: 5 };
+  const contractOrder = { current: 0, pending_liquidation: 1, liquidated: 2, ended: 3 };
   const contractsOf = t => A.db.contracts.filter(c => c.traderId === t.id).sort((a, b) => (contractOrder[contractPhase(a)] - contractOrder[contractPhase(b)]) || String(b.start || '').localeCompare(String(a.start || '')));
   const daysLeft = c => U.days(String(A.db.today || U.today()), c.end);
   const section = (title, body, action) => `<section class="card tw-sec"><div class="card-h"><h3>${title}</h3>${action || ''}</div><div class="card-b">${body}</div></section>`;
@@ -213,6 +213,18 @@
     const rows = headerNotifications(t, acc), unread = rows.filter(n => !n.read).length;
     return `<div class="tw-header-popover tw-notification-popover" role="dialog" aria-label="Thông báo"><div class="tw-header-popover-head"><b>Thông báo</b>${unread ? `<span>${unread > 99 ? '99+' : unread} chưa đọc</span>` : ''}</div><div class="tw-notification-list">${rows.length ? rows.map(n => `<button class="tw-notification-item${n.read ? '' : ' unread'}" data-act="tw-header-notification-open" data-source="${n.source}" data-id="${U.esc(n.id)}"><i aria-hidden="true"></i><span><b>${U.esc(n.title)}</b>${n.message ? `<small>${U.esc(n.message)}</small>` : ''}<em>${headerNotificationTime(n.at)}</em></span></button>`).join('') : '<div class="tw-notification-empty">Bạn chưa có thông báo.</div>'}</div></div>`;
   }
+  function headerNotificationIcon(type) {
+    const value = String(type || '').toUpperCase();
+    if (/(RECEIVABLE|PAYMENT|RECEIPT|BILLING|COLLECTION)/.test(value)) return 'receipt';
+    if (/(CONTRACT|ACCOUNT)/.test(value)) return 'file';
+    if (/(METER|ELECTRIC|WATER)/.test(value)) return 'bolt';
+    if (/(INCIDENT|WARNING|RECONCILIATION)/.test(value)) return 'warning';
+    return 'bell';
+  }
+  function headerNotificationPopover(t, acc) {
+    const rows = headerNotifications(t, acc), unread = rows.filter(n => !n.read).length;
+    return `<div class="tw-header-popover tw-notification-popover" role="dialog" aria-label="Th&#244;ng b&#225;o"><div class="tw-header-popover-head"><b>Th&#244;ng b&#225;o</b><span class="tw-notification-head-actions">${unread ? `<em>${unread > 99 ? '99+' : unread} ch&#432;a &#273;&#7885;c</em>` : ''}<button type="button" data-act="tw-header-notifications-all">Xem t&#7845;t c&#7843;</button></span></div><div class="tw-notification-list">${rows.length ? rows.map(n => `<button class="tw-notification-item${n.read ? '' : ' unread'}" data-act="tw-header-notification-open" data-source="${n.source}" data-id="${U.esc(n.id)}"><i aria-hidden="true">${U.icon(headerNotificationIcon(n.type))}</i><span><b>${U.esc(n.title)}</b>${n.message ? `<small>${U.esc(n.message)}</small>` : ''}<em>${headerNotificationTime(n.at)}</em></span>${n.read ? '' : '<strong aria-label="Chưa đọc"></strong>'}</button>`).join('') : '<div class="tw-notification-empty">B&#7841;n ch&#432;a c&#243; th&#244;ng b&#225;o.</div>'}</div><button class="tw-notification-all" type="button" data-act="tw-header-notifications-all">Xem t&#7845;t c&#7843; th&#244;ng b&#225;o</button></div>`;
+  }
   function headerAccountPopover(t, acc, initial) {
     const name = acc.fullName || t.name || '—', phone = acc.phone || t.phone || '—';
     return `<div class="tw-header-popover tw-account-popover" role="dialog" aria-label="Tài khoản"><div class="tw-account-summary"><span class="tw-avatar tw-avatar-lg">${U.esc(initial)}</span><div><b>${U.esc(name)}</b><small>Tiểu thương</small><small>${U.esc(phone)}</small></div></div><div class="tw-account-actions"><button data-act="tw-header-account-profile">${U.icon('users')}<span>Thông tin tài khoản</span></button><button data-act="tw-logout">${U.icon('close')}<span>Đăng xuất</span></button></div></div>`;
@@ -241,7 +253,7 @@
   function pageHome(t) {
     const cp = currentPeriod(t), cur = myInvoices(t).filter(i => i.period === cp);
     const curDue = U.sum(cur, U.due), older = unpaid(t).filter(i => i.period !== cp), olderDue = U.sum(older, U.due);
-    const cons = contractsOf(t).filter(x => x.status === 'hieuluc');
+    const cons = contractsOf(t).filter(x => x.status === 'ACTIVE');
     const inc = myIncidents(t).slice(0, 2);
     const period = cp ? `<section class="card tw-period"><div class="card-b">
         <div class="tw-period-h"><span class="small muted">Kỳ thu tháng ${U.per(cp)}</span>${cur.every(i => i.status === 'paid') ? '<span class="tag ok">Đã nộp đủ</span>' : (cur.some(U.isOver) ? '<span class="tag danger">Quá hạn</span>' : '<span class="tag warn">Chưa nộp</span>')}</div>
@@ -312,8 +324,8 @@
 
   function contractStatus(c) {
     const phase = contractPhase(c);
-    const labels = { current: 'Đang hiệu lực', upcoming: 'Chưa đến hiệu lực', expired: 'Đã hết hạn', terminated: 'Đã chấm dứt', liquidated: 'Đã thanh lý', ended: 'Đã kết thúc' };
-    const tones = { current: 'ok', upcoming: 'info', expired: 'warn', terminated: '', liquidated: '', ended: '' };
+    const labels = { current: 'Đang hiệu lực', pending_liquidation: 'Chờ thanh lý', liquidated: 'Đã thanh lý', ended: 'Đã kết thúc' };
+    const tones = { current: 'ok', pending_liquidation: 'warn', liquidated: '', ended: '' };
     return `<span class="tag ${tones[phase] || ''}">${labels[phase] || '—'}</span>`;
   }
   const contractLeftTag = contractStatus;
@@ -327,7 +339,7 @@
     // facade scope đã có mặt; fallback vẫn derive đúng Row → collectorId.
     const row = BP.row(point);
     const collector = typeof BP.pointCollector === 'function' ? BP.pointCollector(point.id) : (row && row.collectorId && A.ACCOUNTS.get(row.collectorId));
-    const usage = { current: 'Đang thuê', upcoming: 'Chưa đến hiệu lực', expired: 'Đã hết hạn', terminated: 'Đã chấm dứt', liquidated: 'Đã thanh lý', ended: 'Đã kết thúc' }[contractPhase(c)] || '—';
+    const usage = { current: 'Đang thuê', pending_liquidation: 'Tạm ngưng chờ thanh lý', liquidated: 'Đã thanh lý', ended: 'Đã kết thúc' }[contractPhase(c)] || '—';
     return `<article class="tw-contract-point">
       <div class="tw-contract-point-h"><b>${U.esc(point.code || '—')}</b><span class="tag ${contractPhase(c) === 'current' ? 'ok' : ''}">${usage}</span></div>
       <div class="tw-contract-location"><span>Vị trí</span><b>${U.esc(loc.label || '—')}</b></div>
@@ -615,6 +627,10 @@
     // Mục "Đăng xuất" của sidebar (trader-portal) gọi auth-logout.
     'auth-logout': () => logout('Đã đăng xuất'),
     'tw-header-notifications': () => { S.headerPopover = S.headerPopover === 'notifications' ? null : 'notifications'; render(); },
+    'tw-header-notifications-all': () => {
+      S.headerPopover = null;
+      if (route() === 'thong-bao') render(); else location.hash = '#/thong-bao';
+    },
     'tw-header-account': () => { S.headerPopover = S.headerPopover === 'account' ? null : 'account'; render(); },
     'tw-header-account-profile': () => {
       S.headerPopover = null;

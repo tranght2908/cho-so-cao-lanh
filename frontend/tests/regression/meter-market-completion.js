@@ -1,38 +1,42 @@
+/* Hoàn tất chỉ số theo KỲ CỦA CHỢ: mốc meter lưu trên MarketPeriod; chợ này hoàn tất không khóa chợ khác.
+ * Migration: completionByMarket của kỳ chỉ số legacy được chuyển lên kỳ của từng chợ. */
 const assert = require('assert');
 const path = require('path');
 const { createApp } = require('./harness');
-const h = createApp(path.resolve(__dirname, '../..'));
-const A = h.A, db = A.db, P = '2026-09';
-const cl = db.stalls.find(x => x.market === 'CL' && x.hasMeter);
-const ttd = db.stalls.find(x => x.market === 'TTD' && x.hasMeter);
-const meter = { id: P, month: 9, year: 2026, status: 'CLOSED', completedBy: 'Legacy global', completedAt: 'old', completionByMarket: {
-  CL: { status: 'PENDING' }, TTD: { status: 'CLOSED', completedBy: 'TTD closer', completedAt: '2026-09-29 17:44' }
-} };
-db.meterPeriods = [meter];
-db.billingPeriods = [{ id: P, label: '09/2026', marketId: 'CL', status: 'PREPARING', startDate: '2026-09-01', endDate: '2026-09-30', dueDate: '2026-10-15' }];
-db.issuedPeriods = [];
-db.readings = [
-  { stallId: cl.id, period: '2026-08', elecPrev: 1, elecCur: 10, waterPrev: 1, waterCur: 5, status: 'RECORDED' },
-  { stallId: cl.id, period: P, elecPrev: 10, elecCur: null, waterPrev: 5, waterCur: null, status: 'PENDING' },
-  { stallId: ttd.id, period: P, elecPrev: 20, elecCur: 30, waterPrev: 10, waterCur: 15, status: 'RECORDED' }
-];
-db.invoices = [{ id: 'PT-TTD-09', market: 'TTD', period: P, stallId: ttd.id, traderId: ttd.traderId, amount: 1, paid: 0, status: 'unpaid' }];
-A.reindex();
 
-assert.equal(A.meterPeriodIsClosed(meter, 'CL'), false, 'CL override opens a legacy globally-closed period');
-assert.equal(A.meterPeriodIsClosed(meter, 'TTD'), true, 'TTD remains closed');
-A.ui.market = 'CL'; A.ui.f.mrPeriod = P;
+const ROOT = path.resolve(__dirname, '../..');
+// State đã lưu kiểu cũ: kỳ chỉ số 09/2026 dùng chung, TTD đã khóa riêng qua completionByMarket, CL chưa.
+const base = createApp(ROOT);
+const old = JSON.parse(base.localStorage.getItem('choso-caolanh-state'));
+old.billingPeriods = old.billingPeriods.filter(p => !(p.marketId && p.period === '2026-09'));
+old.billingPeriods.filter(p => !p.marketId && p.period === '2026-09').forEach(p => { delete p.superseded; });
+old.meterPeriods.filter(m => m.id === '2026-09').forEach(m => { m.completionByMarket = { CL: { status: 'PENDING' }, TTD: { status: 'CLOSED', completedBy: 'TTD closer', completedAt: '29/09/2026 17:44' } }; });
+delete old.periodModelVersion;
+const h = createApp(ROOT, { storage: { 'choso-caolanh-state': JSON.stringify(old) } }), A = h.A, S = A.features.finance.marketPeriod;
+
+assert.equal(S.get('TTD', '2026-09').meter.status, 'COMPLETED', 'TTD per-market completion migrated');
+assert.equal(S.get('TTD', '2026-09').meter.completedBy, 'TTD closer');
+assert(!S.get('CL', '2026-09').meter, 'CL stays open');
+assert.equal(A.meterPeriodIsClosed({ id: '2026-09' }, 'TTD'), true);
+assert.equal(A.meterPeriodIsClosed({ id: '2026-09' }, 'CL'), false);
+
+const login = (id, market) => { A.ui.currentDemoAccountId = id; A.ui.sessionAccountId = id; A.ui.market = market; A.syncAccountContext(); };
+login('AC-NV02', 'CL'); A.ui.f.mrPeriod = '2026-09';
 let html = A.VIEWS['dien-nuoc']();
-assert(html.includes('Đang ghi'), 'CL header resolves its own PENDING state');
-assert(!html.includes('Chỉ số đã được khóa'), 'CL is not rendered locked');
-assert(html.includes('Ghi chỉ số'), 'CL can enter readings while TTD is closed');
-A.ui.market = 'TTD';
+assert(html.includes('Đang ghi') || html.includes('Chờ ghi chỉ số'), 'CL header resolves its own state');
+assert(html.includes('Ghi chỉ số') || html.includes('Cập nhật') || html.includes('Kiểm tra'), 'CL can still record while TTD is completed');
+login('AC-NV07', 'TTD'); A.ui.f.mrPeriod = '2026-09';
 html = A.VIEWS['dien-nuoc']();
-assert(html.includes('Đã hoàn tất') && html.includes('TTD closer'), 'TTD header retains its own completion metadata');
+assert(html.includes('Đã hoàn tất'), 'TTD shows completed');
+assert(!html.includes('data-act="mr-complete-open"'), 'completed market has no complete action');
 
-let out = A.features.finance.billing.calculatePeriod('CL', P);
-assert(out.warnings.some(x => x.code === 'METER_PERIOD_NOT_CLOSED'), 'billing CL is blocked until CL closes');
-out = A.features.finance.billing.calculatePeriod('TTD', P);
-assert(!out.warnings.some(x => x.code === 'METER_PERIOD_NOT_CLOSED'), 'TTD completion does not depend on CL');
-
+// Hoàn tất CL không đổi TTD và ngược lại; Tổ trưởng không có quyền hoàn tất.
+login('AC-NV01', 'CL');
+assert(!A.canDo('dien-nuoc.chot-ky', 'CL'));
+const clPeriod = S.get('CL', '2026-09');
+S.meterPoints(clPeriod).forEach(st => { const r = S.readingOf(clPeriod, st.id); if (r) Object.assign(r, { elecCur: r.elecCur != null ? r.elecCur : (r.elecPrev || 0) + 10, waterCur: r.waterCur != null ? r.waterCur : (r.waterPrev || 0) + 1, reviewRequired: false, reviewedAt: '01/10/2026 08:00' }); });
+login('AC-NV02', 'CL');
+const out = S.completeMeter('CL', '2026-09', A.currentAccount());
+assert(out.ok, 'CL completed by its fee collector');
+assert.equal(S.get('TTD', '2026-09').meter.completedBy, 'TTD closer', 'TTD unchanged');
 console.log('meter-market-completion: OK');

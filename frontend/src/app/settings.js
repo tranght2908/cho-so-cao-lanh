@@ -4,11 +4,11 @@
 (function (A) {
   'use strict';
   const ui = A.ui;
-  const SETTINGS_TABS = [['kythu', 'Lịch & kỳ thu'], ['vaitro', 'Vai trò & phân quyền'], ['tichhop', 'Tích hợp'], ['nhatky', 'Nhật ký kiểm toán']];
+  const SETTINGS_TABS = [['vaitro', 'Vai trò & phân quyền'], ['tichhop', 'Tích hợp'], ['nhatky', 'Nhật ký kiểm toán']];
   const isSettingsTab = tab => SETTINGS_TABS.some(x => x[0] === tab);
   // Legacy state may still contain the removed `quytac` tab. Resolve it in memory
   // to the safe first tab; no fee-rule configuration is deleted or persisted here.
-  if (!isSettingsTab(ui.settingsTab)) ui.settingsTab = 'kythu';
+  if (!isSettingsTab(ui.settingsTab)) ui.settingsTab = 'vaitro';
 
   // Phase 6 STEP A: 3 tab giá (Đơn giá mặt bằng/Điện & nước/Dịch vụ khác) đã chuyển sang màn
   // "Chính sách thu và biểu phí" độc lập trong nhóm Tài chính (A.VIEWS['cau-hinh-gia']).
@@ -24,13 +24,12 @@
   }
 
   A.VIEWS['cai-dat'] = function () {
-    const tab = isSettingsTab(ui.settingsTab) ? ui.settingsTab : 'kythu';
+    const tab = isSettingsTab(ui.settingsTab) ? ui.settingsTab : 'vaitro';
     if (ui.settingsTab !== tab) ui.settingsTab = tab;
-    const body = tab === 'kythu' ? A.features.feeConfig.settingsKyThuHtml()
-      : tab === 'tichhop' ? settingsTichhopHtml()
+    const body = tab === 'tichhop' ? settingsTichhopHtml()
       : tab === 'nhatky' ? A.data.auditLogHtml()
       : A.features.accessControl.settingsVaitroHtml();
     return `${settingsTabBar(tab)}${body}`;
   };
-  A.ACT['settings-tab'] = el => { ui.settingsTab = isSettingsTab(el.dataset.id) ? el.dataset.id : 'kythu'; A.render(); };
+  A.ACT['settings-tab'] = el => { ui.settingsTab = isSettingsTab(el.dataset.id) ? el.dataset.id : 'vaitro'; A.render(); };
 })(window.APP);

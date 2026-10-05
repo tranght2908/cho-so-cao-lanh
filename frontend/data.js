@@ -232,6 +232,7 @@ window.DATA = (function () {
     no: { label: 'Nợ phí', color: '#de3b3d' },
     ngung: { label: 'Tạm ngừng', color: '#ef852e' },
     tranhchap: { label: 'Đang tranh chấp', color: '#7c54cd' },
+    choban_giao: { label: 'Chờ bàn giao', color: '#ef852e' },
     trong: { label: 'Còn trống', color: '#c9d3cf' }
   };
 

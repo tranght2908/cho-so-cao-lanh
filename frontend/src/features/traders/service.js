@@ -18,9 +18,8 @@
   ];
   service.list = function () { return repository.list(); };
   service.getProfile = function (id) { return repository.get(id); };
-  // Business lifecycle is derived at read time from contracts, never stored back on
-  // the trader record. A future contract is not active yet; an ended/terminated/
-  // liquidated valid contract proves the trader has operated before.
+  // Canonical business lifecycle is persisted by lifecycle.service; this facade is
+  // the only reader used by views and compatibility callers.
   service.BUSINESS_STATUS = {
     WAITING_ALLOCATION: 'WAITING_ALLOCATION',
     ACTIVE: 'ACTIVE',
@@ -28,17 +27,10 @@
   };
   service.deriveBusinessStatus = function (traderOrId, date) {
     const trader = typeof traderOrId === 'string' ? repository.get(traderOrId) : traderOrId;
-    const status = service.BUSINESS_STATUS;
-    if (!trader) return status.WAITING_ALLOCATION;
-    const contractService = A.features.contracts && A.features.contracts.service;
-    const pointService = A.features.businessPoints && A.features.businessPoints.service;
-    if (!contractService || !pointService) return status.WAITING_ALLOCATION;
-    const day = date || A.U.today();
-    const contracts = contractService.listByTrader(trader.id);
-    const validContract = c => !!pointService.get(c.businessPointId || c.stallId) && !!pointService.occupyingInterval(c);
-    if (contracts.some(c => validContract(c) && pointService.contractPhase(c, day) === 'current')) return status.ACTIVE;
-    if (contracts.some(c => validContract(c) && pointService.occupyingInterval(c).start <= day)) return status.INACTIVE;
-    return status.WAITING_ALLOCATION;
+    if (!trader) return service.BUSINESS_STATUS.WAITING_ALLOCATION;
+    const lifecycle = A.features.lifecycle && A.features.lifecycle.service;
+    if (lifecycle && lifecycle.recalculateTrader) lifecycle.recalculateTrader(trader);
+    return service.BUSINESS_STATUS[trader.status] || service.BUSINESS_STATUS.WAITING_ALLOCATION;
   };
   service.idNoTaken = function (idNo, excludeId) { return repository.idNoTaken(idNo, excludeId); };
   // HỒ SƠ TIỂU THƯƠNG DUY NHẤT THEO CHỢ (nguồn duy nhất cho tạo + sửa): trong CÙNG chợ không có 2 hồ sơ trùng SĐT
@@ -85,6 +77,7 @@
   // Trùng SĐT/CCCD trong cùng chợ → null, không ghi.
   service.create = function (profile) {
     if (service.validateProfileUnique(profile, profile && profile.id)) return null;
+    profile.status = service.BUSINESS_STATUS.WAITING_ALLOCATION;
     repository.add(profile); repository.save(); return profile;
   };
 })(window.APP);

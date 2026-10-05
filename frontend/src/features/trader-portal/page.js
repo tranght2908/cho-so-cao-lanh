@@ -382,10 +382,6 @@
     ensureMiniRegistrationModel();
     return A.db.marketSessions.filter(s => s.marketId === ui.market && s.status === 'REGISTRATION_OPEN' && s.registrationOpenAt <= U.today() && U.today() <= s.registrationCloseAt);
   }
-  function miniCollectingBusinessStateOk(invoices) {
-    const p = A.db.billingPeriods.find(x => x.id === ui.period) || A.db.billingPeriods[A.db.billingPeriods.length - 1];
-    return invoices.length && p && p.status === 'COLLECTING';
-  }
   function collectorActor() {
     const acc = A.currentAccount();
     return acc && D.STAFF.some(s => s.id === acc.code) ? acc.code : (acc ? acc.fullName : 'Mini app thu phí');
@@ -567,20 +563,11 @@
   // activeTraderProfile của phiên Tiểu thương — ĐÚNG hồ sơ mà mọi màn cổng đang dùng (không logic chọn thứ hai).
   // Dùng cho "Thông tin cá nhân" (accounts/profile.js) để không lệch hồ sơ khi đổi "Chợ đang xem".
   A.activeTraderProfile = () => trader();
-  // QUA_HAN_CHUYEN_CONG_NO: khoản đã chuyển công nợ không nộp theo QR thường (chỉ thu hồi nợ).
-  const unpaid = t => A.db.invoices.filter(i => i.traderId === t.id && i.status !== 'paid' && !(A.debtOf && A.debtOf(i))).sort((a, b) => a.due.localeCompare(b.due));
-  const collectorDebtors = () => {
-    const debtors = new Map();
-    A.db.invoices.filter(i => i.market === ui.market && i.status !== 'paid').forEach(i => {
-      const t = A.idx.trader.get(i.traderId);
-      if (!t) return;
-      const d = debtors.get(t.id) || { t, n: 0, amt: 0, over: 0 };
-      d.n++; d.amt += U.due(i); if (U.isOver(i)) d.over += U.due(i);
-      debtors.set(t.id, d);
-    });
-    return Array.from(debtors.values()).sort((a, b) => b.over - a.over || b.amt - a.amt);
-  };
-
+  // Khoản CẦN THANH TOÁN = chưa thu đủ VÀ kỳ của chợ đang được thu (market-period.canCollectInvoice). Khoản chưa trả của
+  // kỳ legacy/đã chốt chỉ còn để tra cứu, không thu tiếp; không có luồng công nợ (BR-07).
+  const PAY_CLOSED_MSG = 'Kỳ thu của chợ không còn nhận thanh toán (chưa phát hành, đã hoàn tất thu hoặc đã chốt kỳ).';
+  const payable = i => { const mp = A.features && A.features.finance && A.features.finance.marketPeriod; return !mp || mp.canCollectInvoice(i); };
+  const unpaid = t => A.db.invoices.filter(i => i.traderId === t.id && i.status !== 'paid' && payable(i)).sort((a, b) => a.due.localeCompare(b.due));
   // Reset luồng đăng nhập/kích hoạt Mini App (SĐT → xác nhận → OTP) về bước đầu — gọi khi đổi tiểu
   // thương mẫu/đăng xuất (đổi danh tính điện thoại thật sự), KHÔNG gọi từ `A.resetMiniRequestState`
   // (đổi account demo Web/BQL không nên làm mất phiên đăng nhập SĐT đang nhập dở trên "điện thoại").
@@ -591,32 +578,6 @@
   // component mới. "Xem chi tiết" tái dùng NGUYÊN action mini-tab có sẵn (chuyển sang tab Hợp đồng,
   // nơi đã có đủ thông tin hợp đồng chi tiết của điểm) — không tạo màn/route mới chỉ để xem thêm.
   const miniOwnsStall = (t, st) => t.stalls.indexOf(st.id) !== -1;
-  // THU_HOI_NO — làn Tiểu thương của swimlane (P chốt 29/09/2026): nhận nhắc nợ / thông báo cắt điện, quét QR thu
-  // nợ (trả ĐỦ nợ còn lại, nội dung CHOSO CN-… PT-…), nhận biên lai. Quyền: action:mini-app.tra-no-qr (trader) +
-  // sở hữu (account.traderId === debt.traderId) + chợ trong marketScopes — kiểm tra lại trong handler.
-  function miniDebtCard(t) {
-    const acc = A.currentAccount() || {}, own = A.ACCOUNTS.traderIdsOf(acc).indexOf(t.id) !== -1;
-    const debts = (A.db.debts || []).filter(d => d.traderId === t.id);
-    if (!debts.length) return '';
-    const canPay = own && A.canDo('mini-app.tra-no-qr', t.market);
-    const row = d => {
-      const i = A.idx.invoice.get(d.invoiceId), remain = i ? U.due(i) : d.amount;
-      const notes = (A.db.notifications || []).filter(n => n.debtId === d.id && n.traderId === t.id).sort((a, b) => String(a.at).localeCompare(String(b.at)));
-      const pays = A.db.payments.filter(p => p.debtId === d.id);
-      const tag = d.status === 'OPEN' ? '<span class="tag danger">Còn nợ</span>' : d.status === 'UNRECOVERABLE' ? '<span class="tag danger">⚡ Danh sách cắt điện</span>' : '<span class="tag ok">✓ Đã thanh toán nợ</span>';
-      return `<div style="border:1px solid #e3e7ef;border-radius:10px;padding:12px;margin-bottom:10px">
-        <div class="row" style="gap:8px;flex-wrap:wrap"><b>${d.id}</b><span class="small muted">khoản ${d.invoiceId} · kỳ ${U.per(d.period)} · hạn ${U.dmy(d.dueDate)}</span><span class="spacer"></span>${tag}</div>
-        <div style="margin:6px 0">Số nợ: <b>${U.money(d.status === 'CLOSED' ? d.amount : remain)}</b> · Gian ${d.stallIds.map(id => (A.idx.stall.get(id) || {}).code || id).join(', ')}</div>
-        ${notes.length ? `<div class="small" style="margin:6px 0"><b>Thông báo đã nhận</b>${notes.map(n => `<div style="padding:3px 0;border-bottom:1px dashed #e3e7ef">${U.dmy(n.at)} · ${U.esc(n.title)}<div class="muted">${U.esc(n.body || '')}</div></div>`).join('')}</div>` : ''}
-        ${d.status === 'OPEN' ? `<div class="row" style="gap:12px;align-items:center;flex-wrap:wrap;margin-top:8px"><div style="font-size:44px;line-height:1;border:1px solid #d9dfeb;border-radius:8px;padding:6px 10px">▦</div>
-          <div class="small">QR thu nợ · số tiền cố định <b>${U.money(remain)}</b><br>Nội dung: <b>CHOSO ${d.id} ${d.invoiceId}</b></div><span class="spacer"></span>
-          ${canPay ? `<button class="btn primary" data-act="mini-debt-pay" data-id="${d.id}">Quét QR & thanh toán (mô phỏng)</button>` : ''}</div>` : ''}
-        ${pays.length ? `<div class="small" style="margin-top:6px">${pays.map(p => `✓ <button class="link-btn" data-act="receipt" data-id="${p.receipt}">${p.receipt}</button> · ${U.esc(D.METHOD[p.method] || p.method)} · ${U.money(p.amount)} · ${U.dmy(p.date)} ${p.time || ''}`).join('<br>')}</div>` : ''}
-      </div>`;
-    };
-    return `<div class="card" style="margin-bottom:14px"><div class="card-h"><div><h3>Công nợ quá hạn của tôi</h3><div class="small muted">Trả đủ số nợ còn lại bằng QR thu nợ hoặc tiền mặt cho NV thu phí. Quá 7 ngày chưa trả: đưa vào danh sách cắt điện.</div></div></div>
-      <div class="card-b">${debts.sort((a, b) => a.dueDate.localeCompare(b.dueDate)).map(row).join('')}</div></div>`;
-  }
 
   function miniPointCard(t, st) {
     const c = st.contractId ? A.idx.contract.get(st.contractId) : null;
@@ -711,7 +672,7 @@
   // liệu cũ/thao tác khác — KHÔNG còn hành động "bổ sung & gửi lại" nào ở Mini App nữa vì không còn
   // luồng nào tạo NEEDS_SUPPLEMENT/PENDING_VERIFICATION từ Mini App).
   function screenProfileStatus(t) {
-    const status = t.profileStatus;
+    const status = A.features.traders.service.deriveBusinessStatus(t);
     const icon = status === 'NEEDS_SUPPLEMENT' ? '📝' : status === 'INACTIVE' ? '⛔' : '⏳';
     const title = status === 'NEEDS_SUPPLEMENT' ? 'Hồ sơ cần bổ sung' : status === 'INACTIVE' ? 'Hồ sơ đã ngừng hoạt động' : 'Hồ sơ chưa hoạt động';
     const body = status === 'NEEDS_SUPPLEMENT' ? (t.supplementNote || 'Vui lòng liên hệ Ban Quản lý chợ để biết chi tiết cần bổ sung.')
@@ -722,27 +683,6 @@
       <button class="btn sm" style="margin-top:8px" data-act="mini-logout">Đăng xuất</button></div>`;
   }
 
-  function screenPay(t) {
-    const m = mini(), list = unpaid(t), total = U.sum(list, U.due);
-    if (m.pay === 'done') {
-      const p = m.lastPays || [];
-      return `<div class="m-body" style="text-align:center"><div style="font-size:54px;margin-top:20px">✅</div><h3>Thanh toán thành công</h3>
-        <div class="m-card" style="text-align:left"><div class="m-list">
-          <div class="it"><span class="muted">Số tiền</span><b>${U.money(U.sum(p, x => x.amount))}</b></div>
-          <div class="it"><span class="muted">Biên lai</span><span>${p.map(x => x.receipt).join('<br>')}</span></div>
-          <div class="it"><span class="muted">Mã tra cứu</span><b>${p[0] ? p[0].lookup : ''}</b></div>
-          <div class="it"><span class="muted">Thời gian</span><span>${p[0] ? U.dmy(p[0].date) + ' ' + p[0].time : ''}</span></div></div></div>
-        <div class="small muted">Biên lai điện tử đã lưu trong mục Hóa đơn và gửi qua Zalo OA</div>
-        <button class="m-btn solid" data-act="mini-home">Về trang chủ</button></div>`;
-    }
-    const content = 'CHOSO ' + t.id;
-    return `<div class="m-body"><button class="btn sm" style="align-self:flex-start" data-act="mini-home">‹ Quay lại</button>
-      <div class="m-card" style="text-align:center"><div class="small muted">Quét mã bằng ứng dụng ngân hàng bất kỳ</div>
-        <div style="margin:10px auto;width:190px">${U.qr(content + total, 190)}</div>
-        <div style="font-size:var(--font-size-kpi);font-weight:800">${U.money(total)}</div><div class="small muted">Nội dung: ${content} · ${list.length} khoản</div></div>
-      <div class="m-card small">${list.map(i => `<div class="row" style="padding:3px 0"><span style="flex:1">Kỳ ${U.per(i.period)} · ${U.invStall(i).code}</span><b>${U.money(U.due(i))}</b></div>`).join('')}</div>
-      <button class="m-btn solid" data-act="mini-paid">Giả lập: đã chuyển khoản thành công</button></div>`;
-  }
   function screenSessionPay(t) {
     const m = mini();
     const reg = (A.db.sessionRegistrations || []).find(r => r.id === m.sessionPayId);
@@ -777,7 +717,7 @@
     // (thay vì 1 dòng gọn cũ) để có chỗ cho nút "Gửi yêu cầu tách điểm"/"Xem yêu cầu đang xử lý".
     return `<div class="m-card m-due"><div class="small" style="opacity:.85">Tổng cần thanh toán</div><div class="amt">${U.money(total)}</div>
         ${over.length ? `<div class="small" style="background:rgba(255,255,255,.15);padding:6px 10px;border-radius:8px;margin-bottom:10px">⚠ ${over.length} khoản quá hạn – vui lòng thanh toán sớm</div>` : ''}
-        ${total ? '<button class="m-btn" data-act="mini-pay">Thanh toán bằng QR</button>' : '<div class="small">Bạn không có khoản nào cần thanh toán 🎉</div>'}</div>
+        ${total ? '' : '<div class="small">Bạn không có khoản nào cần thanh toán 🎉</div>'}</div>
       ${t.stalls.map(id => miniPointCard(t, A.idx.stall.get(id))).join('')}
       <div class="m-card"><b>Thông báo mới</b><div class="m-list">${notis.map(n => `<div class="it"><span>${U.esc(n.title)}</span><span class="muted small">${U.dmy(n.at).slice(0, 5)}</span></div>`).join('') || '<div class="small muted">Chưa có</div>'}</div></div>
       ${mine.length ? `<div class="m-card"><b>Phản ánh của tôi</b><div class="m-list">${mine.map(i => `<div class="it"><span>${U.esc(i.title)}</span><span class="tag info">${D.INCIDENT_STATES.find(s => s.id === i.state).label}</span></div>`).join('')}</div></div>` : ''}`;
@@ -806,7 +746,7 @@
         <div class="it"><span class="muted">Thời hạn</span><span>${U.dmy(c.start)} – ${U.dmy(c.end)}</span></div>
         <div class="it"><span class="muted">Đơn giá</span><span>${U.unitLabel(s)}</span></div>
         ${c.monthly ? `<div class="it"><span class="muted">Giá dịch vụ/tháng</span><b>${U.money(c.monthly)}</b></div>` : ''}
-        <div class="it"><span class="muted">Trạng thái</span><span class="tag ${c.status === 'hieuluc' ? 'ok' : ''}">${c.status === 'hieuluc' ? 'Đang hiệu lực' : 'Đã thanh lý'}</span></div></div>
+        <div class="it"><span class="muted">Trạng thái</span><span class="tag ${c.status === 'ACTIVE' ? 'ok' : c.status === 'PENDING_LIQUIDATION' ? 'warn' : ''}">${c.status === 'ACTIVE' ? 'Đang hiệu lực' : c.status === 'PENDING_LIQUIDATION' ? 'Chờ thanh lý' : 'Đã thanh lý'}</span></div></div>
         <button class="m-btn" style="border:1px solid var(--line);margin-top:8px" data-act="mini-pdf">📄 Xem bản hợp đồng (PDF)</button></div>`;
     }).join('');
   }
@@ -895,8 +835,7 @@
     // Hồ sơ CHƯA ACTIVE (NEEDS_SUPPLEMENT/INACTIVE — dữ liệu cũ/gán tay, không còn phát sinh từ Mini
     // App) → chỉ xem trạng thái, KHÔNG vào app bình thường (mục 19 yêu cầu correction: Profile
     // lifecycle độc lập với Account access lifecycle).
-    else if (t.profileStatus && t.profileStatus !== 'ACTIVE') body = screenProfileStatus(t);
-    else if (m.pay) body = screenPay(t);
+    else if (A.features.traders.service.deriveBusinessStatus(t) === 'INACTIVE') body = screenProfileStatus(t);
     else {
       const f = { home: tabHome, bills: tabBills, contract: tabContract, register: tabRegister, notice: tabNotice, report: tabReport }[m.tab];
       body = `<div class="m-head"><div class="hi">Xin chào,</div><div class="nm">${U.esc(t.name)}</div><div class="hi">${U.esc(U.market(t.market).short)}</div></div><div class="m-body">${f(t)}</div>
@@ -906,13 +845,8 @@
   }
   function collectorPhone() {
     const m = mini();
-    const list = collectorDebtors();
     const sessionDues = miniSessionCashDues();
     const selectedSession = m.collectSessionRegId ? sessionDues.find(x => x.reg.id === m.collectSessionRegId) : null;
-    const selectedRaw = m.collectTraderId ? A.idx.trader.get(m.collectTraderId) : null;
-    const selected = selectedRaw && selectedRaw.market === ui.market ? selectedRaw : null;
-    const due = selected ? unpaid(selected) : [];
-    const total = selected ? U.sum(due, U.due) : 0;
     let body;
     if (m.collectDone) {
       const pays = m.lastPays || [];
@@ -934,21 +868,13 @@
           </div></div>
         <div class="m-card m-due"><div class="small" style="opacity:.85">Tổng cần thu</div><div class="amt">${U.money(selectedSession.amount)}</div>
           <button class="m-btn" data-act="mini-session-cash-paid" ${isCollectorMini() ? '' : 'disabled'}>Ghi nhận thu phí theo phiên trực tiếp</button></div></div>`;
-    } else if (selected) {
-      body = `<div class="m-body"><button class="btn sm" style="align-self:flex-start" data-act="mini-collector-home">‹ Quay lại</button>
-        <div class="m-card"><b>${U.esc(selected.name)}</b><div class="small muted">${selected.id} · ${U.maskPhone(selected.phone)} · ${U.mShort(selected.market)}</div>
-          <div class="m-list" style="margin-top:8px">${due.map(i => `<div class="it"><span>Kỳ ${U.per(i.period)}<div class="small muted">${U.invStall(i).code}</div></span><b>${U.money(U.due(i))}</b></div>`).join('') || '<div class="small muted">Không còn khoản phải thu</div>'}</div></div>
-        <div class="m-card m-due"><div class="small" style="opacity:.85">Tổng cần thu</div><div class="amt">${U.money(total)}</div>
-          <button class="m-btn" data-act="mini-collect-paid" ${total > 0 && isCollectorMini() && miniCollectingBusinessStateOk(due) ? '' : 'disabled'}>Ghi nhận thu phí cố định trực tiếp</button></div></div>`;
     } else {
       body = `<div class="m-head"><div class="hi">Xin chào,</div><div class="nm">${U.esc(A.currentAccount().fullName)}</div><div class="hi">${U.esc(U.market(ui.market).short)}</div></div>
-        <div class="m-body"><div class="m-card m-due"><div class="small" style="opacity:.85">Thu tiền trực tiếp hôm nay</div><div class="amt">${list.length + sessionDues.length}</div><div class="small">Theo phiên ${U.money(U.sum(sessionDues, x => x.amount))} · Cố định ${U.money(U.sum(list, x => x.amt))}</div></div>
+        <div class="m-body"><div class="m-card m-due"><div class="small" style="opacity:.85">Thu tiền trực tiếp hôm nay</div><div class="amt">${sessionDues.length}</div><div class="small">Theo phiên ${U.money(U.sum(sessionDues, x => x.amount))}</div></div>
         ${sessionDues.length ? `<div class="m-card"><b>Thu phí theo phiên trực tiếp</b><div class="small muted" style="margin-top:4px">Khoản đăng ký phiên chợ quê TTĐ cần thu trước điểm danh.</div><div class="m-list" style="margin-top:8px">${sessionDues.slice(0, 12).map(x => `<button class="it" style="width:100%;text-align:left;background:transparent;border:0;cursor:pointer" data-act="mini-session-cash-open" data-id="${x.reg.id}">
           <span><b>${U.esc(x.trader.name)}</b><div class="small muted">${U.esc(x.reg.code || x.reg.id)} · trước điểm danh ${U.dmy(x.session.sessionDate)}</div></span>
           <span style="text-align:right"><b>${U.money(x.amount)}</b><div class="small muted">${U.esc(x.deadline || '')}</div></span></button>`).join('')}</div></div>` : ''}
-        <div class="m-card"><b>Thu phí cố định trực tiếp</b><div class="small muted" style="margin-top:4px">Các khoản phí tháng/quý còn phải thu trong kỳ đang thu.</div><div class="m-list" style="margin-top:8px">${list.slice(0, 12).map(x => `<button class="it" style="width:100%;text-align:left;background:transparent;border:0;cursor:pointer" data-act="mini-collect-open" data-id="${x.t.id}">
-          <span><b>${U.esc(x.t.name)}</b><div class="small muted">${x.t.stalls.map(id => A.idx.stall.get(id).code).join(', ')} · ${x.n} khoản</div></span>
-          <span style="text-align:right"><b>${U.money(x.amt)}</b>${x.over ? `<div class="small" style="color:#d6453b">Quá hạn ${U.money(x.over)}</div>` : ''}</span></button>`).join('') || '<div class="small muted">Không có khoản cần thu</div>'}</div></div></div>`;
+        <div class="m-card"><b>Thu phí tháng</b><div class="small muted" style="margin-top:4px">Khoản phải thu tháng được ghi nhận tại màn Thu tiền &amp; biên lai theo kỳ của chợ.</div></div></div>`;
     }
     return `<div class="phone"><div class="screen"><div class="notch"><span>9:41</span><span>□□□ 4G 🔋</span></div>${body}</div></div>`;
   }
@@ -979,7 +905,7 @@
     const list = unpaid(t), total = U.sum(list, U.due), over = list.filter(U.isOver);
     const incidents = portalIncidents(t), open = incidents.filter(i => i.state !== 'hoanthanh' && i.state !== 'dong');
     const notices = notisFor(t).slice(0, 3), stalls = portalStalls(t);
-    const cons = portalContracts(t).filter(c => c.status === 'hieuluc');
+    const cons = portalContracts(t).filter(c => c.status === 'ACTIVE');
     return `<div class="merchant-kpis">
         ${portalKpi('Điểm kinh doanh', String(stalls.length), cons.length + ' hợp đồng đang hiệu lực', 'blue')}
         ${portalKpi('Còn phải nộp', U.money(total), list.length ? list.length + ' khoản chưa nộp' : 'Đã nộp đủ', total ? 'warn' : 'green')}
@@ -1070,7 +996,13 @@
   const PAY_SOON_DAYS = 7;
   const PAY_METHOD_LABEL = { tm: 'Tiền mặt', ck: 'Chuyển khoản', qr: 'Chuyển khoản (QR)' };
   const payMethodLabel = m => PAY_METHOD_LABEL[m] || (D.METHOD && D.METHOD[m]) || m || '—';
-  const payPending = () => mini().payPending || (mini().payPending = {});
+  // Transfer intent is persisted in the existing bank collection. It is not a
+  // successful payment and therefore never changes the invoice by itself.
+  const transferIntent = invoiceId => (A.db.bank || []).find(x => x && x.invoiceId === invoiceId && x.intentType === 'TRADER_TRANSFER' && x.status === 'PENDING') || null;
+  const nextTransferIntentId = () => 'SK' + U.pad((A.db.bank || []).reduce((m, x) => Math.max(m, Number(String((x || {}).id || '').replace(/\D/g, '')) || 0), 0) + 1, 4);
+  // Compatibility adapter for existing payment UI handlers; records now come
+  // from A.db.bank and therefore survive reload rather than ui.mini.
+  const payPending = () => (A.db.bank || []).filter(x => x && x.intentType === 'TRADER_TRANSFER' && x.status === 'PENDING').reduce((map, x) => { map[x.invoiceId] = x; return map; }, {});
   const payOwnInvoice = (t, id) => { const i = id ? A.idx.invoice.get(id) : null; return i && t && i.traderId === t.id && inMiniScopeMarket(i.market) && i.billingStatus !== 'DRAFT' ? i : null; };
   const payOpenList = t => unpaid(t).filter(i => i.billingStatus !== 'DRAFT');
   const payPaidList = t => portalInvoices(t).filter(i => i.status === 'paid');
@@ -1081,7 +1013,7 @@
   const payBankAccount = market => (A.BANK_ACCOUNTS ? A.BANK_ACCOUNTS.listByMarket(market) : []).find(a => a.status === 'active' && a.isCollectionAccount) || null;
   function payState(i) {
     if (i.status === 'paid') return 'paid';
-    if (payPending()[i.id]) return 'pending';
+    if (transferIntent(i.id)) return 'pending';
     if (U.isOver(i)) return 'over';
     if (U.days(U.today(), i.due) <= PAY_SOON_DAYS) return 'soon';
     return 'unpaid';
@@ -1139,14 +1071,12 @@
     const open = payOpenList(t), paid = payPaidList(t), over = open.filter(U.isOver), soon = open.filter(i => payState(i) === 'soon');
     const nextDue = open.filter(i => !U.isOver(i)).map(i => i.due).sort()[0];
     const tab = mini().payTab === 'history' ? 'history' : 'due';
-    // THU_HOI_NO: khoản đã chuyển nợ quá hạn (CN-…) thanh toán qua QR thu nợ riêng (miniDebtCard), không nằm trong bảng dưới.
     return `<div class="tp-pay-head"><h1>Thanh toán</h1><p>Theo dõi và thanh toán các khoản phí tại chợ.</p></div>
       <div class="merchant-kpis">
         ${portalKpi('Cần thanh toán', U.money(U.sum(open, U.due)), open.length + ' khoản', open.length ? 'warn' : 'green')}
         ${over.length ? portalKpi('Quá hạn', over.length + ' khoản', 'Tổng: ' + U.money(U.sum(over, U.due)), 'danger') : portalKpi('Sắp đến hạn', soon.length + ' khoản', nextDue ? 'Hạn gần nhất: ' + U.dmy(nextDue) : 'Không có khoản sắp đến hạn', soon.length ? 'warn' : 'green')}
         ${portalKpi('Đã thanh toán', paid.length + ' khoản', 'Tổng: ' + U.money(U.sum(paid, i => i.amount)), 'blue')}
       </div>
-      ${miniDebtCard(t)}
       <section class="merchant-panel merchant-block tp-pay-panel">
         <div class="merchant-tabs"><button class="${tab === 'due' ? 'active' : ''}" data-act="tp-pay-tab" data-id="due">Cần thanh toán (${open.length})</button><button class="${tab === 'history' ? 'active' : ''}" data-act="tp-pay-tab" data-id="history">Lịch sử thanh toán</button></div>
         ${tab === 'due' ? payDueTable(t, open) : payHistoryHtml(t)}
@@ -1191,7 +1121,7 @@
     </div><div class="modal-f"><button class="btn" data-act="tp-pay-method" data-id="${U.esc(i.id)}">Quay lại</button>${bank ? `<button class="btn primary" data-act="tp-pay-transfer-start" data-id="${U.esc(i.id)}">Tôi sẽ chuyển khoản ngay</button>` : ''}</div>`, true);
   }
   function payPendingModal(i) {
-    const x = payPending()[i.id] || {};
+    const x = transferIntent(i.id) || {};
     A.modal(A.mHead('Đang chờ ghi nhận giao dịch') + `<div class="modal-b tp-pay-modal">
       <div class="tp-pay-state is-pending"><b>Đang chờ ghi nhận giao dịch</b><p>Hệ thống đang kiểm tra và ghi nhận giao dịch chuyển khoản của bạn.</p></div>
       <div class="tp-pay-meta"><div><span>Số tiền</span><b>${U.money(U.due(i))}</b></div><div><span>Nội dung</span><b>${U.esc(x.ref || payReference(i))}</b></div><div><span>Ngân hàng</span><b>${U.esc(x.bankName || '—')}</b></div><div><span>Thời gian khởi tạo</span><b>${x.at ? U.dmy(x.at.slice(0, 10)) + ' ' + U.esc(x.at.slice(11)) : '—'}</b></div></div>
@@ -1443,9 +1373,16 @@
     'tp-pay-transfer-start': el => {
       const i = payGuard(el); if (!i) return;
       if (i.status === 'paid') { payDetailModal(i); return; }
+      if (!payable(i)) { A.closeModal(); U.toast(PAY_CLOSED_MSG); return; }
       const bank = payBankAccount(i.market);
       if (!bank) { U.toast('Chợ chưa khai báo tài khoản nhận chuyển khoản.'); return; }
-      if (!payPending()[i.id]) payPending()[i.id] = { at: U.today() + ' ' + U.nowTime(), ref: payReference(i), bankName: bank.bankName || A.BANK_ACCOUNTS.bankName(bank.bankCode) };
+      if (!transferIntent(i.id)) {
+        A.db.bank.push({ id: nextTransferIntentId(), intentType: 'TRADER_TRANSFER', invoiceId: i.id, traderId: i.traderId,
+          market: i.market, marketId: i.market, periodId: i.billingPeriodId || '', amount: U.due(i), bankAccountId: bank.id,
+          transferContent: payReference(i), ref: payReference(i), bankName: bank.bankName || A.BANK_ACCOUNTS.bankName(bank.bankCode),
+          createdAt: U.today() + ' ' + U.nowTime(), at: U.today() + ' ' + U.nowTime(), status: 'PENDING', matched: false });
+        A.save();
+      }
       A.render(); payPendingModal(i);
     },
     'tp-pay-pending': el => { const i = payGuard(el); if (!i) return; if (i.status === 'paid') { const p = payLastPayment(i); if (p) paySuccessModal(i, p); else payDetailModal(i); return; } payPendingModal(i); },
@@ -1453,14 +1390,16 @@
     'tp-pay-refresh': el => {
       if (A.refreshSharedState) A.refreshSharedState();
       const i = payGuard(el); if (!i) return;
-      if (i.status === 'paid') { const p = payLastPayment(i); delete payPending()[i.id]; A.render(); if (p) paySuccessModal(i, p); else payDetailModal(i); return; }
+      if (i.status === 'paid') { const p = payLastPayment(i); A.render(); if (p) paySuccessModal(i, p); else payDetailModal(i); return; }
       U.toast('Chưa có giao dịch được ghi nhận. Vui lòng thử lại sau.');
       payPendingModal(i);
     },
-    // DEMO PROTOTYPE: mô phỏng ngân hàng báo có qua đúng cơ chế sẵn có A.applyPayment (như 'mini-paid'), thu ĐỦ số còn lại.
+    // DEMO PROTOTYPE: mô phỏng ngân hàng báo có qua A.applyPayment, thu ĐỦ số còn lại. Vẫn phải qua trạng thái kỳ của chợ:
+    // không nhận chuyển khoản trước phát hành, sau Hoàn tất thu, sau đối soát hay khi kỳ đã chốt.
     'tp-pay-demo-bank': el => {
       const i = payGuard(el); if (!i) return;
       if (i.status === 'paid') { const p = payLastPayment(i); if (p) paySuccessModal(i, p); return; }
+      if (!payable(i)) { delete payPending()[i.id]; A.closeModal(); A.render(); U.toast(PAY_CLOSED_MSG); return; }
       if (!payPending()[i.id]) { U.toast('Chưa khởi tạo chuyển khoản cho khoản thu này.'); return; }
       const pays = A.applyPayment([i.id], U.due(i), 'ck', 'Hệ thống');
       if (!pays.length || i.status !== 'paid') { U.toast('Không ghi nhận được giao dịch.'); return; }
@@ -1486,28 +1425,11 @@
       A.render(); payDetailModal(i);
     },
     'mini-home': () => { mini().pay = null; mini().tab = 'home'; A.render(); },
-    'mini-pay': () => { mini().pay = 'qr'; A.render(); },
-    'mini-paid': () => {
-      const t = trader();
-      if (!isTraderMini() || !t || !inMiniScopeMarket(t.market)) { U.toast('Không có quyền thanh toán cho tiểu thương này'); return; }
-      const list = unpaid(t);
-      const pays = list.length ? A.applyPayment(list.map(i => i.id), U.sum(list, U.due), 'qr', 'Mini app') : [];
-      // THU_HOI_NO: nợ quá hạn trả qua QR thu nợ (nội dung mã nợ) → map về khoản thu gốc.
-      (A.db.debts || []).filter(d => d.traderId === t.id && d.status === 'OPEN').forEach(d => { pays.push.apply(pays, A.payDebtByQr(d.id, 'Mini app')); });
-      mini().lastPays = pays; mini().pay = 'done'; A.render();
-      U.toast('Ngân hàng báo có · hệ thống tự ghi nhận ' + U.money(U.sum(pays, p => p.amount)));
-    },
-    'mini-collect-open': el => {
-      const t = A.idx.trader.get(el.dataset.id);
-      if (!t || t.market !== ui.market || !isCollectorMini() || !A.canDirectCollect(t.market)) return;
-      Object.assign(mini(), { collectTraderId: t.id, collectDone: false, lastPays: null });
-      A.render();
-    },
-    'mini-collector-home': () => { Object.assign(mini(), { collectTraderId: null, collectSessionRegId: null, collectDone: false, lastPays: null }); A.render(); },
+    'mini-collector-home': () => { Object.assign(mini(), { collectSessionRegId: null, collectDone: false, lastPays: null }); A.render(); },
     'mini-session-cash-open': el => {
       const due = miniSessionCashDues().find(x => x.reg.id === el.dataset.id);
       if (!due || !isCollectorMini() || !A.canDirectCollect(due.payment.marketId)) return;
-      Object.assign(mini(), { collectTraderId: null, collectSessionRegId: due.reg.id, collectDone: false, lastPays: null });
+      Object.assign(mini(), { collectSessionRegId: due.reg.id, collectDone: false, lastPays: null });
       A.render();
     },
     'mini-session-cash-paid': () => {
@@ -1522,17 +1444,6 @@
       A.render();
       A.showReceipt([done.ledgerPayment], { autoPrint: true });
       U.toast('Đã ghi nhận thu ' + U.money(done.ledgerPayment.amount));
-    },
-    'mini-collect-paid': () => {
-      const t = mini().collectTraderId ? A.idx.trader.get(mini().collectTraderId) : null;
-      if (!t || !A.canDirectCollect(t.market)) { U.toast('Chỉ được thu trực tiếp tiền mặt cho Chợ quê TTĐ trong phạm vi tài khoản'); return; }
-      const list = unpaid(t);
-      if (!list.length) { U.toast('Tiểu thương không còn khoản phải thu'); return; }
-      if (!miniCollectingBusinessStateOk(list)) { U.toast('Chỉ thu trực tiếp cho kỳ đang ở trạng thái Đang thu'); return; }
-      const pays = A.applyPayment(list.map(i => i.id), U.sum(list, U.due), 'tm', collectorActor());
-      mini().lastPays = pays; mini().collectDone = true; A.render();
-      A.showReceipt(pays, { autoPrint: true });
-      U.toast('Đã ghi nhận thu ' + U.money(U.sum(pays, p => p.amount)));
     },
     'mini-bill': el => { mini().bill = mini().bill === el.dataset.id ? null : el.dataset.id; A.render(); },
     'mini-pdf': () => U.toast('Mở bản số hóa hợp đồng (PDF) – minh họa'),
@@ -1586,18 +1497,9 @@
       if (!miniComplaintAllowed(t, i) || !miniCanRateComplaint(i)) { U.toast('Phản ánh đã đóng hoặc chưa hoàn thành nên không thể đánh giá.'); return; }
       miniComplaintRateModal(i);
     },
-    'mini-debt-pay': el => {
-      const t = trader(), acc = A.currentAccount() || {}, d = (A.db.debts || []).find(x => x.id === el.dataset.id);
-      if (!U.can('mini-app') || !isTraderMini() || !t || !d || d.traderId !== t.id || A.ACCOUNTS.traderIdsOf(acc).indexOf(t.id) === -1 || !inMiniScopeMarket(d.market) || !A.canDo('mini-app.tra-no-qr', d.market)) { U.toast('Không có quyền thanh toán khoản nợ này'); return; }
-      if (d.status !== 'OPEN') { U.toast(d.status === 'UNRECOVERABLE' ? 'Khoản nợ đã vào danh sách cắt điện — không nhận thanh toán' : 'Khoản nợ đã được thanh toán'); A.render(); return; }
-      const pays = A.payDebtByQr(d.id, 'Mini app');
-      if (!pays.length) { U.toast('Không ghi nhận được thanh toán'); return; }
-      A.render(); A.showReceipt(pays, { autoPrint: false });
-      U.toast('Ngân hàng báo có · đã thanh toán nợ ' + d.id + ' (' + U.money(U.sum(pays, p => p.amount)) + ')');
-    },
     'mini-report': () => {
       const t = trader(), stall = A.idx.stall.get(A.$('#mr-stall').value);
-      if (!U.can('mini-app') || !isTraderMini() || !t || !stall || !miniOwnsStall(t, stall) || !inMiniScopeMarket(stall.market) || (t.profileStatus && t.profileStatus !== 'ACTIVE')) {
+      if (!U.can('mini-app') || !isTraderMini() || !t || !stall || !miniOwnsStall(t, stall) || !inMiniScopeMarket(stall.market) || A.features.traders.service.deriveBusinessStatus(t) === 'INACTIVE') {
         U.toast('Không có quyền gửi phản ánh cho điểm kinh doanh này.');
         return;
       }

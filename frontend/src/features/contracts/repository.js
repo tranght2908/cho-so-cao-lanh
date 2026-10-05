@@ -37,24 +37,43 @@
     c.scanned = true;
     return c;
   };
-  // Status 'chamdut' + termination payload; the draft attachment is consumed.
+  // Gia hạn cập nhật cùng một hợp đồng; lịch sử được lưu riêng để giữ kỳ trước.
+  repository.applyRenewal = function (id, renewal) {
+    const c = repository.getById(id);
+    if (!c) return null;
+    const renewals = Array.isArray(A.db.contractRenewals) ? A.db.contractRenewals : (A.db.contractRenewals = []);
+    if (renewals.some(x => x && x.contractId === id && x.renewalNo === renewal.renewalNo)) return null;
+    c.end = renewal.newEndDate;
+    if (renewal.additionalTerms != null) c.additionalTerms = renewal.additionalTerms;
+    renewals.push(renewal);
+    return c;
+  };
+  // Canonical pending-liquidation state + termination payload.
   repository.applyTermination = function (id, termination) {
     const c = repository.getById(id);
     if (!c) return null;
-    c.status = 'chamdut';
+    c.status = 'PENDING_LIQUIDATION';
     c.termination = termination;
+    c.endReason = 'EARLY_TERMINATION';
+    c.terminatedAt = termination.date;
+    c.terminationReason = termination.reason;
+    c.terminationDetail = termination.detail;
+    c.terminatedBy = termination.terminatedBy || '';
     delete c._terminationDraftAttachment;
     return c;
   };
-  // Status 'thanhly' + liquidation fields in legacy order; the draft is consumed.
+  // Canonical liquidated state + liquidation fields; the draft is consumed.
   repository.applyLiquidation = function (id, liquidation) {
     const c = repository.getById(id);
     if (!c) return null;
-    c.status = 'thanhly';
+    c.status = 'LIQUIDATED';
+    c.endReason = c.endReason || 'EXPIRED';
     c.liquidatedAt = liquidation.liquidatedAt;
+    c.liquidatedBy = liquidation.liquidatedBy || '';
     c.liquidationNote = liquidation.liquidationNote;
     c.liquidationChecklist = liquidation.liquidationChecklist;
     c.liquidationSignedCopies = liquidation.liquidationSignedCopies;
+    c.handoverCondition = liquidation.handoverCondition || '';
     delete c._liquidationDraft;
     return c;
   };

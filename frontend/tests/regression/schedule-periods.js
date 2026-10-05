@@ -1,61 +1,57 @@
+/* Lịch nghiệp vụ (template) → kỳ thu tự động. Lịch chỉnh ở Thông báo đa kênh › Thiết lập tự động › Lịch nghiệp vụ
+ * (action:thong-bao.lich-nghiep-vu — Quản trị hệ thống + Tổ trưởng), lưu ở SERVICE_CFG.billingCycle (key serviceconfig hiện có).
+ * Kỳ đã tạo giữ snapshot ngày; sửa lịch chỉ áp dụng cho kỳ tạo sau. Màn tạo kỳ thủ công / Lịch & kỳ thu cũ đã retire. */
 const assert = require('assert');
 const path = require('path');
 const { createApp } = require('./harness');
 
 const h = createApp(path.resolve(__dirname, '../..'));
-const A = h.A;
-A.ui.currentDemoAccountId = 'AC-QT01';
-A.ui.sessionAccountId = 'AC-QT01';
-A.ui.role = 'system_admin';
-A.ui.market = 'CL';
-A.ui.settingsTab = 'kythu';
-const beforePeriods = new Map((A.db.billingPeriods || []).filter(p => ['2026-09', '2026-10'].includes(p.id)).map(p => [p.id, JSON.stringify(p)]));
-const beforeNotifications = JSON.stringify(A.db.notificationEventConfigs || []);
-const beforeBilling = JSON.stringify({ invoices: A.db.invoices, payments: A.db.payments });
+const A = h.A, S = A.features.finance.marketPeriod;
+const login = id => { A.ui.currentDemoAccountId = id; A.ui.sessionAccountId = id; A.ui.market = 'CL'; A.syncAccountContext(); };
+const lastToast = () => h.trace.toasts[h.trace.toasts.length - 1] || '';
+const before = new Map(A.db.billingPeriods.map(p => [p.id, JSON.stringify(p)]));
 
-let html = A.VIEWS['cai-dat']();
-assert(html.includes('Lịch & kỳ thu'), 'renamed tab content renders');
-assert(html.includes('KỲ THU HIỆN TẠI') && html.includes('LỊCH THU MẶC ĐỊNH') && html.includes('DANH SÁCH KỲ THU'), 'new schedule layout renders');
-assert(html.includes('Nhắc thanh toán lần 1') && html.includes('Nhắc thanh toán lần 2'), 'legacy periods receive non-mutating reminder-date display fallback');
-assert((A.db.billingPeriods || []).some(p => p.id === '2026-09'), 'existing 09/2026 remains');
-assert((A.db.billingPeriods || []).some(p => p.id === '2026-10'), 'existing 10/2026 remains');
+// Màn cũ không còn: không có handler tạo kỳ thủ công / thiết lập lịch trong Cài đặt.
+['cfg-create-period-open', 'cfg-manual-create', 'cfg-schedule-open', 'cfg-schedule-save', 'cfg-period-create'].forEach(k => assert(!A.ACT[k], 'retired ' + k));
 
-h.act('cfg-schedule-open');
-assert(h.modal().includes('THIẾT LẬP LỊCH THU MẶC ĐỊNH'), 'default schedule modal opens');
-assert(!h.modal().includes('Dự kiến phát hành'), 'default schedule no longer configures an expected issue date');
-assert(!h.modal().includes('NHẮC THANH TOÁN'), 'payment reminders are not split into a separate section');
-assert(h.modal().includes('THU & THANH TOÁN'), 'collection and payment milestones share one section');
-assert.equal((h.modal().match(/cfg-schedule-form-row/g) || []).length, 6, 'default schedule has exactly six milestones');
-const originalPrep = A.SERVICE_CFG.cycle().preparationDay;
-A.CH['cfg-schedule-day']({ value: '27', dataset: { key: 'preparationDay' } });
-assert.equal(A.ui.cfgScheduleDraft.preparationDay, 27, 'timeline draft updates immediately');
-assert(/>27\/\d{2}\/\d{4}</.test(h.modal()), 'preview recalculates concrete dates');
-A.CH['cfg-schedule-day']({ value: '1', dataset: { key: 'reminder1Day' } });
-h.act('cfg-schedule-save');
-assert(h.trace.toasts.at(-1).includes('Nhắc thanh toán lần 1 phải sau ngày bắt đầu thu'), 'invalid schedule order is rejected with a clear message');
-assert(h.modal().includes('Nhắc thanh toán lần 1 phải sau ngày bắt đầu thu'), 'invalid schedule order is shown in the popup');
-A.CH['cfg-schedule-day']({ value: '5', dataset: { key: 'reminder1Day' } });
-h.act('cfg-schedule-save');
-assert.equal(A.SERVICE_CFG.cycle().preparationDay, 27, 'default schedule saves');
-assert(h.localStorage.getItem(A.SERVICE_CFG.KEY).includes('"preparationDay":27'), 'schedule persists to existing config storage');
-assert(!h.localStorage.getItem(A.SERVICE_CFG.KEY).includes('"issueDay"'), 'legacy expected issue date is removed from saved schedule config');
-beforePeriods.forEach((snapshot, id) => assert.equal(JSON.stringify(A.db.billingPeriods.find(p => p.id === id)), snapshot, 'saving default schedule does not mutate existing period ' + id));
+// NV thu phí không chỉnh lịch.
+login('AC-NV02');
+assert(!A.canDo('thong-bao.lich-nghiep-vu'));
+h.act('notification-schedule-save');
+assert(/chưa được cấp quyền/.test(lastToast()), lastToast());
 
-h.act('cfg-create-period-open');
-assert(h.modal().includes('TẠO KỲ THỦ CÔNG'), 'manual period modal opens');
-const manual = A.ui.cfgManualPeriodDraft;
-assert(manual && manual.preparationDate && manual.reminder1Date && manual.reminder2Date, 'manual period is prefilled from default schedule');
-Object.assign(manual, { id: '2027-01', marketId: 'CL', preparationDate: '2026-12-27', meterReadDate: '2026-12-28', startDate: '2027-01-01', reminder1Date: '2027-02-01', reminder2Date: '2027-02-03', dueDate: '2027-02-03' });
-h.act('cfg-manual-create');
-const created = A.db.billingPeriods.find(p => p.id === '2027-01');
-assert(created && created.marketId === 'CL' && created.manualSchedule, 'manual period is created as a scoped schedule snapshot');
-assert(!('expectedIssueDate' in created), 'new period snapshots do not retain an expected issue date');
-assert.equal(created.reminder1Date, '2027-02-01');
-assert.equal(created.reminder2Date, '2027-02-03');
-const count = A.db.billingPeriods.filter(p => p.id === '2027-01').length;
-A.ui.cfgManualPeriodDraft = Object.assign({}, created);
-h.act('cfg-manual-create');
-assert.equal(A.db.billingPeriods.filter(p => p.id === '2027-01').length, count, 'duplicate period is refused');
-assert.equal(JSON.stringify(A.db.notificationEventConfigs || []), beforeNotifications, 'notification config is unchanged');
-assert.equal(JSON.stringify({ invoices: A.db.invoices, payments: A.db.payments }), beforeBilling, 'billing/payment data is unchanged');
+// Quản trị hệ thống mở và lưu lịch; thứ tự mốc sai bị từ chối.
+login('AC-QT01');
+A.ui.notificationTab = 'auto'; h.go('thong-bao');
+assert(h.view().includes('LỊCH NGHIỆP VỤ') && h.view().includes('Lịch kỳ thu hàng tháng'));
+assert(h.view().includes('data-act="notification-schedule-edit"'), 'admin sees edit');
+h.act('notification-schedule-edit');
+assert(h.modal().includes('CHỈNH SỬA LỊCH NGHIỆP VỤ'));
+// Giả lập các ô chọn ngày của popup (DOM stub của harness không dựng phần tử từ HTML modal).
+const doc = h.ctx.document, origQSA = doc.querySelectorAll;
+const fields = (days, months) => sel => sel === '[data-schedule-day]' ? Object.keys(days).map(k => ({ dataset: { scheduleDay: k }, value: String(days[k]) }))
+  : sel === '[data-schedule-month]' ? Object.keys(months).map(k => ({ dataset: { scheduleMonth: k }, value: months[k] })) : origQSA.call(doc, sel);
+const cyc = A.SERVICE_CFG.cycle();
+doc.querySelectorAll = fields({ collectionStartDay: cyc.collectionStartDay, reminder1Day: 1 }, { collectionStartMonth: 'current', reminder1Month: 'current' });
+h.act('notification-schedule-save');
+assert(/Nhắc thanh toán lần 1 phải sau ngày bắt đầu thu/.test(lastToast()), 'invalid order rejected: ' + lastToast());
+assert.notEqual(A.SERVICE_CFG.cycle().reminder1Day, 1, 'invalid schedule not saved');
+doc.querySelectorAll = fields({ dueDay: 18 }, {});
+h.act('notification-schedule-save');
+doc.querySelectorAll = origQSA;
+assert.equal(A.SERVICE_CFG.cycle().dueDay, 18, 'valid schedule saved: ' + lastToast());
+// Kỳ đã tạo giữ nguyên ngày snapshot.
+assert(h.localStorage.getItem(A.SERVICE_CFG.KEY).includes('"dueDay":18'), 'schedule persists to existing config storage');
+before.forEach((snap, id) => assert.equal(JSON.stringify(A.db.billingPeriods.find(p => p.id === id)), snap, 'existing period unchanged ' + id));
+
+// Kỳ tạo SAU khi sửa lịch dùng lịch mới (snapshot).
+const next = '2026-12';
+A.db.today = S.scheduleDates(next).preparationDate;
+const out = S.ensurePeriodsForCurrentCycle();
+assert.equal(out.month, next);
+assert.equal(S.get('CL', next).dueDate, '2026-12-18', 'new period uses the updated template');
+assert.equal(S.get('CL', next).source, 'auto');
+// Tổ trưởng cũng có quyền chỉnh lịch.
+login('AC-NV01');
+assert(A.canDo('thong-bao.lich-nghiep-vu'));
 console.log('schedule-periods: OK');

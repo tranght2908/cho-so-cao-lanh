@@ -77,26 +77,25 @@ ok('A06/market_accountant are not current roles or actors', () => {
 });
 ok('A05 has reconciliation permissions through RBAC', () => {
   const A = fresh.A;
-  ['screen:doi-soat', 'action:doi-soat.xem-tien-mat', 'action:doi-soat.xac-nhan-phieu-nop', 'screen:theo-doi-ky-doi-soat', 'action:theo-doi-ky-doi-soat.xac-nhan-hoan-tat']
+  // Đối soát buổi thu cũ (screen:doi-soat, doi-soat.*) đã retire — A05 đối soát tại Đối soát thu tiền (theo-doi-ky-doi-soat).
+  ['screen:theo-doi-ky-doi-soat', 'action:theo-doi-ky-doi-soat.xac-nhan-hoan-tat', 'action:theo-doi-ky-doi-soat.xu-ly-ngan-hang']
     .forEach(k => assert(A.PERM.hasPerm('central_accountant', k), k));
-  assert(!A.PERM.hasPerm('market_accountant', 'action:doi-soat.xac-nhan-phieu-nop'), 'fresh seed grants nothing to legacy role');
+  assert(!A.PERM.hasPerm('market_accountant', 'action:theo-doi-ky-doi-soat.xac-nhan-hoan-tat'), 'fresh seed grants nothing to legacy role');
 });
-const A05_VIEW_EXPORT = ['screen:phai-thu', 'action:phai-thu.xem-toan-cho', 'screen:thu-tien', 'screen:cong-no', 'screen:bao-cao',
-  'action:doi-soat.xem-ngan-hang', 'action:doi-soat.xem-truy-vet', 'action:doi-soat.xuat-excel', 'action:cong-no.xuat-excel', 'action:bao-cao.xuat-excel', 'action:bao-cao.xuat-pdf-in'];
-const A05_DENIED = ['action:thu-tien.thu', 'action:thu-tien.chot-buoi', 'action:phai-thu.phat-hanh', 'action:phai-thu.mien-giam', 'action:phai-thu.yeu-cau-dieu-chinh',
-  'action:doi-soat.gan-thu-cong', 'action:doi-soat.xac-nhan-nop-quy', 'action:cong-no.nhac-no', 'action:cong-no.nhac-no-hang-loat', 'action:cong-no.thu-no',
-  'action:bao-cao.luu-mau', 'screen:tai-khoan', 'screen:cai-dat'];
+const A05_VIEW_EXPORT = ['screen:phai-thu', 'action:phai-thu.xem-toan-cho', 'screen:thu-tien', 'screen:bao-cao', 'action:bao-cao.xuat-excel', 'action:bao-cao.xuat-pdf-in'];
+const A05_DENIED = ['action:thu-tien.thu', 'action:thu-tien.chot-buoi', 'action:thu-tien.hoan-tat-thu', 'action:theo-doi-ky-thu.phat-hanh-ky', 'action:theo-doi-ky-thu.chot-ky',
+  'action:phai-thu.tinh-lai', 'action:bao-cao.luu-mau', 'screen:tai-khoan', 'screen:cai-dat'];
 // SCREEN_ACCESS_BY_ACTOR (30/09/2026): A05 được VÀO màn 'Chính sách thu và biểu phí' (không kèm quyền thao tác nào).
 ok('A05 can view/export accounting data but has no write/admin permission', () => {
   const A = fresh.A;
   A05_VIEW_EXPORT.forEach(k => assert(A.PERM.hasPerm('central_accountant', k), k));
   A05_DENIED.forEach(k => assert(!A.PERM.hasPerm('central_accountant', k), k));
   A.ui.sessionAccountId = 'AC-KTTT01'; A.ui.currentDemoAccountId = 'AC-KTTT01'; A.ui.market = 'CL'; A.syncAccountContext();
-  ['phai-thu', 'thu-tien', 'cong-no', 'bao-cao', 'doi-soat', 'theo-doi-ky-doi-soat'].forEach(v => {
+  ['phai-thu', 'thu-tien', 'bao-cao', 'theo-doi-ky-doi-soat'].forEach(v => {
     assert(A.U.can(v), v);
     assert.strictEqual(typeof A.VIEWS[v](), 'string', v + ' renders');
   });
-  assert(!A.canDo('thu-tien.thu', 'CL') && !A.canDo('cong-no.nhac-no', 'CL') && !A.canDo('phai-thu.phat-hanh', 'CL'));
+  assert(!A.canDo('thu-tien.thu', 'CL') && !A.canDo('theo-doi-ky-thu.phat-hanh-ky') && !A.canDo('phai-thu.tinh-lai', 'CL'));
 });
 // SCREEN_ACCESS_BY_ACTOR (30/09/2026): A04 được VÀO 'Tài sản chợ' (màn này chỉ áp dụng Chợ Cao Lãnh), vẫn KHÔNG có Mặt bằng.
 ok('technician has no Mặt bằng screen despite compatibility scope ALL; Tài sản chợ granted', () => {
@@ -140,32 +139,29 @@ ok('accounts screen presents scopes and KPI from current list', () => {
 });
 
 // ---------- 3) A05 performs the reconciliation workflow via RBAC ----------
-ok('A05 logs in and reconciles a cash handover in any Market', () => {
+ok('A05 logs in and reconciles a market period in any Market (Đối soát thu tiền)', () => {
   const h = fresh, A = h.A;
   const kt = A.ACCOUNTS.get('AC-KTTT01');
   assert.strictEqual(A.ACCOUNTS.authStatus(kt), 'ACTIVE');
   A.ui.sessionAccountId = kt.id; A.ui.currentDemoAccountId = kt.id; A.ui.market = 'HA'; A.syncAccountContext();
   assert.strictEqual(A.currentAccount().id, 'AC-KTTT01');
-  assert(A.U.can('doi-soat') && A.canDo('doi-soat.xac-nhan-phieu-nop', 'HA'));
-  const today = A.U.today();
-  A.db.cashHandovers = A.db.cashHandovers || [];
-  A.db.cashHandovers.push({ id: 'PN-TEST-A05', kind: 'FEE', market: 'HA', marketId: 'HA', collectorId: 'AC-NV02', collectorCode: 'NV02', collectorName: 'Lê Thị Ngọc Hân', date: today, paymentIds: [], amount: 300000, status: 'SUBMITTED', submittedAt: A.U.dmy(today) + ' 08:00' });
-  A.ui.dsTab = 'tien-mat';
-  A.ACT['ho-view']({ dataset: { id: 'PN-TEST-A05' } });
-  A.$('#ho-received').value = '300000';
-  A.ACT['ho-reconcile']({ dataset: { id: 'PN-TEST-A05', mode: 'match' } });
-  const ho = A.db.cashHandovers.find(x => x.id === 'PN-TEST-A05');
-  assert.strictEqual(ho.status, 'MATCHED');
-  assert.strictEqual(ho.confirmedByCode, 'KTTT01');
-  assert.strictEqual(ho.collectorCode, 'NV02', 'historical actor untouched');
-  assert(A.U.can('theo-doi-ky-doi-soat') && A.canDo('theo-doi-ky-doi-soat.xac-nhan-hoan-tat', 'HA'), 'A05 period reconciliation');
+  assert(A.U.can('theo-doi-ky-doi-soat') && A.canDo('theo-doi-ky-doi-soat.xac-nhan-hoan-tat'));
+  // Kỳ của chợ HA đã "Hoàn tất thu & chuyển đối soát" (snapshot của NV thu phí NV02).
+  A.db.billingPeriods.push({ id: 'HA_2027-03', marketId: 'HA', period: '2027-03', label: '03/2027', startDate: '2027-03-01', endDate: '2027-03-31', dueDate: '2027-03-15', issuance: { issuedAt: 'test', count: 0 },
+    collection: { marketId: 'HA', periodId: 'HA_2027-03', closedAt: 'test', collectorId: 'AC-NV02', collectorName: 'Lê Thị Ngọc Hân', reconciliationStatus: 'WAITING', reconciliationHistory: [], summary: { cashScope: 'PERIOD_ONLY', cash: 300000, transfer: 0, receivables: 1, paidCount: 1, amount: 300000 } } });
+  A.ui.rcDraft = { key: 'HA_2027-03|HA', actual: '300000', note: '' };
+  A.ACT['rc-commit']({ dataset: { period: 'HA_2027-03', market: 'HA' } });
+  const rec = A.periods.getById('HA_2027-03').collection;
+  assert.strictEqual(rec.reconciliationStatus, 'RECONCILED');
+  assert.strictEqual(rec.reconciledByCode, 'KTTT01');
+  assert.strictEqual(rec.collectorName, 'Lê Thị Ngọc Hân', 'historical actor untouched');
 });
 
-ok('collector (denied role) cannot confirm a cash handover', () => {
+ok('collector (denied role) cannot reconcile or resolve bank transactions', () => {
   const A = fresh.A;
   A.ui.sessionAccountId = 'AC-NV02'; A.ui.currentDemoAccountId = 'AC-NV02'; A.ui.market = 'HA'; A.syncAccountContext();
-  assert.strictEqual(A.canDo('doi-soat.xac-nhan-phieu-nop', 'HA'), false);
-  assert.strictEqual(A.canDo('theo-doi-ky-doi-soat.xac-nhan-hoan-tat', 'HA'), false);
+  assert.strictEqual(A.canDo('theo-doi-ky-doi-soat.xac-nhan-hoan-tat'), false);
+  assert.strictEqual(A.canDo('theo-doi-ky-doi-soat.xu-ly-ngan-hang'), false);
 });
 
 // ---------- 4) Incident assignment by Incident.assignee, any Market ----------
@@ -211,6 +207,7 @@ function legacyStorage() {
   LEGACY_MANAGERS.forEach((id, i) => put({ id, code: id.slice(3), fullName: 'Legacy manager ' + i, phone: '', accountType: 'Tổ trưởng', title: 'Trưởng Ban Quản lý chợ', roleIds: ['market_manager'], organization: 'Ban Quản lý legacy', marketScopes: [i ? 'HA' : 'TTD'], status: 'active', traderId: null }));
   const perms = JSON.parse(ls.getItem('choso-caolanh-permissions'));
   perms.rolePerms = perms.rolePerms.filter(r => r.roleId !== 'central_accountant');
+  // Fixture state CŨ: key Đối soát buổi thu (đã retire) của role legacy — migration phải lọc bỏ, không lỗi.
   ['screen:doi-soat', 'action:doi-soat.xem-tien-mat', 'action:doi-soat.xac-nhan-phieu-nop'].forEach(permKey => perms.rolePerms.push({ roleId: 'market_accountant', permKey, grantedAt: 'seed', grantedBy: 'test' }));
   perms.roles.push({ id: 'ward_accountant', name: 'Kế toán phường', desc: 'UBND phường Cao Lãnh', scope: 'all', market: null, selfService: false, builtin: true, active: true });
   ['screen:mat-bang', 'screen:tai-san'].forEach(permKey => perms.rolePerms.push({ roleId: 'technician', permKey, grantedAt: 'seed', grantedBy: 'test' }));
@@ -247,7 +244,7 @@ ok('legacy KTTT01 is upgraded to current metadata', () => {
 });
 ok('legacy permission state: A05 gains reconciliation, legacy roles hidden but not deleted', () => {
   const A = migrated.A;
-  assert(A.PERM.hasPerm('central_accountant', 'action:doi-soat.xac-nhan-phieu-nop'));
+  assert(A.PERM.hasPerm('central_accountant', 'action:theo-doi-ky-doi-soat.xac-nhan-hoan-tat'));
   assert(A.PERM.hasPerm('central_accountant', 'screen:theo-doi-ky-doi-soat'));
   A05_VIEW_EXPORT.forEach(k => assert(A.PERM.hasPerm('central_accountant', k), k));
   A05_DENIED.forEach(k => assert(!A.PERM.hasPerm('central_accountant', k), k));

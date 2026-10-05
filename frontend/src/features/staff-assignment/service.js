@@ -1,4 +1,4 @@
-/* Nhân sự & phân công — use cases của Tổ trưởng Tổ Quản lý chợ (A02).
+/* Phân công chợ cho NV thu phí — service dùng chung cho Theo dõi kỳ thu.
  *
  * KHÔNG có store riêng. Mọi dữ liệu derive từ nguồn sẵn có:
  *   - Nhân sự     = A.ACCOUNTS.currentList() lọc role A02/A03/A04 (legacy/retired/A06 đã bị loại ở đó).
@@ -16,8 +16,8 @@
   const feature = features.staffAssignment || (features.staffAssignment = {});
   const service = feature.service || (feature.service = {});
 
-  const SCREEN = 'nhan-su-phan-cong';
-  const ACTION = { VIEW_ASSIGNMENT: SCREEN + '.xem-phan-cong', ASSIGN: SCREEN + '.phan-cong', REASSIGN: SCREEN + '.dieu-chuyen' };
+  const SCREEN = 'theo-doi-ky-thu';
+  const ACTION = { ASSIGN: SCREEN + '.phan-cong-cho', REASSIGN: SCREEN + '.doi-nv-phu-trach' };
   const STAFF_ROLE_IDS = ['market_manager', 'collector', 'technician'];
   const roleOf = a => A.ACCOUNTS.primaryRole(a);
   const uniq = xs => Array.from(new Set((xs || []).filter(Boolean)));
@@ -27,7 +27,6 @@
   service.STAFF_ROLE_IDS = STAFF_ROLE_IDS;
 
   service.canView = () => !!(A.U && A.U.can && A.U.can(SCREEN));
-  service.canViewAssignment = () => service.canView() && A.canDo(ACTION.VIEW_ASSIGNMENT);
   service.canAssign = () => service.canView() && A.canDo(ACTION.ASSIGN);
   service.canReassign = () => service.canView() && A.canDo(ACTION.REASSIGN);
 

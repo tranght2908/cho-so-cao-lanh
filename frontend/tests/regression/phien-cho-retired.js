@@ -80,7 +80,7 @@ ok('11: Chợ quê Cù lao Tân Thuận Đông is still a normal Market', () => 
 
 ok('12: TTD keeps layout/trader/contract/finance/assignment', () => {
   login('AC-NV01', 'TTD');
-  ['mat-bang', 'tieu-thuong', 'hop-dong', 'phai-thu', 'thu-tien', 'cong-no'].forEach(r => {
+  ['mat-bang', 'tieu-thuong', 'hop-dong', 'phai-thu', 'thu-tien'].forEach(r => { // Công nợ đã retire (BR-07)
     h.go(r);
     assert.strictEqual(A.current, r, r);
     assert(h.view().length > 100 && !/Vui lòng chọn một chợ/.test(h.view()), r);
@@ -90,8 +90,8 @@ ok('12: TTD keeps layout/trader/contract/finance/assignment', () => {
   assert(A.db.contracts.some(c => c.market === 'TTD'));
   const st = A.ACCOUNTS.marketCollectorState('TTD');
   assert.strictEqual(st.status, 'ASSIGNED');
-  h.go('nhan-su-phan-cong');
-  assert.strictEqual(A.current, 'nhan-su-phan-cong');
+  h.go('nhan-su-phan-cong'); // màn đã retire; Tổ trưởng không có màn Tài khoản → rơi về màn hợp lệ đầu tiên
+  assert(A.current !== 'nhan-su-phan-cong' && A.U.can(A.current));
 });
 
 ok('13: legacy market-session data is not deleted', () => {

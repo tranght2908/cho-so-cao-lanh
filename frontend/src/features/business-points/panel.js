@@ -76,7 +76,7 @@
       ${sec('C. Hợp đồng hiện hành', c
         ? `<dl class="kv"><dt>Số hợp đồng</dt><dd>${c.id}</dd>
         <dt>Thời hạn</dt><dd>${U.dmy(c.start)} – ${U.dmy(c.end)}<br><span class="small muted">${left <= 30 ? `<b style="color:#df2225">còn ${left} ngày</b>` : 'còn ' + left + ' ngày'}</span></dd>
-        <dt>Trạng thái</dt><dd>${c.status === 'hieuluc' ? '<span class="tag ok">Đang hiệu lực</span>' : '<span class="tag">Đã thanh lý</span>'}</dd></dl>`
+        <dt>Trạng thái</dt><dd>${A.features.contracts.service.isActive(c) ? '<span class="tag ok">Đang hiệu lực</span>' : A.features.contracts.service.lifecycle(c) === 'PENDING_LIQUIDATION' ? '<span class="tag warn">Chờ thanh lý</span>' : '<span class="tag">Đã thanh lý</span>'}</dd></dl>`
         : '<div class="note info">Chưa có hợp đồng hiệu lực.</div>')}
       <div class="divider"></div>
       ${sec('D. Công nợ', !t ? '<span class="tag">Không có nghĩa vụ hiện tại</span>'
@@ -111,7 +111,7 @@
       // Chỉ đổi trạng thái VẬN HÀNH; Đang thuê/Còn trống theo hợp đồng, Nợ phí theo khoản phải thu.
       const opts = Object.keys(D.POINT_STATUS);
       A.modal(A.mHead('Đổi trạng thái vận hành điểm ' + st.code) + `<div class="modal-b"><div class="form-grid">
-        <div class="field"><label>Trạng thái vận hành</label><select class="input" id="ss-status">${opts.map(k => `<option value="${k}" ${st.status === k ? 'selected' : ''}>${A.pointOpLabel(k)}</option>`).join('')}</select></div>
+        <div class="field"><label>Trạng thái vận hành</label><select class="input" id="ss-status">${opts.map(k => `<option value="${k}" ${(st.operationalStatus || st.status) === k ? 'selected' : ''}>${A.pointOpLabel(k)}</option>`).join('')}</select></div>
         <div class="field"><label>Lý do</label><input class="input" id="ss-reason" placeholder="VD: tiểu thương xin tạm nghỉ 1 tháng"></div></div>
         <div class="small muted" style="margin-top:10px">Tình trạng sử dụng do hợp đồng quyết định; "Nợ phí" do hệ thống xác định theo khoản phải thu quá hạn.</div></div>
         <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="stall-status-save" data-id="${st.id}">Lưu</button></div>`);
@@ -123,8 +123,8 @@
       const ns = A.$('#ss-status').value, reason = A.$('#ss-reason').value.trim();
       if (!D.POINT_STATUS[ns]) return;
       st.history = st.history || [];
-      st.history.unshift(`${U.dmy(U.today())}: ${A.pointOpLabel(st.status)} → ${A.pointOpLabel(ns)}${reason ? ' (' + reason + ')' : ''}`);
-      st.status = ns;
+      st.history.unshift(`${U.dmy(U.today())}: ${A.pointOpLabel(st.operationalStatus || st.status)} → ${A.pointOpLabel(ns)}${reason ? ' (' + reason + ')' : ''}`);
+      st.operationalStatus = ns; st.status = ns;
       U.log(`Đổi trạng thái vận hành điểm ${st.code} sang ${A.pointOpLabel(st.status)}`);
       A.save(); A.closeModal(); A.render(); U.toast('Đã cập nhật trạng thái ' + st.code);
     }

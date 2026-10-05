@@ -30,7 +30,7 @@
   periods.exists = (marketId, period) => !!periods.getByMarketMonth(marketId, period);
   periods.resolve = (marketId, reference) => {
     const byId = periods.getById(reference);
-    if (byId && (!byId.marketId || byId.marketId === marketId)) return byId;
+    if (byId && (byId.marketId === marketId || (!byId.marketId && !byId.superseded))) return byId;
     const period = periodMonth(reference);
     const scoped = periods.getByMarketMonth(marketId, period);
     if (scoped) return scoped;
@@ -41,8 +41,10 @@
   };
   periods.matchesEntity = (entity, periodRecord, marketId) => {
     if (!entity || !periodRecord) return false;
-    if (entity.billingPeriodId) return entity.billingPeriodId === periodRecord.id;
     const owner = entity.marketId || entity.market;
+    // Kỳ legacy dùng chung (không marketId) có cùng id cho mọi chợ → billingPeriodId
+    // thôi chưa đủ phân biệt; phải khớp thêm chợ sở hữu để không lẫn bản nháp giữa các chợ.
+    if (entity.billingPeriodId) return entity.billingPeriodId === periodRecord.id && (!!periodRecord.marketId || !marketId || !owner || owner === marketId);
     return (!marketId || !owner || owner === marketId) && entity.period === periodMonth(periodRecord);
   };
   periods.isIssued = periodRecord => {
@@ -74,9 +76,8 @@
         if (record.id !== technicalId) { record.id = technicalId; changed = true; }
         if (!record.label) { record.label = `${month.slice(5)}/${month.slice(0, 4)}`; changed = true; }
         if (!record.source) { record.source = 'default'; changed = true; }
-        if ((A.db.issuedPeriods || []).includes(month) && !A.db.issuedPeriodIds.includes(technicalId)) {
-          A.db.issuedPeriodIds.push(technicalId); changed = true;
-        }
+        // Không suy "đã phát hành" của 1 chợ từ issuedPeriods theo THÁNG (danh sách legacy dùng chung 12 chợ):
+        // phát hành theo chợ được xác định từ invoice của chính chợ đó trong migrateMarketPeriods().
       } else if (month && !record.marketId && !record.legacyPeriod) {
         // Explicit marker makes the compatibility policy inspectable without
         // guessing ownership for historic global month records.
@@ -96,8 +97,95 @@
     attach(A.db.billingWarnings, 'market'); attach(A.db.debts, 'market');
     attach(A.db.cashHandovers, 'market'); attach(A.db.receivableAdjustments, 'market');
     attach(A.db.meterPeriods, 'marketId'); attach(A.db.meterReadings, 'marketId');
+    if (migrateMarketPeriods()) changed = true;
     return changed;
   };
+
+  // ===== MARKET_PERIOD v2: kỳ thu = 1 chợ + 1 tháng (`{marketId}_{YYYY-MM}`) =====
+  // Kỳ legacy dùng chung 12 chợ (không marketId) được TÁCH thành kỳ theo chợ; bản ghi legacy giữ lại read-only
+  // (superseded) để tra cứu, không còn được ghi state mới. Mốc nghiệp vụ của từng chợ chuyển lên kỳ của chợ:
+  //   meter       ← meterPeriod.completionByMarket[m] / meterPeriod.status CLOSED (legacy toàn cục)
+  //   issuance    ← invoice đã phát hành của chính chợ (không suy từ issuedPeriods theo tháng)
+  //   collection  ← collectionHandoffByMarket[m] (snapshot Hoàn tất thu + đối soát)
+  //   monthClose  ← kỳ legacy PAST/CLOSED (kỳ cũ read-only)
+  // Tham chiếu invoices/drafts/warnings/cashHandovers/readings được trỏ sang id kỳ của chợ. Không xoá bản ghi
+  // nào. Idempotent: chỉ bổ sung khi chưa có; chạy cho cả dữ liệu seed lẫn dữ liệu đã lưu.
+  const MARKET_PERIOD_MODEL_VERSION = 2;
+  const ACTIVE_RECON = ['WAITING', 'NEEDS_RESOLUTION', 'RECONCILED'];
+  function normalizeHandoff(h) {
+    const rec = JSON.parse(JSON.stringify(h));
+    if (!ACTIVE_RECON.includes(rec.reconciliationStatus)) rec.reconciliationStatus = 'WAITING'; // WAITING_RECONCILIATION cũ
+    rec.reconciliationHistory = Array.isArray(rec.reconciliationHistory) ? rec.reconciliationHistory : [];
+    // BR-02: Thiếu/Thừa không phải hoàn tất — kết quả cũ chuyển vào lịch sử, chờ Kế toán xử lý đến khi khớp.
+    if (rec.reconciliationStatus === 'RECONCILED' && rec.result && rec.result !== 'MATCHED') {
+      rec.reconciliationHistory.push({ at: rec.reconciledAt || '', by: rec.reconciledBy || '', result: rec.result, actualCashAmount: rec.actualCashAmount,
+        systemCashAmount: rec.systemCashAmount, differenceAmount: rec.differenceAmount, transferDifferenceAmount: rec.transferDifferenceAmount, note: rec.note || '', migrated: true });
+      rec.reconciliationStatus = 'NEEDS_RESOLUTION';
+    }
+    return rec;
+  }
+  function migrateMarketPeriods() {
+    const db = A.db, list = db.billingPeriods;
+    let changed = false;
+    const marketIds = (typeof A.effectiveMarkets === 'function' ? A.effectiveMarkets() : (D.MARKETS || [])).map(m => m.id);
+    const stallMarket = id => { const s = (db.stalls || []).find(x => x.id === id); return s ? s.market : ''; };
+    const legacyByMonth = new Map();
+    list.filter(x => x && !x.marketId && periodMonth(x)).forEach(lp => {
+      legacyByMonth.set(periodMonth(lp), lp);
+      if (!lp.legacyPeriod || !lp.superseded) { lp.legacyPeriod = true; lp.superseded = true; changed = true; }
+    });
+    legacyByMonth.forEach((lp, month) => marketIds.forEach(mid => {
+      if (periods.getByMarketMonth(mid, month)) return;
+      const rec = { id: scopedPeriodId(mid, month), marketId: mid, period: month, label: lp.label || `${month.slice(5)}/${month.slice(0, 4)}`, source: 'legacy-split', legacyPeriodId: lp.id, createdAt: 'migrated' };
+      ['preparationDate', 'meterReadDate', 'startDate', 'reminder1Date', 'reminder2Date', 'dueDate', 'endDate'].forEach(k => { if (lp[k]) rec[k] = lp[k]; });
+      list.push(rec); changed = true;
+    }));
+    const invoicesOf = mp => (db.invoices || []).filter(i => (i.marketId || i.market) === mp.marketId && i.billingStatus !== 'DRAFT'
+      && (i.billingPeriodId === mp.id || ((!i.billingPeriodId || i.billingPeriodId === mp.legacyPeriodId || i.billingPeriodId === mp.period) && i.period === mp.period)));
+    list.filter(x => x && x.marketId && periodMonth(x)).forEach(mp => {
+      const month = periodMonth(mp), lp = legacyByMonth.get(month) || null, mid = mp.marketId;
+      if (!mp.meter) {
+        const mps = (db.meterPeriods || []).filter(x => x.billingPeriodId === mp.id || (x.marketId === mid && x.period === month) || (!x.marketId && x.id === month));
+        const done = mps.map(x => (x.completionByMarket && x.completionByMarket[mid]) || (x.status === 'CLOSED' && (x.marketId === mid || !x.completionByMarket) ? x : null)).find(x => x && x.status === 'CLOSED');
+        if (done) { mp.meter = { status: 'COMPLETED', mode: 'RECORDED', completedAt: done.completedAt || done.closedAt || '', completedBy: done.completedBy || done.closedBy || '', migrated: true }; changed = true; }
+      }
+      const invs = invoicesOf(mp);
+      if (invs.length && !mp.issuance) {
+        mp.issuance = { issuedAt: (lp && lp.issuedAt) || mp.issuedAt || invs[0].publishedAt || invs[0].issuedAt || '', issuedBy: (lp && lp.issuedBy) || mp.issuedBy || invs[0].publishedBy || invs[0].issuedBy || '', count: invs.length, migrated: true };
+        changed = true;
+      }
+      if (mp.issuance && !(db.issuedPeriodIds || []).includes(mp.id)) { db.issuedPeriodIds.push(mp.id); changed = true; }
+      const handoff = (mp.collectionHandoffByMarket && mp.collectionHandoffByMarket[mid]) || (lp && lp.collectionHandoffByMarket && lp.collectionHandoffByMarket[mid]);
+      if (handoff && !mp.collection) { mp.collection = normalizeHandoff(handoff); mp.collection.periodId = mp.id; changed = true; }
+      const closedSource = ['PAST', 'CLOSED'].includes(mp.status) ? mp : lp && ['PAST', 'CLOSED'].includes(lp.status) ? lp : null;
+      if (closedSource && !mp.monthClose) {
+        // Kỳ cũ read-only: trạng thái cuối đông cứng tại thời điểm migrate (chợ có khoản phải thu = Hoàn tất, không có = Không áp dụng).
+        mp.monthClose = { closedAt: closedSource.closedAt || '', closedBy: closedSource.closedBy || '', legacy: true, finalState: invs.length ? 'COMPLETED' : 'NOT_APPLICABLE' };
+        changed = true;
+      }
+      // Trỏ tham chiếu sang kỳ của chợ (chỉ các bản ghi đang trỏ tới kỳ legacy của cùng tháng / chưa có kỳ).
+      const legacyRef = x => !x.billingPeriodId || (lp && x.billingPeriodId === lp.id) || x.billingPeriodId === month;
+      const repoint = (rows, marketOf, monthOf) => (rows || []).forEach(x => {
+        if (!x || x.billingPeriodId === mp.id || marketOf(x) !== mid || monthOf(x) !== month || !legacyRef(x)) return;
+        x.billingPeriodId = mp.id; changed = true;
+      });
+      repoint(db.invoices, x => x.marketId || x.market, x => x.period);
+      repoint(db.billingDrafts, x => x.marketId || x.market, x => x.period);
+      repoint(db.billingWarnings, x => x.marketId || x.market, x => x.period);
+      repoint(db.readings, x => stallMarket(x.stallId), x => x.period);
+      (db.cashHandovers || []).forEach(h => {
+        if (!h || h.market !== mid || h.periodId === mp.id) return;
+        if (h.periodId === month || (lp && h.periodId === lp.id)) { h.periodId = mp.id; h.billingPeriodId = mp.id; changed = true; }
+      });
+    });
+    if (db.periodModelVersion !== MARKET_PERIOD_MODEL_VERSION) { db.periodModelVersion = MARKET_PERIOD_MODEL_VERSION; changed = true; }
+    return changed;
+  }
+  periods.migrateMarketPeriods = migrateMarketPeriods;
+  // Kỳ của 1 chợ cho 1 tháng (không fallback sang kỳ legacy dùng chung).
+  periods.forMarketMonth = (marketId, month) => periods.getByMarketMonth(marketId, periodMonth(month));
+  // Danh sách tháng có kỳ theo chợ (mới nhất trước).
+  periods.months = () => Array.from(new Set((A.db && A.db.billingPeriods || []).filter(x => x && x.marketId).map(periodMonth).filter(Boolean))).sort().reverse();
   // Last persisted snapshot seen by this tab. It protects unrelated changes
   // made in a second web app from a stale whole-A.db save.
   let baselineDb = null;
@@ -202,6 +290,9 @@
       if (broken) { A.db = null; try { localStorage.removeItem(KEY); } catch (e) { /* bỏ qua */ } }
     }
     if (A.db) A.reindex(); else A.fresh();
+    // Lịch sử gia hạn nằm trong state dùng chung. State cũ thiếu field này vẫn
+    // hợp lệ; chỉ bổ sung mảng rỗng, không reset/reseed dữ liệu đã lưu.
+    if (!Array.isArray(A.db.contractRenewals)) A.db.contractRenewals = [];
     // Hợp đồng seed cũ thiếu serviceApplicability → tính nháp bỏ qua điện, nước, dịch vụ. Bổ sung đúng như seed
     // hiện tại (điểm có công tơ: điện + nước; chợ TTD: dịch vụ), không đụng hợp đồng đã khai báo trên UI.
     let serviceMigrated = false;
@@ -213,8 +304,7 @@
     });
     const migratedPeriods = A.periods && A.periods.migrate ? A.periods.migrate() : false;
     if (migratedPeriods) A.reindex();
-    // QUA_HAN_CHUYEN_CONG_NO: khoản quá hạn chưa thu → hệ thống tự chuyển công nợ (idempotent).
-    if (A.syncDebts) A.syncDebts({ save: false });
+    // BR-07: Công nợ đã retire — không còn tự chuyển khoản quá hạn thành nợ (dữ liệu debts cũ giữ nguyên, chỉ đọc).
     // Hồ sơ/tài khoản: collection nghiệp vụ đổi số điện thoại, cùng state prototype A.db.
     // Không sao chép account; mỗi request chỉ tham chiếu accountId.
     if (!Array.isArray(A.db.phoneChangeRequests)) A.db.phoneChangeRequests = [];
@@ -231,6 +321,15 @@
     });
     A.db.actorMetadata = actorMetadata;
     if (serviceMigrated || migratedActorMetadata || migratedPeriods) A.save();
+    // BR-08: hệ thống tự tạo kỳ thu theo Lịch nghiệp vụ (idempotent) và tự tính nháp các kỳ đã đủ điều kiện.
+    const marketPeriod = A.features && A.features.finance && A.features.finance.marketPeriod;
+    if (marketPeriod) {
+      marketPeriod.ensurePeriodsForCurrentCycle(); marketPeriod.autoCalculatePending();
+      // Cấu hình biểu phí vừa được bổ sung khi nạp (migration) → tính lại nháp các kỳ còn được tính theo đúng logic hiện có.
+      if (A.SERVICE_CFG && A.SERVICE_CFG.takeRecalcRequest && A.SERVICE_CFG.takeRecalcRequest()) marketPeriod.recalculateAfterSourceChange();
+    }
+    // Bộ phát thông báo theo mốc kỳ thu (idempotent, notificationKey chống gửi trùng).
+    if (A.NOTIFICATIONS && A.NOTIFICATIONS.dispatchDueMilestones) A.NOTIFICATIONS.dispatchDueMilestones();
   };
   // External-tab refresh: never seed, clear, or write localStorage. UI callers
   // decide separately whether it is safe to render (for example, no open form).
@@ -242,7 +341,6 @@
     captureBaseline(latest.db);
     A.reindex();
     if (A.periods && A.periods.migrate && A.periods.migrate()) { A.reindex(); A.save(); }
-    if (A.syncDebts) A.syncDebts({ save: false });
     if (!Array.isArray(A.db.phoneChangeRequests)) A.db.phoneChangeRequests = [];
     return { changed: true };
   };

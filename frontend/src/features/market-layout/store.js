@@ -358,7 +358,7 @@
     const check = validateRowPointGroups(mid, rowId, groups);
     if (!check.ok) return Object.assign({ ok: false }, check);
     const next = [];
-    (groups || []).forEach(g => (check.pointCodes[g.id] || []).forEach((code, i) => next.push({ id: mid + '-' + code, code, market: mid, rowId, num: Number((code.match(/(\d+)$/) || [0, i + 1])[1]), area: n(g.areaPerPoint), areaTypeId: g.areaTypeId, status: 'active', hasMeter: false, type: '', note: '', history: [] })));
+    (groups || []).forEach(g => (check.pointCodes[g.id] || []).forEach((code, i) => next.push({ id: mid + '-' + code, code, market: mid, rowId, num: Number((code.match(/(\d+)$/) || [0, i + 1])[1]), area: n(g.areaPerPoint), areaTypeId: g.areaTypeId, status: 'active', operationalStatus: 'active', usageStatus: 'VACANT', usageReason: null, hasMeter: false, type: '', note: '', history: [] })));
     // Build all points first; one array swap + one save prevents a partial create.
     db().stalls = list('stalls').concat(next); A.reindex(); A.save();
     return { ok: true, stalls: next, check };
@@ -435,12 +435,15 @@
     const newFloors = draft.floors.map((f, i) => { const code = 'F' + (i + 1), id = uniqueId(mid + '-F-' + buildingCode[f.buildingDraftId] + '-' + code, fIds); floorId[f.id] = id; return { id, market: mid, buildingId: buildingId[f.buildingDraftId], code, name: String(f.name).trim(), businessArea: n(f.businessArea), order: i + 1 }; });
     const newRows = draft.rows.map((r, i) => { const code = p.rowCodes[r.id], id = uniqueId(mid + '-R-' + code, rIds); rowId[r.id] = id; return { id, market: mid, buildingId: buildingId[r.buildingDraftId], floorId: r.floorDraftId ? floorId[r.floorDraftId] : null, code, name: String(r.name).trim(), industry: r.industry, allocatedArea: n(r.allocatedArea), order: byMarket('rows', mid).length + i + 1, status: 'active', note: '' }; });
     const newStalls = [];
-    draft.pointGroups.forEach(g => (p.pointCodes[g.id] || []).forEach((code, i) => newStalls.push({ id: mid + '-' + code, code, market: mid, rowId: rowId[g.rowDraftId], num: i + 1, area: n(g.areaPerPoint), areaTypeId: g.areaTypeId, status: 'active', hasMeter: false, type: '', note: '', history: [] })));
+    draft.pointGroups.forEach(g => (p.pointCodes[g.id] || []).forEach((code, i) => newStalls.push({ id: mid + '-' + code, code, market: mid, rowId: rowId[g.rowDraftId], num: i + 1, area: n(g.areaPerPoint), areaTypeId: g.areaTypeId, status: 'active', operationalStatus: 'active', usageStatus: 'VACANT', usageReason: null, hasMeter: false, type: '', note: '', history: [] })));
     // All final records exist before the first assignment. One state save follows one graph swap.
     const old = { buildings: db().buildings, floors: db().floors, rows: db().rows, stalls: db().stalls };
     try {
       db().buildings = old.buildings.concat(newBuildings); db().floors = old.floors.concat(newFloors); db().rows = old.rows.concat(newRows); db().stalls = old.stalls.concat(newStalls);
-      A.reindex(); A.save();
+      A.reindex();
+      const lifecycle = A.features && A.features.lifecycle && A.features.lifecycle.service;
+      if (lifecycle) lifecycle.completeMarketLayout(mid);
+      A.save();
       return { ok: true, buildings: newBuildings, floors: newFloors, rows: newRows, stalls: newStalls, check };
     } catch (err) {
       db().buildings = old.buildings; db().floors = old.floors; db().rows = old.rows; db().stalls = old.stalls; A.reindex();

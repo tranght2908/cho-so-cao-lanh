@@ -17,6 +17,7 @@
   service.effectiveMarkets = function () { return repository.effectiveMarkets(); };
   service.add = function (record, user) { return repository.add(record, user); };
   service.update = function (id, patch, user) { return repository.update(id, patch, user); };
+  service.completeLayoutSetup = function (id, user) { return repository.completeLayoutSetup(id, user); };
   service.RANKS = repository.ranks();
   service.STATUS = repository.statuses();
   service.PRICE_CONFIGS = repository.priceConfigs();
@@ -26,12 +27,12 @@
   // Loại diện tích: danh mục dùng chung U.AREA_TYPE_CODES / U.areaTypeLabel (business-points/format.js).
   service.areaTypes = function () { return (A.U.AREA_TYPE_CODES || []).map(id => ({ id, label: A.U.areaTypeLabel(id) || id })); };
 
-  // Tình trạng mặt bằng: "Đã thiết lập" khi graph mặt bằng (A.db.rows, do Tổ trưởng dựng ở Mặt bằng &
-  // điểm kinh doanh) của chợ có ít nhất 1 Dãy. Chợ chưa có Dãy → chưa thiết lập.
+  // Lifecycle layout is persisted on Market; graph rows are never a substitute
+  // for the explicit completed-setup transition.
   service.layoutZoneCount = function (id) {
     return ((A.db && A.db.rows) || []).filter(r => r.market === id).length;
   };
-  service.layoutReady = function (id) { return service.layoutZoneCount(id) > 0; };
+  service.layoutReady = function (id) { const market = repository.get(id); return !!market && market.layoutStatus === 'SETUP_COMPLETED'; };
 
   // Đã số hoá theo loại diện tích: đếm điểm kinh doanh thật (A.db.stalls) của chợ, bỏ bản ghi đã gộp/
   // đã tách (chỉ giữ để truy vết). Trả về { [areaTypeId]: { count, area } }; điểm chưa có loại → '_none'.
