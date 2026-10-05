@@ -49,12 +49,25 @@
       services
     };
   }
-  const earliest = rows => rows.filter(x => x.status !== 'cancelled').sort((a, b) => String(a.effectiveFrom || '').localeCompare(String(b.effectiveFrom || '')))[0] || null;
+  // Bản ghi đã hủy / vô hiệu hóa / nháp không bao giờ được chụp vào HĐ; bản ghi hết hạn vẫn là lịch sử hợp lệ.
+  const lockable = x => !['cancelled', 'inactive', 'draft'].includes(x.status);
+  const earliest = rows => rows.filter(lockable).sort((a, b) => String(a.effectiveFrom || '').localeCompare(String(b.effectiveFrom || '')))[0] || null;
+  // HĐ đủ bảng giá cho mọi dịch vụ đã đăng ký. Phần còn trống (lúc chụp chợ chưa có giá) được bổ sung khi có giá;
+  // phần đã khóa KHÔNG bao giờ bị ghi đè.
+  function termsComplete(c) {
+    const t = c && c.priceTerms, applies = (c && c.serviceApplicability) || {};
+    return !!t && !!t.land && (!applies.electricity || !!t.electricity) && (!applies.water || !!t.water) && (!applies.marketService || (t.services || []).length > 0);
+  }
   function freezeContractTerms(c) {
-    if (!c || c.priceTerms) return c && c.priceTerms;
+    if (!c || termsComplete(c)) return c && c.priceTerms;
     const st = A.idx.stall.get(c.businessPointId || c.stallId);
-    if (!st) return null;
-    c.priceTerms = buildPriceTerms(c.market, st, st.area, c.start, c.serviceApplicability || {}, 'LEGACY');
+    if (!st) return c.priceTerms || null;
+    const fresh = buildPriceTerms(c.market, st, st.area, c.start, c.serviceApplicability || {}, 'LEGACY');
+    if (!c.priceTerms) c.priceTerms = fresh;
+    else {
+      ['land', 'electricity', 'water'].forEach(k => { if (!c.priceTerms[k] && fresh[k]) c.priceTerms[k] = fresh[k]; });
+      if (!(c.priceTerms.services || []).length) c.priceTerms.services = fresh.services;
+    }
     // Dữ liệu HĐ cũ có thể bắt đầu trước mốc biểu phí đầu tiên được số hóa: dùng bản ghi lịch sử sớm nhất,
     // không dùng giá mới nhất, để migration không làm tăng phí HĐ cũ.
     const applies = c.serviceApplicability || {}, type = { kiot: 'Ki-ốt', nhalong: 'Trong nhà lồng chợ', ngoai: 'Tự sản tự tiêu', phien: 'Quầy theo phiên' }[st.type];
@@ -69,12 +82,12 @@
       const p = earliest((A.SERVICE_CFG ? A.SERVICE_CFG.list('utilities') : []).filter(u => u.marketId === c.market && (!u.kind || u.kind === kind) && u[UTILITY_FIELDS[kind][0]] != null));
       if (p) c.priceTerms[key] = utilityTerm(p, kind);
     });
-    if (applies.marketService && !c.priceTerms.services.length) c.priceTerms.services = (A.SERVICE_CFG ? A.SERVICE_CFG.list('extraServices') : []).filter(x => x.marketId === c.market && x.category !== 'VEHICLE' && x.status !== 'cancelled').map(serviceTerm);
+    if (applies.marketService && !c.priceTerms.services.length) c.priceTerms.services = (A.SERVICE_CFG ? A.SERVICE_CFG.list('extraServices') : []).filter(x => x.marketId === c.market && x.category !== 'VEHICLE' && lockable(x)).map(serviceTerm);
     return c.priceTerms;
   }
   function contractTermsAt(c, date) {
     if (!c) return null;
-    if (!c.priceTerms) { freezeContractTerms(c); A.save(); }
+    if (!termsComplete(c)) { const before = JSON.stringify(c.priceTerms || null); freezeContractTerms(c); if (JSON.stringify(c.priceTerms || null) !== before) A.save(); }
     const amendment = (c.amendments || []).filter(x => x.effectiveFrom && x.effectiveFrom <= date)
       .sort((a, b) => String(b.effectiveFrom).localeCompare(String(a.effectiveFrom)))[0];
     return amendment ? (amendment.priceTerms || amendment.terms || amendment) : c.priceTerms;
@@ -248,7 +261,7 @@
   // KHOA_GIA_THEO_HOP_DONG: migration cộng thêm, không đổi khóa localStorage và chạy lặp an toàn.
   document.addEventListener('DOMContentLoaded', () => {
     let migrated = false;
-    (A.db.contracts || []).forEach(c => { if (!c.priceTerms) { freezeContractTerms(c); migrated = true; } });
+    (A.db.contracts || []).forEach(c => { if (termsComplete(c)) return; const before = JSON.stringify(c.priceTerms || null); freezeContractTerms(c); if (JSON.stringify(c.priceTerms || null) !== before) migrated = true; });
     if (migrated) A.save();
   });
 })(window.APP);
