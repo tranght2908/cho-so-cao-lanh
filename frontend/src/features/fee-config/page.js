@@ -645,13 +645,13 @@
     const mName = id => (landMarkets().find(m => m.id === id) || {}).name || id;
     let shown = 0;
     const rows = list.map(({ c, amendment }) => {
-      const t = A.idx.trader.get(c.traderId) || {}, pt = A.idx.stall.get(c.businessPointId || c.stallId) || {};
-      const hay = ctFold([c.id, t.name, c.traderId, pt.code, c.stallId].join(' ')), ok = ctMatch(st, c.market, hay);
+      const t = A.idx.trader.get(c.traderId) || {};
+      const hay = ctFold([c.id, t.name].join(' ')), ok = ctMatch(st, c.market, hay);
       if (ok) shown++;
-      return `<tr data-market="${U.esc(c.market)}" data-q="${U.esc(hay)}"${ok ? '' : ' style="display:none"'}><td><b>${U.esc(c.id)}</b><div class="small muted">${amendment ? 'Phụ lục' : 'Hợp đồng'}</div></td><td>${U.esc(t.name || '—')}<div class="small muted">${U.esc(c.traderId || '')}</div></td><td>${U.esc(pt.code || c.stallId || '—')}<div class="small muted">${U.esc(mName(c.market))}</div></td><td class="num">${pt.area != null ? Number(pt.area).toLocaleString('vi-VN') + ' m²' : '—'}</td><td>${U.dmy(c.start)} → ${c.end ? U.dmy(c.end) : '—'}</td></tr>`;
+      return `<tr data-market="${U.esc(c.market)}" data-q="${U.esc(hay)}"${ok ? '' : ' style="display:none"'}><td><b>${U.esc(c.id)}</b>${amendment ? '<div class="small muted">Phụ lục</div>' : ''}</td><td>${U.esc(t.name || '—')}</td><td>${U.dmy(c.start)} → ${c.end ? U.dmy(c.end) : '—'}</td></tr>`;
     });
-    const tools = `<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:8px"><select class="input" style="min-width:180px;flex:0 0 auto" data-ch="price-ct-market" aria-label="Lọc theo chợ"><option value="">Tất cả chợ</option>${marketIds.map(id => `<option value="${U.esc(id)}" ${st.market === id ? 'selected' : ''}>${U.esc(mName(id))}</option>`).join('')}</select><input class="input" style="flex:1;min-width:200px" data-in="price-ct-q" value="${U.esc(st.q)}" placeholder="Tìm mã hợp đồng, tên / mã tiểu thương, điểm KD" aria-label="Tìm hợp đồng"><span class="small muted" style="align-self:center">Hiển thị <b data-ct-count>${shown}</b> / ${list.length}</span></div>`;
-    return head + `<div id="price-ct">${tools}${U.table([{t:'Hợp đồng'},{t:'Tiểu thương'},{t:'Điểm KD'},{t:'Diện tích',num:true},{t:'Thời hạn HĐ'}], rows)}<div class="small muted" data-ct-empty style="margin-top:6px${shown ? ';display:none' : ''}">Không có hợp đồng phù hợp bộ lọc.</div></div>`;
+    const tools = `<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:8px"><select class="input" style="min-width:180px;flex:0 0 auto" data-ch="price-ct-market" aria-label="Lọc theo chợ"><option value="">Tất cả chợ</option>${marketIds.map(id => `<option value="${U.esc(id)}" ${st.market === id ? 'selected' : ''}>${U.esc(mName(id))}</option>`).join('')}</select><input class="input" style="flex:1;min-width:200px" data-in="price-ct-q" value="${U.esc(st.q)}" placeholder="Tìm mã hợp đồng, tên tiểu thương" aria-label="Tìm hợp đồng"><span class="small muted" style="align-self:center">Hiển thị <b data-ct-count>${shown}</b> / ${list.length}</span></div>`;
+    return head + `<div id="price-ct">${tools}${U.table([{t:'Mã hợp đồng'},{t:'Tên tiểu thương'},{t:'Thời hạn hợp đồng'}], rows)}<div class="small muted" data-ct-empty style="margin-top:6px${shown ? ';display:none' : ''}">Không có hợp đồng phù hợp bộ lọc.</div></div>`;
   }
   function priceCtApply() {
     const box = A.$('#price-ct'), st = ui.priceCt;
