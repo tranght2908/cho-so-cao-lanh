@@ -4,13 +4,16 @@
 (function (A) {
   'use strict';
   const ui = A.ui;
-  if (!ui.settingsTab) ui.settingsTab = 'vaitro';
+  const SETTINGS_TABS = [['kythu', 'Lịch & kỳ thu'], ['vaitro', 'Vai trò & phân quyền'], ['tichhop', 'Tích hợp'], ['nhatky', 'Nhật ký kiểm toán']];
+  const isSettingsTab = tab => SETTINGS_TABS.some(x => x[0] === tab);
+  // Legacy state may still contain the removed `quytac` tab. Resolve it in memory
+  // to the safe first tab; no fee-rule configuration is deleted or persisted here.
+  if (!isSettingsTab(ui.settingsTab)) ui.settingsTab = 'kythu';
 
   // Phase 6 STEP A: 3 tab giá (Đơn giá mặt bằng/Điện & nước/Dịch vụ khác) đã chuyển sang màn
-  // "Chính sách thu và biểu phí" độc lập trong nhóm Tài chính (A.VIEWS['cau-hinh-gia']) — xem
-  // SERVICE_PRICING_SCREEN_AUDIT.md mục 9/10. Kỳ thu/Quy tắc thu phí GIỮ NGUYÊN trong Cài đặt,
-  // nay lên thẳng tab cấp 1 (trước đây nằm sau 2 cấp: Cài đặt → Cấu hình dịch vụ → Kỳ thu).
-  const SETTINGS_TABS = [['kythu', 'Kỳ thu'], ['quytac', 'Quy tắc thu phí'], ['vaitro', 'Vai trò & phân quyền'], ['tichhop', 'Tích hợp'], ['nhatky', 'Nhật ký kiểm toán']];
+  // "Chính sách thu và biểu phí" độc lập trong nhóm Tài chính (A.VIEWS['cau-hinh-gia']).
+  // Các config quy tắc thu phí legacy vẫn được giữ ở data/service layer để tương thích,
+  // nhưng không còn là tab nghiệp vụ của màn Cài đặt & phân quyền.
   function settingsTabBar(tab) {
     return `<div class="seg">${SETTINGS_TABS.map(t => `<button class="${tab === t[0] ? 'on' : ''}" data-act="settings-tab" data-id="${t[0]}">${t[1]}</button>`).join('')}</div>`;
   }
@@ -21,13 +24,13 @@
   }
 
   A.VIEWS['cai-dat'] = function () {
-    const tab = ui.settingsTab;
+    const tab = isSettingsTab(ui.settingsTab) ? ui.settingsTab : 'kythu';
+    if (ui.settingsTab !== tab) ui.settingsTab = tab;
     const body = tab === 'kythu' ? A.features.feeConfig.settingsKyThuHtml()
-      : tab === 'quytac' ? A.features.feeConfig.settingsQuyTacHtml()
       : tab === 'tichhop' ? settingsTichhopHtml()
       : tab === 'nhatky' ? A.data.auditLogHtml()
       : A.features.accessControl.settingsVaitroHtml();
     return `${settingsTabBar(tab)}${body}`;
   };
-  A.ACT['settings-tab'] = el => { ui.settingsTab = el.dataset.id; A.render(); };
+  A.ACT['settings-tab'] = el => { ui.settingsTab = isSettingsTab(el.dataset.id) ? el.dataset.id : 'kythu'; A.render(); };
 })(window.APP);

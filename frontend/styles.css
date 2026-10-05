@@ -2128,3 +2128,68 @@ button.mb-chip.on { outline: 2px solid currentColor; outline-offset: -2px; }
 .rc-diff.is-ok { background: #e6f6ec; border-color: #bfe3cb; color: #167a3c; }
 .rc-diff.is-bad { background: var(--danger-soft); border-color: #f3c2c2; color: #b01c1e; }
 .rc-diff.is-warn { background: var(--warn-soft); border-color: #f7cfa3; color: #9a4b0c; }
+
+/* ===== Lịch & kỳ thu (fee-config/page.js) ===== */
+.cfg-schedule-page { display: grid; gap: 16px; }
+.cfg-market-context { display:flex; align-items:center; gap:10px; padding:4px 0 14px; border-bottom:1px solid var(--line); }
+.cfg-market-context label { font-weight:700; }.cfg-market-context .input { width:230px; }
+.cfg-calendar { margin-top:10px; border-top:1px solid color-mix(in srgb, var(--line) 72%, transparent); padding-top:10px; }.cfg-calendar h3 { text-align:center; margin:0 0 6px; font-size:16px; line-height:24px; font-weight:700; }.cfg-calendar-week,.cfg-calendar-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); }.cfg-calendar-week { border-bottom:1px solid color-mix(in srgb, var(--line) 72%, transparent); }.cfg-calendar-week>b { min-height:36px; display:flex; align-items:center; justify-content:center; padding:6px; color:var(--muted); font-size:13px; font-weight:600; }.cfg-calendar-day { min-height:clamp(76px,6.25vw,80px); border:1px solid color-mix(in srgb, var(--line) 68%, transparent); margin:-1px 0 0 -1px; padding:7px 9px; display:flex; flex-direction:column; gap:4px; overflow:hidden; }.cfg-calendar-day>b { font-size:14px; line-height:18px; font-weight:600; }.cfg-calendar-day.is-adjacent { color:color-mix(in srgb, var(--muted) 72%, transparent); background:color-mix(in srgb, #fafafa 72%, transparent); }.cfg-calendar-day.is-today>b { color:var(--primary); }.cfg-calendar-event { display:block; max-width:100%; font-size:12px; line-height:17px; padding:3px 7px; border-radius:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; background:#f1f5f9; color:#475569; }.cfg-calendar-event.is-current { background:#dbeafe; color:#1d4ed8; font-weight:700; }.cfg-calendar-event.is-complete { background:#ecfdf5; color:#047857; }.cfg-calendar-footer { display:flex; gap:12px 16px; flex-wrap:wrap; margin-top:10px; font-size:12px; color:var(--muted); }
+.cfg-schedule-head, .cfg-period-title, .cfg-period-list-head { display: flex; align-items: flex-start; gap: 16px; }
+.cfg-schedule-head { justify-content: space-between; flex-wrap: wrap; }
+.cfg-schedule-head h2, .cfg-period-title h2, .cfg-period-list-head h3 { margin: 0; }
+.cfg-schedule-head p, .cfg-period-title p { margin: 5px 0 0; color: var(--muted); }
+.cfg-schedule-overview { display: grid; grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); gap: 16px; }
+.cfg-period-title { justify-content: space-between; padding: 14px 18px 6px; }
+.cfg-current-period .cfg-period-title h2 { margin-top:2px; font-size:20px; line-height:26px; }
+.cfg-current-period .cfg-period-title p { margin-top:3px; line-height:19px; }
+.cfg-current-period { overflow: hidden; }
+.cfg-default-schedule .card-b { display: grid; gap: 10px; }
+.cfg-default-schedule p { margin: 0; }
+.cfg-schedule-preview { display: grid; gap: 8px; }
+.cfg-schedule-preview > div { border-left: 2px solid var(--line); padding-left: 10px; display: grid; gap: 2px; }
+.cfg-schedule-preview b { font-size: var(--font-size-sm); font-weight: 600; }
+.cfg-schedule-preview span { font-size: var(--font-size-sm); color: var(--muted); }
+.cfg-schedule-timeline { display: flex; padding: 8px 18px 18px; overflow-x: auto; }
+.cfg-schedule-step { min-width: 116px; position: relative; padding-top: 23px; flex: 1; }
+.cfg-schedule-step::before { content: ''; position: absolute; height: 2px; background: var(--line); top: 8px; left: 0; right: 0; }
+.cfg-schedule-step:first-child::before { left: 50%; }
+.cfg-schedule-step:last-child::before { right: 50%; }
+.cfg-schedule-step i { position: absolute; top: 2px; left: calc(50% - 6px); width: 10px; height: 10px; border-radius: 50%; background: #fff; border: 2px solid #aab7c7; z-index: 1; }
+.cfg-schedule-step > div { display: grid; gap: 3px; text-align: center; padding: 0 5px; }
+.cfg-schedule-step b { font-size: var(--font-size-sm); }
+.cfg-schedule-step span { color: var(--muted); font-size: var(--font-size-xs); line-height: 1.35; }
+.cfg-schedule-step.is-past i { background: #6e7e92; border-color: #6e7e92; }
+.cfg-schedule-step.is-current i { background: var(--brand); border-color: var(--brand); box-shadow: 0 0 0 3px #dcecff; }
+.cfg-schedule-step.is-current b { color: var(--brand); }
+.cfg-period-list { display: grid; gap: 12px; }
+.cfg-period-list-head { align-items: center; }
+.cfg-period-toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+.cfg-period-toolbar input { min-width: 230px; flex: 1; }
+.cfg-period-toolbar select { min-width: 150px; }
+.cfg-period-table { overflow-x: auto; }
+.cfg-period-table table { min-width: 1150px; }
+.cfg-schedule-modal { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .7fr); gap: 20px; max-height: min(68vh, 680px); overflow: auto; }
+.cfg-schedule-form { display: grid; align-content: start; gap: 10px; }
+.cfg-schedule-form p, .cfg-schedule-form h4 { margin: 0; }
+.cfg-schedule-form h4 { margin-top: 8px; font-size: var(--font-size-sm); }
+.cfg-schedule-form-row { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(240px, 1.2fr); gap: 12px; align-items: center; }
+.cfg-schedule-form-row label { font-weight: 600; }
+.cfg-schedule-form-row select { min-width: 0; flex: 1; }
+.cfg-schedule-live { border-left: 1px solid var(--line); padding-left: 20px; }
+.cfg-schedule-live h3 { margin: 5px 0 8px; }
+.cfg-schedule-live .cfg-schedule-timeline { display: grid; padding: 0; overflow: visible; }
+.cfg-schedule-live .cfg-schedule-step { min-width: 0; min-height: 42px; padding: 0 0 10px 26px; }
+.cfg-schedule-live .cfg-schedule-step::before { width: 2px; height: 100%; top: 10px; left: 5px; right: auto; }
+.cfg-schedule-live .cfg-schedule-step:last-child::before { display: none; }
+.cfg-schedule-live .cfg-schedule-step i { top: 2px; left: 0; }
+.cfg-schedule-live .cfg-schedule-step > div { text-align: left; padding: 0; }
+@media (max-width: 900px) { .cfg-schedule-overview, .cfg-schedule-modal { grid-template-columns: minmax(0, 1fr); } .cfg-schedule-live { border-left: 0; border-top: 1px solid var(--line); padding: 16px 0 0; } }
+@media (max-width: 600px) { .cfg-schedule-form-row { grid-template-columns: minmax(0, 1fr); gap: 5px; } .cfg-period-title { padding-left: 14px; padding-right: 14px; } .cfg-schedule-timeline { padding-left: 12px; padding-right: 12px; } }
+
+/* ===== Thông báo đa kênh ===== */
+.notification-page { display:grid; gap:16px; }.notification-page-head h2 { margin:0; font-size:22px; }.notification-page-head p { margin:5px 0 0; color:var(--muted); }.notification-tabs { margin:0; width:max-content; max-width:100%; }.notification-info { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:11px 14px; border:1px solid #cfe0f5; background:#f5f9ff; color:#36516e; font-size:13px; line-height:1.45; }.notification-auto-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px; align-items:start; }.notification-rules-list,.notification-rule-detail { border:1px solid var(--line); background:#fff; min-width:0; }.notification-panel-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px; border-bottom:1px solid var(--line); }.notification-panel-head h3 { margin:0; font-size:14px; }.notification-rule-filters,.notification-history-filters { display:flex; flex-wrap:wrap; gap:8px; padding:12px 16px; border-bottom:1px solid var(--line); }.notification-rule-filters .input,.notification-history-filters .input { min-width:130px; flex:1; }.notification-rule-filters input,.notification-history-filters input { min-width:190px; }.notification-rule-table { overflow:auto; }.notification-rule-table table { min-width:680px; }.notification-rule-table tr.is-selected td { background:#f5f9ff; }.notification-form { display:grid; gap:16px; padding:16px; }.notification-form section { display:grid; gap:8px; }.notification-form h4 { margin:0; font-size:12px; color:var(--muted); letter-spacing:.02em; }.notification-channel-list { gap:12px; flex-wrap:wrap; }.notification-channel-list label { font-size:13px; white-space:nowrap; }.notification-rule-actions { display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--line); }.notification-manual { max-width:780px; }.notification-manual-form { display:grid; gap:14px; }.notification-history .card-b { display:grid; gap:12px; }.notification-history table { min-width:1050px; }
+@media (max-width:900px) { .notification-auto-grid { grid-template-columns:minmax(0,1fr); }.notification-info { align-items:flex-start; flex-direction:column; } }
+
+/* Manual notification uses a single wide workspace, not the rule master-detail layout. */
+.notification-manual-workspace { width:100%; max-width:1200px; }.notification-manual-workspace .card-h { padding:20px 24px 14px; }.notification-manual-workspace .card-h h3 { margin:0; font-size:18px; }.notification-manual-workspace .card-b { padding:20px 24px 22px; }.notification-manual-workspace .notification-manual-form { gap:20px; }.notification-manual-section { display:grid; gap:16px; }.notification-manual-section h4 { margin:0; font-size:14px; font-weight:700; }.notification-manual-recipient-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }.notification-manual-recipient-grid .field,.notification-manual-section .field { display:grid; gap:7px; margin:0; }.notification-manual-channels { margin-top:2px!important; }.notification-manual-channels .notification-channel-list { gap:20px 28px; min-height:28px; align-items:center; }.notification-manual-workspace .divider { margin:2px 0; }.notification-manual-body { min-height:170px; resize:vertical; }.notification-manual-actions { display:flex; justify-content:flex-end; gap:8px; padding-top:2px; }.notification-manual-workspace .input { min-height:40px; font-size:14px; }.notification-manual-workspace textarea.input { min-height:170px; line-height:1.5; }
+@media (max-width:700px) { .notification-manual-workspace .card-h,.notification-manual-workspace .card-b { padding-left:16px; padding-right:16px; }.notification-manual-recipient-grid { grid-template-columns:minmax(0,1fr); gap:14px; }.notification-manual-channels .notification-channel-list { gap:12px 20px; } }

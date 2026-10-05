@@ -9,12 +9,16 @@
   // Khoản phải thu, Thu tiền, Đối soát. Ngày phát sinh giao dịch thực tế (ngày ghi chỉ số, ngày thu,
   // ngày giao dịch ngân hàng...) là filter RIÊNG của từng màn, không đồng nhất với kỳ này.
   function financePeriod() {
-    const list = A.db.billingPeriods, idx = list.findIndex(p => p.id === ui.period);
-    return idx >= 0 ? list[idx] : list[list.length - 1];
+    const market = ui.market;
+    const p = A.periods && A.periods.resolve ? A.periods.resolve(market, ui.periodId || ui.period) : null;
+    const list = A.periods ? A.periods.listForMarket(market) : A.db.billingPeriods;
+    const selected = p && (p.marketId === market || !p.marketId) ? p : list[list.length - 1];
+    if (selected) { ui.periodId = selected.id; ui.period = A.periods ? A.periods.periodKey(selected) : selected.id; }
+    return selected;
   }
   function financeStatusBadge(p) { return p.status === 'COLLECTING' ? '<span class="tag info">● Đang thu</span>' : p.status === 'OPEN' || p.status === 'PREPARING' ? '<span class="tag warn">◌ Đã mở · chưa phát hành</span>' : '<span class="tag">◻ Kỳ trước</span>'; }
   function financeTimeBarRow(label) {
-    const p = financePeriod(), list = A.db.billingPeriods, idx = list.findIndex(x => x.id === p.id);
+    const p = financePeriod(), list = A.periods ? A.periods.listForMarket(ui.market) : A.db.billingPeriods, idx = list.findIndex(x => x.id === p.id);
     return `<div class="row" style="flex-wrap:wrap">
       <span class="label-sm">${label}</span>
       <div class="row" style="gap:4px">
@@ -24,10 +28,10 @@
       </div>
       ${financeStatusBadge(p)}<span class="small muted">${U.dmy(p.startDate)} – ${U.dmy(p.endDate)}</span></div>`;
   }
-  A.CH['fp-select'] = el => { ui.period = el.value; A.render(); };
+  A.CH['fp-select'] = el => { const p = A.periods && A.periods.getById(el.value); ui.periodId = el.value; ui.period = p ? A.periods.periodKey(p) : el.value; A.render(); };
   A.ACT['fp-nav'] = el => {
-    const list = A.db.billingPeriods, idx = list.findIndex(x => x.id === ui.period), ni = idx + Number(el.dataset.d);
-    if (ni >= 0 && ni < list.length) { ui.period = list[ni].id; A.render(); }
+    const list = A.periods ? A.periods.listForMarket(ui.market) : A.db.billingPeriods, idx = list.findIndex(x => x.id === financePeriod().id), ni = idx + Number(el.dataset.d);
+    if (ni >= 0 && ni < list.length) { ui.periodId = list[ni].id; ui.period = A.periods ? A.periods.periodKey(list[ni]) : list[ni].id; A.render(); }
   };
 
   // ---------- Chỉ số điện, nước (quản lý theo từng kỳ/tháng) ----------
@@ -37,7 +41,8 @@
   const photoKey = (r, kind) => r.period + '|' + r.stallId + '|' + kind;
   const findReading = (id, period) => A.db.readings.find(x => x.stallId === id && x.period === period);
   const currentPeriod = () => {
-    const list = A.db.meterPeriods, idx = list.findIndex(p => p.id === ui.period);
+    const billing = financePeriod(), list = (A.db.meterPeriods || []).filter(p => p.marketId === ui.market || (!p.marketId && p.id === (billing && billing.period)));
+    const idx = list.findIndex(p => p.billingPeriodId === (billing && billing.id) || p.id === (billing && billing.id));
     return idx >= 0 ? list[idx] : list[list.length - 1];
   };
   function periodStatusBadge(p) {

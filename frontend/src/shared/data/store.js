@@ -9,6 +9,95 @@
   const KEY = 'choso-caolanh-state';
   const BACKUP_KEY = 'choso-caolanh-state-backup';
   const data = A.data || (A.data = {});
+  // Collection periods are owned by a market.  `period` is the business month
+  // (YYYY-MM); `id` is the technical identifier of one market-period instance.
+  // Keep this adapter here so every feature resolves the same identity instead
+  // of independently treating a month string as a global primary key.
+  const periodMonth = value => {
+    if (!value) return '';
+    if (typeof value === 'object') return value.period || periodMonth(value.id);
+    const text = String(value);
+    const match = text.match(/(\d{4}-\d{2})$/);
+    return match ? match[1] : '';
+  };
+  const scopedPeriodId = (marketId, period) => marketId && period ? `${marketId}_${period}` : '';
+  const periods = A.periods || (A.periods = {});
+  periods.periodKey = periodMonth;
+  periods.makeId = scopedPeriodId;
+  periods.getById = id => (A.db && A.db.billingPeriods || []).find(x => x && x.id === id) || null;
+  periods.getByMarketMonth = (marketId, period) => (A.db && A.db.billingPeriods || []).find(x => x && x.marketId === marketId && x.period === period) || null;
+  periods.listForMarket = marketId => (A.db && A.db.billingPeriods || []).filter(x => x && x.marketId === marketId);
+  periods.exists = (marketId, period) => !!periods.getByMarketMonth(marketId, period);
+  periods.resolve = (marketId, reference) => {
+    const byId = periods.getById(reference);
+    if (byId && (!byId.marketId || byId.marketId === marketId)) return byId;
+    const period = periodMonth(reference);
+    const scoped = periods.getByMarketMonth(marketId, period);
+    if (scoped) return scoped;
+    // Legacy rows are read-only compatibility fallbacks. They never prevent a
+    // new scoped period from being created and never get assigned a market here.
+    const legacy = (A.db && A.db.billingPeriods || []).filter(x => x && !x.marketId && periodMonth(x) === period);
+    return legacy.length === 1 ? legacy[0] : null;
+  };
+  periods.matchesEntity = (entity, periodRecord, marketId) => {
+    if (!entity || !periodRecord) return false;
+    if (entity.billingPeriodId) return entity.billingPeriodId === periodRecord.id;
+    const owner = entity.marketId || entity.market;
+    return (!marketId || !owner || owner === marketId) && entity.period === periodMonth(periodRecord);
+  };
+  periods.isIssued = periodRecord => {
+    if (!periodRecord || !A.db) return false;
+    if (periodRecord.marketId) return (A.db.issuedPeriodIds || []).includes(periodRecord.id);
+    return (A.db.issuedPeriods || []).includes(periodMonth(periodRecord));
+  };
+  periods.markIssued = periodRecord => {
+    if (!periodRecord || !A.db) return false;
+    if (!periodRecord.marketId) {
+      if (!(A.db.issuedPeriods || []).includes(periodMonth(periodRecord))) (A.db.issuedPeriods || (A.db.issuedPeriods = [])).push(periodMonth(periodRecord));
+      return true;
+    }
+    const ids = A.db.issuedPeriodIds || (A.db.issuedPeriodIds = []);
+    if (!ids.includes(periodRecord.id)) ids.push(periodRecord.id);
+    return true;
+  };
+  periods.migrate = () => {
+    if (!A.db) return false;
+    let changed = false;
+    const list = Array.isArray(A.db.billingPeriods) ? A.db.billingPeriods : (A.db.billingPeriods = []);
+    if (!Array.isArray(A.db.issuedPeriodIds)) { A.db.issuedPeriodIds = []; changed = true; }
+    list.forEach(record => {
+      if (!record || typeof record !== 'object') return;
+      const month = periodMonth(record);
+      if (month && record.period !== month) { record.period = month; changed = true; }
+      if (record.marketId && month) {
+        const technicalId = scopedPeriodId(record.marketId, month);
+        if (record.id !== technicalId) { record.id = technicalId; changed = true; }
+        if (!record.label) { record.label = `${month.slice(5)}/${month.slice(0, 4)}`; changed = true; }
+        if (!record.source) { record.source = 'default'; changed = true; }
+        if ((A.db.issuedPeriods || []).includes(month) && !A.db.issuedPeriodIds.includes(technicalId)) {
+          A.db.issuedPeriodIds.push(technicalId); changed = true;
+        }
+      } else if (month && !record.marketId && !record.legacyPeriod) {
+        // Explicit marker makes the compatibility policy inspectable without
+        // guessing ownership for historic global month records.
+        record.legacyPeriod = true; changed = true;
+      }
+    });
+    // New relationship fields can only be backfilled when market + month map
+    // to exactly one scoped period. Ambiguous legacy records remain untouched.
+    const attach = (rows, marketField) => (Array.isArray(rows) ? rows : []).forEach(row => {
+      if (!row || row.billingPeriodId) return;
+      const marketId = row.marketId || row[marketField] || row.market;
+      const period = row.period;
+      const match = marketId && period && periods.getByMarketMonth(marketId, period);
+      if (match) { row.billingPeriodId = match.id; changed = true; }
+    });
+    attach(A.db.invoices, 'market'); attach(A.db.billingDrafts, 'market');
+    attach(A.db.billingWarnings, 'market'); attach(A.db.debts, 'market');
+    attach(A.db.cashHandovers, 'market'); attach(A.db.receivableAdjustments, 'market');
+    attach(A.db.meterPeriods, 'marketId'); attach(A.db.meterReadings, 'marketId');
+    return changed;
+  };
   // Last persisted snapshot seen by this tab. It protects unrelated changes
   // made in a second web app from a stale whole-A.db save.
   let baselineDb = null;
@@ -122,7 +211,8 @@
       c.serviceApplicability = { electricity: !!st.hasMeter, water: !!st.hasMeter, marketService: c.market === 'TTD' };
       serviceMigrated = true;
     });
-    if (serviceMigrated) A.save();
+    const migratedPeriods = A.periods && A.periods.migrate ? A.periods.migrate() : false;
+    if (migratedPeriods) A.reindex();
     // QUA_HAN_CHUYEN_CONG_NO: khoản quá hạn chưa thu → hệ thống tự chuyển công nợ (idempotent).
     if (A.syncDebts) A.syncDebts({ save: false });
     // Hồ sơ/tài khoản: collection nghiệp vụ đổi số điện thoại, cùng state prototype A.db.
@@ -140,7 +230,7 @@
       }
     });
     A.db.actorMetadata = actorMetadata;
-    if (migratedActorMetadata) A.save();
+    if (serviceMigrated || migratedActorMetadata || migratedPeriods) A.save();
   };
   // External-tab refresh: never seed, clear, or write localStorage. UI callers
   // decide separately whether it is safe to render (for example, no open form).
@@ -151,6 +241,7 @@
     A.db = latest.db;
     captureBaseline(latest.db);
     A.reindex();
+    if (A.periods && A.periods.migrate && A.periods.migrate()) { A.reindex(); A.save(); }
     if (A.syncDebts) A.syncDebts({ save: false });
     if (!Array.isArray(A.db.phoneChangeRequests)) A.db.phoneChangeRequests = [];
     return { changed: true };
