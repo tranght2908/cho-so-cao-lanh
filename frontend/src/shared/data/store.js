@@ -229,7 +229,10 @@
       const raw = localStorage.getItem(KEY);
       if (!raw) return { db: null };
       const db = JSON.parse(raw);
-      return db && db.version === D.VERSION ? { db } : { db: null, incompatible: true };
+      if (db && db.version === D.VERSION) return { db };
+      // Phiên bản CŨ hơn: loadDb đã sao lưu (backupOutdated) và dựng lại seed có chủ đích → được ghi đè. Chỉ chặn khi state
+      // đã lưu là phiên bản MỚI hơn (tab khác chạy code mới) hoặc không đọc được version.
+      return db && Number(db.version) < Number(D.VERSION) ? { db: null, outdated: true } : { db: null, incompatible: true };
     } catch (e) { return { db: null, invalid: true }; }
   }
   // ---------- dữ liệu ----------
