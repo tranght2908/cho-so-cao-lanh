@@ -225,17 +225,65 @@
     return defaultConfig();
   }
   let CFG = loadConfig();
+  // The policy resolver is shared by pricing preview, contract creation and
+  // billing.  Matching by display text in individual screens is prohibited.
+  function marketFor(id) {
+    const markets = A.features && A.features.markets && A.features.markets.service;
+    return (markets && markets.get && markets.get(id)) || ((typeof A.effectiveMarkets === 'function' ? A.effectiveMarkets() : D.MARKETS || []).find(x => x.id === id)) || null;
+  }
+  function marketGrade(market) {
+    const rank = String((market && (market.rank || market.hang)) || '');
+    const hit = /(?:HANG_|hạng\s*)([123])/i.exec(rank);
+    return hit ? Number(hit[1]) : null;
+  }
+  function legacyStallType(point) {
+    return { kiot: 'Ki-ốt', nhalong: 'Trong nhà lồng chợ', ngoai: 'Tự sản tự tiêu', phien: 'Quầy theo phiên' }[point && point.type] || null;
+  }
+  function policyActiveAt(policy, date) {
+    return !!policy && policy.status === 'active' && (!policy.effectiveFrom || policy.effectiveFrom <= date) && (!policy.effectiveTo || policy.effectiveTo >= date);
+  }
+  function policyMarketMatch(policy, marketId, grade) {
+    const listed = Array.isArray(policy.marketIds) ? policy.marketIds : [];
+    if (listed.length && !listed.includes(marketId)) return false;
+    if (!listed.length && policy.marketId && policy.marketId !== 'ALL' && policy.marketId !== marketId) return false;
+    return !(Array.isArray(policy.marketGrades) && policy.marketGrades.length) || policy.marketGrades.includes(grade);
+  }
+  function resolveApplicableMarketFeePolicy(input) {
+    const point = input && input.point;
+    const marketId = (input && input.marketId) || (input && input.market && input.market.id) || (point && point.market);
+    const date = String((input && (input.startDate || input.date)) || (U.today ? U.today() : '') || '');
+    const market = (input && input.market) || marketFor(marketId);
+    if (!point || !marketId || !date) return null;
+    const areaTypeId = point.areaTypeId || point.areaType || null;
+    const legacyType = legacyStallType(point);
+    return (CFG.stallPrices || []).filter(policy => policyActiveAt(policy, date)
+      && policyMarketMatch(policy, marketId, marketGrade(market))
+      && (policy.areaTypeId ? policy.areaTypeId === areaTypeId : (policy.stallType === legacyType || policy.stallType === point.cat)))
+      .sort((a, b) => {
+        const exactA = Number(a.marketId === marketId), exactB = Number(b.marketId === marketId);
+        if (exactA !== exactB) return exactB - exactA;
+        return String(b.effectiveFrom || '').localeCompare(String(a.effectiveFrom || ''));
+      })[0] || null;
+  }
   // Người nghe thay đổi cấu hình (vd. kỳ thu tự tính lại nháp khi biểu phí đổi). Lỗi của người nghe không chặn việc lưu.
   const changeListeners = [];
   function save() {
     try { localStorage.setItem(SKEY, JSON.stringify(CFG)); } catch (e) { /* bỏ qua */ }
     changeListeners.forEach(fn => { try { fn(); } catch (e) { console.error('[service-config] change listener lỗi', e); } });
   }
+  function reload() {
+    const next = loadConfig();
+    if (JSON.stringify(next) === JSON.stringify(CFG)) return { changed: false };
+    CFG = next;
+    return { changed: true };
+  }
   function nowStr() { return A.U.dmy(A.U.today()) + ' ' + A.U.nowTime(); }
 
   const SC = A.SERVICE_CFG = {
     KEY: SKEY,
     data: () => CFG,
+    reload,
+    resolveApplicableMarketFeePolicy,
     onChange: fn => { if (typeof fn === 'function') changeListeners.push(fn); },
     // Migration cấu hình lúc nạp (vd. biểu phí demo) chạy TRƯỚC khi dữ liệu kỳ thu sẵn sàng → bên nạp dữ liệu hỏi lại để tính lại nháp.
     takeRecalcRequest: () => { const r = recalcRequested; recalcRequested = false; return r; },
@@ -338,23 +386,9 @@
   // Đơn giá hiện hành của điểm KD lấy từ "Chính sách thu và biểu phí", không phải
   // đơn giá snapshot của hợp đồng. NEED_CONFIRMATION: quy tắc mapping biểu phí
   // theo khu vực/loại điểm cần được nghiệp vụ xác nhận khi có API/backend.
-  U.appliedStallPrice = st => {
-    if (!st) return null;
-    const stallType = { kiot: 'Ki-ốt', nhalong: 'Trong nhà lồng chợ', ngoai: 'Tự sản tự tiêu', phien: 'Quầy theo phiên' }[st.type];
-    if (!stallType) return null;
-    const prices = A.SERVICE_CFG ? A.SERVICE_CFG.list('stallPrices') : ((D.RATE_POLICY_SEED || {}).stallPrices || []);
-    const today = U.today ? U.today() : '';
-    // Ưu tiên chính sách chung marketId:'ALL'; các bản ghi theo chợ cũ vẫn là
-    // dữ liệu chuyển tiếp để không làm mất khả năng hiển thị của prototype cũ.
-    const matches = prices.filter(r => (r.marketId === 'ALL' || r.marketId === st.market)
-      && (r.stallType === stallType || r.stallType === st.cat) && r.status === 'active'
-      && (!r.effectiveFrom || r.effectiveFrom <= today) && (!r.effectiveTo || r.effectiveTo >= today));
-    return matches.sort((a, b) => {
-      const commonFirst = Number(b.marketId === 'ALL') - Number(a.marketId === 'ALL');
-      if (commonFirst) return commonFirst;
-      return String(b.effectiveFrom || '').localeCompare(String(a.effectiveFrom || ''));
-    })[0] || null;
-  };
+  U.appliedStallPrice = (st, startDate) => A.SERVICE_CFG.resolveApplicableMarketFeePolicy({
+    point: st, startDate: startDate || (U.today ? U.today() : '')
+  });
   U.unitLabel = st => {
     const price = U.appliedStallPrice(st);
     if (!price) return 'Chưa cấu hình';

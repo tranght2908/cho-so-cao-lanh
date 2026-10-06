@@ -38,6 +38,21 @@
   };
   // Persisted by the legacy store; the caller builds the record (role, scopes, status).
   service.add = function (account) { return repository.add(account); };
+  // Canonical write path for a merchant account. Generic account creation is
+  // intentionally kept for staff administration; this use case refuses an
+  // orphan, a second account for one profile, and a login phone owned by a
+  // different account.
+  service.createTraderAccount = function (account) {
+    const traderId = account && account.traderId;
+    const trader = traderId && A.idx && A.idx.trader ? A.idx.trader.get(traderId) : null;
+    if (!trader || (A.ACCOUNTS.traderLinkState && A.ACCOUNTS.traderLinkState(traderId).status !== 'NONE')) return null;
+    const phone = A.ACCOUNTS.normalizePhone(trader.phone);
+    const owner = A.ACCOUNTS.byPhone(phone);
+    if (!phone || owner || repository.get(account.id)) return null;
+    const next = Object.assign({}, account, { roleIds: ['trader'], traderId, traderIds: [traderId], phone, status: 'PENDING_ACTIVATION' });
+    repository.add(next);
+    return next;
+  };
   service.setStatus = function (id, status) { return repository.setStatus(id, status); };
   // "Loại người dùng" (nhóm danh tính) suy ra từ quan hệ sẵn có — vai trò trader, liên kết hồ sơ tiểu
   // thương hoặc accountType cũ — không có field lưu riêng. Dùng chung cho màn quản trị tài khoản và

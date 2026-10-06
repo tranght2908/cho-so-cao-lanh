@@ -9,13 +9,17 @@ const CS = A.features.contracts.service;
 const market = A.MARKET_CATALOG.add({ name: 'Chợ lifecycle', address: 'Test', rank: 'HANG_3', priceConfigId: 'QD480_NHOM_CON_LAI' }, 'test');
 assert.strictEqual(market.status, 'NOT_ACTIVE');
 assert.strictEqual(market.layoutStatus, 'PENDING_SETUP');
+assert.strictEqual(L.completeMarketLayout(market.id, 'test'), null, 'a market cannot activate before its layout graph is complete');
+assert.strictEqual(A.MARKET_CATALOG.get(market.id).status, 'NOT_ACTIVE');
+
+const building = { id: 'LIFE-BUILDING', market: market.id, name: 'Nhà lồng', businessArea: 10 };
+const row = { id: 'LIFE-ROW', market: market.id, buildingId: building.id, allocatedArea: 10 };
+const point = { id: 'LIFE-POINT', code: 'L-01', market: market.id, rowId: row.id, area: 1, status: 'active', operationalStatus: 'active', usageStatus: 'VACANT', usageReason: null };
+const trader = { id: 'LIFE-TRADER', name: 'Lifecycle trader', market: market.id, stalls: [], status: 'WAITING_ALLOCATION' };
+A.db.buildings.push(building); A.db.rows.push(row); A.db.stalls.push(point); A.db.traders.push(trader); A.reindex();
 L.completeMarketLayout(market.id, 'test');
 assert.strictEqual(A.MARKET_CATALOG.get(market.id).status, 'ACTIVE');
 assert.strictEqual(A.MARKET_CATALOG.get(market.id).layoutStatus, 'SETUP_COMPLETED');
-
-const point = { id: 'LIFE-POINT', code: 'L-01', market: market.id, rowId: null, area: 1, status: 'active', operationalStatus: 'active', usageStatus: 'VACANT', usageReason: null };
-const trader = { id: 'LIFE-TRADER', name: 'Lifecycle trader', market: market.id, stalls: [], status: 'WAITING_ALLOCATION' };
-A.db.stalls.push(point); A.db.traders.push(trader); A.reindex();
 assert.strictEqual(BP.get(point.id).usageStatus, 'VACANT');
 assert.strictEqual(A.features.traders.service.getProfile(trader.id).status, 'WAITING_ALLOCATION');
 

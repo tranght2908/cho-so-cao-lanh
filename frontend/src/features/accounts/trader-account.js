@@ -91,7 +91,8 @@
     if (!A.canDo('tai-khoan.tao-moi')) return;
     const x = checked(el.dataset.id); if (!x) return;
     const t = x.t, id = accounts.nextTraderAccountId(U.pad), phone = A.ACCOUNTS.normalizePhone(t.phone);
-    accounts.add({ id, code: id.replace('AC-', ''), fullName: t.name, phone, accountType: 'Tiểu thương', title: 'Tiểu thương', roleIds: ['trader'], organization: marketName(t.market), marketScopes: [t.market], status: PENDING, traderId: t.id });
+    const created = accounts.createTraderAccount({ id, code: id.replace('AC-', ''), fullName: t.name, phone, accountType: 'Tiểu thương', title: 'Tiểu thương', roleIds: ['trader'], organization: marketName(t.market), marketScopes: [t.market], status: PENDING, traderId: t.id });
+    if (!created) return U.toast('Không thể tạo tài khoản: hồ sơ đã có tài khoản hoặc số điện thoại đã được sử dụng.');
     U.log('Tạo tài khoản tiểu thương ' + id.replace('AC-', '') + ' cho hồ sơ ' + t.id + ' — chờ kích hoạt qua OTP');
     A.closeModal(); A.render();
     // Prototype: không có nhà cung cấp SMS — chỉ tạo hướng dẫn kích hoạt, không khẳng định đã gửi thật.

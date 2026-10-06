@@ -408,6 +408,9 @@
     if (owners.length) return { ok: true, account: a, alreadyLinked: true };
     a.traderIds = traderIdsOf(a).concat([traderId]);
     if (!a.traderId) a.traderId = traderId;
+    // Scope metadata follows the profile's market; record access remains
+    // constrained by traderIds rather than this list alone.
+    if (Array.isArray(a.marketScopes) && !a.marketScopes.includes('ALL') && !a.marketScopes.includes(t.market)) a.marketScopes.push(t.market);
     saveAccounts();
     return { ok: true, account: a, alreadyLinked: false };
   }

@@ -92,9 +92,10 @@ ok('3 search / rank / status / layout filters compose', () => {
   A.CH['dmc-rank']({ value: 'HANG_3' }); const n3 = rowsInView(); assert(n3 > 0 && n3 < 12);
   A.CH['dmc-layout']({ value: 'unset' }); assert.strictEqual(rowsInView(), MC.rows().filter(r => r.rank === 'HANG_3' && !MC.layoutReady(r.id)).length);
   h.act('dmc-reset');
-  MC.update('SQ', { status: 'inactive' }, 't');
-  A.CH['dmc-status']({ value: 'inactive' }); assert.strictEqual(rowsInView(), 1);
-  MC.update('SQ', { status: 'active' }, 't'); h.act('dmc-reset');
+  const sqStatus = MC.get('SQ').status;
+  MC.update('SQ', { status: 'NOT_ACTIVE' }, 't');
+  A.CH['dmc-status']({ value: 'NOT_ACTIVE' }); assert.strictEqual(rowsInView(), MC.rows().filter(r => r.status === 'NOT_ACTIVE').length);
+  MC.update('SQ', { status: sqStatus }, 't'); h.act('dmc-reset');
 });
 ok('4 (B/C) create: section C is a checklist of area types, no quota inputs/totals; nothing pre-selected', () => {
   h.act('dmc-new');
@@ -140,15 +141,19 @@ ok('5 (I) detail modal: section C lists area types only, no quota numbers', () =
   assert(!/data-act="(mb-|qh-)/.test(m), 'no layout setup action for admin');
   A.closeModal();
 });
-ok('6 existing market without scale: edit general info keeps "Chưa cập nhật" and new wording', () => {
+ok('6 existing market without scale: update requires valid scale and an applied area type', () => {
   h.act('dmc-edit', { id: 'HA' });
-  assert(/Có thể để trống thông tin quy mô nếu chưa có số liệu chính thức\. Loại diện tích kinh doanh được cấu hình theo thực tế áp dụng tại chợ\./.test(h.modal()));
-  assert(!/mục B và C/.test(h.modal()));
-  fill({ 'dmc-address': MC.get('HA').address, 'dmc-phone': '0277 000 111', 'dmc-total-area': '', 'dmc-business-area': '' }); pick([]);
+  fill({ 'dmc-name': MC.get('HA').name, 'dmc-address': MC.get('HA').address, 'dmc-phone': '0277 000 111', 'dmc-total-area': '', 'dmc-business-area': '' }); pick([]);
   h.act('dmc-save', { id: 'HA' });
-  assert.strictEqual(MC.get('HA').phone, '0277 000 111');
+  assert(/Vui lòng nhập tổng diện tích chợ/.test(h.el('#dmc-err-totalArea').innerHTML));
+  assert(/ít nhất một loại diện tích/.test(h.el('#dmc-err-areaTypes').innerHTML));
   assert.strictEqual(MC.get('HA').businessArea, null);
   assert.strictEqual(MC.get('HA').allowedAreaTypeIds, null);
+  fill({ 'dmc-phone': '0901234567', 'dmc-total-area': 1000, 'dmc-business-area': 600 }); pick(['covered']);
+  h.act('dmc-save', { id: 'HA' });
+  assert.strictEqual(MC.get('HA').phone, '0901234567');
+  assert.strictEqual(MC.get('HA').businessArea, 600);
+  eq(MC.get('HA').allowedAreaTypeIds, ['covered']);
 });
 const usageCL = MC.usage('CL');
 ok('7 usage derived from business points', () => {
@@ -163,7 +168,7 @@ ok('8 (D/G) enable area types on a market with layout → saved; layout untouche
   const before = layoutSnap();
   h.act('dmc-edit', { id: 'CL' });
   assert(h.modal().includes(`${usageCL.covered.count.toLocaleString('vi-VN')} điểm đang sử dụng`), 'usage hint');
-  fill({ 'dmc-address': MC.get('CL').address, 'dmc-total-area': 20000, 'dmc-business-area': 9000 });
+  fill({ 'dmc-name': MC.get('CL').name, 'dmc-address': MC.get('CL').address, 'dmc-total-area': 20000, 'dmc-business-area': 9000 });
   pick(typeIds);
   h.act('dmc-save', { id: 'CL' });
   eq(MC.get('CL').allowedAreaTypeIds, typeIds);
@@ -171,6 +176,7 @@ ok('8 (D/G) enable area types on a market with layout → saved; layout untouche
 });
 ok('9 (E) removing an unused area type → saved', () => {
   h.act('dmc-edit', { id: 'CL' });
+  h.input('#dmc-name', MC.get('CL').name);
   eq(checkedInHtml(h.modal()), typeIds, 'form shows stored selection');
   const keep = typeIds.filter(id => id !== unusedCL[0]);
   pick(keep);
@@ -180,6 +186,7 @@ ok('9 (E) removing an unused area type → saved', () => {
 ok('10 (F/G) removing an area type used by points is blocked; nothing changed', () => {
   const before = layoutSnap(), stored = JSON.stringify(MC.get('CL').allowedAreaTypeIds);
   h.act('dmc-edit', { id: 'CL' });
+  h.input('#dmc-name', MC.get('CL').name);
   pick(MC.get('CL').allowedAreaTypeIds.filter(id => id !== 'covered'));
   h.act('dmc-save', { id: 'CL' });
   assert.strictEqual(h.el('#dmc-err-areaTypes').innerHTML, U_esc("Không thể bỏ loại 'Có mái che' vì hiện có điểm kinh doanh đang sử dụng loại diện tích này."));
@@ -193,16 +200,26 @@ ok('11 editing general info keeps legacy manager and area types; cannot blank ex
   const before = JSON.stringify(MC.get('CL').allowedAreaTypeIds);
   const legacyManager = MC.get('CL').manager;
   h.act('dmc-edit', { id: 'CL' });
+  h.input('#dmc-name', MC.get('CL').name);
   pick(MC.get('CL').allowedAreaTypeIds);
   assert(!/dmc-manager|Tổ trưởng phụ trách/.test(h.modal()));
   h.act('dmc-save', { id: 'CL' });
   assert.strictEqual(MC.get('CL').manager, legacyManager);
   assert.strictEqual(JSON.stringify(MC.get('CL').allowedAreaTypeIds), before);
-  h.act('dmc-edit', { id: 'CL' }); fill({ 'dmc-total-area': '', 'dmc-business-area': '' });
+  h.act('dmc-edit', { id: 'CL' }); fill({ 'dmc-name': MC.get('CL').name, 'dmc-total-area': '', 'dmc-business-area': '' });
   h.act('dmc-save', { id: 'CL' });
   assert(/Vui lòng nhập tổng diện tích chợ/.test(h.el('#dmc-err-totalArea').innerHTML));
   fill({ 'dmc-total-area': 20000, 'dmc-business-area': 9000 });
   A.closeModal();
+});
+ok('11b a market name may be updated while its immutable code remains unchanged', () => {
+  const beforeCode = MC.get('CL').code;
+  h.act('dmc-edit', { id: 'CL' });
+  fill({ 'dmc-name': 'Chợ Cao Lãnh cập nhật', 'dmc-address': MC.get('CL').address, 'dmc-total-area': 20000, 'dmc-business-area': 9000 });
+  pick(MC.get('CL').allowedAreaTypeIds);
+  h.act('dmc-save', { id: 'CL' });
+  assert.strictEqual(MC.get('CL').name, 'Chợ Cao Lãnh cập nhật');
+  assert.strictEqual(MC.get('CL').code, beforeCode);
 });
 ok('12 (C) list / KPI / CSV: no "điểm tối đa" quota figures', () => {
   const v = view();
@@ -231,7 +248,7 @@ ok('14 (A) legacy capacityByAreaType → only area types with a declared quota a
   assert(!QUOTA_UI.test(h3.modal()) && !/[^.\d](10|20) điểm|[^.\d](100|200) m²/.test(h3.modal()));
   // Legacy quota stays stored untouched (Mặt bằng still reads it — next task); save writes the new field only.
   h3.act('dmc-edit', { id: 'TTT' });
-  h3.input('#dmc-address', MC3.get('TTT').address); h3.input('#dmc-total-area', '2000'); h3.input('#dmc-business-area', '1200');
+  h3.input('#dmc-name', MC3.get('TTT').name); h3.input('#dmc-address', MC3.get('TTT').address); h3.input('#dmc-total-area', '2000'); h3.input('#dmc-business-area', '1200');
   ['covered', 'uncovered', 'self_produced', 'session'].forEach(id => { h3.el('#dmc-at-' + id).checked = id !== 'uncovered'; });
   h3.act('dmc-save', { id: 'TTT' });
   const rec = JSON.parse(h3.localStorage.getItem('choso-caolanh-marketcatalog')).find(x => x.id === 'TTT');
@@ -251,7 +268,7 @@ ok('15 RBAC: ward leader reads only, handlers refuse', () => {
 });
 ok('16 (J) neighbouring screens still render', () => {
   login(A, 'AC-QT01');
-  const mgr = A.ACCOUNTS.list().find(a => A.ACCOUNTS.primaryRole(a) === 'market_manager' && (a.marketScopes || []).includes('CL'));
+  const mgr = A.ACCOUNTS.currentList().find(a => A.ACCOUNTS.primaryRole(a) === 'market_manager' && (a.marketScopes || []).some(scope => scope === 'ALL' || scope === 'CL'));
   A.ui.sessionAccountId = mgr.id; A.ui.market = 'CL'; A.syncAccountContext();
   ['mat-bang', 'hop-dong', 'tieu-thuong', 'tai-chinh'].forEach(r => { if (!A.VIEWS[r]) return; h.go(r); assert(h.view().length > 100, r); });
 });

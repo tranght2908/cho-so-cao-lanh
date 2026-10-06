@@ -111,9 +111,23 @@
   // LOCKED (giữ nguyên để tương thích, xem A.ACCOUNTS.byTraderId/ttCreateLinkedAccount dùng chung
   // cho cả wizard cũ đã bỏ lẫn luồng OTP mới).
   function ttLinkedAccount(t) { return A.features.accounts.service.byTraderId(t.id); }
-  function ttMiniAppState(t) {
+  // UI-only account lifecycle projection. `t.app` is a legacy installation flag
+  // and must not decide whether the merchant account has been activated.
+  function ttWebAppState(t) {
     const acc = ttLinkedAccount(t);
-    return acc ? (A.ACCOUNTS.authStatus(acc) === 'ACTIVE' ? 'LINKED' : 'LOCKED') : 'NOT_LINKED';
+    return acc ? A.ACCOUNTS.authStatus(acc) : 'NO_ACCOUNT';
+  }
+  const TT_WEBAPP_LABEL = {
+    NO_ACCOUNT: 'Chưa có tài khoản',
+    PENDING_ACTIVATION: 'Chưa kích hoạt',
+    ACTIVE: 'Đã kích hoạt',
+    LOCKED: 'Đã khóa'
+  };
+  const TT_WEBAPP_CLASS = { NO_ACCOUNT: '', PENDING_ACTIVATION: 'warn', ACTIVE: 'ok', LOCKED: 'danger' };
+  function ttWebAppTag(t) { const state = ttWebAppState(t); return `<span class="tag ${TT_WEBAPP_CLASS[state] || ''}">${TT_WEBAPP_LABEL[state] || state}</span>`; }
+  function ttMiniAppState(t) {
+    const state = ttWebAppState(t);
+    return state === 'ACTIVE' ? 'LINKED' : state === 'NO_ACCOUNT' ? 'NOT_LINKED' : 'LOCKED';
   }
   const TT_MINIAPP_LABEL = { NOT_LINKED: 'Chưa kích hoạt', LINKED: 'Đã kích hoạt', LOCKED: 'Đã khóa' };
   const TT_MINIAPP_CLASS = { NOT_LINKED: '', LINKED: 'ok', LOCKED: 'danger' };
@@ -253,23 +267,23 @@
   function ttRows() {
     const q = (f.ttSearch || '').toLowerCase();
     return TS.list().filter(t => U.inM(t)
-      && (!f.ttApp || (f.ttApp === 'yes') === !!t.app)
+      && (!f.ttApp || ttWebAppState(t) === f.ttApp)
       && (!f.ttStatus || ttProfileStatus(t) === f.ttStatus)
       && (!q || t.name.toLowerCase().includes(q) || t.phone.includes(q) || t.id.toLowerCase().includes(q) || ttActivePointsOf(t).some(st => st.code.toLowerCase().includes(q))));
   }
   function ttViewGeneric() {
     const rows = ttRows(), pg = U.pager('tt', rows.length, 25);
     return `${ttPendingSummaryHtml()}<div class="card trader-table-card"><div class="card-h"><h3>${ui.role === 'ward_leader' ? 'Tra cứu tiểu thương' : 'Hồ sơ tiểu thương'}</h3>
-      <select class="input" data-ch="tt-app"><option value="">Mini app: tất cả</option><option value="yes" ${f.ttApp === 'yes' ? 'selected' : ''}>Đã cài mini app</option><option value="no" ${f.ttApp === 'no' ? 'selected' : ''}>Chưa cài</option></select>
+      <select class="input" data-ch="tt-app"><option value="">Web app: tất cả</option><option value="ACTIVE" ${f.ttApp === 'ACTIVE' ? 'selected' : ''}>Đã kích hoạt</option><option value="PENDING_ACTIVATION" ${f.ttApp === 'PENDING_ACTIVATION' ? 'selected' : ''}>Chưa kích hoạt</option><option value="NO_ACCOUNT" ${f.ttApp === 'NO_ACCOUNT' ? 'selected' : ''}>Chưa có tài khoản</option><option value="LOCKED" ${f.ttApp === 'LOCKED' ? 'selected' : ''}>Đã khóa</option></select>
       <select class="input" data-ch="tt-status"><option value="">Trạng thái: Tất cả</option>${Object.entries(TT_PROFILE_LABEL).map(([value, label]) => `<option value="${value}" ${f.ttStatus === value ? 'selected' : ''}>${label}</option>`).join('')}</select>
       <input class="input" placeholder="Tên, SĐT, mã điểm KD" data-in="tt-search" value="${U.esc(f.ttSearch || '')}">
       ${A.canDo('tieu-thuong.them-moi', ui.market) ? '<button class="btn primary" data-act="tt-new">+ Thêm tiểu thương</button>' : ''}</div>
-      <div class="card-b">${U.table([{ t: 'Mã' }, { t: 'Họ tên' }, { t: 'Điện thoại' }, { t: 'Chợ' }, { t: 'Ngành hàng' }, { t: 'Điểm KD' }, { t: 'Trạng thái' }, { t: 'Mini app' }, { t: 'Công nợ', num: true }],
+      <div class="card-b">${U.table([{ t: 'Mã' }, { t: 'Họ tên' }, { t: 'Điện thoại' }, { t: 'Chợ' }, { t: 'Ngành hàng' }, { t: 'Điểm KD' }, { t: 'Trạng thái' }, { t: 'Web app' }, { t: 'Công nợ', num: true }],
         rows.slice(pg.start, pg.end).map(t => {
           const debt = U.traderDebt(t.id), over = U.traderOverdue(t.id);
           const cats = ttCatsOf(t).join(', ') || '—';
           return `<tr class="click" data-act="trader" data-id="${t.id}"><td>${t.id}</td><td><b>${U.esc(t.name)}</b></td><td>${U.maskPhone(t.phone)}</td><td>${U.mShort(t.market)}</td><td class="tt-cats-cell" title="${U.esc(cats)}">${U.esc(cats)}</td>
-            <td>${ttPointsCell(t)}</td><td>${ttProfileStatusTag(t)}</td><td>${t.app ? '<span class="tag ok">Đã cài</span>' : '<span class="tag">Chưa</span>'}</td>
+            <td>${ttPointsCell(t)}</td><td>${ttProfileStatusTag(t)}</td><td>${ttWebAppTag(t)}</td>
             <td class="num" style="${over ? 'color:#df2225;font-weight:600' : ''}">${debt ? U.money(debt) : '–'}</td></tr>`;
         }))}${pg.html}
         <div class="small muted" style="margin-top:8px">Số điện thoại, số giấy tờ được che trên danh sách theo Nghị định 356/2025/NĐ-CP về bảo vệ dữ liệu cá nhân.</div></div></div>`;
@@ -331,7 +345,7 @@
     const placement = usage && Array.isArray(usage.placementFiles) ? usage.placementFiles : [];
     const files = placement.length ? `<div class="contract-copy-list">${placement.map(x => `<div class="contract-copy"><span class="contract-copy-icon">${U.icon('file')}</span><span><b>${U.esc(x.name)}</b><small>${ttFileMetaLabel(x)}</small></span></div>`).join('')}</div>` : '<div class="small muted">Chưa có tệp</div>';
     const view = U.can('mat-bang') ? `<button class="btn sm" data-act="tt-open-point" data-trader="${t.id}" data-id="${st.id}">Xem điểm</button>` : '';
-    return `<div class="tt-dossier-point"><div class="contract-policy-subhead">${st.code} ${U.statusTag(A.pointDisplayStatus(st))}<span class="spacer"></span>${view}</div>${ttPairs([['Vị trí', U.esc(ttPointPath(st))], ['Ngành hàng', U.esc(st.cat || '—')], ['Diện tích', '<b>' + st.area.toLocaleString('vi-VN') + ' m²</b>'], ['Loại diện tích', U.esc(U.areaTypeLabel(st.areaType) || 'Chưa có thông tin')], ['Ngày bắt đầu', U.dmy(ttUsageStart(t, st))]])}<div class="contract-policy-subhead">Hồ sơ bố trí</div>${files}</div>`;
+    return `<div class="tt-dossier-point"><div class="contract-policy-subhead">${st.code} ${U.statusTag(A.pointDisplayStatus(st))}<span class="spacer"></span>${view}</div>${ttPairs([['Vị trí', U.esc(ttPointPath(st))], ['Ngành hàng', U.esc(BP.industry(st) || '—')], ['Diện tích', '<b>' + st.area.toLocaleString('vi-VN') + ' m²</b>'], ['Loại diện tích', U.esc(U.areaTypeLabel(st.areaType) || 'Chưa có thông tin')], ['Ngày bắt đầu', U.dmy(ttUsageStart(t, st))]])}<div class="contract-policy-subhead">Hồ sơ bố trí</div>${files}</div>`;
   }
   // Section A — VIEW MODE (mặc định khi mở drawer).
   function ttSectionAViewHtml(t) {
@@ -354,19 +368,18 @@
     const canVerify = A.canDo('tieu-thuong.xac-minh', t.market);
     const acc = ttLinkedAccount(t);
     if (acc) {
-      const locked = acc.status !== 'active';
+      const state = ttWebAppState(t), locked = state === 'LOCKED', canToggle = state === 'ACTIVE' || state === 'LOCKED';
       return `<dl class="kv">
-          <dt>Trạng thái</dt><dd>${locked ? '<span class="tag danger">Đã khóa</span>' : '<span class="tag ok">Đã kích hoạt</span>'}</dd>
+          <dt>Trạng thái</dt><dd>${ttWebAppTag(t)}</dd>
           <dt>Tài khoản</dt><dd>${acc.id}</dd>
           <dt>SĐT đăng nhập</dt><dd>${U.maskPhone(acc.phone || t.phone)}</dd>
           <dt>Hồ sơ liên kết</dt><dd>${t.id}</dd>
-          <dt>Trạng thái truy cập</dt><dd>${locked ? 'Đã khóa' : 'Hoạt động'}</dd>
+          <dt>Trạng thái truy cập</dt><dd>${TT_WEBAPP_LABEL[state] || state}</dd>
         </dl>
-        ${canVerify ? `<div class="row" style="margin-top:8px"><button class="btn sm ${locked ? '' : 'danger'}" data-act="tt-miniapp-toggle" data-id="${t.id}">${locked ? 'Mở khóa truy cập' : 'Khóa truy cập'}</button></div>` : ''}`;
+        ${canVerify && canToggle ? `<div class="row" style="margin-top:8px"><button class="btn sm ${locked ? '' : 'danger'}" data-act="tt-miniapp-toggle" data-id="${t.id}">${locked ? 'Mở khóa truy cập' : 'Khóa truy cập'}</button></div>` : ''}`;
     }
-    return `<div class="note"><span class="tag">Chưa kích hoạt</span><div style="margin-top:8px">Số điện thoại đăng ký: <b>${U.maskPhone(t.phone)}</b></div>
-      <div class="small muted" style="margin-top:4px">Tiểu thương có thể sử dụng số điện thoại đã đăng ký với Ban Quản lý để kích hoạt Mini App.</div></div>
-      ${canVerify ? `<div class="row" style="margin-top:8px"><button class="btn sm" data-act="tt-miniapp-copy-guide" data-id="${t.id}">Sao chép hướng dẫn</button></div>` : ''}`;
+    return `<div class="note"><span class="tag">Chưa có tài khoản</span><div style="margin-top:8px">Số điện thoại hồ sơ: <b>${U.maskPhone(t.phone)}</b></div>
+      <div class="small muted" style="margin-top:4px">Tiểu thương chưa có tài khoản Web app để thực hiện bước kích hoạt.</div></div>`;
   }
   A.ACT['tt-miniapp-toggle'] = el => {
     const t = A.idx.trader.get(el.dataset.id);
@@ -375,17 +388,17 @@
     if (!acc) return;
     const next = A.ACCOUNTS.authStatus(acc) === 'ACTIVE' ? 'LOCKED' : 'ACTIVE';
     A.features.accounts.service.setStatus(acc.id, next);
-    U.log(`${next === 'active' ? 'Mở khóa' : 'Khóa'} truy cập Mini App của ${t.name} (${t.id})`);
+    U.log(`${next === 'active' ? 'Mở khóa' : 'Khóa'} truy cập Web app của ${t.name} (${t.id})`);
     ttRerenderDrawer(t);
     A.render();
-    U.toast(next === 'active' ? 'Đã mở khóa truy cập Mini App.' : 'Đã khóa truy cập Mini App.');
+    U.toast(next === 'active' ? 'Đã mở khóa truy cập Web app.' : 'Đã khóa truy cập Web app.');
   };
   // Mock UI/toast thuần (mục 17 yêu cầu correction — thay "Gửi hướng dẫn đăng ký hồ sơ" cũ, không
   // còn ý nghĩa, bằng hành động nhẹ "Sao chép hướng dẫn" kích hoạt bằng SĐT). Không notification thật.
   A.ACT['tt-miniapp-copy-guide'] = el => {
     const t = A.idx.trader.get(el.dataset.id);
     if (!t || !A.canDo('tieu-thuong.xac-minh', t.market)) return;
-    U.toast('Đã sao chép hướng dẫn kích hoạt Mini App (SĐT ' + U.maskPhone(t.phone) + ') — minh họa.');
+    U.toast('Đã sao chép hướng dẫn kích hoạt Web app (SĐT ' + U.maskPhone(t.phone) + ') — minh họa.');
   };
   // Renderer cũ được giữ làm tham chiếu compatibility; popup hiện dùng renderer bên dưới.
   function ttDrawerHtmlLegacy(t) {
@@ -414,7 +427,7 @@
         ${(()=>{const cs=CS.listByTrader(t.id).sort((a,b)=>b.start.localeCompare(a.start));return cs.length?U.table([{t:'Mã HĐ'},{t:'Điểm KD'},{t:'Thời hạn'},{t:'Trạng thái'},{t:''}],cs.map(c=>`<tr><td>${c.id}</td><td>${A.idx.stall.get(c.stallId)?A.idx.stall.get(c.stallId).code:'—'}</td><td>${U.dmy(c.start)} – ${U.dmy(c.end)}</td><td>${CS.isActive(c)?'<span class="tag ok">Hiệu lực</span>':CS.lifecycle(c)==='PENDING_LIQUIDATION'?'<span class="tag warn">Chờ thanh lý</span>':'<span class="tag">Đã thanh lý</span>'}</td><td><button class="btn sm" data-act="ct-view" data-id="${c.id}">Xem</button></td></tr>`)): '<div class="empty small">Chưa có hợp đồng.</div>';})()}
         </section>
         <section class="tt-detail-card">
-        <div class="tt-detail-card-h"><span>${U.icon('phone')}</span><div><b>E. Tài khoản Mini App</b><div class="small muted">Liên kết đăng nhập ứng dụng tiểu thương</div></div></div>
+        <div class="tt-detail-card-h"><span>${U.icon('phone')}</span><div><b>E. Tài khoản Web app</b><div class="small muted">Liên kết đăng nhập ứng dụng tiểu thương</div></div></div>
         ${ttMiniAppSectionHtml(t)}
         </section>
       </div><div class="drawer-f detail-form-footer"><button class="btn" data-act="close">Đóng</button></div>`;
@@ -542,7 +555,7 @@
         <dt>CCCD</dt><dd>${U.maskId(t.idNo)}</dd><dt>Địa chỉ</dt><dd>${U.esc(t.address)}</dd>
         <dt>Hộ kinh doanh</dt><dd>${t.hkd ? 'Có giấy CN ĐKKD' : 'Cá nhân kinh doanh'}</dd></dl>
       <dl class="kv"><dt>Chợ</dt><dd>${U.mShort(t.market)}</dd><dt>Ngành hàng</dt><dd>${U.esc(ttCatsOf(t).join(', ') || '—')}</dd><dt>Kinh doanh từ</dt><dd>${U.dmy(t.since)}</dd>
-        <dt>Mini app</dt><dd>${t.app ? '<span class="tag ok">Đã cài</span>' : '<span class="tag">Chưa cài</span>'}</dd>
+        <dt>Web app</dt><dd>${ttWebAppTag(t)}</dd>
         <dt>Giấy tờ số hóa</dt><dd><span class="tag info">CCCD 2 mặt</span> ${t.hkd ? '<span class="tag info">Giấy CN ĐKKD</span>' : ''}</dd></dl></div>
       <div class="divider"></div><b>Điểm kinh doanh & hợp đồng</b>
       ${U.table([{ t: 'Số hợp đồng' }, { t: 'Điểm KD' }, { t: 'Thời hạn' }, { t: 'Giá/tháng', num: true }, { t: 'Trạng thái' }], cts.map(c => `<tr><td>${c.id}</td><td>${A.idx.stall.get(c.stallId).code}</td><td>${U.dmy(c.start)} – ${U.dmy(c.end)}</td><td class="num">${c.monthly ? U.money(c.monthly) : 'Theo phiên'}</td><td>${CS.isActive(c) ? '<span class="tag ok">Hiệu lực</span>' : CS.lifecycle(c)==='PENDING_LIQUIDATION' ? '<span class="tag warn">Chờ thanh lý</span>' : '<span class="tag">Đã thanh lý</span>'}</td></tr>`))}

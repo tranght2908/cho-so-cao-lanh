@@ -138,9 +138,9 @@
   const err = id => `<div class="dmc-err" id="dmc-err-${id}"></div>`;
   function marketForm(r) {
     const x = r || { code: MC.nextCode(), name: '', address: '', rank: 'HANG_3', phone: '', priceConfigId: MC.PRICE_CONFIGS[0].id, status: 'NOT_ACTIVE', totalArea: null, businessArea: null, allowedAreaTypeIds: null };
-    const builtin = r && !r.isCustom;
     const usage = r ? MC.usage(r.id) : {};
-    const required = !r || r.businessArea !== null;
+    const required = true;
+    const canSetStatus = !!(r && MC.layoutReady(r.id));
     // Chỉ chọn loại áp dụng — không mặc định chọn sẵn loại nào khi chợ chưa cấu hình.
     const allowed = x.allowedAreaTypeIds || [];
     const areaTypeItems = MC.areaTypes().map(t => {
@@ -151,19 +151,17 @@
       <div class="dmc-err-summary" id="dmc-err-summary"></div>
       <section class="dmc-section"><h4>A. THÔNG TIN CHUNG</h4>
         <div class="form-grid">
-          <div class="field"><label>Tên chợ *</label><input class="input" id="dmc-name" value="${U.esc(x.name)}" ${builtin ? 'disabled' : ''}>${err('name')}</div>
+          <div class="field"><label>Tên chợ *</label><input class="input" id="dmc-name" value="${U.esc(x.name)}">${err('name')}</div>
           <div class="field"><label>Mã chợ</label><input class="input" id="dmc-code" value="${U.esc(x.code)}" disabled><div class="small muted">${r ? 'Mã chợ dùng làm khóa tham chiếu, không thay đổi.' : 'Hệ thống tự sinh khi lưu.'}</div></div>
           <div class="field"><label>Địa điểm *</label><input class="input" id="dmc-address" value="${U.esc(x.address)}">${err('address')}</div>
           <div class="field"><label>Hạng chợ</label><select class="input" id="dmc-rank">${Object.keys(MC.RANKS).map(k => `<option value="${k}" ${x.rank === k ? 'selected' : ''}>${MC.RANKS[k]}</option>`).join('')}</select></div>
           <div class="field"><label>Đơn vị quản lý</label><input class="input" value="${U.esc(MC.managementUnit(x))}" readonly></div>
-          <div class="field"><label>Số điện thoại</label><input class="input" id="dmc-phone" value="${U.esc(x.phone)}"></div>
+          <div class="field"><label>Số điện thoại</label><input class="input" id="dmc-phone" value="${U.esc(x.phone)}" inputmode="tel">${err('phone')}</div>
           <div class="field"><label>Bảng giá áp dụng</label><select class="input" id="dmc-price">${MC.PRICE_CONFIGS.map(p => `<option value="${p.id}" ${x.priceConfigId === p.id ? 'selected' : ''}>${U.esc(p.label)}</option>`).join('')}</select></div>
-          <div class="field"><label>Trạng thái</label><select class="input" id="dmc-status">${Object.keys(MC.STATUS).map(k => `<option value="${k}" ${x.status === k ? 'selected' : ''}>${MC.STATUS[k][0]}</option>`).join('')}</select></div>
+          <div class="field"><label>Trạng thái</label><select class="input" id="dmc-status" ${canSetStatus ? '' : 'disabled'}>${Object.keys(MC.STATUS).map(k => `<option value="${k}" ${(canSetStatus ? x.status : 'NOT_ACTIVE') === k ? 'selected' : ''}>${MC.STATUS[k][0]}</option>`).join('')}</select>${canSetStatus ? '' : '<div class="small muted">Chợ chỉ chuyển sang hoạt động sau khi hoàn tất thiết lập mặt bằng hợp lệ.</div>'}</div>
         </div>
-        ${builtin ? '<div class="small muted" style="margin-top:8px">Tên chợ hệ thống hiện có không đổi tại đây (dùng làm khóa tham chiếu xuyên suốt hệ thống).</div>' : ''}
       </section>
       <section class="dmc-section"><h4>B. QUY MÔ CHỢ</h4>
-        ${required ? '' : '<div class="note info" style="margin-bottom:10px">Có thể để trống thông tin quy mô nếu chưa có số liệu chính thức. Loại diện tích kinh doanh được cấu hình theo thực tế áp dụng tại chợ.</div>'}
         <div class="form-grid">
           <div class="field"><label>Tổng diện tích chợ${required ? ' *' : ''}</label>${numInput('dmc-total-area', x.totalArea, 'm²')}${err('totalArea')}</div>
           <div class="field"><label>Diện tích phục vụ kinh doanh${required ? ' *' : ''}</label>${numInput('dmc-business-area', x.businessArea, 'm²')}${err('businessArea')}</div>
@@ -193,7 +191,7 @@
     const ok = v => v !== null && !isNaN(v);
     setText('dmc-nonbiz', ok(s.totalArea) && ok(s.businessArea) ? fmtM2(s.totalArea - s.businessArea) : '—');
   }
-  const ERR_KEYS = ['name', 'address', 'totalArea', 'businessArea', 'areaTypes'];
+  const ERR_KEYS = ['name', 'address', 'phone', 'totalArea', 'businessArea', 'areaTypes'];
   function showErrors(errors) {
     ERR_KEYS.forEach(k => setText('dmc-err-' + k, errors[k] ? U.esc(errors[k]) : ''));
     setText('dmc-err-summary', ERR_KEYS.some(k => errors[k]) ? '<div class="note">Chưa lưu được: vui lòng kiểm tra các mục được đánh dấu đỏ bên dưới.</div>' : '');
@@ -252,24 +250,28 @@
     if (existing ? !canEdit() : !canCreate()) return;
     const acc = A.currentAccount();
     const user = acc ? acc.fullName : 'Không rõ';
-    const name = existing && !existing.isCustom ? existing.name : inputValue('dmc-name');
+    const name = inputValue('dmc-name');
     const address = inputValue('dmc-address');
     const errors = {};
     if (!name) errors.name = 'Vui lòng nhập tên chợ.';
+    else if (MC.nameTaken(name, existing && existing.id)) errors.name = 'Tên chợ đã tồn tại. Vui lòng kiểm tra hoặc nhập tên khác.';
     if (!address) errors.address = 'Vui lòng nhập địa điểm.';
+    const phone = inputValue('dmc-phone');
+    if (!MC.validPhone(phone)) errors.phone = 'Số điện thoại phải gồm 10 chữ số và có đầu số di động Việt Nam hợp lệ.';
     // Chợ mới, hoặc chợ đã từng khai báo quy mô: bắt buộc (không được xoá trắng quy mô đã có).
-    const scale = MC.validateScale(scaleInput(), { required: !existing || existing.businessArea !== null });
+    const scale = MC.validateScale(scaleInput(), { required: true, marketId: existing && existing.id });
     const types = MC.validateAreaTypes(selectedAreaTypes(), existing ? existing.allowedAreaTypeIds : null, existing ? MC.usage(existing.id) : {});
     Object.assign(errors, scale.errors);
     if (!types.ok) errors.areaTypes = types.error;
     if (errors.name || errors.address || !scale.ok || !types.ok) { showErrors(errors); return; }
     const patch = {
-      address, rank: inputValue('dmc-rank') || 'HANG_3', phone: inputValue('dmc-phone'),
+      address, rank: inputValue('dmc-rank') || 'HANG_3', phone,
       priceConfigId: inputValue('dmc-price') || MC.PRICE_CONFIGS[0].id
     };
     Object.assign(patch, scale.value, { allowedAreaTypeIds: types.value });
     if (existing) {
-      if (existing.isCustom) patch.name = name;
+      if (MC.layoutReady(existing.id)) patch.status = inputValue('dmc-status');
+      patch.name = name;
       MC.update(existing.id, patch, user);
     } else {
       MC.add(Object.assign({ name, code: MC.nextCode() }, patch), user);

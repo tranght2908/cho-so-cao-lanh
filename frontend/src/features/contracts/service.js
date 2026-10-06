@@ -17,7 +17,10 @@
     const l = lifecycleService();
     if (l && l.syncExpiry && l.syncExpiry()) A.data.save();
   };
-  const isActive = c => !!c && c.status === 'ACTIVE';
+  // Persisted ACTIVE means the contract has not been liquidated/terminated.
+  // Use-case eligibility that says "hiệu lực" must additionally respect its
+  // date range; a future contract must not unlock trader-account onboarding.
+  const isActive = c => !!c && c.status === 'ACTIVE' && (!c.start || c.start <= A.U.today()) && (!c.end || c.end >= A.U.today());
 
   // ---- Reads ----
   service.isActive = isActive;
@@ -44,7 +47,12 @@
     syncExpiry();
     if (contract.status === 'LIQUIDATED') return 'LIQUIDATED';
     if (contract.status === 'PENDING_LIQUIDATION') return 'PENDING_LIQUIDATION';
-    if (contract.status === 'ACTIVE') return 'ACTIVE';
+    if (contract.status === 'ACTIVE') {
+      const at = date || A.U.today();
+      if (contract.start && contract.start > at) return 'UPCOMING';
+      if (contract.end && contract.end < at) return 'ENDED';
+      return 'ACTIVE';
+    }
     return 'ENDED';
   };
   service.presentationStatus = function (contract, date) {
@@ -165,19 +173,44 @@
     const t = A.idx && A.idx.trader ? A.idx.trader.get(traderId) : null, p = points().get(pointId);
     if (!contract || !contract.market || !t || !p || contract.traderId !== traderId || (contract.businessPointId || contract.stallId) !== pointId
       || t.market !== contract.market || p.market !== contract.market) return null;
-    repository.add(contract);                                  // contracts.push + reindex
+    const markets = features.markets && features.markets.service;
+    const market = markets && markets.get ? markets.get(contract.market) : null;
+    const allowedTraderStates = traders().BUSINESS_STATUS || { WAITING_ALLOCATION: 'WAITING_ALLOCATION', ACTIVE: 'ACTIVE' };
+    if (!market || market.layoutStatus !== 'SETUP_COMPLETED' || market.status !== 'ACTIVE'
+      || ![allowedTraderStates.WAITING_ALLOCATION, allowedTraderStates.ACTIVE].includes(traders().deriveBusinessStatus(t))
+      || !contract.start || !contract.end || contract.end < contract.start
+      || repository.getById(contract.id)
+      || !points().isAvailable(pointId, contract.start, contract.end, { market: contract.market })) return null;
+    // Validate every aggregate before changing one of them. localStorage has
+    // no transaction, so restore the in-memory unit of work if a later step
+    // fails before the single final save.
+    const before = {
+      contractsLength: repository.list().length,
+      point: Object.assign({}, p, { history: Array.isArray(p.history) ? p.history.slice() : p.history }),
+      trader: Object.assign({}, t, { stalls: Array.isArray(t.stalls) ? t.stalls.slice() : t.stalls })
+    };
+    try {
+      repository.add(contract);                                // contracts.push + reindex
     // Current occupancy fields (point status/traderId/contractId, trader.stalls) describe TODAY. A
     // contract that starts later does not displace today's occupant; its interval still blocks
     // availability through the shared rule.
-    const lifecycle = lifecycleService();
-    if (lifecycle) lifecycle.activateContract(contract);
-    else { points().occupy(pointId, traderId, contract.id); traders().linkPoint(traderId, pointId); }
-    points().addHistory(pointId, input.pointHistoryEntry);     // point history (newest first)
+      const lifecycle = lifecycleService();
+      if (lifecycle) lifecycle.activateContract(contract);
+      else { points().occupy(pointId, traderId, contract.id); traders().linkPoint(traderId, pointId); }
+      points().addHistory(pointId, input.pointHistoryEntry);   // point history (newest first)
     // Caller-owned side effect that the legacy command ran right before saving
     // (workflow recent-point marker); the service does not know what it does.
-    if (typeof input.beforeSave === 'function') input.beforeSave(contract);
-    A.data.save();
-    return contract;
+      if (typeof input.beforeSave === 'function') input.beforeSave(contract);
+      A.data.save();
+      return contract;
+    } catch (err) {
+      repository.list().splice(before.contractsLength);
+      Object.assign(p, before.point);
+      Object.assign(t, before.trader);
+      A.data.reindex();
+      console.warn('[choso] Contract creation failed; changes were rolled back.', err);
+      return null;
+    }
   };
 
   // ---- Lifecycle use cases (Phase 10) ----

@@ -15,12 +15,11 @@
   const activePolicy = (category, market) => (A.SERVICE_CFG && A.SERVICE_CFG.list ? A.SERVICE_CFG.list(category) : []).find(p =>
     p.marketId === market && p.status === 'active' && (!p.effectiveFrom || p.effectiveFrom <= U.today()) && (!p.effectiveTo || p.effectiveTo >= U.today())
   ) || null;
-  const pointPrice = s => {
-    // `U.appliedStallPrice` is the existing source. The category fallback handles
-    // the existing fixed-stall TTD seed, whose policy is named after its category.
-    const policy = (U.appliedStallPrice ? U.appliedStallPrice(s) : null) || (A.SERVICE_CFG && A.SERVICE_CFG.list ? A.SERVICE_CFG.list('stallPrices').find(p =>
-      p.marketId === s.market && p.stallType === s.cat && p.status === 'active' && (!p.effectiveFrom || p.effectiveFrom <= U.today()) && (!p.effectiveTo || p.effectiveTo >= U.today())
-    ) : null);
+  const pointPrice = (s, startDate) => {
+    // Preview and submit use the same resolver and the contract's start date.
+    const policy = A.SERVICE_CFG && A.SERVICE_CFG.resolveApplicableMarketFeePolicy
+      ? A.SERVICE_CFG.resolveApplicableMarketFeePolicy({ point: s, startDate: startDate || U.today() })
+      : (U.appliedStallPrice ? U.appliedStallPrice(s, startDate) : null);
     if (!policy) return { policy: null, unit: 0, monthly: null, amount: null, label: 'Chưa cấu hình chính sách thu phù hợp' };
     const unit = Number(policy.amount || 0), area = Number(s.area || 0), policyUnit = String(policy.unit || '');
     let amount = unit, monthly = null;
@@ -129,7 +128,7 @@
   };
   const feePolicyHtml = p => {
     if (!p) return '<div class="small muted" id="wf-ct-fee-policy">Chọn điểm kinh doanh để xem chính sách thu áp dụng.</div>';
-    const rate = pointPrice(p), policy = rate.policy, basis = policy && policy.legalBasis || {};
+    const rate = pointPrice(p, draft && draft.start), policy = rate.policy, basis = policy && policy.legalBasis || {};
     return `<dl class="kv" id="wf-ct-fee-policy"><dt>Loại diện tích</dt><dd>${U.esc(U.areaTypeLabel(p.areaTypeId || p.areaType) || 'Chưa có thông tin')}</dd><dt>Diện tích</dt><dd>${p.area} m²</dd><dt>Đơn giá</dt><dd>${policy ? U.money(rate.unit) : '—'}</dd><dt>Đơn vị tính</dt><dd>${policy ? U.esc(policy.unit || '—') : '—'}</dd><dt>Căn cứ / chính sách áp dụng</dt><dd>${policy ? U.esc([basis.docNo, basis.summary].filter(Boolean).join(' · ') || policy.id) : '<span class="tag warn">Chưa có chính sách thu phù hợp</span>'}</dd><dt>Mức dự kiến</dt><dd>${policy ? '<b>' + U.money(rate.amount) + (rate.monthly === null ? ' / phiên' : ' / tháng') + '</b>' : '—'}</dd></dl>`;
   };
   // Live hint only; the binding check is repeated in wf-contract-save.
@@ -191,6 +190,9 @@
     const market = ui.market;
     if (!market || !U.market(market)) return U.toast('Vui lòng chọn một chợ cụ thể trước khi tạo hợp đồng.');
     if (!allowedMarket(market) || !canCreateIn(market)) return;
+    const marketService = A.features.markets && A.features.markets.service;
+    const marketRecord = marketService && marketService.get ? marketService.get(market) : null;
+    if (!marketRecord || marketRecord.layoutStatus !== 'SETUP_COMPLETED' || marketRecord.status !== 'ACTIVE') return U.toast('Chợ chưa hoàn tất thiết lập mặt bằng nên chưa thể tạo hợp đồng.');
     if (selected && selected.market !== market) return U.toast('Hồ sơ tiểu thương thuộc chợ khác chợ đang chọn. Vui lòng chuyển sang đúng chợ để lập hợp đồng.');
     if (point && point.market !== market) return U.toast('Điểm kinh doanh thuộc chợ khác chợ đang chọn.');
     const choices = contracts.tradersForCreate(market);
@@ -278,7 +280,8 @@
     if (!BP.isAllocatable(s)) return U.toast('Điểm ' + s.code + ' đang tạm ngừng, tranh chấp hoặc không còn sử dụng nên không thể bố trí.');
     // Save-time revalidation against CURRENT contract data (never trust an earlier search result).
     if (!BP.isAvailable(s.id, start, end)) return U.toast(overlapMessage(s));
-    const rate = pointPrice(s);
+    // Resolve again immediately before submission; rendered form values are not trusted.
+    const rate = pointPrice(s, start);
     if (!rate.policy) return U.toast('Điểm kinh doanh chưa có chính sách thu đang hiệu lực. Vui lòng cấu hình biểu phí trước khi tạo hợp đồng.');
     const checked = key => { const input = A.$('#wf-ct-service-' + key); return input ? !!input.checked : !!draft.services[key]; };
     const serviceApplicability = { electricity: checked('electricity'), water: checked('water'), marketService: checked('market') };

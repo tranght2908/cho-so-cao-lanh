@@ -76,9 +76,18 @@
   const myIncidents = t => A.db.incidents.filter(i => i.traderId === t.id).slice().reverse();
   const incState = id => (D.INCIDENT_STATES.find(s => s.id === id) || { label: id }).label;
   const incTag = i => `<span class="tag ${i.state === 'dong' || i.state === 'hoanthanh' ? 'ok' : 'info'}">${U.esc(incState(i.state))}</span>`;
+  // Commodity is owned by Row and reached through the profile's effective
+  // contracts. `trader.cat` remains legacy-only and is never used here.
+  function commoditiesOf(t) {
+    const BP = A.features.businessPoints && A.features.businessPoints.service;
+    if (!BP) return [];
+    return Array.from(new Set((A.db.contracts || []).filter(c => c.traderId === t.id && BP.contractPhase(c, U.today()) === 'current')
+      .map(c => BP.industry(stallOf(c.businessPointId || c.stallId))).filter(Boolean)));
+  }
+  const inCommodityGroup = (group, t) => commoditiesOf(t).some(x => group === 'Ngành hàng: ' + x);
   function notices(t) {
     const debt = U.traderOverdue(t.id) > 0, mk = U.market(t.market).short;
-    return (A.db.notifications || []).filter(n => n.traderId === t.id || n.group === 'Toàn bộ tiểu thương' || n.group === mk || n.group === 'Ngành hàng: ' + t.cat || (debt && n.group === 'Danh sách nợ phí'))
+    return (A.db.notifications || []).filter(n => n.traderId === t.id || n.group === 'Toàn bộ tiểu thương' || n.group === mk || inCommodityGroup(n.group, t) || (debt && n.group === 'Danh sách nợ phí'))
       .slice().sort((a, b) => (b.at || '').localeCompare(a.at || ''));
   }
   const pointStatus = st => { const k = A.features.businessPoints.service.displayStatus(st); return `<span class="tag ${k === 'no' ? 'danger' : k === 'thue' ? 'ok' : ''}">${U.esc(D.STATUS[k] ? D.STATUS[k].label : k)}</span>`; };
@@ -180,7 +189,7 @@
       if (n.accountId) return n.accountId === acc.id;
       if (n.traderId) return n.traderId === t.id;
       const group = String(n.group || '');
-      return group === 'Toàn bộ tiểu thương' || group === market.short || group === 'Ngành hàng: ' + t.cat || (debt && group === 'Danh sách nợ phí');
+      return group === 'Toàn bộ tiểu thương' || group === market.short || inCommodityGroup(group, t) || (debt && group === 'Danh sách nợ phí');
     };
     const personal = (A.db.personalNotifications || []).filter(n => n && n.recipientAccountId === acc.id).map(n => ({
       source: 'personal', id: n.id, raw: n, title: n.title || 'Thông báo', message: n.message || n.body || '', at: n.createdAt || n.at,
@@ -459,9 +468,10 @@
 
   function pageAccount(t) {
     const idNo = String(t.idNo || '');
+    const commodities = commoditiesOf(t);
     return `<div class="tw-hello"><h2>Tài khoản</h2></div>
       ${section('Thông tin tiểu thương', `<dl class="kv"><dt>Họ tên</dt><dd><b>${U.esc(t.name)}</b></dd><dt>Số điện thoại</dt><dd>${U.esc(t.phone)}</dd><dt>Số giấy tờ</dt><dd>${idNo ? '•••••' + U.esc(idNo.slice(-4)) : '—'}</dd>
-        <dt>Chợ</dt><dd>${U.esc(marketName(t.market))}</dd><dt>Ngành hàng</dt><dd>${U.esc(t.cat || '—')}</dd><dt>Địa chỉ</dt><dd>${U.esc(t.address || '—')}</dd></dl>
+        <dt>Chợ</dt><dd>${U.esc(marketName(t.market))}</dd><dt>Ngành hàng</dt><dd>${U.esc(commodities.join(', ') || '—')}</dd><dt>Địa chỉ</dt><dd>${U.esc(t.address || '—')}</dd></dl>
         <div class="small muted" style="margin-top:10px">Muốn thay đổi thông tin, vui lòng liên hệ Ban Quản lý chợ.</div>`)}
       ${section('Điểm kinh doanh', t.stalls.map(stallOf).filter(Boolean).map(st => `<div class="tw-item"><span class="tw-dot">${U.icon('store')}</span><div class="tw-item-m"><b>${U.esc(st.code)}</b><span class="small muted">${U.esc(st.sectionName || '')} · ${Number(st.area || 0).toLocaleString('vi-VN')} m²</span></div>${pointStatus(st)}</div>`).join('') || empty('Chưa có điểm kinh doanh.'))}
       <section class="card tw-sec"><div class="card-b" style="padding-top:12px">

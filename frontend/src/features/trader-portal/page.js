@@ -3,6 +3,13 @@
   'use strict';
   const D = A.D, U = A.U, ui = A.ui;
   const mini = () => ui.mini;
+  const pointCommodity = st => {
+    const BP = A.features.businessPoints && A.features.businessPoints.service;
+    return BP && st ? BP.industry(st) : '';
+  };
+  const traderCommodities = t => Array.from(new Set((A.db.contracts || []).filter(c => c.traderId === t.id)
+    .map(c => pointCommodity(A.idx.stall.get(c.businessPointId || c.stallId))).filter(Boolean)));
+  const inTraderCommodityGroup = (group, t) => traderCommodities(t).some(x => group === 'Ngành hàng: ' + x);
 
   function activeRole() {
     return A.PERM.role(ui.role);
@@ -45,7 +52,7 @@
     const opsSessions = (A.db.sessions || []).filter(s => s && s.market === 'TTD' && s.id && s.date);
     if (!opsSessions.length) return;
     const sessionPoints = A.db.stalls.filter(s => s.market === 'TTD' && U.rentalKind(s) === 'session');
-    const cats = Array.from(new Set(sessionPoints.map(s => s.cat).filter(Boolean))).slice(0, 4);
+    const cats = Array.from(new Set(sessionPoints.map(pointCommodity).filter(Boolean))).slice(0, 4);
     const pricing = miniSessionPricing('TTD');
     opsSessions.forEach(s => {
       let ms = A.db.marketSessions.find(x => x.id === s.id);
@@ -90,7 +97,7 @@
     // removes the portal flow that creates records in it.
     A.db.fixedStallApplications = A.db.fixedStallApplications || [];
     if (!A.db.marketSessions.some(s => s.marketId === 'TTD')) {
-      const cats = Array.from(new Set(A.db.stalls.filter(s => s.market === 'TTD' && U.rentalKind(s) === 'session').map(s => s.cat))).slice(0, 4);
+      const cats = Array.from(new Set(A.db.stalls.filter(s => s.market === 'TTD' && U.rentalKind(s) === 'session').map(pointCommodity))).slice(0, 4);
       const pricing = miniSessionPricing('TTD');
       A.db.marketSessions.push(
         miniSession('PC-TTD-20260919', 'Phiên chợ quê thứ Bảy 19/09/2026', '2026-09-19', 'REGISTRATION_OPEN', 24, cats, pricing),
@@ -155,7 +162,7 @@
   function miniSessionAvailablePoints(s, cat) {
     if (!s) return [];
     const reserved = miniReservedPointIds(s.id);
-    return A.db.stalls.filter(st => st.market === s.marketId && U.rentalKind(st) === 'session' && st.status === 'active' && !st.traderId && !reserved.has(st.id) && (!cat || st.cat === cat))
+    return A.db.stalls.filter(st => st.market === s.marketId && U.rentalKind(st) === 'session' && st.status === 'active' && !st.traderId && !reserved.has(st.id) && (!cat || pointCommodity(st) === cat))
       .sort((a, b) => String(a.code || '').localeCompare(String(b.code || ''), 'vi'));
   }
   function miniSessionReceiptsForTrader(t) {
@@ -596,7 +603,7 @@
     return `<div class="m-card"><b>${st.code}</b><div class="small muted" style="margin:2px 0 8px">${U.esc(st.sectionName)}</div>
       <dl class="kv">
         <dt>Diện tích</dt><dd>${st.area.toLocaleString('vi-VN')} m²</dd>
-        <dt>Ngành hàng</dt><dd>${U.esc(st.cat) || 'Chưa có thông tin'}</dd>
+        <dt>Ngành hàng</dt><dd>${U.esc(pointCommodity(st)) || 'Chưa có thông tin'}</dd>
         <dt>Hợp đồng</dt><dd>${c ? c.id : 'Chưa có hợp đồng hiệu lực'}</dd>
         <dt>Trạng thái</dt><dd>${U.esc(A.mbStatusLabel(A.pointDisplayStatus(st)))}${st.structuralStatus === 'SPLIT' ? ' · Đã tách' : ''}</dd>
       </dl>
@@ -768,7 +775,7 @@
     const issuedFor = A.db.notifications.filter(n => n.kind === 'RECEIVABLE_ISSUED' && n.traderLines && n.traderLines[t.id]).map(n => Object.assign({}, n, { body: n.traderLines[t.id] }));
     // New personal records are strictly scoped by active traderId. Market-only
     // records are broadcasts, never a substitute for financial ownership.
-    const general = issuedFor.concat(A.db.notifications.filter(n => !(n.kind === 'RECEIVABLE_ISSUED' && n.traderLines) && n.kind !== 'RECEIVABLE_LIST_TO_COLLECTORS').filter(n => n.traderId === t.id || (!n.traderId && (n.group === 'Toàn bộ tiểu thương' || n.group === mk || n.group === 'Ngành hàng: ' + t.cat || (debt && n.group === 'Danh sách nợ phí')))));
+    const general = issuedFor.concat(A.db.notifications.filter(n => !(n.kind === 'RECEIVABLE_ISSUED' && n.traderLines) && n.kind !== 'RECEIVABLE_LIST_TO_COLLECTORS').filter(n => n.traderId === t.id || (!n.traderId && (n.group === 'Toàn bộ tiểu thương' || n.group === mk || inTraderCommodityGroup(n.group, t) || (debt && n.group === 'Danh sách nợ phí')))));
     const session = (A.db.sessionNotifications || []).map(n => {
       const s = (A.db.marketSessions || []).find(x => x.id === n.sessionId);
       if (n.merchantId && n.merchantId !== t.id) return null;
@@ -937,7 +944,7 @@
       ${portalPanel('file', 'Điểm kinh doanh & hợp đồng của tôi', '', stalls.length ? `<div class="merchant-cards">${stalls.map(st => {
         const c = st.contractId ? A.idx.contract.get(st.contractId) : null;
         return `<div class="merchant-card"><b>${U.esc(st.code)}</b><small>${U.esc(st.sectionName || '')}</small>
-          <dl class="kv"><dt>Ngành hàng</dt><dd>${U.esc(st.cat) || 'Chưa có thông tin'}</dd>
+          <dl class="kv"><dt>Ngành hàng</dt><dd>${U.esc(pointCommodity(st)) || 'Chưa có thông tin'}</dd>
             <dt>Diện tích</dt><dd>${st.area.toLocaleString('vi-VN')} m²</dd>
             <dt>Hợp đồng</dt><dd>${c ? U.esc(c.id) : 'Chưa có hợp đồng hiệu lực'}</dd>
             <dt>Trạng thái</dt><dd>${D.STATUS[st.status] ? U.esc(D.STATUS[st.status].label) : U.esc(st.status)}</dd></dl></div>`;
@@ -978,7 +985,7 @@
     const point = portalContractPoint(c);
     if (!point) return `<div class="portal-contract-point"><div class="portal-point-head"><div class="portal-point-icon">${U.icon('store')}</div><div><b>Chưa xác định được điểm kinh doanh</b><small>Thông tin điểm kinh doanh hiện chưa khả dụng.</small></div>${portalContractStatus(c)}</div></div>`;
     const BP = A.features.businessPoints.service, row = BP.row(point), collector = typeof BP.pointCollector === 'function' ? BP.pointCollector(point.id) : (row && row.collectorId ? A.ACCOUNTS.get(row.collectorId) : null);
-    const industry = BP.industry(point) || point.cat || '—';
+    const industry = BP.industry(point) || '—';
     const areaType = U.areaTypeLabel(point.areaTypeId || point.areaType) || '—';
     return `<article class="portal-contract-point">
       <div class="portal-point-head"><div class="portal-point-icon">${U.icon('store')}</div><div><b>${U.esc(point.code || '—')}</b><small>${U.esc((row && row.name) || point.sectionName || 'Điểm kinh doanh')}</small></div><span class="portal-point-usage ${portalContractPhase(c)}">${portalPointUsage(c)}</span></div>
@@ -1521,7 +1528,7 @@
         const reg = {
           id: miniSeq('DK', A.db.sessionRegistrations), code: 'DK-' + s.code.slice(-8) + '-' + U.pad(A.db.sessionRegistrations.length + 1, 3),
           sessionId: s.id, market: s.marketId, marketId: s.marketId, traderId: t.id, merchantId: t.id,
-          pointId: selectedPoint.id, requestedSectionId: selectedPoint.section, requestedStalls: n, businessCategory: selectedPoint.cat,
+          pointId: selectedPoint.id, requestedSectionId: selectedPoint.section, requestedStalls: n, businessCategory: pointCommodity(selectedPoint),
           listType: isWaiting ? 'waitlist' : 'official', status: isWaiting ? 'waitlisted' : 'registered',
           waitlistOrder: isWaiting ? miniSessionRegs(s.id).filter(x => x.listType === 'waitlist' || x.status === 'waitlisted').length + 1 : null,
           paymentMethod: form.method || 'ONLINE', pricingSnapshot: snap, totalAmount: snap.totalAmount,
