@@ -337,6 +337,28 @@
     A.save();
     return { ok: true, results, count, notApplicable: sum.notApplicable.length };
   };
+  // KY_11_DA_PHAT_HANH (dữ liệu mẫu v34): đưa kỳ seedIssue.month tới "Đã phát hành" bằng ĐÚNG luồng thật, chạy 1 lần:
+  // NV thu phí phụ trách từng chợ (marketScopes) hoàn tất ghi chỉ số → hệ thống tự tính nháp → Tổ trưởng phát hành kỳ
+  // (issueMonth: sinh mã PT-, gửi thông báo phát hành cho từng tiểu thương). Đây là bước dựng dữ liệu, không phải thao tác
+  // người dùng nên không qua permission handler. Trang chưa nạp billing/lifecycle → để nguyên PENDING (cổng tiểu thương đã nạp cả hai nên mở trang nào trước cũng phát hành).
+  // window.__SKIP_SEED_ISSUE: test hồi quy giữ kỳ ở bước ghi chỉ số để kiểm tra luồng từ đầu.
+  svc.applySeedIssue = function () {
+    const req = A.db && A.db.seedIssue;
+    // Cần runtime đầy đủ của trang quản lý: billing + lifecycle (chuẩn hóa trạng thái HĐ). Thiếu → giữ PENDING, không đánh dấu lỗi.
+    if (!req || req.status !== 'PENDING' || !finance.billing || !(A.features.lifecycle && A.features.lifecycle.service) || window.__SKIP_SEED_ISSUE) return null;
+    const accounts = A.ACCOUNTS && A.ACCOUNTS.list ? A.ACCOUNTS.list() : [];
+    const pick = (role, mid) => accounts.find(a => a.status === 'active' && (a.roleIds || []).includes(role) && ((a.marketScopes || []).includes(mid) || (a.marketScopes || []).includes('ALL')));
+    svc.monthSummary(req.month).rows.filter(r => r.state.id !== 'NOT_APPLICABLE').forEach(r => {
+      const mp = svc.get(r.market.id, req.month);
+      if (mp && svc.canCompleteMeter(mp)) svc.completeMeter(r.market.id, req.month, pick('collector', r.market.id));
+      else if (mp && !mp.calculatedAt) svc.autoCalculate(mp);
+    });
+    const out = svc.issueMonth(req.month, pick('market_manager', 'CL'));
+    Object.assign(req, { status: out.ok ? 'DONE' : 'FAILED', result: out.ok ? out.count : (out.reason || '') });
+    if (!out.ok) console.warn('[market-period] Dữ liệu mẫu: không phát hành được kỳ ' + req.month, out);
+    A.save();
+    return out;
+  };
   // XVIII: chốt kỳ tháng — xét TOÀN BỘ chợ đang hoạt động (không theo phạm vi người bấm). Quyền kiểm tra ở handler.
   svc.closeMonth = function (month, account) {
     const sum = svc.monthSummary(month);

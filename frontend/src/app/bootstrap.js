@@ -202,6 +202,9 @@
     A.data.loadDb();
     const lifecycle = A.features && A.features.lifecycle && A.features.lifecycle.service;
     if (lifecycle && lifecycle.migrate && lifecycle.migrate()) { A.reindex(); A.save(); }
+    // KY_11_DA_PHAT_HANH (dữ liệu mẫu, 1 lần): sau khi trạng thái HĐ đã chuẩn hóa (lifecycle.migrate) mới chạy luồng phát hành.
+    const marketPeriod = A.features && A.features.finance && A.features.finance.marketPeriod;
+    if (marketPeriod && marketPeriod.applySeedIssue && marketPeriod.applySeedIssue()) A.reindex();
     // RBAC V1 migration: ui state cũ (schema khác, hoặc còn giữ shape {role, market} kiểu cũ
     // không có currentDemoAccountId) không tương thích — bỏ qua, để currentDemoAccountId=null rồi
     // A.currentAccount()/A.syncAccountContext() bên dưới tự chọn 1 account ACTIVE + 1 market hợp

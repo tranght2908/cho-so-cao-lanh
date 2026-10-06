@@ -51,6 +51,8 @@ ok('E2E TTD (1–6): meter 5/5 → calculate → no fee warnings → READY; moni
 ok('stored config missing all 4 TTD fee types (user state) → reload migrates + recalculates → READY', () => {
   const base = createApp(ROOT), BA = base.A, S0 = BA.features.finance.marketPeriod;
   ['utilities', 'extraServices', 'stallPrices'].forEach(c => BA.SERVICE_CFG.list(c).forEach(x => { if (x.marketId === 'TTD') x.status = 'inactive'; }));
+  // KHOA_GIA_THEO_HOP_DONG: HĐ TTD dữ liệu cũ chưa từng khóa bảng giá (chụp lại khi tính → không có giá nào).
+  BA.db.contracts.forEach(c => { if (c.market === 'TTD') delete c.priceTerms; });
   login(BA, 'AC-NV07', 'TTD'); S0.completeMeter('TTD', M, BA.currentAccount());
   const w0 = BA.features.finance.billing.warnings('TTD', S0.get('TTD', M).id).map(w => w.code);
   ['MISSING_LAND_POLICY', 'MISSING_UTILITY_POLICY', 'MISSING_SERVICE_POLICY'].forEach(c => assert(w0.includes(c), 'before: ' + c));

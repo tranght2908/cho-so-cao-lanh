@@ -1398,27 +1398,23 @@
       <section class="inc-section inc-accept-work">
         <h4>Cập nhật mới</h4>
         <input type="hidden" id="iw-submit-mode" value="${submitMode}">
-        <div class="inc-work-mode" hidden>
-          <label><input type="radio" name="iw-mode" value="progress" checked data-ch="inc-work-mode"> Đang xử lý</label>
-          <label><input type="radio" name="iw-mode" value="done" data-ch="inc-work-mode"> Gửi chờ nghiệm thu</label>
-        </div>
         <div class="field"><label>${submitMode === 'done' ? 'Nội dung đã xử lý' : 'Nội dung cập nhật'} *</label><textarea class="input" id="iw-content" rows="4" placeholder="${submitMode === 'done' ? 'Mô tả công việc đã hoàn tất.' : 'Ghi ngắn gọn việc đã kiểm tra / đã làm.'}">${submitMode === 'done' ? U.esc(w.content || '') : ''}</textarea></div>
         <div class="field" id="iw-result-wrap" ${submitMode === 'done' ? '' : 'hidden'}><label>Kết quả sau xử lý *</label><textarea class="input" id="iw-result" rows="3" placeholder="Ví dụ: đã thông nghẹt, nước thoát bình thường.">${U.esc(w.result || '')}</textarea></div>
         <input type="hidden" id="iw-at" value="${incNow()}">
         <div class="field"><label>Ghi chú</label><textarea class="input" id="iw-note" rows="2"></textarea></div>
       </section>
-      ${submitMode === 'progress' ? incMaterialFormHtml(i) : '<section class="inc-section"><div class="note info">Không ghi nhận phát sinh vật tư/chi phí ở bước gửi chờ nghiệm thu.</div></section>'}
+      ${submitMode === 'progress' ? incMaterialFormHtml(i) : ''}
       <section class="inc-section"><h4>Hình ảnh <span class="muted small">(không bắt buộc)</span></h4>${incImageInput('work')}</section>`;
     const footer = submitMode === 'done'
-      ? `<button class="btn" data-act="inc-work-open" data-id="${i.id}">Quay lại cập nhật tiến độ</button><button class="btn primary" data-act="inc-work-save" data-id="${i.id}">Gửi chờ nghiệm thu</button>`
-      : `<button class="btn" data-act="close">Hủy</button><button class="btn" data-act="inc-work-done-open" data-id="${i.id}">Gửi chờ nghiệm thu</button><button class="btn primary" data-act="inc-work-save" data-id="${i.id}">Lưu cập nhật</button>`;
+      ? `<button class="btn" data-act="inc-work-open" data-id="${i.id}">Quay lại cập nhật tiến độ</button><button class="btn primary" data-act="inc-work-save" data-mode="done" data-id="${i.id}">Gửi chờ nghiệm thu</button>`
+      : `<button class="btn" data-act="close">Hủy</button><button class="btn" data-act="inc-work-done-open" data-id="${i.id}">Gửi chờ nghiệm thu</button><button class="btn primary" data-act="inc-work-save" data-mode="progress" data-id="${i.id}">Lưu cập nhật</button>`;
     incModal(submitMode === 'done' ? 'Gửi kết quả chờ nghiệm thu' : 'Cập nhật tiến độ xử lý', incHeader(i) + body, footer);
     return;
   }
   A.ACT['inc-work-open'] = el => { const i=A.db.incidents.find(x=>x.id===el.dataset.id);if(i&&i.state==='dangxuly'&&incCan(i,'transition'))workModal(i, 'progress'); };
   A.ACT['inc-work-done-open'] = el => { const i=A.db.incidents.find(x=>x.id===el.dataset.id);if(i&&i.state==='dangxuly'&&incCan(i,'transition'))workModal(i, 'done'); };
   function saveWork(i, submit) {
-    const explicitMode = (A.$('#iw-submit-mode') || {}).value;
+    const explicitMode = submit || (A.$('#iw-submit-mode') || {}).value;
     const mode = explicitMode || (A.$('input[name="iw-mode"]:checked') || {}).value || 'progress', content = A.$('#iw-content').value.trim(), result = (A.$('#iw-result') && A.$('#iw-result').value.trim()) || '', at = A.$('#iw-at').value;
     if (!i || i.state !== 'dangxuly' || !incCan(i, 'transition')) return false;
     if (!content) { U.toast('Vui lòng nhập nội dung cập nhật.'); return false; }
@@ -1468,7 +1464,7 @@
     A.save(); A.closeModal(); A.render(); U.toast(mode === 'done' ? 'Đã gửi kết quả, hồ sơ chuyển sang Chờ nghiệm thu.' : 'Đã lưu cập nhật tiến độ.');
     return true;
   }
-  A.ACT['inc-work-save'] = el => saveWork(A.db.incidents.find(x=>x.id===el.dataset.id),false);
+  A.ACT['inc-work-save'] = el => saveWork(A.db.incidents.find(x=>x.id===el.dataset.id), el.dataset.mode || '');
   A.CH['inc-work-mode'] = el => { const wrap=A.$('#iw-result-wrap'); if(wrap) wrap.hidden=el.value!=='done'; };
   A.CH['inc-material-toggle'] = el => { const fields=A.$('#im-fields'); if(fields) fields.hidden=el.value!=='yes'; };
   A.ACT['inc-material-approve'] = el => {

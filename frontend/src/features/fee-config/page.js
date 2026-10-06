@@ -609,16 +609,91 @@
   const landName = r => (r.areaTypeId ? (U.areaTypeLabel(r.areaTypeId) || r.areaTypeId) : r.landTypeName || r.stallType) || '—';
   const landGrades = r => (r.marketGrades && r.marketGrades.length ? r.marketGrades : Array.from(new Set(landMarketIds(r).map(id => landGrade(landMarkets().find(m => m.id === id))).filter(Boolean)))).slice().sort();
   const landGradeText = r => { const g = landGrades(r); return g.length ? 'Hạng ' + g.join(', ') : '—'; };
-  function landState(r) {
-    const t = policyToday();
-    if (r.status === 'inactive') return ['Vô hiệu hóa', 'danger', 3];
-    if (r.status === 'expired' || (r.effectiveTo && r.effectiveTo < t)) return ['Hết hiệu lực', '', 2];
-    if (r.status !== 'active' || (r.effectiveFrom && r.effectiveFrom > t)) return ['Chưa có hiệu lực', 'warn', 1];
-    return ['Đang có hiệu lực', 'ok', 0];
+  // KHOA_GIA_THEO_HOP_DONG: HĐ đang dùng mức giá r = HĐ còn hiệu lực (chưa hết hạn) có bảng giá áp dụng hôm nay
+  // (billing.contractTermsAt — phụ lục mới nhất hoặc priceTerms) trỏ tới r. scope = Set chợ được liệt kê (null = mọi chợ,
+  // chỉ dùng để chặn Hủy, không hiển thị).
+  function priceContracts(cat, r, scope) {
+    if (!r) return [];
+    const billing = A.features.finance && A.features.finance.billing, today = policyToday();
+    return (A.db.contracts || []).filter(c => (c.status === 'ACTIVE' || c.status === 'hieuluc') && (!c.end || c.end >= today) && (!scope || scope.has(c.market))).map(c => {
+      const t = billing && billing.contractTermsAt ? billing.contractTermsAt(c, today) : c.priceTerms;
+      if (!t) return null;
+      const hit = cat === 'stallPrices' ? !!t.land && t.land.policyId === r.id
+        : cat === 'utilities' ? ['electricity', 'water'].some(k => t[k] && t[k].policyId === r.id)
+          : (t.services || []).some(x => x.serviceId === r.id);
+      const amendment = (c.amendments || []).some(x => x.effectiveFrom && x.effectiveFrom <= today);
+      return hit ? { c, amendment } : null;
+    }).filter(Boolean);
   }
+  // Mặt bằng dùng chung: mọi chợ trong marketScopes; giá theo chợ: chỉ chợ của dòng giá (nếu thuộc marketScopes).
+  const priceScope = (cat, r) => cat === 'stallPrices' ? landAllowed() : new Set(r && r.marketId && landAllowed().has(r.marketId) ? [r.marketId] : []);
+  const priceContractCount = (cat, r) => priceContracts(cat, r, priceScope(cat, r)).length;
+  const priceInUse = (cat, r) => priceContracts(cat, r, null).length > 0;
+  // Danh sách HĐ thu gọn mặc định; bấm nút mới sổ ra. Lọc theo chợ + tìm theo mã HĐ / tiểu thương / điểm KD lọc ngay
+  // trên DOM (không vẽ lại modal nên ô tìm kiếm không mất con trỏ). Trạng thái giữ trong ui.priceCt theo từng mức giá.
+  const ctFold = x => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
+  const ctKey = (cat, r) => cat + '|' + (r && r.id);
+  const ctState = (cat, r) => (ui.priceCt && ui.priceCt.key === ctKey(cat, r)) ? ui.priceCt : (ui.priceCt = { key: ctKey(cat, r), open: false, market: '', q: '' });
+  const ctMatch = (st, market, hay) => (!st.market || market === st.market) && (!st.q || hay.indexOf(ctFold(st.q)) >= 0);
+  function priceContractsHtml(cat, r) {
+    const list = priceContracts(cat, r, priceScope(cat, r)), st = ctState(cat, r);
+    const head = `<div class="row" style="align-items:center;gap:8px;margin:16px 0 6px"><h4 style="margin:0">HỢP ĐỒNG ĐANG ÁP DỤNG MỨC GIÁ NÀY (${list.length})</h4><span class="spacer"></span>${list.length ? `<button class="btn sm" data-act="price-ct-toggle" data-cat="${cat}" data-id="${U.esc(r.id)}" aria-expanded="${st.open}" title="${st.open ? 'Thu gọn danh sách' : 'Xem danh sách hợp đồng'}">${st.open ? '▴ Thu gọn' : '▾ Xem danh sách'}</button>` : ''}</div>`;
+    if (!list.length) return head + '<div class="small muted">Chưa có hợp đồng nào áp dụng mức giá này.</div>';
+    if (!st.open) return head;
+    const marketIds = Array.from(new Set(list.map(x => x.c.market)));
+    if (st.market && !marketIds.includes(st.market)) st.market = '';
+    const mName = id => (landMarkets().find(m => m.id === id) || {}).name || id;
+    let shown = 0;
+    const rows = list.map(({ c, amendment }) => {
+      const t = A.idx.trader.get(c.traderId) || {};
+      const hay = ctFold([c.id, t.name].join(' ')), ok = ctMatch(st, c.market, hay);
+      if (ok) shown++;
+      return `<tr data-market="${U.esc(c.market)}" data-q="${U.esc(hay)}"${ok ? '' : ' style="display:none"'}><td><b>${U.esc(c.id)}</b>${amendment ? '<div class="small muted">Phụ lục</div>' : ''}</td><td>${U.esc(t.name || '—')}</td><td>${U.dmy(c.start)} → ${c.end ? U.dmy(c.end) : '—'}</td></tr>`;
+    });
+    const tools = `<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:8px"><select class="input" style="min-width:180px;flex:0 0 auto" data-ch="price-ct-market" aria-label="Lọc theo chợ"><option value="">Tất cả chợ</option>${marketIds.map(id => `<option value="${U.esc(id)}" ${st.market === id ? 'selected' : ''}>${U.esc(mName(id))}</option>`).join('')}</select><input class="input" style="flex:1;min-width:200px" data-in="price-ct-q" value="${U.esc(st.q)}" placeholder="Tìm mã hợp đồng, tên tiểu thương" aria-label="Tìm hợp đồng"><span class="small muted" style="align-self:center">Hiển thị <b data-ct-count>${shown}</b> / ${list.length}</span></div>`;
+    return head + `<div id="price-ct">${tools}${U.table([{t:'Mã hợp đồng'},{t:'Tên tiểu thương'},{t:'Thời hạn hợp đồng'}], rows)}<div class="small muted" data-ct-empty style="margin-top:6px${shown ? ';display:none' : ''}">Không có hợp đồng phù hợp bộ lọc.</div></div>`;
+  }
+  function priceCtApply() {
+    const box = A.$('#price-ct'), st = ui.priceCt;
+    if (!box || !st) return;
+    let shown = 0;
+    box.querySelectorAll('tr[data-q]').forEach(tr => { const ok = ctMatch(st, tr.dataset.market, tr.dataset.q); tr.style.display = ok ? '' : 'none'; if (ok) shown++; });
+    const cnt = box.querySelector('[data-ct-count]'), empty = box.querySelector('[data-ct-empty]');
+    if (cnt) cnt.textContent = shown;
+    if (empty) empty.style.display = shown ? 'none' : '';
+  }
+  A.ACT['price-ct-toggle'] = el => {
+    const cat = el.dataset.cat, r = A.SERVICE_CFG.get(cat, el.dataset.id);
+    if (!r || !U.can('cau-hinh-gia')) return;
+    const st = ctState(cat, r); st.open = !st.open;
+    priceReopen(cat, r.id);
+  };
+  A.CH['price-ct-market'] = el => { if (ui.priceCt) { ui.priceCt.market = el.value; priceCtApply(); } };
+  A.IN['price-ct-q'] = el => { if (ui.priceCt) { ui.priceCt.q = el.value; priceCtApply(); } };
+  // Hủy (nhập sai): dùng lại action:cau-hinh-gia.khoa-mo-phi (market_manager) + MỌI chợ của dòng giá thuộc marketScopes.
+  // Chỉ hủy được khi không có HĐ nào dùng (kiểm tra trên toàn bộ HĐ, kể cả ngoài phạm vi hiển thị).
+  const landCanCancel = r => !!r && r.status !== 'cancelled' && U.can('cau-hinh-gia') && A.canDo('cau-hinh-gia.khoa-mo-phi') && landMarketIds(r).length > 0 && landMarketIds(r).every(id => landAllowed().has(id));
+  const priceUsageHtml = (cat, r) => `<div class="note info" style="margin-bottom:12px">Hợp đồng đang dùng: <b>${priceContractCount(cat, r)} hợp đồng</b></div>`;
+  // KHOA_GIA_THEO_HOP_DONG: mức giá chỉ có 2 trạng thái — "Đang áp dụng" (chưa bị thay; hiệu lực tương lai thêm dòng
+  // "từ dd/mm/yyyy") và "Ngừng áp dụng từ dd/mm/yyyy" (= effectiveTo + 1 = ngày hiệu lực của mức thay thế). Mức đã ngừng
+  // vẫn là giá của HĐ cũ nên không gọi là vô hiệu. Nháp: "Chưa áp dụng". Bản ghi đã hủy (nhập sai) ẩn khỏi bảng.
+  const cfgShiftDay = (d, k) => { const x = new Date(d + 'T00:00:00'); x.setDate(x.getDate() + k); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
+  const cfgPrevDay = d => cfgShiftDay(d, -1);
+  const cfgFirstOfMonth = d => /^\d{4}-\d{2}-01$/.test(d || '');
+  const cfgNextMonthStart = () => { const t = policyToday(), x = new Date(Number(t.slice(0, 4)), Number(t.slice(5, 7)), 1); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-01'; };
+  function landState(r) {
+    if (r.status === 'draft') return ['Chưa áp dụng', 'warn', 1, ''];
+    // Bản ghi cũ từng bị "Vô hiệu hóa" thủ công (trước khi khóa giá theo HĐ) hiển thị như đã ngừng áp dụng.
+    const stop = r.effectiveTo ? cfgShiftDay(r.effectiveTo, 1) : (r.status === 'inactive' || r.status === 'expired') ? (r.deactivatedAt || r.effectiveFrom || policyToday()) : null;
+    if (stop) return ['Ngừng áp dụng từ ' + U.dmy(stop), '', 2, ''];
+    return ['Đang áp dụng', 'ok', 0, r.effectiveFrom && r.effectiveFrom > policyToday() ? 'từ ' + U.dmy(r.effectiveFrom) : ''];
+  }
+  const cfgPriceStatusTag = r => { const st = landState(r); return `<span class="tag ${st[1]}">${st[0]}</span>${st[3] ? `<div class="small muted">${st[3]}</div>` : ''}`; };
+  // Đang được dùng để tính tiền HĐ ký hôm nay (dùng cho cảnh báo "chưa có giá").
+  const priceAppliesNow = r => r.status === 'active' && (!r.effectiveFrom || r.effectiveFrom <= policyToday()) && (!r.effectiveTo || r.effectiveTo >= policyToday());
   function landRows() {
     const allowed = landAllowed();
-    return A.SERVICE_CFG.list('stallPrices').filter(r => landMarketIds(r).some(id => allowed.has(id)))
+    return A.SERVICE_CFG.list('stallPrices').filter(r => r.status !== 'cancelled' && landMarketIds(r).some(id => allowed.has(id)))
       .sort((a, b) => landState(a)[2] - landState(b)[2] || String(b.effectiveFrom || '').localeCompare(String(a.effectiveFrom || '')));
   }
   function landPriceHtml(r) {
@@ -628,7 +703,7 @@
   const landCanAdd = () => U.can('cau-hinh-gia') && A.canDo('cau-hinh-gia.them-phi') && landMarkets().some(m => landAllowed().has(m.id));
   function policyLandHtml() {
     const rows = landRows(), can = landCanAdd();
-    return `<div class="card"><div class="card-h"><div><h3>Đơn giá mặt bằng</h3><div class="small muted">Mỗi mức giá áp dụng cho một hoặc nhiều chợ theo hạng chợ và căn cứ ban hành. Thu trước cho tháng tiếp theo.</div></div>${can ? '<button class="btn sm primary" data-act="policy-land-new">+ Thêm đơn giá</button>' : ''}</div><div class="card-b">${U.table([{t:'STT'},{t:'Loại điểm kinh doanh'},{t:'Đơn giá',num:true},{t:'Hạng chợ áp dụng'},{t:'Trạng thái áp dụng'},{t:'Có hiệu lực từ'},{t:''}], rows.map((r, i) => { const s = landState(r); return `<tr><td>${i + 1}</td><td><b>${U.esc(landName(r))}</b></td><td class="num">${landPriceHtml(r)}</td><td>${landGradeText(r)}</td><td><span class="tag ${s[1]}">${s[0]}</span></td><td>${U.dmy(r.effectiveFrom)}</td><td><button class="btn sm" data-act="policy-land-view" data-id="${U.esc(r.id)}">Xem chi tiết</button></td></tr>`; }), {empty:'Chưa có đơn giá mặt bằng cho các chợ trong phạm vi tài khoản.'})}<div class="note info" style="margin-top:12px"><b>Cách tính</b><br>Phí mặt bằng = Đơn giá × Diện tích điểm KD × Số ngày của tháng được thu. Quy đổi tháng ở cột Đơn giá tính theo 30 ngày để tham khảo.</div></div></div>`;
+    return `<div class="card"><div class="card-h"><div><h3>Đơn giá mặt bằng</h3><div class="small muted">Mỗi mức giá áp dụng cho một hoặc nhiều chợ theo hạng chợ và căn cứ ban hành. Thu trước cho tháng tiếp theo.</div></div>${can ? '<button class="btn sm primary" data-act="policy-land-new">+ Thêm đơn giá</button>' : ''}</div><div class="card-b">${U.table([{t:'STT'},{t:'Loại điểm kinh doanh'},{t:'Đơn giá',num:true},{t:'Hạng chợ áp dụng'},{t:'Trạng thái áp dụng'},{t:'Có hiệu lực từ'},{t:''}], rows.map((r, i) => `<tr><td>${i + 1}</td><td><b>${U.esc(landName(r))}</b></td><td class="num">${landPriceHtml(r)}</td><td>${landGradeText(r)}</td><td>${cfgPriceStatusTag(r)}</td><td>${U.dmy(r.effectiveFrom)}</td><td><button class="btn sm" data-act="policy-land-view" data-id="${U.esc(r.id)}">Xem chi tiết</button></td></tr>`), {empty:'Chưa có đơn giá mặt bằng cho các chợ trong phạm vi tài khoản.'})}<div class="note info" style="margin-top:12px"><b>Cách tính</b><br>Phí mặt bằng = Đơn giá × Diện tích điểm KD × Số ngày của tháng được thu. Quy đổi tháng ở cột Đơn giá tính theo 30 ngày để tham khảo.</div></div></div>`;
   }
   // Căn cứ = 1 tệp PDF hoặc ảnh quyết định/công văn (mock: object URL, chỉ xem được trong phiên hiện tại).
   const LAND_FILE_ACCEPT = 'application/pdf,image/*';
@@ -636,8 +711,6 @@
   const landAttachment = file => ({ name: file.name, type: file.type || (/\.pdf$/i.test(file.name) ? 'application/pdf' : 'application/octet-stream'), size: file.size, note: '', mock: false, url: URL.createObjectURL(file) });
   // Sửa căn cứ của bản ghi có sẵn: cùng quyền thêm + MỌI chợ của bản ghi thuộc marketScopes.
   const landCanEdit = r => !!r && U.can('cau-hinh-gia') && A.canDo('cau-hinh-gia.them-phi') && landMarketIds(r).length > 0 && landMarketIds(r).every(id => landAllowed().has(id));
-  // Vô hiệu hóa: action:cau-hinh-gia.khoa-mo-phi (có sẵn, market_manager) + MỌI chợ của bản ghi thuộc marketScopes.
-  const landCanDisable = r => !!r && r.status === 'active' && landState(r)[2] !== 2 && U.can('cau-hinh-gia') && A.canDo('cau-hinh-gia.khoa-mo-phi') && landMarketIds(r).length > 0 && landMarketIds(r).every(id => landAllowed().has(id));
   const landFileRow = (a, r, pending) => {
     const img = a.url && (a.type || '').indexOf('image/') === 0;
     return `<div class="row" style="gap:10px;padding:6px 0;border-bottom:1px solid #eef2f7">${img ? `<img src="${a.url}" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid #e5e7eb">` : `<span style="font-size:22px">${cfgAttachIcon(a.type)}</span>`}<span style="flex:1">${U.esc(a.name)}${pending ? ' <span class="tag warn">Chưa lưu</span>' : ''}</span>${pending ? '' : `<button class="btn sm" data-act="cfg-att-view" data-cat="stallPrices" data-id="${U.esc(r.id)}" data-att="${U.esc(a.id)}">Xem</button>`}</div>`;
@@ -651,12 +724,12 @@
   function landDetail(id) {
     const r = A.SERVICE_CFG.get('stallPrices', id), allowed = landAllowed();
     if (!r || !landMarketIds(r).some(x => allowed.has(x))) return U.toast('Không tìm thấy đơn giá trong phạm vi chợ của tài khoản.');
-    const s = landState(r), names = landMarketIds(r).map(x => (landMarkets().find(m => m.id === x) || {}).name || x);
-    const draft = ui.landEvidenceDraft && ui.landEvidenceDraft.id === r.id ? ui.landEvidenceDraft.files : [], canEdit = landCanEdit(r), canDisable = landCanDisable(r);
-    const off = r.status === 'inactive' ? `<dt>Vô hiệu hóa</dt><dd>${U.dmy(r.deactivatedAt) || '—'} · ${U.esc(r.deactivatedBy || '—')}</dd>` : '';
-    A.modal(A.mHead('Chi tiết đơn giá mặt bằng') + `<div class="modal-b"><dl class="kv"><dt>Loại điểm kinh doanh</dt><dd><b>${U.esc(landName(r))}</b></dd><dt>Đơn giá</dt><dd>${landPriceHtml(r)}</dd><dt>Hạng chợ áp dụng</dt><dd>${landGradeText(r)}</dd><dt>Các chợ đang áp dụng</dt><dd>${names.length} chợ: ${names.map(U.esc).join(', ')}</dd><dt>Trạng thái áp dụng</dt><dd><span class="tag ${s[1]}">${s[0]}</span></dd>${off}<dt>Có hiệu lực từ</dt><dd>${U.dmy(r.effectiveFrom)}</dd><dt>Ngày kết thúc</dt><dd>${r.effectiveTo ? U.dmy(r.effectiveTo) : 'Chưa kết thúc'}</dd></dl><h4 style="margin:16px 0 6px">Căn cứ quyết định / công văn</h4>${landEvidenceHtml(r, canEdit, draft)}<h4 style="margin:16px 0 6px">Lịch sử thay đổi</h4>${cfgHistoryHtml(r)}</div><div class="modal-f">${canDisable ? `<button class="btn danger" data-act="policy-land-disable-open" data-id="${U.esc(r.id)}">Vô hiệu hóa</button><span class="spacer"></span>` : ''}<button class="btn" data-act="close">Đóng</button>${canEdit && draft.length ? `<button class="btn primary" data-act="policy-land-evidence-save" data-id="${U.esc(r.id)}">Lưu</button>` : ''}</div>`, true);
+    const names = landMarketIds(r).map(x => (landMarkets().find(m => m.id === x) || {}).name || x);
+    const draft = ui.landEvidenceDraft && ui.landEvidenceDraft.id === r.id ? ui.landEvidenceDraft.files : [], canEdit = landCanEdit(r);
+    const canCancel = landCanCancel(r) && !priceInUse('stallPrices', r);
+    A.modal(A.mHead('Chi tiết đơn giá mặt bằng') + `<div class="modal-b">${priceUsageHtml('stallPrices', r)}<dl class="kv"><dt>Loại điểm kinh doanh</dt><dd><b>${U.esc(landName(r))}</b></dd><dt>Đơn giá</dt><dd>${landPriceHtml(r)}</dd><dt>Hạng chợ áp dụng</dt><dd>${landGradeText(r)}</dd><dt>Các chợ đang áp dụng</dt><dd>${names.length} chợ: ${names.map(U.esc).join(', ')}</dd><dt>Trạng thái áp dụng</dt><dd>${cfgPriceStatusTag(r)}</dd><dt>Có hiệu lực từ</dt><dd>${U.dmy(r.effectiveFrom)}</dd><dt>Ngày kết thúc</dt><dd>${r.effectiveTo ? U.dmy(r.effectiveTo) : 'Chưa kết thúc'}</dd></dl>${priceContractsHtml('stallPrices', r)}<h4 style="margin:16px 0 6px">Căn cứ quyết định / công văn</h4>${landEvidenceHtml(r, canEdit, draft)}<h4 style="margin:16px 0 6px">Lịch sử thay đổi</h4>${cfgHistoryHtml(r)}</div><div class="modal-f">${canCancel ? `<button class="btn danger" data-act="price-cancel-open" data-cat="stallPrices" data-id="${U.esc(r.id)}">Hủy mức giá</button>` : ''}<span class="spacer"></span><button class="btn" data-act="close">Đóng</button>${canEdit && draft.length ? `<button class="btn primary" data-act="policy-land-evidence-save" data-id="${U.esc(r.id)}">Lưu</button>` : ''}</div>`, true);
   }
-  A.ACT['policy-land-view'] = el => { if (!U.can('cau-hinh-gia')) return; ui.landEvidenceDraft = null; landDetail(el.dataset.id); };
+  A.ACT['policy-land-view'] = el => { if (!U.can('cau-hinh-gia')) return; ui.landEvidenceDraft = null; ui.priceCt = null; landDetail(el.dataset.id); };
   // Chọn tệp chỉ đưa vào bản nháp; bấm "Lưu" mới ghi vào đơn giá + lịch sử.
   A.CH['land-att-add'] = el => {
     const file = el.files && el.files[0], r = A.SERVICE_CFG.get('stallPrices', el.dataset.id);
@@ -674,19 +747,6 @@
     d.files.forEach(a => A.SERVICE_CFG.addAttachment(r, a, cfgActor()));
     const n = d.files.length; ui.landEvidenceDraft = null; landDetail(r.id);
     U.toast('Đã lưu ' + n + ' tệp căn cứ (chỉ xem được trong phiên hiện tại, không upload lên máy chủ).');
-  };
-  A.ACT['policy-land-disable-open'] = el => {
-    const r = A.SERVICE_CFG.get('stallPrices', el.dataset.id);
-    if (!landCanDisable(r)) return U.toast('Bạn không có quyền vô hiệu hóa đơn giá này.');
-    A.modal(A.mHead('Vô hiệu hóa đơn giá mặt bằng?') + `<div class="modal-b">Đơn giá <b>${U.esc(landName(r))}</b> · ${landPriceHtml(r)} sẽ ngừng áp dụng cho ${landMarketIds(r).length} chợ. Thao tác được ghi vào lịch sử thay đổi.<div class="field" style="margin-top:12px"><label>Lý do</label><input class="input" id="land-disable-reason" placeholder="Có quyết định giá mới"></div></div><div class="modal-f"><button class="btn" data-act="policy-land-view" data-id="${U.esc(r.id)}">Hủy</button><button class="btn danger" data-act="policy-land-disable" data-id="${U.esc(r.id)}">Vô hiệu hóa</button></div>`);
-  };
-  A.ACT['policy-land-disable'] = el => {
-    const r = A.SERVICE_CFG.get('stallPrices', el.dataset.id);
-    // Kiểm tra lại quyền + marketScopes trong handler.
-    if (!landCanDisable(r)) return U.toast('Bạn không có quyền vô hiệu hóa đơn giá này.');
-    const actor = cfgActor(), reason = ((A.$('#land-disable-reason') || {}).value || '').trim();
-    A.SERVICE_CFG.update('stallPrices', r.id, { status: 'inactive', deactivatedAt: policyToday(), deactivatedBy: actor }, actor, 'Vô hiệu hóa', reason || 'Vô hiệu hóa thủ công');
-    ui.landEvidenceDraft = null; A.render(); landDetail(r.id); U.toast('Đã vô hiệu hóa đơn giá.');
   };
   // Form: Hạng chợ → các chợ áp dụng (tự suy ra, không tích tay) → loại diện tích đã khai báo ở Danh mục chợ.
   const landAreaTypesOf = mid => { const st = A.features.marketLayout && A.features.marketLayout.store; return st && st.allowedAreaTypes ? st.allowedAreaTypes(mid) : (U.AREA_TYPE_CODES || []); };
@@ -709,7 +769,7 @@
   }
   A.ACT['policy-land-new'] = () => {
     if (!landCanAdd()) return U.toast('Bạn không có quyền thêm đơn giá mặt bằng.');
-    ui.landForm = { grades: [], areaTypeId: '', amount: 0, effectiveFrom: policyToday(), effectiveTo: '', file: null };
+    ui.landForm = { grades: [], areaTypeId: '', amount: 0, effectiveFrom: cfgNextMonthStart(), effectiveTo: '', file: null };
     landFormHtml();
   };
   A.CH['land-grade'] = el => { const f = ui.landForm, g = Number(el.value); f.grades = el.checked ? Array.from(new Set(f.grades.concat([g]))).sort() : f.grades.filter(x => x !== g); landFormHtml(); };
@@ -733,24 +793,24 @@
     if (marketIds.some(id => !allowed.has(id))) return U.toast('Có chợ nằm ngoài phạm vi chợ của tài khoản.');
     if (!(f.amount > 0)) return U.toast('Đơn giá phải lớn hơn 0.');
     if (!f.effectiveFrom) return U.toast('Vui lòng nhập ngày có hiệu lực.');
+    if (!cfgFirstOfMonth(f.effectiveFrom)) return U.toast('Giá mới chỉ được có hiệu lực từ ngày 01 của tháng.');
     if (f.effectiveTo && f.effectiveTo < f.effectiveFrom) return U.toast('Ngày kết thúc phải sau ngày có hiệu lực.');
     if (!f.file) return U.toast('Vui lòng tải lên tệp PDF hoặc ảnh quyết định / công văn làm căn cứ.');
     const actor = cfgActor(), label = U.areaTypeLabel(f.areaTypeId) || f.areaTypeId;
-    // Kiểm tra trùng theo loại điểm kinh doanh: bảng không có 2 mức đang áp dụng cho cùng 1 loại → mức cũ (còn hiệu
-    // lực hoặc chưa tới hiệu lực, hiển thị trong phạm vi tài khoản) tự chuyển Vô hiệu hóa. Không vô hiệu hóa giá của
-    // chợ ngoài marketScopes — khi đó chặn lưu.
-    const today = policyToday();
-    const dup = landRows().filter(r => r.status === 'active' && r.areaTypeId === f.areaTypeId && !(r.effectiveTo && r.effectiveTo < today));
-    const foreign = dup.find(r => landMarketIds(r).some(id => !allowed.has(id)));
-    if (foreign) return U.toast('Mức "' + label + '" đang áp dụng cả cho chợ ngoài phạm vi tài khoản nên không thể tự vô hiệu hóa. Liên hệ người quản lý các chợ đó.');
-    dup.forEach(r => A.SERVICE_CFG.update('stallPrices', r.id, { status: 'inactive', deactivatedAt: today, deactivatedBy: actor }, actor, 'Vô hiệu hóa', 'Trùng loại điểm kinh doanh — được thay bằng mức ' + f.amount.toLocaleString('vi-VN') + ' đ/m²/ngày có hiệu lực từ ' + U.dmy(f.effectiveFrom)));
-    const overlap = dup;
+    // KHOA_GIA_THEO_HOP_DONG: mức cũ cùng loại điểm kinh doanh, có chợ trùng, còn áp dụng tại ngày hiệu lực mới → kết thúc
+    // ngày trước đó ("Ngừng áp dụng từ …"), vẫn active để HĐ cũ tiếp tục tính theo giá cũ. Không chạm giá của chợ ngoài
+    // marketScopes hoặc chợ không thuộc mức mới — khi đó chặn lưu.
+    const olds = landRows().filter(r => r.status === 'active' && r.areaTypeId === f.areaTypeId && (!r.effectiveTo || r.effectiveTo >= f.effectiveFrom) && landMarketIds(r).some(id => marketIds.includes(id)));
+    if (olds.some(r => landMarketIds(r).some(id => !allowed.has(id)))) return U.toast('Mức "' + label + '" đang áp dụng cả cho chợ ngoài phạm vi tài khoản nên không thể thay. Liên hệ người quản lý các chợ đó.');
+    if (olds.some(r => landMarketIds(r).some(id => !marketIds.includes(id)))) return U.toast('Mức "' + label + '" đang áp dụng cho cả chợ không thuộc mức mới. Mức mới phải áp dụng cho đủ các chợ đó.');
+    if (olds.some(r => (r.effectiveFrom || '') >= f.effectiveFrom)) return U.toast('Ngày hiệu lực của mức mới phải sau ngày hiệu lực của mức đang áp dụng.');
     const rec = { scope: 'SHARED', marketId: null, marketIds, areaTypeId: f.areaTypeId, marketGrades: f.grades.slice(), amount: f.amount, unit: 'đ/m²/ngày',
-      effectiveFrom: f.effectiveFrom, effectiveTo: f.effectiveTo || null, status: 'active', legalBasis: { docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: f.effectiveFrom, note: '' },
+      effectiveFrom: f.effectiveFrom, effectiveTo: f.effectiveTo || null, status: 'active', previousVersionId: olds.length ? olds[0].id : null, legalBasis: { docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: f.effectiveFrom, note: '' },
       __detail: label + ' · ' + f.amount.toLocaleString('vi-VN') + ' đ/m²/ngày · ' + marketIds.length + ' chợ · căn cứ: ' + f.file.name };
     A.SERVICE_CFG.add('stallPrices', rec, actor); delete rec.__detail;
     A.SERVICE_CFG.addAttachment(rec, f.file, actor);
-    ui.landForm = null; A.closeModal(); A.render(); U.toast('Đã lưu đơn giá mặt bằng.' + (overlap.length ? ' Mức cũ cùng loại điểm kinh doanh đã chuyển sang Vô hiệu hóa.' : ''));
+    olds.forEach(r => A.SERVICE_CFG.update('stallPrices', r.id, { effectiveTo: cfgPrevDay(f.effectiveFrom), replacedById: rec.id }, actor, 'Ngừng áp dụng', 'Ngừng áp dụng từ ' + U.dmy(f.effectiveFrom) + ' — thay bằng ' + rec.id));
+    ui.landForm = null; A.closeModal(); A.render(); U.toast('Đã lưu đơn giá mặt bằng.' + (olds.length ? ' Mức cũ cùng loại điểm kinh doanh ngừng áp dụng từ ' + U.dmy(f.effectiveFrom) + '; hợp đồng đã ký vẫn giữ giá cũ.' : ''));
   };
   // ---- Đơn giá điện / nước / dịch vụ theo từng chợ (DON_GIA_THEO_CHO, 01/10/2026) ----
   // Mỗi dòng giá thuộc 1 chợ (marketId — market applicability sẵn có, billing đọc theo chợ). Không quyền mới:
@@ -770,20 +830,20 @@
   const feeOfTab = (tab, r) => { const c = FEE_TABS[tab]; return c.cat === 'utilities' ? (r.kind ? r.kind === c.kind : r[c.field] != null) : r.category !== 'VEHICLE' && !/gửi xe/i.test(r.name || ''); };
   function feeRows(tab, market) {
     const c = FEE_TABS[tab];
-    return A.SERVICE_CFG.list(c.cat).filter(r => feeInScope(r) && feeOfTab(tab, r) && (market === 'all' || r.marketId === market))
+    return A.SERVICE_CFG.list(c.cat).filter(r => r.status !== 'cancelled' && feeInScope(r) && feeOfTab(tab, r) && (market === 'all' || r.marketId === market))
       .sort((a, b) => String(a.marketId).localeCompare(String(b.marketId)) || landState(a)[2] - landState(b)[2] || String(b.effectiveFrom || '').localeCompare(String(a.effectiveFrom || '')));
   }
   const feeTabOf = (cat, r) => cat === 'extraServices' ? 'service' : (r.kind === 'WATER' || (!r.kind && r.elecPrice == null) ? 'water' : 'electricity');
   function feePriceHtml(tab, r) { const c = FEE_TABS[tab]; return `${Number(r[c.field] || 0).toLocaleString('vi-VN')} ${U.esc(r[c.unitField] || c.unit || '')}`; }
   const feeCanAdd = () => U.can('cau-hinh-gia') && A.canDo('cau-hinh-gia.them-phi') && feeScopeMarkets().length > 0;
   const feeCanEdit = r => feeInScope(r) && U.can('cau-hinh-gia') && A.canDo('cau-hinh-gia.them-phi');
-  const feeCanDisable = r => feeInScope(r) && r.status === 'active' && landState(r)[2] !== 2 && U.can('cau-hinh-gia') && A.canDo('cau-hinh-gia.khoa-mo-phi');
+  const feeCanCancel = r => feeInScope(r) && r.status !== 'cancelled' && U.can('cau-hinh-gia') && A.canDo('cau-hinh-gia.khoa-mo-phi');
   function feeTabHtml(tab) {
     const c = FEE_TABS[tab], filter = feeFilter(), rows = feeRows(tab, filter), svc = tab === 'service';
     const opts = feeScopeMarkets().map(m => `<option value="${U.esc(m.id)}" ${filter === m.id ? 'selected' : ''}>${U.esc(m.name)}</option>`).join('');
     const cols = [{t:'STT'}].concat(svc ? [{t:'Tên dịch vụ'},{t:'Cách tính'}] : []).concat([{t:'Đơn giá',num:true},{t:'Trạng thái áp dụng'},{t:'Có hiệu lực từ'},{t:''}]);
-    const body = rows.map((r, i) => { const s = landState(r); return `<tr><td>${i + 1}</td>${svc ? `<td><b>${U.esc(r.name || '—')}</b></td><td>${U.esc((FEE_CALC[r.calcMethod] || [CFG_CALC_LABELS[r.calcMethod] || r.calcMethod || '—'])[0])}</td>` : ''}<td class="num"><b>${feePriceHtml(tab, r)}</b></td><td><span class="tag ${s[1]}">${s[0]}</span></td><td>${U.dmy(r.effectiveFrom)}</td><td><button class="btn sm" data-act="fee-view" data-cat="${c.cat}" data-id="${U.esc(r.id)}">Xem chi tiết</button></td></tr>`; });
-    const missing = filter && !rows.some(r => landState(r)[2] === 0) ? `<div class="note warn" style="margin-bottom:10px">${U.esc(feeMarketName(filter))} chưa có ${c.noun === 'dịch vụ' ? 'dịch vụ' : 'đơn giá ' + c.noun} đang có hiệu lực.</div>` : '';
+    const body = rows.map((r, i) => `<tr><td>${i + 1}</td>${svc ? `<td><b>${U.esc(r.name || '—')}</b></td><td>${U.esc((FEE_CALC[r.calcMethod] || [CFG_CALC_LABELS[r.calcMethod] || r.calcMethod || '—'])[0])}</td>` : ''}<td class="num"><b>${feePriceHtml(tab, r)}</b></td><td>${cfgPriceStatusTag(r)}</td><td>${U.dmy(r.effectiveFrom)}</td><td><button class="btn sm" data-act="fee-view" data-cat="${c.cat}" data-id="${U.esc(r.id)}">Xem chi tiết</button></td></tr>`);
+    const missing = filter && !rows.some(priceAppliesNow) ? `<div class="note warn" style="margin-bottom:10px">${U.esc(feeMarketName(filter))} chưa có ${c.noun === 'dịch vụ' ? 'dịch vụ' : 'đơn giá ' + c.noun} đang có hiệu lực.</div>` : '';
     return `<div class="card"><div class="card-h"><div><h3>${c.title}</h3><div class="small muted">Mỗi chợ khai báo đơn giá ${c.noun} riêng; lọc theo chợ để xem.</div></div><span class="spacer"></span><label class="small" style="margin-right:6px">Chợ</label><select class="input" style="min-width:220px" data-ch="fee-market-filter">${opts}</select>${feeCanAdd() ? `<button class="btn sm primary" style="margin-left:8px" data-act="fee-new" data-tab="${tab}">+ Thêm đơn giá</button>` : ''}</div><div class="card-b">${missing}${U.table(cols, body, {empty:'Chưa có đơn giá ' + c.noun + ' cho chợ đã chọn.'})}<div class="note info" style="margin-top:12px">${c.formula}</div></div></div>`;
   }
   A.CH['fee-market-filter'] = el => { ui.feeMarketFilter = el.value; A.render(); };
@@ -791,14 +851,13 @@
   function feeDetail(cat, id) {
     const r = A.SERVICE_CFG.get(cat, id);
     if (!feeInScope(r)) return U.toast('Không tìm thấy đơn giá trong phạm vi chợ của tài khoản.');
-    const tab = feeTabOf(cat, r), c = FEE_TABS[tab], s = landState(r), svc = tab === 'service';
-    const draft = ui.feeEvidenceDraft && ui.feeEvidenceDraft.id === r.id ? ui.feeEvidenceDraft.files : [], canEdit = feeCanEdit(r), canDisable = feeCanDisable(r);
+    const tab = feeTabOf(cat, r), c = FEE_TABS[tab], svc = tab === 'service';
+    const draft = ui.feeEvidenceDraft && ui.feeEvidenceDraft.id === r.id ? ui.feeEvidenceDraft.files : [], canEdit = feeCanEdit(r), canCancel = feeCanCancel(r) && !priceInUse(cat, r);
     const list = r.attachments || [], rowsHtml = list.map(a => landFileRow(a, r, false).replace('data-cat="stallPrices"', `data-cat="${cat}"`)).join('') + draft.map(a => landFileRow(a, r, true)).join('');
     const evidence = `${rowsHtml || '<div class="small muted">Chưa có tệp căn cứ.</div>'}${canEdit ? `<label class="btn sm" style="cursor:pointer;margin-top:8px;display:inline-flex">${rowsHtml ? 'Chọn thêm tệp căn cứ' : '+ Chọn tệp căn cứ (PDF / ảnh)'}<input type="file" accept="${LAND_FILE_ACCEPT}" style="display:none" data-ch="fee-att-add" data-cat="${cat}" data-id="${U.esc(r.id)}"></label>` : ''}`;
-    const off = r.status === 'inactive' ? `<dt>Vô hiệu hóa</dt><dd>${U.dmy(r.deactivatedAt) || '—'} · ${U.esc(r.deactivatedBy || '—')}</dd>` : '';
-    A.modal(A.mHead('Chi tiết ' + c.title.toLowerCase()) + `<div class="modal-b"><dl class="kv"><dt>Chợ</dt><dd><b>${U.esc(feeMarketName(r.marketId))}</b></dd>${svc ? `<dt>Tên dịch vụ</dt><dd>${U.esc(r.name || '—')}</dd><dt>Cách tính</dt><dd>${U.esc((FEE_CALC[r.calcMethod] || [r.calcMethod || '—'])[0])}</dd>` : ''}<dt>Đơn giá</dt><dd>${feePriceHtml(tab, r)}</dd><dt>Trạng thái áp dụng</dt><dd><span class="tag ${s[1]}">${s[0]}</span></dd>${off}<dt>Có hiệu lực từ</dt><dd>${U.dmy(r.effectiveFrom)}</dd><dt>Ngày kết thúc</dt><dd>${r.effectiveTo ? U.dmy(r.effectiveTo) : 'Chưa kết thúc'}</dd></dl><h4 style="margin:16px 0 6px">Căn cứ quyết định / công văn</h4>${evidence}<h4 style="margin:16px 0 6px">Lịch sử thay đổi</h4>${cfgHistoryHtml(r)}</div><div class="modal-f">${canDisable ? `<button class="btn danger" data-act="fee-disable-open" data-cat="${cat}" data-id="${U.esc(r.id)}">Vô hiệu hóa</button><span class="spacer"></span>` : ''}<button class="btn" data-act="close">Đóng</button>${canEdit && draft.length ? `<button class="btn primary" data-act="fee-evidence-save" data-cat="${cat}" data-id="${U.esc(r.id)}">Lưu</button>` : ''}</div>`, true);
+    A.modal(A.mHead('Chi tiết ' + c.title.toLowerCase()) + `<div class="modal-b">${priceUsageHtml(cat, r)}<dl class="kv"><dt>Chợ</dt><dd><b>${U.esc(feeMarketName(r.marketId))}</b></dd>${svc ? `<dt>Tên dịch vụ</dt><dd>${U.esc(r.name || '—')}</dd><dt>Cách tính</dt><dd>${U.esc((FEE_CALC[r.calcMethod] || [r.calcMethod || '—'])[0])}</dd>` : ''}<dt>Đơn giá</dt><dd>${feePriceHtml(tab, r)}</dd><dt>Trạng thái áp dụng</dt><dd>${cfgPriceStatusTag(r)}</dd><dt>Có hiệu lực từ</dt><dd>${U.dmy(r.effectiveFrom)}</dd><dt>Ngày kết thúc</dt><dd>${r.effectiveTo ? U.dmy(r.effectiveTo) : 'Chưa kết thúc'}</dd></dl>${priceContractsHtml(cat, r)}<h4 style="margin:16px 0 6px">Căn cứ quyết định / công văn</h4>${evidence}<h4 style="margin:16px 0 6px">Lịch sử thay đổi</h4>${cfgHistoryHtml(r)}</div><div class="modal-f">${canCancel ? `<button class="btn danger" data-act="price-cancel-open" data-cat="${cat}" data-id="${U.esc(r.id)}">Hủy mức giá</button>` : ''}<span class="spacer"></span><button class="btn" data-act="close">Đóng</button>${canEdit && draft.length ? `<button class="btn primary" data-act="fee-evidence-save" data-cat="${cat}" data-id="${U.esc(r.id)}">Lưu</button>` : ''}</div>`, true);
   }
-  A.ACT['fee-view'] = el => { if (!U.can('cau-hinh-gia')) return; ui.feeEvidenceDraft = null; feeDetail(el.dataset.cat, el.dataset.id); };
+  A.ACT['fee-view'] = el => { if (!U.can('cau-hinh-gia')) return; ui.feeEvidenceDraft = null; ui.priceCt = null; feeDetail(el.dataset.cat, el.dataset.id); };
   A.CH['fee-att-add'] = el => {
     const file = el.files && el.files[0], r = A.SERVICE_CFG.get(el.dataset.cat, el.dataset.id);
     if (!file || !r) return;
@@ -815,24 +874,31 @@
     const n = d.files.length; ui.feeEvidenceDraft = null; feeDetail(el.dataset.cat, r.id);
     U.toast('Đã lưu ' + n + ' tệp căn cứ (chỉ xem được trong phiên hiện tại, không upload lên máy chủ).');
   };
-  A.ACT['fee-disable-open'] = el => {
+  // KHOA_GIA_THEO_HOP_DONG: Hủy = sửa mức nhập sai (chưa HĐ nào dùng). Mức bị hủy từng thay mức cũ → mức cũ áp dụng lại.
+  // Handler kiểm tra lại quyền + marketScopes + "không có HĐ dùng" (không dựa vào việc ẩn nút).
+  const priceCancelAllowed = (cat, r) => cat === 'stallPrices' ? landCanCancel(r) : feeCanCancel(r);
+  const priceReopen = (cat, id) => cat === 'stallPrices' ? landDetail(id) : feeDetail(cat, id);
+  A.ACT['price-cancel-open'] = el => {
     const cat = el.dataset.cat, r = A.SERVICE_CFG.get(cat, el.dataset.id);
-    if (!feeCanDisable(r)) return U.toast('Bạn không có quyền vô hiệu hóa đơn giá này.');
-    const tab = feeTabOf(cat, r);
-    A.modal(A.mHead('Vô hiệu hóa ' + FEE_TABS[tab].title.toLowerCase() + '?') + `<div class="modal-b">${tab === 'service' ? 'Dịch vụ <b>' + U.esc(r.name || '') + '</b>' : 'Đơn giá ' + FEE_TABS[tab].noun} · ${feePriceHtml(tab, r)} của <b>${U.esc(feeMarketName(r.marketId))}</b> sẽ ngừng áp dụng. Thao tác được ghi vào lịch sử thay đổi.<div class="field" style="margin-top:12px"><label>Lý do</label><input class="input" id="fee-disable-reason" placeholder="Có quyết định giá mới"></div></div><div class="modal-f"><button class="btn" data-act="fee-view" data-cat="${cat}" data-id="${U.esc(r.id)}">Hủy</button><button class="btn danger" data-act="fee-disable" data-cat="${cat}" data-id="${U.esc(r.id)}">Vô hiệu hóa</button></div>`);
+    if (!priceCancelAllowed(cat, r)) return U.toast('Bạn không có quyền hủy mức giá này.');
+    if (priceInUse(cat, r)) return U.toast('Không thể hủy: mức giá đang có hợp đồng áp dụng.');
+    A.modal(A.mHead('Hủy mức giá nhập sai?') + `<div class="modal-b">Mức giá này chưa có hợp đồng nào áp dụng và sẽ bị hủy (vẫn lưu trong lịch sử thay đổi).${A.SERVICE_CFG.list(cat).some(x => x.replacedById === r.id) ? ' Mức giá cũ mà mức này đã thay sẽ tiếp tục áp dụng.' : ''}</div><div class="modal-f"><button class="btn" data-act="price-cancel-back" data-cat="${cat}" data-id="${U.esc(r.id)}">Quay lại</button><button class="btn danger" data-act="price-cancel" data-cat="${cat}" data-id="${U.esc(r.id)}">Hủy mức giá</button></div>`);
   };
-  A.ACT['fee-disable'] = el => {
+  A.ACT['price-cancel-back'] = el => priceReopen(el.dataset.cat, el.dataset.id);
+  A.ACT['price-cancel'] = el => {
     const cat = el.dataset.cat, r = A.SERVICE_CFG.get(cat, el.dataset.id);
-    if (!feeCanDisable(r)) return U.toast('Bạn không có quyền vô hiệu hóa đơn giá này.');
-    const actor = cfgActor(), reason = ((A.$('#fee-disable-reason') || {}).value || '').trim();
-    A.SERVICE_CFG.update(cat, r.id, { status: 'inactive', deactivatedAt: policyToday(), deactivatedBy: actor }, actor, 'Vô hiệu hóa', reason || 'Vô hiệu hóa thủ công');
-    ui.feeEvidenceDraft = null; A.render(); feeDetail(cat, r.id); U.toast('Đã vô hiệu hóa đơn giá.');
+    if (!priceCancelAllowed(cat, r)) return U.toast('Bạn không có quyền hủy mức giá này.');
+    if (priceInUse(cat, r)) return U.toast('Không thể hủy: mức giá đang có hợp đồng áp dụng.');
+    const actor = cfgActor();
+    A.SERVICE_CFG.update(cat, r.id, { status: 'cancelled', cancelledAt: policyToday(), cancelledBy: actor }, actor, 'Hủy mức giá', 'Hủy do nhập sai — chưa có hợp đồng nào áp dụng');
+    A.SERVICE_CFG.list(cat).filter(x => x.replacedById === r.id).forEach(old => A.SERVICE_CFG.update(cat, old.id, { effectiveTo: null, replacedById: null }, actor, 'Áp dụng lại', 'Mức thay thế ' + r.id + ' bị hủy → tiếp tục áp dụng'));
+    A.closeModal(); A.render(); U.toast('Đã hủy mức giá.');
   };
   // Form thêm: chợ (trong phạm vi) · [tên dịch vụ, cách tính] · đơn giá · hiệu lực · ngày kết thúc · 1 tệp căn cứ.
   function feeFormHtml() {
     const f = ui.feeForm, c = FEE_TABS[f.tab], svc = f.tab === 'service', unit = svc ? FEE_CALC[f.calcMethod][1] : c.unit;
     const cur = f.marketId ? A.SERVICE_CFG.list(c.cat).filter(r => r.marketId === f.marketId && feeOfTab(f.tab, r) && r.status === 'active' && !(r.effectiveTo && r.effectiveTo < policyToday()) && (!svc || (r.name || '').trim().toLowerCase() === f.name.trim().toLowerCase())) : [];
-    const note = cur.length && (!svc || f.name.trim()) ? `<div class="note warn" style="margin-top:10px">Đang có ${svc ? 'dịch vụ "' + U.esc(f.name.trim()) + '"' : 'đơn giá ' + c.noun} ${cur.map(r => feePriceHtml(f.tab, r)).join(', ')} tại chợ này. Khi lưu, mức cũ sẽ tự chuyển sang Vô hiệu hóa.</div>` : '';
+    const note = cur.length && (!svc || f.name.trim()) ? `<div class="note warn" style="margin-top:10px">Đang có ${svc ? 'dịch vụ "' + U.esc(f.name.trim()) + '"' : 'đơn giá ' + c.noun} ${cur.map(r => feePriceHtml(f.tab, r)).join(', ')} tại chợ này. Khi lưu, mức cũ ngừng áp dụng từ ngày hiệu lực của mức mới; hợp đồng đã ký vẫn giữ giá cũ.</div>` : '';
     const svcFields = svc ? `<div class="field"><label>Tên dịch vụ *</label><input class="input" data-ch="fee-name" value="${U.esc(f.name)}" placeholder="Vệ sinh"></div><div class="field"><label>Cách tính *</label><select class="input" data-ch="fee-calc">${Object.keys(FEE_CALC).map(k => `<option value="${k}" ${f.calcMethod === k ? 'selected' : ''}>${FEE_CALC[k][0]}</option>`).join('')}</select></div>` : '';
     A.modal(A.mHead('Thêm ' + c.title.toLowerCase() + ' · ' + U.esc(feeMarketName(f.marketId))) + `<div class="modal-b"><div class="form-grid">${svcFields}<div class="field"><label>Đơn giá (${unit}) *</label><input class="input" type="number" min="0" data-ch="fee-amount" value="${f.amount || ''}"></div><div class="field"><label>Có hiệu lực từ *</label><input class="input" type="date" data-ch="fee-from" value="${f.effectiveFrom}"></div><div class="field"><label>Ngày kết thúc</label><input class="input" type="date" data-ch="fee-to" value="${f.effectiveTo || ''}"><div class="small muted">Để trống = chưa kết thúc.</div></div></div>${note}<div class="field" style="margin-top:10px"><label>Căn cứ quyết định / công văn * <span class="small muted">(1 tệp PDF hoặc ảnh)</span></label><label class="btn sm" style="cursor:pointer;display:inline-flex;width:max-content">${f.file ? 'Đổi tệp' : '+ Tải tệp PDF / ảnh'}<input type="file" accept="${LAND_FILE_ACCEPT}" style="display:none" data-ch="fee-file"></label>${f.file ? `<div class="row" style="gap:8px;margin-top:6px"><span>${cfgAttachIcon(f.file.type)}</span><span>${U.esc(f.file.name)}</span></div>` : ''}</div><div class="small muted" style="margin-top:10px">Lịch sử thay đổi được hệ thống ghi tự động (người thực hiện, thời điểm, nội dung).</div></div><div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="fee-save">Lưu đơn giá</button></div>`, true);
   }
@@ -841,7 +907,7 @@
     const tab = FEE_TABS[el.dataset.tab] ? el.dataset.tab : 'electricity', filter = feeFilter();
     if (!filter) return U.toast('Tài khoản chưa có chợ nào trong phạm vi.');
     // Chợ của dòng giá = chợ đang lọc (không chọn lại trong form); fee-save vẫn kiểm tra marketScopes.
-    ui.feeForm = { tab, marketId: filter, name: '', calcMethod: 'fixed', amount: 0, effectiveFrom: policyToday(), effectiveTo: '', file: null };
+    ui.feeForm = { tab, marketId: filter, name: '', calcMethod: 'fixed', amount: 0, effectiveFrom: cfgNextMonthStart(), effectiveTo: '', file: null };
     feeFormHtml();
   };
   A.CH['fee-name'] = el => { ui.feeForm.name = el.value; feeFormHtml(); };
@@ -860,20 +926,24 @@
     if (svc && !f.name.trim()) return U.toast('Vui lòng nhập tên dịch vụ.');
     if (!(f.amount > 0)) return U.toast('Đơn giá phải lớn hơn 0.');
     if (!f.effectiveFrom) return U.toast('Vui lòng nhập ngày có hiệu lực.');
+    if (!cfgFirstOfMonth(f.effectiveFrom)) return U.toast('Giá mới chỉ được có hiệu lực từ ngày 01 của tháng.');
     if (f.effectiveTo && f.effectiveTo < f.effectiveFrom) return U.toast('Ngày kết thúc phải sau ngày có hiệu lực.');
     if (!f.file) return U.toast('Vui lòng tải lên tệp PDF hoặc ảnh quyết định / công văn làm căn cứ.');
-    const actor = cfgActor(), today = policyToday(), name = f.name.trim(), unit = svc ? FEE_CALC[f.calcMethod][1] : c.unit;
-    // Trùng: cùng chợ (+ cùng tên dịch vụ) đang áp dụng / chưa tới hiệu lực → mức cũ tự Vô hiệu hóa.
-    const dup = A.SERVICE_CFG.list(c.cat).filter(r => r.marketId === f.marketId && feeOfTab(f.tab, r) && r.status === 'active' && !(r.effectiveTo && r.effectiveTo < today) && (!svc || (r.name || '').trim().toLowerCase() === name.toLowerCase()));
-    dup.forEach(r => A.SERVICE_CFG.update(c.cat, r.id, { status: 'inactive', deactivatedAt: today, deactivatedBy: actor }, actor, 'Vô hiệu hóa', 'Trùng ' + (svc ? 'dịch vụ "' + name + '"' : 'đơn giá ' + c.noun) + ' — được thay bằng mức ' + f.amount.toLocaleString('vi-VN') + ' ' + unit + ' có hiệu lực từ ' + U.dmy(f.effectiveFrom)));
+    const actor = cfgActor(), name = f.name.trim(), unit = svc ? FEE_CALC[f.calcMethod][1] : c.unit;
+    // KHOA_GIA_THEO_HOP_DONG: mức cũ cùng chợ (+ cùng tên dịch vụ) còn áp dụng tại ngày hiệu lực mới → kết thúc ngày trước đó
+    // ("Ngừng áp dụng từ …"), vẫn active để HĐ cũ tiếp tục tính theo giá cũ.
+    const dup = A.SERVICE_CFG.list(c.cat).filter(r => r.marketId === f.marketId && feeOfTab(f.tab, r) && r.status === 'active' && (!r.effectiveTo || r.effectiveTo >= f.effectiveFrom) && (!svc || (r.name || '').trim().toLowerCase() === name.toLowerCase()));
+    if (dup.some(r => (r.effectiveFrom || '') >= f.effectiveFrom)) return U.toast('Ngày hiệu lực của mức mới phải sau ngày hiệu lực của mức đang áp dụng.');
     const base = { marketId: f.marketId, effectiveFrom: f.effectiveFrom, effectiveTo: f.effectiveTo || null, status: 'active', legalBasis: { docNo: '', docDate: '', issuer: '', summary: '', effectiveDate: f.effectiveFrom, note: '' } };
     const rec = svc ? Object.assign(base, { name, category: 'GENERAL', calcMethod: f.calcMethod, amount: f.amount, unit })
       : Object.assign(base, { kind: c.kind, elecPrice: null, waterPrice: null, elecUnit: 'đ/kWh', waterUnit: 'đ/m³', [c.field]: f.amount });
     rec.__detail = (svc ? name + ' · ' : '') + f.amount.toLocaleString('vi-VN') + ' ' + unit + ' · ' + feeMarketName(f.marketId) + ' · căn cứ: ' + f.file.name;
+    if (dup.length) rec.previousVersionId = dup[0].id;
     A.SERVICE_CFG.add(c.cat, rec, actor); delete rec.__detail;
     A.SERVICE_CFG.addAttachment(rec, f.file, actor);
+    dup.forEach(r => A.SERVICE_CFG.update(c.cat, r.id, { effectiveTo: cfgPrevDay(f.effectiveFrom), replacedById: rec.id }, actor, 'Ngừng áp dụng', 'Ngừng áp dụng từ ' + U.dmy(f.effectiveFrom) + ' — thay bằng ' + rec.id));
     ui.feeMarketFilter = f.marketId; ui.feeForm = null; A.closeModal(); A.render();
-    U.toast('Đã lưu ' + c.title.toLowerCase() + '.' + (dup.length ? ' Mức cũ đã chuyển sang Vô hiệu hóa.' : ''));
+    U.toast('Đã lưu ' + c.title.toLowerCase() + '.' + (dup.length ? ' Mức cũ ngừng áp dụng từ ' + U.dmy(f.effectiveFrom) + '; hợp đồng đã ký vẫn giữ giá cũ.' : ''));
   };
   function policyLandHtmlLegacy() {
     const rows = policyLandRows(), legacy = rows.filter(r => !r.areaTypeId), can = cfgFeeAddAllowed('stallPrices', null);
@@ -905,7 +975,7 @@
     if (active && f.effectiveFrom <= active.effectiveFrom) return U.toast('Ngày hiệu lực mức mới phải sau mức đang áp dụng'); if (active) A.SERVICE_CFG.createVersion(cat, active.id, p, cfgActor(), Number(f.amount).toLocaleString('vi-VN')); else A.SERVICE_CFG.add(cat, p, cfgActor()); ui.policyForm = null; A.closeModal(); A.render(); U.toast(active ? 'Đã tạo phiên bản mới; mức cũ được lưu lịch sử.' : 'Đã lưu mức phí mới.');
   };
   A.VIEWS['cau-hinh-gia'] = function () {
-    const tab = POLICY_TABS.some(t => t[0] === ui.cfgTab) ? ui.cfgTab : 'land', configured = [landRows().some(r => landMarketIds(r).includes(ui.market) && landState(r)[2] === 0),policyUtilityRows().length>0,policyUtilityRows().length>0,policyServiceRows().length>0].filter(Boolean).length;
+    const tab = POLICY_TABS.some(t => t[0] === ui.cfgTab) ? ui.cfgTab : 'land', configured = [landRows().some(r => landMarketIds(r).includes(ui.market) && priceAppliesNow(r)),policyUtilityRows().length>0,policyUtilityRows().length>0,policyServiceRows().length>0].filter(Boolean).length;
     const bar = `<div class="seg" style="margin:14px 0">${POLICY_TABS.map(t => `<button class="${tab === t[0] ? 'on' : ''}" data-act="policy-tab" data-id="${t[0]}">${t[1]}</button>`).join('')}</div>`;
     const content = tab === 'land' ? policyLandHtml() : feeTabHtml(tab === 'electricity' || tab === 'water' ? tab : 'service');
     return `<section><div class="card-h" style="padding:0 0 8px"><div><h2 style="margin:0">Chính sách thu & biểu phí</h2><div class="small muted">Cấu hình mức thu áp dụng cho từng chợ để lập khoản phải thu.</div></div></div><div class="note info">${tab === 'land' ? `Đơn giá mặt bằng áp dụng chung cho <b>${landMarkets().filter(m => landAllowed().has(m.id)).length} chợ</b> trong phạm vi tài khoản` : `Đơn giá ${tab === 'service' ? 'dịch vụ' : tab === 'water' ? 'nước' : 'điện'} khai báo riêng từng chợ — dùng bộ lọc Chợ ở bảng bên dưới`}<span class="muted"> · ${U.esc(U.market(ui.market).name)}: ${configured}/4 nhóm đã có cấu hình theo dữ liệu hiện tại</span></div>${bar}${content}${policyUseHtml()}</section>`;

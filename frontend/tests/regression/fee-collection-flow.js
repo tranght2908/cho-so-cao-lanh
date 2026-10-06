@@ -201,9 +201,9 @@ ok('transfer E2E: trader intent persists, matched bank payment updates every can
   const account = A.ACCOUNTS.byTraderId(inv.traderId), due = A.U.due(inv), payBefore = A.db.payments.length;
   login(account.id, 'CL');
   Object.assign(A.ui.mini, { traderId: inv.traderId, step: 'app', tab: 'pay' }); h.go('mini-app');
+  // Bấm Thanh toán → mở thẳng mã QR + tổng tiền (không chọn phương thức, không có tiền mặt).
   h.act('tp-pay-method', { id: inv.id });
-  h.act('tp-pay-choose', { id: inv.id, method: 'transfer' });
-  h.act('tp-pay-continue', { id: inv.id });
+  assert(h.modal().includes('Thanh toán bằng mã QR') && h.modal().includes('data-act="tp-pay-transfer-start"') && !h.modal().includes('Tiền mặt'));
   h.act('tp-pay-transfer-start', { id: inv.id });
   const intent = A.db.bank.find(x => x.intentType === 'TRADER_TRANSFER' && x.invoiceId === inv.id);
   assert(intent && intent.status === 'PENDING' && intent.amount === due && intent.traderId === inv.traderId && intent.marketId === 'CL');

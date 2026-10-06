@@ -71,6 +71,11 @@ window.DATA = (function () {
   // 31 → 32 (INCIDENT_DEMO_FLOW_DATA): lọc lại phản ánh/sự cố thành bộ demo cố định theo từng bước luồng xử lý.
   // 32 → 33 (INCIDENT_DEMO_FLOW_VOLUME): tăng số hồ sơ đã phân công cho NV kỹ thuật để demo màn Công việc kỹ thuật.
   // 33 → 34: đảm bảo riêng màn NV kỹ thuật đang đăng nhập có đúng 17 hồ sơ được giao.
+  // 31 → 32 (KHOA_GIA_THEO_HOP_DONG): thêm đơn giá ki-ốt CL v2 (2.500 đ từ 01/09/2026); HĐ khóa bảng giá tại
+  // ngày bắt đầu (billing.freezeContractTerms) nên HĐ cũ vẫn giữ giá v1.
+  // 32 → 33 (KHOA_GIA_THEO_HOP_DONG): HĐ mẫu ký 01/09/2026 (TT0049, điểm mới cuối Dãy KB-A) khóa đơn giá ki-ốt v2.
+  // 33 → 34 (KY_11_DA_PHAT_HANH): kỳ 11/2026 được phát hành khi nạp (qua luồng thật, xem marketPeriod.applySeedIssue)
+  // để tiểu thương có thông báo phát hành + khoản cần thanh toán QR.
   const VERSION = 34;
   const TODAY = new Date(2026, 8, 13); // 13/09/2026
 
@@ -98,7 +103,8 @@ window.DATA = (function () {
   ];
   const RATE_POLICY_SEED = {
     stallPrices: [
-      { id: 'sp-cl-kiot-v1', marketId: 'CL', area: 'Toàn chợ (hạng 1)', stallType: 'Ki-ốt', marketModel: RATE_MARKET_MODEL.FIXED_MONTHLY, collectionCycle: RATE_COLLECTION_CYCLE.MONTH, amount: 2000, unit: 'đ/m²/ngày', taxClass: RATE_TAX_CLASS.TAXABLE_REVENUE, waiverTypeId: 'WAIVER_AUTHORIZED_DECISION', effectiveFrom: '2026-02-14', effectiveTo: null, status: 'active', legalBasis: { docNo: '480/QĐ-UBND', docDate: '2026-02-14', issuer: 'UBND tỉnh Đồng Tháp', summary: 'Quy định đơn giá dịch vụ chợ', effectiveDate: '2026-02-14', note: '' }, attachments: [{ id: 'att-001', name: 'QD_480_2026.pdf', type: 'application/pdf', note: 'Văn bản căn cứ', mock: true }], history: [{ time: '14/02/2026 09:30', user: 'Trần Minh Khoa', action: 'Tạo đơn giá', detail: '2.000 đ/m²/ngày' }] },
+      { id: 'sp-cl-kiot-v1', marketId: 'CL', area: 'Toàn chợ (hạng 1)', stallType: 'Ki-ốt', marketModel: RATE_MARKET_MODEL.FIXED_MONTHLY, collectionCycle: RATE_COLLECTION_CYCLE.MONTH, amount: 2000, unit: 'đ/m²/ngày', taxClass: RATE_TAX_CLASS.TAXABLE_REVENUE, waiverTypeId: 'WAIVER_AUTHORIZED_DECISION', effectiveFrom: '2026-02-14', effectiveTo: '2026-08-31', status: 'active', legalBasis: { docNo: '480/QĐ-UBND', docDate: '2026-02-14', issuer: 'UBND tỉnh Đồng Tháp', summary: 'Quy định đơn giá dịch vụ chợ', effectiveDate: '2026-02-14', note: '' }, attachments: [{ id: 'att-001', name: 'QD_480_2026.pdf', type: 'application/pdf', note: 'Văn bản căn cứ', mock: true }], history: [{ time: '14/02/2026 09:30', user: 'Trần Minh Khoa', action: 'Tạo đơn giá', detail: '2.000 đ/m²/ngày' }] },
+      { id: 'sp-cl-kiot-v2', marketId: 'CL', area: 'Toàn chợ (hạng 1)', stallType: 'Ki-ốt', marketModel: RATE_MARKET_MODEL.FIXED_MONTHLY, collectionCycle: RATE_COLLECTION_CYCLE.MONTH, amount: 2500, unit: 'đ/m²/ngày', taxClass: RATE_TAX_CLASS.TAXABLE_REVENUE, waiverTypeId: 'WAIVER_AUTHORIZED_DECISION', effectiveFrom: '2026-09-01', effectiveTo: null, status: 'active', previousVersionId: 'sp-cl-kiot-v1', legalBasis: { docNo: '15/QĐ-BQLC', docDate: '2026-08-20', issuer: 'Ban Quản lý Chợ Cao Lãnh', summary: 'Điều chỉnh đơn giá ki-ốt từ tháng 09/2026', effectiveDate: '2026-09-01', note: 'Dữ liệu mẫu FE prototype' }, attachments: [], history: [{ time: '20/08/2026 09:00', user: 'Trần Minh Khoa', action: 'Áp dụng phí', detail: '2.500 đ/m²/ngày từ 01/09/2026' }] },
       { id: 'sp-cl-nhalong-v1', marketId: 'CL', area: 'Toàn chợ (hạng 1)', stallType: 'Trong nhà lồng chợ', marketModel: RATE_MARKET_MODEL.FIXED_MONTHLY, collectionCycle: RATE_COLLECTION_CYCLE.MONTH, amount: 2000, unit: 'đ/m²/ngày', taxClass: RATE_TAX_CLASS.TAXABLE_REVENUE, waiverTypeId: 'WAIVER_AUTHORIZED_DECISION', effectiveFrom: '2026-02-14', effectiveTo: null, status: 'active', legalBasis: { docNo: '480/QĐ-UBND', docDate: '2026-02-14', issuer: 'UBND tỉnh Đồng Tháp', summary: 'Quy định đơn giá dịch vụ chợ', effectiveDate: '2026-02-14', note: '' }, attachments: [], history: [{ time: '14/02/2026 09:30', user: 'Trần Minh Khoa', action: 'Tạo đơn giá', detail: '2.000 đ/m²/ngày' }] },
       { id: 'sp-cl-ngoai-v1', marketId: 'CL', area: 'Ngoài nhà lồng', stallType: 'Tự sản tự tiêu', marketModel: RATE_MARKET_MODEL.FIXED_MONTHLY, collectionCycle: RATE_COLLECTION_CYCLE.MONTH, amount: 800, unit: 'đ/m²/ngày', taxClass: RATE_TAX_CLASS.TAXABLE_REVENUE, waiverTypeId: 'WAIVER_AUTHORIZED_DECISION', effectiveFrom: '2026-02-14', effectiveTo: null, status: 'active', legalBasis: { docNo: '480/QĐ-UBND', docDate: '2026-02-14', issuer: 'UBND tỉnh Đồng Tháp', summary: 'Quy định đơn giá dịch vụ chợ', effectiveDate: '2026-02-14', note: '' }, attachments: [{ id: 'att-002', name: 'bang_gia_trang_3.png', type: 'image/png', note: 'Trang có bảng đơn giá', mock: true }], history: [{ time: '14/02/2026 09:30', user: 'Trần Minh Khoa', action: 'Tạo đơn giá', detail: '800 đ/m²/ngày' }] },
       { id: 'sp-ttd-codinh-v1', marketId: 'TTD', area: 'Khu quầy thuê cố định', stallType: 'Quầy cố định tháng/quý', marketModel: RATE_MARKET_MODEL.FIXED_MONTHLY, collectionCycle: RATE_COLLECTION_CYCLE.MONTH, amount: 1200, unit: 'đ/m²/ngày', taxClass: RATE_TAX_CLASS.TAXABLE_REVENUE, waiverTypeId: null, effectiveFrom: '2026-01-01', effectiveTo: null, status: 'active', legalBasis: { docNo: '', docDate: '', issuer: 'UBND phường Cao Lãnh', summary: 'Mức thu giả định cho quầy cố định chợ quê', effectiveDate: '2026-01-01', note: 'Giả định FE prototype, chờ xác nhận mức thu chính thức' }, attachments: [], history: [{ time: '01/01/2026 08:00', user: 'Huỳnh Thanh Tâm', action: 'Tạo đơn giá', detail: '1.200 đ/m²/ngày' }] },
@@ -1228,6 +1234,25 @@ window.DATA = (function () {
     // Giữ 10 khoản kỳ 08/2026 chưa thu (quá hạn 15/08 → hệ thống tự chuyển công nợ lúc chạy), chia đều các NV thu
     // phí; mọi khoản chưa thu khác của kỳ 05–08 coi như đã thu tiền mặt đúng kỳ (1 biên lai / khoản, người thu =
     // NV phụ trách gian). Không dùng RNG; không đụng ngày hôm nay nên sao kê / nộp quỹ không đổi.
+    // KHOA_GIA_THEO_HOP_DONG (v33): 1 HĐ ki-ốt ký 01/09/2026 (khóa đơn giá v2 2.500 đ/m²/ngày) trên 1 điểm MỚI cuối Dãy
+    // KB-A — không dùng 8 điểm trống hồi quy, Dãy vẫn còn ≥ 2 m² trống. Điểm không có công tơ, HĐ không đăng ký điện/nước/
+    // dịch vụ nên không cần chỉ số kỳ 09/11. Không dùng RNG.
+    (function seedContractPriceLock() {
+      const row = rows.find(r => r.market === 'CL' && r.code === 'KB-A');
+      if (!row || stalls.some(s => s.id === 'CL-KB-A05') || traders.some(t => t.id === 'TT0049')) return;
+      const sib = stalls.filter(s => s.rowId === row.id), area = 0.5, used = sib.reduce((sum, s) => sum + Number(s.area || 0), 0);
+      if (used + area > row.allocatedArea - 2) return;
+      const num = sib.reduce((m, s) => Math.max(m, s.num), 0) + 1, code = 'KB-A' + pad(num);
+      const st = { id: 'CL-' + code, code, market: 'CL', rowId: row.id, num, area, areaTypeId: 'covered', status: 'active', hasMeter: false, type: 'kiot', note: '', history: [] };
+      const t = { id: 'TT0049', name: 'Lê Thị Minh Anh', gender: 'Nữ', phone: '0934567849', idNo: '087190004949', birth: 1990,
+        address: 'Khóm Mỹ Tây, phường Cao Lãnh', market: 'CL', cat: 'Ki-ốt tổng hợp', hkd: true, since: '2026-09-01', app: false, bank: false,
+        stalls: [st.id], profileStatus: 'ACTIVE', source: 'STAFF', supplementNote: '', licenseNo: null, licenseDate: null };
+      const unit = 2500, monthly = Math.round(area * unit * 30 / 1000) * 1000;
+      stalls.push(st); traders.push(t);
+      contracts.push({ id: 'HĐ-CL-2026-' + pad(++cSeq, 4), stallId: st.id, businessPointId: st.id, traderId: t.id, market: 'CL', kind: 'Hợp đồng thuê cố định quầy tháng/quý',
+        signedDate: '2026-09-01', start: '2026-09-01', end: '2029-08-31', unit, monthly, deposit: monthly, status: 'hieuluc', scanned: true,
+        serviceApplicability: { electricity: false, water: false, marketService: false } });
+    })();
     (function seedDemoDebts() {
       const grouped = new Set(MARKETS.filter(m => m.receivableGrouping === 'TRADER').map(m => m.id));
       const old = invoices.filter(i => grouped.has(i.market) && i.period < '2026-09' && i.status !== 'paid').sort((a, b) => a.id.localeCompare(b.id));
@@ -1334,6 +1359,8 @@ window.DATA = (function () {
     return {
       // KY_11_DEN_HOAN_TAT_GHI_CHI_SO: "hôm nay" = 29/10/2026 (ngày bắt đầu thu kỳ 11) để các bước thu tiền/chốt
       // buổi ghi nhận giao dịch trong khoảng thời gian thu của kỳ. Dữ liệu mẫu vẫn sinh theo mốc TODAY 13/09.
+      // KY_11_DA_PHAT_HANH: yêu cầu dữ liệu mẫu — chạy 1 lần khi nạp bằng đúng luồng nghiệp vụ (không tự viết khoản phải thu).
+      seedIssue: { month: '2026-11', status: 'PENDING' },
       version: VERSION, today: '2026-10-29', buildings, floors, rows, stalls, traders, contracts, invoices, payments, readings, incidents, marketAssets,
       notifications, sessions, marketSessions, sessionRegistrations, sessionPayments, sessionReceipts, sessionNotifications, sessionAttendances, sessionReplacements, bank, months, audit, issuedPeriods: PERIODS.filter(p => p !== '2026-09'), extraLog: [],
       meterPeriods: METER_PERIODS, meterAdjustRequests: [], receivableAdjustRequests: [],
