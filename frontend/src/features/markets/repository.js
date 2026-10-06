@@ -21,6 +21,7 @@
   repository.effectiveMarkets = function () { return source().effectiveMarkets(); };
   repository.add = function (record, user) { return source().add(record, user); };
   repository.update = function (id, patch, user) { return source().update(id, patch, user); };
+  repository.completeLayoutSetup = function (id, user) { return source().completeLayoutSetup(id, user); };
   repository.ranks = function () { return source().RANKS; };
   repository.statuses = function () { return source().STATUS; };
   repository.priceConfigs = function () { return source().PRICE_CONFIGS; };

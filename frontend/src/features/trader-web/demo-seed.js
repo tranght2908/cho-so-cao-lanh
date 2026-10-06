@@ -17,7 +17,7 @@
   function roleName(id) { const r = A.PERM && A.PERM.role ? A.PERM.role(id) : null; return r ? r.name : 'Tiểu thương'; }
   const hasAccount = t => A.ACCOUNTS.isTraderLinked(t.id);
   const unpaid = t => A.db.invoices.filter(i => i.traderId === t.id && i.status !== 'paid');
-  const eligible = (market, used) => A.db.traders.filter(t => t.market === market && t.stalls.length && (!t.profileStatus || t.profileStatus === 'ACTIVE') && !hasAccount(t) && used.indexOf(t.id) === -1)
+  const eligible = (market, used) => A.db.traders.filter(t => t.market === market && t.stalls.length && A.features.traders.service.deriveBusinessStatus(t) === 'ACTIVE' && !hasAccount(t) && used.indexOf(t.id) === -1)
     .sort((a, b) => a.id.localeCompare(b.id));
 
   // Mỗi tình huống lấy 1 tiểu thương thật trong dữ liệu mẫu; không đủ dữ liệu thì bỏ qua tình huống đó.
@@ -42,7 +42,7 @@
       const m = U.market(x.t.market) || { name: x.t.market };
       A.ACCOUNTS.add({ id, code: 'TW-DEMO' + (n + 1), fullName: x.t.name, phone: x.t.phone, accountType: roleName('trader'),
         title: 'Tiểu thương mẫu – ' + x.label, roleIds: ['trader'], organization: m.name, marketScopes: [x.t.market],
-        status: 'active', traderId: x.t.id, linkedTraderId: x.t.id, demoSeed: TAG });
+        status: 'PENDING_ACTIVATION', traderId: x.t.id, linkedTraderId: x.t.id, demoSeed: TAG });
     });
   }
 
@@ -97,7 +97,7 @@
   function ensurePortalDemo() {
     const t = A.idx.trader.get(PORTAL_DEMO_TRADER), st = t && A.idx.stall.get(t.stalls[0]);
     if (!st) return false;
-    const contract = A.db.contracts.find(c => c.traderId === t.id && c.status === 'hieuluc');
+    const contract = A.db.contracts.find(c => c.traderId === t.id && c.status === 'ACTIVE');
     let changed = false;
     const invoice = (id, period, name, amount, paid, due) => {
       if (A.db.invoices.some(i => i.id === id)) return;

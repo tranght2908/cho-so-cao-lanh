@@ -113,7 +113,7 @@
   function ttLinkedAccount(t) { return A.features.accounts.service.byTraderId(t.id); }
   function ttMiniAppState(t) {
     const acc = ttLinkedAccount(t);
-    return acc ? (acc.status === 'active' ? 'LINKED' : 'LOCKED') : 'NOT_LINKED';
+    return acc ? (A.ACCOUNTS.authStatus(acc) === 'ACTIVE' ? 'LINKED' : 'LOCKED') : 'NOT_LINKED';
   }
   const TT_MINIAPP_LABEL = { NOT_LINKED: 'Chưa kích hoạt', LINKED: 'Đã kích hoạt', LOCKED: 'Đã khóa' };
   const TT_MINIAPP_CLASS = { NOT_LINKED: '', LINKED: 'ok', LOCKED: 'danger' };
@@ -373,7 +373,7 @@
     if (!t || !A.canDo('tieu-thuong.xac-minh', t.market)) return;
     const acc = ttLinkedAccount(t);
     if (!acc) return;
-    const next = acc.status === 'active' ? 'disabled' : 'active';
+    const next = A.ACCOUNTS.authStatus(acc) === 'ACTIVE' ? 'LOCKED' : 'ACTIVE';
     A.features.accounts.service.setStatus(acc.id, next);
     U.log(`${next === 'active' ? 'Mở khóa' : 'Khóa'} truy cập Mini App của ${t.name} (${t.id})`);
     ttRerenderDrawer(t);
@@ -391,9 +391,6 @@
   function ttDrawerHtmlLegacy(t) {
     const canEdit = A.canDo('tieu-thuong.them-moi', t.market);
     const editing = canEdit && ttEditId === t.id;
-    const canCongNo = U.can('cong-no');
-    const debt = U.traderDebt(t.id);
-    const unpaidCount = A.features.finance.service.unpaidInvoicesForTrader(t.id).length;
     const status = ttProfileStatus(t);
     return `<div class="drawer-h detail-form-head" style="flex-wrap:wrap"><div><div class="row" style="gap:9px"><h3>${U.esc(t.name)}</h3>${ttProfileStatusTag(t)}</div><div class="small muted" style="margin-top:2px">${t.id} · ${U.esc(U.mShort(t.market))}</div></div><span class="spacer"></span>
         ${canEdit && !editing ? `<button class="btn sm" data-act="tt-edit-open" data-id="${t.id}">${U.icon('edit')}Chỉnh sửa thông tin</button>` : ''}
@@ -414,15 +411,7 @@
         </section>
         <section class="tt-detail-card">
         <div class="tt-detail-card-h"><span>${U.icon('file')}</span><div><b>Lịch sử hợp đồng</b><div class="small muted">Truy vết từ quan hệ Contract, không sao chép vào hồ sơ tiểu thương</div></div></div>
-        ${(()=>{const cs=CS.listByTrader(t.id).sort((a,b)=>b.start.localeCompare(a.start));return cs.length?U.table([{t:'Mã HĐ'},{t:'Điểm KD'},{t:'Thời hạn'},{t:'Trạng thái'},{t:''}],cs.map(c=>`<tr><td>${c.id}</td><td>${A.idx.stall.get(c.stallId)?A.idx.stall.get(c.stallId).code:'—'}</td><td>${U.dmy(c.start)} – ${U.dmy(c.end)}</td><td>${c.status==='hieuluc'?'<span class="tag ok">Hiệu lực</span>':'<span class="tag">'+(c.status==='chamdut'?'Đã chấm dứt':'Đã kết thúc')+'</span>'}</td><td><button class="btn sm" data-act="ct-view" data-id="${c.id}">Xem</button></td></tr>`)): '<div class="empty small">Chưa có hợp đồng.</div>';})()}
-        </section>
-        <section class="tt-detail-card">
-        <div class="tt-detail-card-h"><span>${U.icon('money')}</span><div><b>E. Tình trạng công nợ</b><div class="small muted">Tóm tắt các khoản cần theo dõi</div></div></div>
-        <dl class="kv">
-          <dt>Công nợ hiện tại</dt><dd>${debt ? `<b style="color:#df2225">${U.money(debt)}</b>` : '<span class="tag ok">Không nợ</span>'}</dd>
-          <dt>Khoản chưa thanh toán</dt><dd>${unpaidCount}</dd>
-        </dl>
-        ${canCongNo ? `<div class="row" style="margin-top:8px"><button class="btn sm" data-act="tt-open-congno">Xem chi tiết công nợ</button></div>` : ''}
+        ${(()=>{const cs=CS.listByTrader(t.id).sort((a,b)=>b.start.localeCompare(a.start));return cs.length?U.table([{t:'Mã HĐ'},{t:'Điểm KD'},{t:'Thời hạn'},{t:'Trạng thái'},{t:''}],cs.map(c=>`<tr><td>${c.id}</td><td>${A.idx.stall.get(c.stallId)?A.idx.stall.get(c.stallId).code:'—'}</td><td>${U.dmy(c.start)} – ${U.dmy(c.end)}</td><td>${CS.isActive(c)?'<span class="tag ok">Hiệu lực</span>':CS.lifecycle(c)==='PENDING_LIQUIDATION'?'<span class="tag warn">Chờ thanh lý</span>':'<span class="tag">Đã thanh lý</span>'}</td><td><button class="btn sm" data-act="ct-view" data-id="${c.id}">Xem</button></td></tr>`)): '<div class="empty small">Chưa có hợp đồng.</div>';})()}
         </section>
         <section class="tt-detail-card">
         <div class="tt-detail-card-h"><span>${U.icon('phone')}</span><div><b>E. Tài khoản Mini App</b><div class="small muted">Liên kết đăng nhập ứng dụng tiểu thương</div></div></div>
@@ -443,7 +432,7 @@
   function ttContractPhaseTag(c) {
     const phase = BP.contractPhase(c, U.today());
     if (TT_PHASE[phase]) return TT_PHASE[phase];
-    return `<span class="tag">${c.status === 'chamdut' ? 'Đã chấm dứt' : c.status === 'thanhly' ? 'Đã thanh lý' : 'Đã kết thúc'}</span>`;
+    return `<span class="tag">${CS.lifecycle(c) === 'PENDING_LIQUIDATION' ? 'Chờ thanh lý' : CS.lifecycle(c) === 'LIQUIDATED' ? 'Đã thanh lý' : 'Đã kết thúc'}</span>`;
   }
   function ttContractsHtml(t) {
     const order = { current: 0, future: 1, ended: 2 }, today = U.today();
@@ -458,16 +447,14 @@
     // A trader may hold multiple concurrent contracts; point/time availability,
     // not the trader's existing contracts, decides whether a new one can be made.
     const canCreateContract = A.canDo('hop-dong.tao', t.market) || A.canDo('so-do.tao-hop-dong', t.market);
-    const debt = U.traderDebt(t.id), unpaid = A.features.finance.service.unpaidInvoicesForTrader(t.id).length;
     const info = ttSection('users', 'A', editing ? 'THÔNG TIN TIỂU THƯƠNG · CHỈNH SỬA' : 'THÔNG TIN TIỂU THƯƠNG', editing ? ttSectionAEditHtml(t) : ttSectionAViewHtml(t), 'contract-blue');
     const docs = ttSection('attachment', 'B', 'GIẤY TỜ & HỒ SƠ ĐÍNH KÈM', editing ? `<div class="contract-copy-list">${TT_DOCS.map(ttDocRowEdit).join('')}</div>` : ttDetailDocRowsHtml(t), 'contract-purple');
     const activePoints = ttActivePointsOf(t);
     const points = ttSection('store', 'C', 'ĐIỂM KINH DOANH & HỢP ĐỒNG', `<div class="contract-policy-subhead">1. Điểm kinh doanh đang sử dụng</div>${activePoints.length ? activePoints.map(st => ttPointCardHtml(t, st.id)).join('') : '<div class="small muted">Tiểu thương chưa có điểm kinh doanh đang sử dụng.</div>'}<div class="contract-policy-subhead">2. Hợp đồng</div>${ttContractsHtml(t)}`, 'contract-mint');
-    const debtBlock = ttSection('money', 'E', 'TÌNH TRẠNG CÔNG NỢ', ttPairs([['Công nợ hiện tại', debt ? `<b class="contract-danger-text">${U.money(debt)}</b>` : '<span class="tag ok">Không nợ</span>'], ['Khoản chưa thanh toán', unpaid]]), 'contract-sky');
     const footer = editing
       ? `<button class="btn" data-act="tt-edit-cancel" data-id="${t.id}">Hủy</button><button class="btn primary" data-act="tt-edit-save" data-id="${t.id}">Lưu thay đổi</button>`
       : `${canEdit ? `<button class="btn primary" data-act="tt-edit-open" data-id="${t.id}">${U.icon('edit')}Chỉnh sửa thông tin</button>` : ''}${canCreateContract ? `<button class="btn" data-act="wf-contract-open" data-id="${t.id}">${U.icon('file')}Tạo hợp đồng</button>` : ''}<button class="btn" data-act="close">Đóng</button>`;
-    return `<div class="drawer-h tt-dossier-head"><div class="row" style="gap:8px"><h3>${U.icon('users')}Hồ sơ tiểu thương ${t.id}</h3>${ttProfileStatusTag(t)}</div><button class="x" data-act="close" aria-label="Đóng">×</button></div><div class="drawer-b contract-detail-body"><div class="contract-detail-grid">${info}${docs}${points}${debtBlock}</div></div><div class="drawer-f contract-detail-footer">${footer}</div>`;
+    return `<div class="drawer-h tt-dossier-head"><div class="row" style="gap:8px"><h3>${U.icon('users')}Hồ sơ tiểu thương ${t.id}</h3>${ttProfileStatusTag(t)}</div><button class="x" data-act="close" aria-label="Đóng">×</button></div><div class="drawer-b contract-detail-body"><div class="contract-detail-grid">${info}${docs}${points}</div></div><div class="drawer-f contract-detail-footer">${footer}</div>`;
   }
   A.ACT['tt-placement-view'] = el => {
     const st = A.idx.stall.get(el.dataset.point);
@@ -524,14 +511,11 @@
     if (e) e.preventDefault();
     const c = A.idx.contract.get(el.dataset.id);
     if (!c) return;
-    ui.contractTab = c.status === 'hieuluc' ? 'all' : 'end';
+    ui.contractTab = CS.isActive(c) ? 'all' : 'end';
     f.hdSearch = c.id;
     ui.page['hd' + ui.contractTab] = 0;
     A.go('hop-dong');
   };
-  // Điều hướng "Xem công nợ" → màn Công nợ & nhắc nợ (screen-level, màn đó không có ô tìm theo tên
-  // nên không thể tự động lọc đúng 1 tiểu thương — không sửa màn tài chính để thêm cơ chế đó).
-  A.ACT['tt-open-congno'] = () => { if (U.can('cong-no')) A.go('cong-no'); };
   A.ACT['tt-open-point'] = el => {
     const t=A.idx.trader.get(el.dataset.trader), st=A.idx.stall.get(el.dataset.id);
     if(!t||!st||!U.can('mat-bang'))return;
@@ -561,7 +545,7 @@
         <dt>Mini app</dt><dd>${t.app ? '<span class="tag ok">Đã cài</span>' : '<span class="tag">Chưa cài</span>'}</dd>
         <dt>Giấy tờ số hóa</dt><dd><span class="tag info">CCCD 2 mặt</span> ${t.hkd ? '<span class="tag info">Giấy CN ĐKKD</span>' : ''}</dd></dl></div>
       <div class="divider"></div><b>Điểm kinh doanh & hợp đồng</b>
-      ${U.table([{ t: 'Số hợp đồng' }, { t: 'Điểm KD' }, { t: 'Thời hạn' }, { t: 'Giá/tháng', num: true }, { t: 'Trạng thái' }], cts.map(c => `<tr><td>${c.id}</td><td>${A.idx.stall.get(c.stallId).code}</td><td>${U.dmy(c.start)} – ${U.dmy(c.end)}</td><td class="num">${c.monthly ? U.money(c.monthly) : 'Theo phiên'}</td><td>${c.status === 'hieuluc' ? '<span class="tag ok">Hiệu lực</span>' : '<span class="tag">Đã thanh lý</span>'}</td></tr>`))}
+      ${U.table([{ t: 'Số hợp đồng' }, { t: 'Điểm KD' }, { t: 'Thời hạn' }, { t: 'Giá/tháng', num: true }, { t: 'Trạng thái' }], cts.map(c => `<tr><td>${c.id}</td><td>${A.idx.stall.get(c.stallId).code}</td><td>${U.dmy(c.start)} – ${U.dmy(c.end)}</td><td class="num">${c.monthly ? U.money(c.monthly) : 'Theo phiên'}</td><td>${CS.isActive(c) ? '<span class="tag ok">Hiệu lực</span>' : CS.lifecycle(c)==='PENDING_LIQUIDATION' ? '<span class="tag warn">Chờ thanh lý</span>' : '<span class="tag">Đã thanh lý</span>'}</td></tr>`))}
       <div class="divider"></div><b>Khoản phải thu gần đây</b>
       ${U.table([{ t: 'Mã' }, { t: 'Kỳ' }, { t: 'Số tiền', num: true }, { t: 'Đã thu', num: true }, { t: 'Trạng thái' }], invs.map(i => `<tr><td>${i.id}</td><td>${U.per(i.period)}</td><td class="num">${U.money(i.amount)}</td><td class="num">${U.money(i.paid)}</td><td>${U.invTag(i)}</td></tr>`))}
       ${pays.length ? `<div class="divider"></div><b>Biên lai gần đây</b>${U.table([{ t: 'Biên lai' }, { t: 'Ngày' }, { t: 'Hình thức' }, { t: 'Số tiền', num: true }], pays.map(p => `<tr class="click" data-act="receipt" data-id="${p.receipt}"><td>${p.receipt}</td><td>${U.dmy(p.date)}</td><td>${D.METHOD[p.method]}</td><td class="num">${U.money(p.amount)}</td></tr>`))}` : ''}
@@ -590,7 +574,7 @@
   function ttCreateLinkedAccount(trader, phone) {
     if (A.ACCOUNTS.isTraderLinked(trader.id)) return A.ACCOUNTS.byTraderId(trader.id);
     const id = ttNextAccountId();
-    const acc = { id, code: id.replace('AC-', ''), fullName: trader.name, phone: phone || trader.phone, accountType: 'Tiểu thương', title: 'Tiểu thương', roleIds: ['trader'], organization: U.mShort(trader.market), marketScopes: [trader.market], status: 'active', traderId: trader.id };
+    const acc = { id, code: id.replace('AC-', ''), fullName: trader.name, phone: phone || trader.phone, accountType: 'Tiểu thương', title: 'Tiểu thương', roleIds: ['trader'], organization: U.mShort(trader.market), marketScopes: [trader.market], status: 'PENDING_ACTIVATION', traderId: trader.id };
     A.ACCOUNTS.add(acc);
     return acc;
   }

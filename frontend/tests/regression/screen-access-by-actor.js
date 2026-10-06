@@ -15,7 +15,8 @@ const COMMON_FIN = ['tieu-thuong', 'hop-dong', 'cau-hinh-gia', 'tai-khoan-ngan-h
 // còn vào 'doi-soat' (Đối soát buổi thu cũ) — thu hồi 1 lần qua migrateAccountantReconScreen.
 const EXPECTED = {
   'AC-QT01': ['tong-quan', 'danh-muc-cho', 'mat-bang', 'tai-san'].concat(COMMON_FIN, ['su-co', 'thong-bao', 'bao-cao', 'tai-khoan', 'cai-dat']),
-  'AC-NV01': ['tong-quan', 'danh-muc-cho', 'nhan-su-phan-cong', 'mat-bang', 'tai-san'].concat(COMMON_FIN, ['su-co', 'thong-bao', 'bao-cao']),
+  // Tổ trưởng: Theo dõi kỳ thu (đứng đầu nhóm Nghiệp vụ tài chính; phân công NV thu phí làm tại đây). Không vào Tài khoản người dùng.
+  'AC-NV01': ['tong-quan', 'danh-muc-cho', 'mat-bang', 'tai-san', 'tieu-thuong', 'hop-dong', 'cau-hinh-gia', 'tai-khoan-ngan-hang', 'theo-doi-ky-thu', 'dien-nuoc', 'phai-thu', 'thu-tien', 'su-co', 'thong-bao', 'bao-cao'],
   'AC-NV02': ['mat-bang'].concat(COMMON_FIN, ['thong-bao', 'bao-cao']),
   'AC-NV05': ['tai-san', 'su-co', 'thong-bao', 'bao-cao'],
   'AC-KTTT01': ['tong-quan'].concat(['tieu-thuong', 'hop-dong', 'cau-hinh-gia', 'tai-khoan-ngan-hang', 'dien-nuoc', 'phai-thu', 'thu-tien', 'theo-doi-ky-doi-soat'], ['thong-bao', 'bao-cao']),
@@ -23,7 +24,7 @@ const EXPECTED = {
 };
 // Ma trận screen mặc định TRƯỚC task (dựng state "đã lưu" cũ để kiểm tra migration).
 const OLD_SCREENS = {
-  'tong-quan': ['system_admin', 'ward_leader'], 'danh-muc-cho': ['system_admin', 'ward_leader'], 'nhan-su-phan-cong': ['market_manager'],
+  'tong-quan': ['system_admin', 'ward_leader'], 'danh-muc-cho': ['system_admin', 'ward_leader'],
   'mat-bang': ['system_admin', 'ward_leader', 'market_manager', 'collector'], 'tai-san': ['ward_leader', 'market_manager'],
   'diem-kd': ['system_admin', 'ward_leader', 'market_manager', 'collector'], 'tieu-thuong': ['system_admin', 'ward_leader', 'market_manager', 'collector'],
   'hop-dong': ['system_admin', 'ward_leader', 'market_manager', 'collector'], 'cau-hinh-gia': ['system_admin', 'market_manager', 'ward_leader'],
@@ -66,8 +67,8 @@ ok('7: A07 Tiểu thương stays on the separate Trader Web; its screen grants a
 });
 
 ok('8: routes of non-granted screens are not reachable', () => {
-  [['AC-NV05', ['phai-thu', 'mat-bang', 'tieu-thuong', 'tong-quan']], ['AC-NV01', ['tai-khoan', 'cai-dat']], ['AC-QT01', ['nhan-su-phan-cong']],
-    ['AC-NV02', ['tong-quan', 'su-co', 'tai-san', 'nhan-su-phan-cong']], ['AC-KTTT01', ['mat-bang', 'su-co', 'danh-muc-cho']],
+  [['AC-NV05', ['phai-thu', 'mat-bang', 'tieu-thuong', 'tong-quan']], ['AC-NV01', ['tai-khoan', 'cai-dat']],
+    ['AC-NV02', ['tong-quan', 'su-co', 'tai-san']], ['AC-KTTT01', ['mat-bang', 'su-co', 'danh-muc-cho']],
     ['AC-LD01', ['thu-tien', 'doi-soat', 'dien-nuoc', 'thong-bao', 'tai-san']]].forEach(([id, routes]) => {
     A.ui.currentDemoAccountId = id; A.ui.sessionAccountId = id; A.ui.market = 'CL'; A.syncAccountContext();
     routes.forEach(r => { h.go(r); assert.notStrictEqual(A.current, r, id + ' ' + r); assert(!A.U.can(r), id + ' ' + r); });
@@ -84,11 +85,11 @@ const actorRoles = ['system_admin', 'market_manager', 'collector', 'technician',
 stored.rolePerms = stored.rolePerms.filter(r => !(r.permKey.indexOf('screen:') === 0 && OLD_SCREENS[r.permKey.slice(7)]));
 Object.keys(OLD_SCREENS).forEach(id => OLD_SCREENS[id].forEach(roleId => stored.rolePerms.push({ roleId, permKey: 'screen:' + id, grantedAt: 'seed', grantedBy: 'old seed' })));
 // Tuỳ biến: thu hồi 1 action, cấp thêm 1 action, role tuỳ biến có màn, role legacy có màn, màn đã bỏ.
-stored.rolePerms = stored.rolePerms.filter(r => !(r.roleId === 'collector' && r.permKey === 'action:cong-no.nhac-no'));
+stored.rolePerms = stored.rolePerms.filter(r => !(r.roleId === 'collector' && r.permKey === 'action:thu-tien.thu')); // action do 2 role cùng giữ (Tổ trưởng + NV)
 stored.rolePerms.push({ roleId: 'ward_leader', permKey: 'action:danh-muc-cho.sua', grantedAt: 'custom', grantedBy: 'admin' });
 stored.roles.push({ id: 'custom_role', name: 'Vai trò tuỳ biến', desc: '', scope: 'all', market: null, selfService: false, builtin: false, active: true });
 stored.rolePerms.push({ roleId: 'custom_role', permKey: 'screen:tai-khoan', grantedAt: 'custom', grantedBy: 'admin' },
-  { roleId: 'market_accountant', permKey: 'screen:doi-soat', grantedAt: 'custom', grantedBy: 'admin' },
+  { roleId: 'market_accountant', permKey: 'screen:theo-doi-ky-doi-soat', grantedAt: 'custom', grantedBy: 'admin' },
   { roleId: 'collector', permKey: 'screen:phien-cho', grantedAt: 'seed', grantedBy: 'old seed' });
 const actionRows = x => JSON.stringify(x.rolePerms.filter(r => r.permKey.indexOf('action:') === 0).map(r => r.roleId + '|' + r.permKey).sort());
 const actionsStored = actionRows(stored);
@@ -100,13 +101,13 @@ ok('1–6 on previously stored state: one-time migration yields the same sidebar
 ok('10 + 11: action permissions untouched (fresh defaults and stored customisations)', () => {
   assert.strictEqual(actionRows(after), actionsStored, 'every stored action row kept, none added/removed');
   const P = migrated.A.PERM;
-  assert(!P.hasPerm('collector', 'action:cong-no.nhac-no'), 'admin revoke kept');
+  assert(!P.hasPerm('collector', 'action:thu-tien.thu'), 'admin revoke kept');
   assert(P.hasPerm('ward_leader', 'action:danh-muc-cho.sua'), 'admin grant kept');
-  assert(P.hasPerm('custom_role', 'screen:tai-khoan') && P.hasPerm('market_accountant', 'screen:doi-soat'), 'custom/legacy roles untouched');
+  assert(P.hasPerm('custom_role', 'screen:tai-khoan') && P.hasPerm('market_accountant', 'screen:theo-doi-ky-doi-soat'), 'custom/legacy roles untouched');
   assert(P.hasPerm('collector', 'screen:phien-cho'), 'retired key rows kept (hidden)');
   assert(P.hasPerm('collector', 'screen:mini-app') && P.hasPerm('central_accountant', 'screen:theo-doi-ky-doi-soat'), 'screens outside the matrix untouched');
   same(JSON.stringify(A.PERM.roles().map(r => [r.id, A.PERM.rolePermKeys(r.id).filter(k => k.indexOf('action:') === 0).sort()])), actionsFresh);
-  assert.strictEqual(after.screenAccessByActorVersion, 1);
+  assert.strictEqual(after.screenAccessByActorVersion, 4);
 });
 
 ok('11: migration runs once — later admin changes to screens are not overwritten', () => {

@@ -74,9 +74,17 @@
     if (notification.targetMarket && A.allowedMarkets(A.currentAccount()).indexOf(notification.targetMarket) === -1) return false;
     return !!((A.PERSONAL_ROUTES && A.PERSONAL_ROUTES[notification.targetRoute]) || U.can(notification.targetRoute));
   }
+  function typeIcon(type) {
+    const value = String(type || '').toUpperCase();
+    if (/(BILLING|RECEIVABLE|COLLECTION|PAYMENT|RECEIPT)/.test(value)) return 'receipt';
+    if (/(CONTRACT|ACCOUNT|ACCESS)/.test(value)) return 'file';
+    if (/(INCIDENT|WARNING|RECONCILIATION)/.test(value)) return 'warning';
+    if (/(METER|ELECTRIC|WATER)/.test(value)) return 'bolt';
+    return 'bell';
+  }
   function itemHtml(notification) {
     const unreadItem = !notification.readAt;
-    return `<button class="personal-notification-item ${unreadItem ? 'unread' : ''}" data-act="personal-notification-open" data-id="${U.esc(notification.id)}"><span class="personal-notification-dot" aria-hidden="true"></span><span class="personal-notification-copy"><b>${U.esc(notification.title)}</b><span>${U.esc(notification.message || '')}</span><small>${relativeTime(notification.createdAt)}</small></span></button>`;
+    return `<button class="personal-notification-item ${unreadItem ? 'unread' : ''}" data-act="personal-notification-open" data-id="${U.esc(notification.id)}"><span class="personal-notification-icon" aria-hidden="true">${U.icon(typeIcon(notification.type))}</span><span class="personal-notification-copy"><b>${U.esc(notification.title)}</b><span>${U.esc(notification.message || '')}</span><small>${relativeTime(notification.createdAt)}</small></span>${unreadItem ? '<i class="personal-notification-dot" aria-label="Chưa đọc"></i>' : ''}</button>`;
   }
   function headerPopoverHtml(account) {
     const notifications = mine(account), unreadCount = unread(account).length;
@@ -88,6 +96,16 @@
     const count = unread(account).length, badge = count ? `<span class="personal-notification-badge">${count > 99 ? '99+' : count}</span>` : '';
     const open = ui.activeHeaderPopover === 'notifications';
     return `<div class="header-popover-anchor personal-notification-host"><button class="personal-notification-trigger" data-act="personal-notification-toggle" aria-label="Thông báo cá nhân" aria-expanded="${open}">${U.icon('bell')}${badge}</button>${open ? headerPopoverHtml(account) : ''}</div>`;
+  }
+  function headerPopoverV2(account) {
+    const notifications = mine(account), unreadCount = unread(account).length, visible = notifications.slice(0, 5);
+    return `<div class="header-popover personal-notification-popover" role="dialog" aria-label="Th&#244;ng b&#225;o"><div class="personal-notification-popover-head"><b>Th&#244;ng b&#225;o</b><span class="personal-notification-head-actions"><button class="btn link personal-notification-view-all" data-act="personal-notification-view-all">Xem t&#7845;t c&#7843;</button>${unreadCount ? '<button class="btn link personal-notification-mark-all" data-act="personal-notification-mark-all">&#272;&#225;nh d&#7845;u &#273;&#227; &#273;&#7885;c</button>' : ''}</span></div><div class="personal-notification-list">${visible.length ? visible.map(itemHtml).join('') : '<div class="personal-notification-empty">B&#7841;n ch&#432;a c&#243; th&#244;ng b&#225;o.</div>'}</div><button class="personal-notification-all" data-act="personal-notification-view-all">Xem t&#7845;t c&#7843; th&#244;ng b&#225;o</button></div>`;
+  }
+  function headerHtml(account) {
+    if (!account) return '';
+    const count = unread(account).length, badge = count ? `<span class="personal-notification-badge">${count > 99 ? '99+' : count}</span>` : '';
+    const open = ui.activeHeaderPopover === 'notifications';
+    return `<div class="header-popover-anchor personal-notification-host"><button class="personal-notification-trigger" data-act="personal-notification-toggle" aria-label="Th&#244;ng b&#225;o" aria-expanded="${open}">${U.icon('bell')}${badge}</button>${open ? headerPopoverV2(account) : ''}</div>`;
   }
   function findOwn(id) { const account = A.currentAccount(); return account && mine(account).find(n => n.id === id); }
   function markRead(notification) { if (notification && !notification.readAt) { notification.readAt = now(); A.save(); } }
@@ -105,6 +123,13 @@
   A.ACT['personal-notification-toggle'] = () => { ui.activeHeaderPopover = ui.activeHeaderPopover === 'notifications' ? null : 'notifications'; ui.personalNotificationsExpanded = false; A.render(); };
   A.ACT['personal-notification-mark-all'] = () => { const account = A.currentAccount(); if (!account) return; unread(account).forEach(markRead); A.render(); };
   A.ACT['personal-notification-all'] = () => { ui.personalNotificationsExpanded = !ui.personalNotificationsExpanded; A.render(); };
+  A.ACT['personal-notification-view-all'] = () => {
+    ui.activeHeaderPopover = null;
+    if (A.current === 'mini-app' && ui.mini) {
+      ui.mini.portalNav = 'notice';
+      A.render();
+    } else if (U.can('thong-bao')) A.go('thong-bao'); else A.render();
+  };
   A.ACT['personal-notification-open'] = el => {
     const notification = findOwn(el.dataset.id); if (!notification) return;
     markRead(notification); ui.activeHeaderPopover = null; ui.personalNotificationsExpanded = false;

@@ -23,6 +23,11 @@
   const U = A.U;
   const AKEY = 'choso-caolanh-accounts';
   const ASCHEMA_KEY = 'choso-caolanh-accounts-schema';
+  const normalizeAccountStatus = value => {
+    if (value === 'PENDING_ACTIVATION') return 'PENDING_ACTIVATION';
+    if (value === 'ACTIVE' || value === 'active') return 'ACTIVE';
+    return 'LOCKED';
+  };
   const defaultAccounts = () => A.data.getSource('accounts-seed').defaultAccounts();
   // Các account/role này có phạm vi nghiệp vụ được chốt là toàn bộ market. `ALL` là convention
   // sẵn có; A.allowedMarkets() là nơi duy nhất giải mã nó sang danh sách market hiệu lực.
@@ -109,6 +114,11 @@
     list.forEach(a => { if (normalizeTraderLinks(a)) changed = true; });
     return changed;
   }
+  function normalizeAccountStatuses(list) {
+    let changed = false;
+    list.forEach(a => { const status = normalizeAccountStatus(a.status); if (a.status !== status) { a.status = status; changed = true; } });
+    return changed;
+  }
 
   // Chỉ chuẩn hóa account HIỆN HÀNH có phạm vi toàn hệ thống đã được chốt. Không chạm scope tự chọn của
   // collector/trader, account ngoài tổ chức hiện hành, hay các account quản lý legacy theo từng chợ.
@@ -188,8 +198,8 @@
           loadedFromStorage = true;
           const schemaMismatch = localStorage.getItem(ASCHEMA_KEY) !== String(A.RBAC_SCHEMA);
           const merged = mergeSeedAccounts(x);
-          const traderField = ensureTraderIdField(merged), demoLink = linkDemoTraderAccounts(merged), traderLinks = ensureTraderIdsField(merged), fixedAll = normalizeFixedAllScopes(merged);
-          if (schemaMismatch || traderField || demoLink || traderLinks || fixedAll) {
+          const traderField = ensureTraderIdField(merged), demoLink = linkDemoTraderAccounts(merged), traderLinks = ensureTraderIdsField(merged), accountStatuses = normalizeAccountStatuses(merged), fixedAll = normalizeFixedAllScopes(merged);
+          if (schemaMismatch || traderField || demoLink || traderLinks || accountStatuses || fixedAll) {
             try {
               localStorage.setItem(AKEY, JSON.stringify(merged));
               localStorage.setItem(ASCHEMA_KEY, String(A.RBAC_SCHEMA));
@@ -200,7 +210,7 @@
       }
     } catch (e) { /* bỏ qua */ }
     const seeded = defaultAccounts();
-    ensureTraderIdsField(seeded);
+    ensureTraderIdsField(seeded); normalizeAccountStatuses(seeded);
     return seeded;
   }
   function mergeSeedAccounts(accounts) {
@@ -424,12 +434,9 @@
     // Account ngoài tổ chức hiện hành (legacy/retired demo) được SUY RA là LOCKED — không ghi đè status đã lưu.
     authStatus: account => {
       if (account && !isCurrentOrganization(account)) return 'LOCKED';
-      const status = account && account.status;
-      if (status === 'PENDING_ACTIVATION') return 'PENDING_ACTIVATION';
-      if (status === 'LOCKED' || status === 'locked' || status === 'disabled') return 'LOCKED';
-      return 'ACTIVE';
+      return normalizeAccountStatus(account && account.status);
     },
-    isActive: account => !!account && isCurrentOrganization(account) && !['LOCKED', 'locked', 'disabled', 'PENDING_ACTIVATION'].includes(account.status),
+    isActive: account => !!account && isCurrentOrganization(account) && normalizeAccountStatus(account.status) === 'ACTIVE',
     // V1 chỉ dùng roleIds[0] làm role hiệu lực (mỗi account seed đúng 1 role). Cấu trúc roleIds[]
     // vẫn là mảng để sau này hỗ trợ nhiều role/account mà không phải đổi shape dữ liệu — khi đó
     // chỉ cần sửa đúng hàm này (thêm UI chọn role trong account), mọi nơi khác đang gọi hàm này
@@ -521,9 +528,14 @@
       const c = (code || '').trim().toLowerCase();
       return ACCOUNTS.some(a => a.id !== excludeId && a.code.trim().toLowerCase() === c);
     },
-    add: acc => { normalizeTraderLinks(acc); ACCOUNTS.push(acc); saveAccounts(); },
-    update: (id, patch) => { const a = A.ACCOUNTS.get(id); if (a) { Object.assign(a, patch); normalizeTraderLinks(a); } saveAccounts(); },
-    setStatus: (id, status) => { const a = A.ACCOUNTS.get(id); if (a) a.status = status; saveAccounts(); },
+    add: acc => {
+      // Trader accounts always enter through OTP activation; no creator may bypass it.
+      if ((acc.roleIds || [])[0] === 'trader') acc.status = 'PENDING_ACTIVATION';
+      else acc.status = normalizeAccountStatus(acc.status);
+      normalizeTraderLinks(acc); ACCOUNTS.push(acc); saveAccounts();
+    },
+    update: (id, patch) => { const a = A.ACCOUNTS.get(id); if (a) { Object.assign(a, patch); a.status = normalizeAccountStatus(a.status); normalizeTraderLinks(a); } saveAccounts(); },
+    setStatus: (id, status) => { const a = A.ACCOUNTS.get(id); if (a) a.status = normalizeAccountStatus(status); saveAccounts(); },
     resetDefault: () => { ACCOUNTS = defaultAccounts(); saveAccounts(); }
   };
   migrateCurrentOrgDemo();

@@ -15,6 +15,9 @@ A.db.stalls.push({ id: 'FIN-POINT-CL', code: 'FIN-CL', market: 'CL', collectorId
 A.db.stalls.push({ id: 'FIN-POINT-HA', code: 'FIN-HA', market: 'HA', collectorId: 'FIN-NV02', status: 'active' });
 A.reindex();
 const invoice = { id: 'FIN-INV-CL', market: 'CL', traderId: (A.db.traders[0] || {}).id, period: '202605', due: '2026-05-31', amount: 1000000, paid: 0, status: 'unpaid', stallId: 'FIN-POINT-CL', items: [{ stallId: 'FIN-POINT-CL', name: 'Phí quầy', amount: 1000000 }] };
+// Thanh toán chỉ ghi nhận khi kỳ của chợ đang thu → fixture dùng 1 kỳ CL đã phát hành, chưa hoàn tất thu/chốt.
+A.db.billingPeriods.push({ id: 'CL_2027-02', marketId: 'CL', period: '2027-02', label: '02/2027', startDate: '2027-02-01', endDate: '2027-02-28', dueDate: '2027-02-15', issuance: { issuedAt: 'test', issuedBy: 'test', count: 1 } });
+Object.assign(invoice, { period: '2027-02', billingPeriodId: 'CL_2027-02', billingStatus: 'PUBLISHED' });
 A.db.invoices.push(invoice); A.reindex();
 
 A.ui.currentDemoAccountId = 'FIN-NV01'; A.ui.sessionAccountId = 'FIN-NV01'; A.ui.market = 'CL';

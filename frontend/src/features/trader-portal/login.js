@@ -3,7 +3,7 @@
 (function (A) {
   'use strict';
   const U = A.U, ui = A.ui;
-  const active = c => c && c.status === 'hieuluc';
+  const active = c => c && c.status === 'ACTIVE';
   const trader = id => A.idx.trader.get(id);
   const stall = id => A.idx.stall.get(id);
   const accounts = A.features.accounts.service;

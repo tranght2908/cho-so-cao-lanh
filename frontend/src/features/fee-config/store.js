@@ -83,6 +83,47 @@
     cfg.utilities = out;
     cfg.utilitiesSplitV1 = 1;
   }
+  // DEMO_TTD_FEE_POLICY v1 (prototype): Chợ quê Cù lao Tân Thuận Đông không có trong phụ lục QĐ 480 (xem D.MARKETS.priceNote)
+  // nên chưa có giá mặt bằng cho điểm "Trong nhà lồng chợ" (areaTypeId 'covered') — thiếu biểu phí làm kỳ thu của TTD
+  // luôn Cần xử lý. Bổ sung biểu phí DEMO đúng schema hiện có, CLONE mức giá đã tồn tại (không đặt số mới):
+  //   mặt bằng  ← giá loại diện tích 'covered' đang áp dụng (QĐ 480 mái che / CL Trong nhà lồng chợ)
+  //   điện/nước ← bản ghi điện/nước của chính TTD nếu có (kể cả không hiệu lực), nếu không thì của CL
+  //   dịch vụ   ← dịch vụ chợ (không phải phí xe) của chính TTD nếu có, nếu không thì của CL
+  // Chỉ thêm slot CHƯA có bản ghi đang hiệu lực cho kỳ demo; chạy đúng 1 lần (marker), id cố định → không trùng sau reload.
+  const DEMO_MARKET = 'TTD', DEMO_REF_DATE = '2026-12-01'; // ngày mặt bằng (tháng kế tiếp) của kỳ demo 11/2026 — mốc tra cứu muộn nhất
+  let recalcRequested = false;
+  function ensureDemoMarketPolicies(cfg) {
+    if (cfg.demoTtdFeePolicyV1 >= 1) return false;
+    const live = x => x && x.status === 'active' && (!x.effectiveFrom || x.effectiveFrom <= DEMO_REF_DATE) && (!x.effectiveTo || x.effectiveTo >= DEMO_REF_DATE);
+    const legal = { docNo: '', docDate: '', issuer: '', summary: 'Mức giá DEMO của prototype — chợ quê không có trong phụ lục QĐ 480; mức thu thực tế do phường quyết định.', effectiveDate: '2026-01-01', note: 'prototype-demo' };
+    const stamp = { time: '05/10/2026 00:00', user: 'Hệ thống (dữ liệu demo)', action: 'Tạo cấu hình', detail: 'Bổ sung biểu phí demo cho ' + DEMO_MARKET + ' (clone từ bản ghi sẵn có)' };
+    const add = (cat, id, src, patch) => {
+      if (!src || cfg[cat].some(x => x.id === id)) return false;
+      const rec = Object.assign(clone(src), { id, marketId: DEMO_MARKET, scope: 'MARKET', marketIds: undefined, marketGrades: undefined, status: 'active', effectiveFrom: '2026-01-01', effectiveTo: null,
+        marketModel: 'FIXED_MONTHLY', collectionCycle: 'MONTH', source: 'prototype-demo', clonedFromId: src.id, legalBasis: clone(legal), attachments: [], history: [clone(stamp)] }, patch || {});
+      delete rec.marketIds; delete rec.marketGrades; delete rec.previousVersionId; delete rec.splitFromId;
+      cfg[cat].push(normalizeRecord(cat, rec));
+      return true;
+    };
+    let changed = false;
+    // 1. Mặt bằng — billing so khớp areaTypeId của điểm ('covered') hoặc stallType theo loại điểm (nhalong → 'Trong nhà lồng chợ').
+    const landOk = cfg.stallPrices.some(x => live(x) && x.marketId === DEMO_MARKET && (x.areaTypeId === 'covered' || (!x.areaTypeId && x.stallType === 'Trong nhà lồng chợ')));
+    const landSrc = cfg.stallPrices.find(x => live(x) && x.areaTypeId === 'covered') || cfg.stallPrices.find(x => live(x) && x.stallType === 'Trong nhà lồng chợ');
+    if (!landOk && add('stallPrices', 'sp-ttd-demo-covered', landSrc, { areaTypeId: 'covered', stallType: 'Trong nhà lồng chợ' })) changed = true;
+    // 2. Điện / nước — billing chọn theo kind + giá elecPrice / waterPrice khác null.
+    [['ELECTRICITY', 'elecPrice', 'ut-ttd-demo-dien'], ['WATER', 'waterPrice', 'ut-ttd-demo-nuoc']].forEach(([kind, field, id]) => {
+      const ok = cfg.utilities.some(x => live(x) && x.marketId === DEMO_MARKET && (!x.kind || x.kind === kind) && x[field] != null);
+      const src = cfg.utilities.find(x => x.marketId === DEMO_MARKET && x.kind === kind && x[field] != null) || cfg.utilities.find(x => live(x) && x.marketId === 'CL' && x.kind === kind && x[field] != null);
+      if (!ok && add('utilities', id, src)) changed = true;
+    });
+    // 3. Dịch vụ chợ — hợp đồng TTD đăng ký marketService: billing áp MỌI dịch vụ đang hiệu lực của chợ (trừ phí xe).
+    const svcOk = cfg.extraServices.some(x => live(x) && x.marketId === DEMO_MARKET && x.category !== 'VEHICLE');
+    const svcSrc = cfg.extraServices.find(x => x.marketId === DEMO_MARKET && x.category !== 'VEHICLE') || cfg.extraServices.find(x => live(x) && x.marketId === 'CL' && x.category !== 'VEHICLE');
+    if (!svcOk && add('extraServices', 'es-ttd-demo-dich-vu', svcSrc)) changed = true;
+    cfg.demoTtdFeePolicyV1 = 1;
+    if (changed) recalcRequested = true;
+    return true;
+  }
   function normalizeConfig(cfg) {
     // HINH_THUC_THU_DIEN_NUOC: mỗi chợ chọn 1 trong 2 hình thức (mặc định METER — giữ hành vi cũ):
     //   METER   = theo công tơ từng điểm KD, ghi chỉ số hằng tháng, khoản phải thu tính theo chỉ số;
@@ -106,6 +147,7 @@
     });
     ensureQd480LandPrices(cfg);
     splitUtilityRecords(cfg);
+    ensureDemoMarketPolicies(cfg);
     // Lịch kỳ thu chỉ cấu hình các mốc vận hành; không kích hoạt phát hành khoản phải thu.
     const cycle = cfg.billingCycle || {};
     cycle.preparationDay = Number(cycle.preparationDay) || Number(cycle.meterCutoffDay) || 25;
@@ -170,17 +212,33 @@
   function loadConfig() {
     try {
       const s = localStorage.getItem(SKEY);
-      if (s) { const x = JSON.parse(s); if (x && x.stallPrices && x.billingCycle && x.billingRules) return normalizeConfig(x); }
+      if (s) {
+        const x = JSON.parse(s);
+        if (x && x.stallPrices && x.billingCycle && x.billingRules) {
+          const cfg = normalizeConfig(x);
+          // Biểu phí demo vừa bổ sung → lưu ngay vào đúng key cấu hình hiện có (không tạo key mới).
+          if (recalcRequested) { try { localStorage.setItem(SKEY, JSON.stringify(cfg)); } catch (e) { /* bỏ qua */ } }
+          return cfg;
+        }
+      }
     } catch (e) { /* bỏ qua */ }
     return defaultConfig();
   }
   let CFG = loadConfig();
-  function save() { try { localStorage.setItem(SKEY, JSON.stringify(CFG)); } catch (e) { /* bỏ qua */ } }
+  // Người nghe thay đổi cấu hình (vd. kỳ thu tự tính lại nháp khi biểu phí đổi). Lỗi của người nghe không chặn việc lưu.
+  const changeListeners = [];
+  function save() {
+    try { localStorage.setItem(SKEY, JSON.stringify(CFG)); } catch (e) { /* bỏ qua */ }
+    changeListeners.forEach(fn => { try { fn(); } catch (e) { console.error('[service-config] change listener lỗi', e); } });
+  }
   function nowStr() { return A.U.dmy(A.U.today()) + ' ' + A.U.nowTime(); }
 
   const SC = A.SERVICE_CFG = {
     KEY: SKEY,
     data: () => CFG,
+    onChange: fn => { if (typeof fn === 'function') changeListeners.push(fn); },
+    // Migration cấu hình lúc nạp (vd. biểu phí demo) chạy TRƯỚC khi dữ liệu kỳ thu sẵn sàng → bên nạp dữ liệu hỏi lại để tính lại nháp.
+    takeRecalcRequest: () => { const r = recalcRequested; recalcRequested = false; return r; },
     list: cat => CFG[cat],
     waiverTypes: () => CFG.waiverTypes || [],
     get: (cat, id) => CFG[cat].find(x => x.id === id),

@@ -54,7 +54,7 @@
     if (!d || !d.name.trim() || !d.phone.trim() || !d.idNo.trim()) return U.toast('Vui lòng nhập họ tên, số điện thoại và số giấy tờ.');
     const dup = TS.validateProfileUnique({ market: ui.market, phone: d.phone, idNo: d.idNo });
     if (dup) return U.toast(dup.message);
-    const t = { id: nextTraderId(), name: d.name.trim(), phone: d.phone.trim(), idNo: d.idNo.trim(), idType: d.idType, address: d.address.trim(), market: ui.market, stalls: [], source: 'STAFF', docFiles: Object.assign({}, d.files), since: U.today(), app: false, bank: false };
+    const t = { id: nextTraderId(), name: d.name.trim(), phone: d.phone.trim(), idNo: d.idNo.trim(), idType: d.idType, address: d.address.trim(), market: ui.market, stalls: [], status: 'WAITING_ALLOCATION', source: 'STAFF', docFiles: Object.assign({}, d.files), since: U.today(), app: false, bank: false };
     if (!TS.create(t)) return U.toast('Không thể tạo hồ sơ: trùng số điện thoại hoặc CCCD trong chợ này.');
     profileDraft = null; profileSuccess(t); U.toast('Đã tạo hồ sơ tiểu thương');
   };

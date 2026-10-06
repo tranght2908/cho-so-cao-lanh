@@ -17,7 +17,13 @@
   // thể HOẶC 'ALL' làm tham số, KHÔNG đọc ui.market toàn cục. 'ALL' ở đây là "Tất cả" của bộ lọc
   // NỘI BỘ màn đó (xem A.xmMarket()), không phải selectedMarket.
   U.inScope = (x, m) => m === 'ALL' || x.market === m;
-  U.due = i => i.amount - i.paid;
+  // Canonical read facade for invoices. Legacy records retain amount/paid/due;
+  // new consumers must not need to know which compatible shape they received.
+  A.invoiceTotal = i => Number((i && i.totalAmount != null) ? i.totalAmount : (i && i.amount) || 0);
+  A.invoicePaid = i => Number((i && i.paidAmount != null) ? i.paidAmount : (i && i.paid) || 0);
+  A.invoiceOutstanding = i => Math.max(0, A.invoiceTotal(i) - A.invoicePaid(i));
+  A.invoiceDueDate = i => (i && (i.dueDate || i.due)) || '';
+  U.due = i => A.invoiceOutstanding(i);
   U.isOver = i => i.status !== 'paid' && i.due < U.today();
   U.overDays = i => Math.max(0, U.days(i.due, U.today()));
   // GOM_KHOAN_THU_THEO_TIEU_THUONG: 1 khoản phải thu có thể gồm nhiều điểm KD (stallIds). Mọi nơi cần điểm
@@ -50,84 +56,10 @@
   };
   A.invMyPart = () => null;
   A.invPartLabel = () => null;
-  // ---------- QUA_HAN_CHUYEN_CONG_NO (chợ receivableGrouping 'TRADER') ----------
-  // P chốt 29/09/2026: quá hạn nộp mà chưa thu đủ → HỆ THỐNG tự chuyển phần còn lại của mã khoản sang Công nợ
-  // (1 dòng nợ / mã khoản, mã CN-<kỳ>-<số khoản>). Từ đó KHÔNG thu theo luồng thường nữa (NV không còn nút Đã
-  // thu / Thu sau; QR thường của tiểu thương cũng không nhận) — chỉ thu theo luồng thu hồi nợ (thiết kế sau).
-  // Hành động tự động được ghi Nhật ký kiểm toán (người thực hiện = Hệ thống) và lưu trên bản ghi nợ.
-  A.debtOf = i => (i && (A.db.debts || []).find(d => d.invoiceId === i.id && d.status !== 'CLOSED')) || null;
-  A.syncDebts = function (opts) {
-    const db = A.db;
-    if (!db || !Array.isArray(db.invoices)) return 0;
-    db.debts = Array.isArray(db.debts) ? db.debts : [];
-    db.extraLog = Array.isArray(db.extraLog) ? db.extraLog : [];
-    let n = 0;
-    db.invoices.filter(i => A.receivableMarket(i) && i.status !== 'paid' && i.due < U.today()).sort((a, b) => a.due.localeCompare(b.due) || a.id.localeCompare(b.id)).forEach(i => {
-      if (db.debts.some(d => d.invoiceId === i.id)) return;
-      const next = new Date(i.due + 'T00:00:00'); next.setDate(next.getDate() + 1);
-      const at = U.dmy(next.getFullYear() + '-' + U.pad(next.getMonth() + 1) + '-' + U.pad(next.getDate())) + ' 00:05';
-      const d = { id: 'CN-' + String(i.id).replace(/^PT-/, ''), invoiceId: i.id, market: A.receivableMarket(i), traderId: i.traderId, period: i.period, dueDate: i.due,
-        amount: U.due(i), stallIds: U.invStallIds(i), status: 'OPEN', createdAt: at, createdBy: 'Hệ thống (tự động)' };
-      db.debts.push(d); n++;
-      db.extraLog.unshift({ at, who: 'Hệ thống (tự động)', what: 'Khoản ' + i.id + ' quá hạn nộp ' + U.dmy(i.due) + ' → chuyển công nợ ' + d.id + ' (' + U.money(d.amount) + ')' });
-    });
-    // NHAC_NO_TU_DONG (P chốt 29/09/2026): theo Cài đặt › Kỳ thu — nhắc lần 1 sau reminder1Days (3) ngày quá hạn,
-    // lần 2 sau reminder2Days (7) ngày (khi bật "Tự động nhắc nợ"). Quá reminder2Days ngày → thôi nhắc, khoản nợ
-    // thành KHÔNG THU HỒI, vào DANH SÁCH CẮT ĐIỆN và hệ thống gửi thông báo cắt điện → luồng kết thúc (không thu nữa).
-    // Mọi bước tự động ghi Nhật ký kiểm toán + lưu trên bản ghi nợ để các vai trò liên quan xem lại được.
-    const cyc = (A.SERVICE_CFG && A.SERVICE_CFG.cycle && A.SERVICE_CFG.cycle()) || {};
-    const r1 = Number(cyc.reminder1Days) || 3, r2 = Math.max(r1, Number(cyc.reminder2Days) || 7), autoRemind = cyc.autoRemind !== false;
-    const plus = (iso, k) => { const x = new Date(iso + 'T00:00:00'); x.setDate(x.getDate() + k); return x.getFullYear() + '-' + U.pad(x.getMonth() + 1) + '-' + U.pad(x.getDate()); };
-    db.notifications = Array.isArray(db.notifications) ? db.notifications : [];
-    const notify = (d, o) => db.notifications.unshift(Object.assign({ id: 'TB-' + U.pad(32 + db.notifications.length, 3), market: d.market, traderId: d.traderId, debtId: d.id, invoiceId: d.invoiceId, channels: ['Mini app', 'Zalo OA', 'SMS'], sent: 1, delivered: 1, read: 0, auto: true }, o));
-    db.debts.filter(d => d.status === 'OPEN').forEach(d => {
-      const days = U.days(d.dueDate, U.today()), inv = db.invoices.find(x => x.id === d.invoiceId), t = (db.traders || []).find(x => x.id === d.traderId);
-      d.autoReminders = Array.isArray(d.autoReminders) ? d.autoReminders : [];
-      [[1, r1], [2, r2]].forEach(([lv, k]) => {
-        if (!autoRemind || days < k || d.autoReminders.some(x => x.level === lv)) return;
-        const on = plus(d.dueDate, k), at = U.dmy(on) + ' 08:00';
-        d.autoReminders.push({ level: lv, at, by: 'Hệ thống (tự động)' });
-        if (inv) inv.reminders = (inv.reminders || 0) + 1;
-        notify(d, { at: on, kind: 'DEBT_REMINDER', level: lv, title: 'Nhắc nợ lần ' + lv + ': ' + d.id + ' (khoản ' + d.invoiceId + ')', group: 'Nhắc nợ tự động · ' + (t ? t.name : d.traderId),
-          body: 'Khoản ' + d.invoiceId + ' quá hạn ' + U.dmy(d.dueDate) + ', còn nợ ' + U.money(inv ? U.due(inv) : d.amount) + '. Trả tiền mặt cho NV thu phí hoặc quét QR nội dung "CHOSO ' + d.id + ' ' + d.invoiceId + '".' + (lv === 2 ? ' Quá ' + r2 + ' ngày chưa nộp sẽ bị đưa vào danh sách cắt điện.' : '') });
-        db.extraLog.unshift({ at, who: 'Hệ thống (tự động)', what: 'Nhắc nợ lần ' + lv + ' ' + d.id + ' tới ' + (t ? t.name : d.traderId) });
-        n++;
-      });
-      if (days > r2) {
-        const on = plus(d.dueDate, r2 + 1), at = U.dmy(on) + ' 08:00';
-        Object.assign(d, { status: 'UNRECOVERABLE', unrecoverableAt: at, powerCut: { listedAt: at, noticeSentAt: at, by: 'Hệ thống (tự động)' } });
-        notify(d, { at: on, kind: 'POWER_CUT_NOTICE', title: 'Thông báo cắt điện · ' + (t ? t.name : d.traderId) + ' (nợ ' + d.id + ')', group: 'Danh sách cắt điện · ' + (t ? t.name : d.traderId),
-          body: 'Khoản ' + d.invoiceId + ' quá hạn ' + days + ' ngày, còn nợ ' + U.money(inv ? U.due(inv) : d.amount) + ' — không thu hồi. Gian ' + d.stallIds.map(id => ((db.stalls || []).find(s => s.id === id) || {}).code || id).join(', ') + ' được đưa vào danh sách cắt điện.' });
-        db.extraLog.unshift({ at, who: 'Hệ thống (tự động)', what: 'Nợ ' + d.id + ' quá ' + r2 + ' ngày → không thu hồi, đưa vào danh sách cắt điện, gửi thông báo cắt điện' });
-        n++;
-      }
-    });
-    if (n && A.save && !(opts && opts.save === false)) A.save(); // lúc nạp dữ liệu: không ghi (tính lại được, idempotent)
-    return n;
-  };
-  // Tiền của các điểm (theo dòng chi tiết) trong 1 khoản. Không phải ownership collector.
-  A.stallsAmount = (i, ids) => { const all = U.invStallIds(i); return U.sum(i.items.filter(x => ids.indexOf(x.stallId || all[0]) !== -1), x => x.amount); };
-  // THU_HOI_NO: thu nợ = ghi vào KHOẢN THU GỐC (gian còn nợ), gắn debtId; đủ → tất toán nợ. Không thu một phần.
-  A.payDebt = function (d, method, by, stallIds) {
-    const inv = d && A.idx.invoice.get(d.invoiceId);
-    if (!inv || d.status !== 'OPEN') return [];
-    const amount = U.due(inv);
-    if (amount <= 0) return [];
-    const pays = A.applyPayment([inv.id], amount, method, by, { debtId: d.id });
-    if (inv.status === 'paid') Object.assign(d, { status: 'CLOSED', closedAt: U.dmy(U.today()) + ' ' + U.nowTime(), closedBy: by });
-    // Tiểu thương nhận biên lai (cùng số BL-…) qua Mini app / Zalo.
-    A.db.notifications = A.db.notifications || [];
-    pays.forEach(p => A.db.notifications.unshift({ id: 'TB-' + U.pad(32 + A.db.notifications.length, 3), at: U.today(), kind: 'DEBT_RECEIPT', market: d.market, traderId: d.traderId, debtId: d.id, invoiceId: d.invoiceId,
-      title: 'Biên lai ' + p.receipt + ' · thanh toán nợ ' + d.id, group: 'Biên lai thu hồi nợ', channels: ['Mini app', 'Zalo OA'], sent: 1, delivered: 1, read: 0, auto: true,
-      body: U.money(p.amount) + ' · ' + (D.METHOD[p.method] || p.method) + ' · khoản ' + d.invoiceId + (d.status === 'CLOSED' ? ' · đã tất toán nợ' : '') }));
-    A.save();
-    return pays;
-  };
-  // QR thu nợ: nội dung chứa mã nợ CN-… → tự khớp về khoản thu gốc, thu TOÀN BỘ nợ còn lại (số cố định).
-  A.payDebtByQr = function (debtId, by) { const d = (A.db.debts || []).find(x => x.id === debtId); return A.payDebt(d, 'qr', by || 'Mini app'); };
-  U.invTag = i => (i && A.debtOf && A.debtOf(i) && `<span class="tag danger">Quá hạn · đã chuyển công nợ</span>`) || (i && i.status === 'paid' && (A.db.debts || []).some(d => d.invoiceId === i.id) && '<span class="tag ok">Đã thu hồi nợ</span>') || (i.status === 'paid' ? '<span class="tag ok">Đã thu</span>'
-    : i.status === 'partial' ? '<span class="tag warn">Thu một phần</span>'
-      : U.isOver(i) ? `<span class="tag danger">Quá hạn ${U.overDays(i)} ngày</span>` : '<span class="tag">Chưa đến hạn</span>');
+  // BR-07: Công nợ đã retire — không còn tự chuyển khoản quá hạn thành nợ, nhắc nợ, cắt điện hay thu hồi nợ.
+  // Dữ liệu A.db.debts cũ (nếu có) giữ nguyên để tra cứu, không còn được tạo/cập nhật hay hiển thị như luồng nghiệp vụ.
+  U.invTag = i => !i ? '' : i.status === 'paid' ? '<span class="tag ok">Đã thu</span>'
+    : U.isOver(i) ? `<span class="tag danger">Quá hạn ${U.overDays(i)} ngày</span>` : '<span class="tag">Chưa đến hạn</span>';
   U.traderDebt = id => U.sum(A.db.invoices.filter(i => i.traderId === id && i.status !== 'paid'), U.due);
   U.traderOverdue = id => U.sum(A.db.invoices.filter(i => i.traderId === id && U.isOver(i)), U.due);
   A.canDirectCollect = function (targetMarket) {
@@ -193,15 +125,13 @@
   //   'SYSTEM' = không gate theo market (Tài khoản, Cài đặt = hệ thống).
   A.SCREEN_MARKET = {
     'tong-quan': 'CROSS', 'bao-cao': 'CROSS', 'danh-muc-cho': 'CROSS',
-    // Nhân sự & phân công: nhìn toàn bộ chợ trong phạm vi account (A.allowedMarkets), không theo selectedMarket.
-    'nhan-su-phan-cong': 'CROSS',
     'mat-bang': 'BOTH', 'tai-san': 'CL', 'diem-kd': 'BOTH', 'tieu-thuong': 'BOTH', 'hop-dong': 'BOTH',
     'cau-hinh-gia': 'BOTH',
     // Danh sách tài khoản ngân hàng hiển thị theo chợ đang chọn (U.market(ui.market)) — cần 1 chợ cụ thể như
     // các màn Tài chính khác; thiếu khai báo này thì route render cả khi chưa có chợ (ui.market ''/'ALL') và lỗi.
     'tai-khoan-ngan-hang': 'BOTH',
-    'phai-thu': 'BOTH', 'thu-tien': 'BOTH', 'doi-soat': 'BOTH', 'theo-doi-ky-doi-soat': 'CROSS', 'cong-no': 'BOTH',
-    'su-co': 'CROSS', 'thong-bao': 'BOTH',
+    'phai-thu': 'BOTH', 'thu-tien': 'BOTH', 'theo-doi-ky-thu': 'CROSS', 'theo-doi-ky-doi-soat': 'CROSS',
+    'su-co': 'CROSS', 'thong-bao': 'CROSS',
     'phien-cho': 'TTD',
     'dien-nuoc': 'BOTH',
     'tai-khoan': 'SYSTEM', 'cai-dat': 'SYSTEM', 'mini-app': 'BOTH'
@@ -270,6 +200,8 @@
   A.saveUi = function () { try { localStorage.setItem(UIKEY, JSON.stringify({ schemaVersion: RBAC_SCHEMA, currentDemoAccountId: ui.currentDemoAccountId, market: ui.market })); } catch (e) { /* bỏ qua */ } };
   A.load = function () {
     A.data.loadDb();
+    const lifecycle = A.features && A.features.lifecycle && A.features.lifecycle.service;
+    if (lifecycle && lifecycle.migrate && lifecycle.migrate()) { A.reindex(); A.save(); }
     // RBAC V1 migration: ui state cũ (schema khác, hoặc còn giữ shape {role, market} kiểu cũ
     // không có currentDemoAccountId) không tương thích — bỏ qua, để currentDemoAccountId=null rồi
     // A.currentAccount()/A.syncAccountContext() bên dưới tự chọn 1 account ACTIVE + 1 market hợp
@@ -290,11 +222,13 @@
 
   // Ghi nhận thanh toán cho danh sách khoản phải thu (trả khoản cũ trước).
   // `by` là actor lịch sử đã thực hiện giao dịch; không được thay bằng NV đang phụ trách Market sau này.
+  // Chỉ ghi nhận cho khoản thuộc kỳ của chợ ĐANG ĐƯỢC THU (đã phát hành, chưa Hoàn tất thu, chưa chốt kỳ) — áp dụng chung
+  // cho tiền mặt, chuyển khoản/QR và nút demo ngân hàng: không kênh nào đi vòng qua trạng thái kỳ.
   A.applyPayment = function (invoiceIds, amount, method, by, opts) {
-    const db = A.db;
+    const db = A.db, mp = A.features && A.features.finance && A.features.finance.marketPeriod;
     let remain = amount;
     const out = [];
-    const invs = invoiceIds.map(id => A.idx.invoice.get(id)).filter(Boolean).sort((a, b) => a.due.localeCompare(b.due));
+    const invs = invoiceIds.map(id => A.idx.invoice.get(id)).filter(Boolean).filter(inv => !mp || mp.canCollectInvoice(inv)).sort((a, b) => a.due.localeCompare(b.due));
     const time = U.nowTime();
     invs.forEach(inv => {
       if (remain <= 0) return;
@@ -304,7 +238,7 @@
       inv.status = inv.paid >= inv.amount ? 'paid' : 'partial';
       remain -= take;
       const n = db.payments.reduce((m, x) => Math.max(m, Number(String(x.id).replace(/\D/g, '')) || 0), 0) + 1;
-      const receipt = 'BL2609-' + U.pad(n, 6);
+      const receipt = 'BL' + String(db.today || '').slice(2, 7).replace('-', '') + '-' + U.pad(n, 6); // BL{YYMM ngày thu}-{số thứ tự}
       const p = {
         id: 'GD' + U.pad(n, 6), invoiceId: inv.id, market: A.receivableMarket(inv), traderId: inv.traderId, amount: take, method,
         date: db.today, time, by, receipt,
@@ -313,15 +247,31 @@
         receiptDelivery: { miniApp: true, sentAt: db.today + ' ' + time, status: 'SENT_MOCK' },
         printStatus: 'PENDING'
       };
-      if (opts && opts.debtId) p.debtId = opts.debtId; // THU_HOI_NO: giao dịch thu nợ vẫn ghi vào khoản thu gốc
       db.payments.push(p);
-      A.addTraderNotification({ kind: 'PAYMENT_RECEIPT', traderId: inv.traderId, market: p.market, referenceId: p.id,
-        title: 'Thanh toán đã được ghi nhận', body: 'Đã ghi nhận ' + U.money(take) + ' cho khoản ' + inv.id + '. Biên lai ' + receipt + ' đã sẵn sàng.',
-        channels: ['Mini app'], eventKey: 'payment-receipt:' + p.id });
+      const paymentPeriod = mp && mp.ofInvoice ? mp.ofInvoice(inv) : null;
+      if (A.NOTIFICATIONS && A.NOTIFICATIONS.dispatchEvent && paymentPeriod) {
+        A.NOTIFICATIONS.dispatchEvent('PAYMENT_SUCCESS', { period: paymentPeriod, paymentId: p.id, invoiceId: inv.id,
+          traderId: inv.traderId, marketId: p.market, amount: take, receiptCode: receipt, paidAt: p.paidAt });
+      }
+      // Thông báo PAYMENT_SUCCESS theo quy tắc ở Thông báo đa kênh (tắt quy tắc → không gửi; web Tiểu thương không nạp module
+      // quy tắc thì dùng nội dung mặc định). Kênh gửi mô phỏng.
+      const payRule = A.NOTIFICATIONS && A.NOTIFICATIONS.eventByKey ? A.NOTIFICATIONS.eventByKey('PAYMENT_SUCCESS') : null;
+      if ((!A.NOTIFICATIONS || !A.NOTIFICATIONS.dispatchEvent) && (!payRule || payRule.enabled !== false)) {
+        const tpl = (payRule && payRule.templates && payRule.templates.trader) || {}, fill = x => String(x || '').replace(/\{([A-Za-z]+)\}/g, (_, k) => ({ amount: U.money(take), period: U.per(inv.period), receiptCode: receipt, receivableCode: inv.id })[k] || '{' + k + '}');
+        A.addTraderNotification({ kind: 'PAYMENT_SUCCESS', traderId: inv.traderId, market: p.market, referenceId: p.id,
+          title: tpl.title ? fill(tpl.title) : 'Thanh toán đã được ghi nhận', body: tpl.body ? fill(tpl.body) : 'Đã ghi nhận ' + U.money(take) + ' cho khoản ' + inv.id + '. Biên lai ' + receipt + ' đã sẵn sàng.',
+          channels: (payRule && payRule.channels) || ['Mini app'], eventKey: 'PAYMENT_SUCCESS|' + p.id });
+      }
       out.push(p);
-      if (method !== 'tm') {
+      // Khớp thủ công của Kế toán (opts.bankLine): gắn payment vào DÒNG SAO KÊ ĐÃ CÓ, không sinh dòng sao kê thứ hai.
+      const pendingIntent = method !== 'tm' && db.bank.find(x => x && x.intentType === 'TRADER_TRANSFER' && x.invoiceId === inv.id && x.status === 'PENDING');
+      if (method !== 'tm' && opts && opts.bankLine) {
+        Object.assign(opts.bankLine, { paymentId: p.id, receivableId: inv.id, receiptId: p.receipt });
+      } else if (pendingIntent) {
+        Object.assign(pendingIntent, { status: 'MATCHED', matched: true, matchMethod: 'MOCK_BANK_INCOMING', matchedAt: p.paidAt, paymentId: p.id, receivableId: inv.id, receiptId: p.receipt });
+      } else if (method !== 'tm') {
         const bk = {
-          id: 'SK' + U.pad(db.bank.length + 1, 4), date: db.today, time, amount: take, ref: 'CHOSO ' + (opts && opts.debtId ? opts.debtId + ' ' : '') + inv.id,
+          id: 'SK' + U.pad(db.bank.length + 1, 4), date: db.today, time, amount: take, ref: 'CHOSO ' + inv.id,
           market: A.receivableMarket(inv), bankName: (D.BANK_BY_MARKET && D.BANK_BY_MARKET[A.receivableMarket(inv)]) || 'Vietcombank',
           paymentId: p.id, receivableId: inv.id, receiptId: p.receipt,
           status: 'MATCHED_AUTO', matched: true, matchedBy: null, matchedAt: null, matchMethod: 'AUTO',
@@ -330,6 +280,13 @@
         db.bank.push(bk);
       }
     });
+    // Thu đủ 100% khoản phải thu của kỳ chợ → sự kiện PERIOD_FULLY_COLLECTED (chống trùng theo kỳ của chợ + người nhận).
+    if (mp && out.length && A.NOTIFICATIONS && A.NOTIFICATIONS.dispatchEvent) {
+      Array.from(new Set(invs.map(mp.ofInvoice).filter(Boolean))).forEach(period => {
+        const all = mp.invoices(period);
+        if (all.length && all.every(i => i.status === 'paid')) A.NOTIFICATIONS.dispatchEvent('PERIOD_FULLY_COLLECTED', { market: period.marketId, period });
+      });
+    }
     A.save();
     return out;
   };
@@ -429,8 +386,6 @@
       // thái) — KHÁC "Mặt bằng chợ" bên dưới (cấu trúc Khu/Tầng/Dãy/Điểm kinh doanh BÊN TRONG 1 chợ,
       // GIỮ NGUYÊN không đổi). Xem js/marketcatalog.js + js/v-danhmuccho.js.
       { id: 'danh-muc-cho', ico: U.icon('store'), label: 'Danh mục chợ' },
-      // Nhân sự Tổ Quản lý chợ + phân công Chợ cho NV thu phí (features/staff-assignment) — KHÁC "Tài khoản người dùng".
-      { id: 'nhan-su-phan-cong', ico: U.icon('users'), label: 'Nhân sự & phân công' },
       { sub: 'Hạ tầng chợ' },
       // Phase 7: UI "Thiết lập mặt bằng chợ" + "Sơ đồ mặt bằng" đã gộp thành 1 workspace "Mặt bằng
       // chợ" (MARKET_LAYOUT_UX_HOTFIX_REPORT.md) và nay RBAC cũng chuẩn hóa theo — 2 screen
@@ -452,13 +407,12 @@
       { id: 'cau-hinh-gia', ico: U.icon('money'), label: 'Chính sách thu và biểu phí' },
       { id: 'tai-khoan-ngan-hang', ico: U.icon('bank'), label: 'Danh sách tài khoản ngân hàng' },
       { sub: 'Nghiệp vụ tài chính' },
+      { id: 'theo-doi-ky-thu', ico: U.icon('calendar'), label: 'Theo dõi kỳ thu' },
       { id: 'dien-nuoc', ico: U.icon('bolt'), label: 'Chỉ số điện, nước' },
       { id: 'phai-thu', ico: U.icon('receipt'), label: 'Khoản phải thu' },
       { id: 'thu-tien', ico: U.icon('card'), label: 'Thu tiền & biên lai' },
-      { id: 'doi-soat', ico: U.icon('refresh'), label: 'Đối soát buổi thu', badge: () => (A.db.cashHandovers || []).filter(h => h.market === ui.market && ['SUBMITTED', 'WAITING_EXPLANATION'].includes(h.status)).length },
       // Màn nghiệp vụ Đối soát thu tiền của Kế toán Trung tâm (12 chợ) — giữ route id cũ để không phải cấp quyền lại.
-      { id: 'theo-doi-ky-doi-soat', ico: U.icon('calendar'), label: 'Đối soát thu tiền' },
-      { id: 'cong-no', ico: '⏰', label: 'Công nợ & nhắc nợ' }
+      { id: 'theo-doi-ky-doi-soat', ico: U.icon('calendar'), label: 'Đối soát thu tiền' }
     ] },
     { group: 'Vận hành', items: [
       { id: 'su-co', ico: U.icon('warning'), label: 'Phản ánh & sự cố', badge: () => suCoMenuBadge() },
@@ -600,7 +554,7 @@
     // khỏi có 2 dropdown chọn chợ cùng lúc trên 1 màn. Các màn khác (kể cả 'mini-app', đã ẩn từ
     // trước) không đổi.
     // Đối soát thu tiền có bộ lọc Chợ riêng trong màn (liên chợ, theo marketScopes) → ẩn bản trên topbar.
-    $('#market-wrap').style.display = (A.current === 'mini-app' || A.current === 'tong-quan' || A.current === 'theo-doi-ky-doi-soat') ? 'none' : '';
+    $('#market-wrap').style.display = (A.current === 'mini-app' || A.current === 'tong-quan' || A.current === 'thong-bao' || A.current === 'theo-doi-ky-thu' || A.current === 'theo-doi-ky-doi-soat') ? 'none' : '';
     const it = A.menuItem(A.current);
     const pageLabel = it && it.id === 'mat-bang' && ui.market === 'CL'
       ? 'Mặt bằng & điểm kinh doanh'
@@ -677,6 +631,13 @@
     // #/phien-cho (Phiên chợ quê — module đã bỏ): không mở lại màn cũ, đưa về Mặt bằng chợ; account không có
     // quyền 'mat-bang' tự rơi về screen hợp lệ đầu tiên như mọi route khác.
     if (r === 'phien-cho') r = 'mat-bang';
+    // UI Nhân sự & phân công đã retire: dữ liệu phân công vẫn là Account.marketScopes.
+    // Giữ link cũ an toàn bằng cách đưa người dùng đến nguồn quản trị tài khoản.
+    if (r === 'nhan-su-phan-cong') r = 'tai-khoan';
+    // Công nợ (BR-07) và Đối soát buổi thu cũ đã retire: link cũ về Thu tiền & biên lai / Đối soát thu tiền; account
+    // không có quyền màn đích tự rơi về screen hợp lệ đầu tiên.
+    if (r === 'cong-no') r = 'thu-tien';
+    if (r === 'doi-soat') r = 'theo-doi-ky-doi-soat';
     // NO SCREEN PERMISSION = NO SCREEN RENDER: route yêu cầu (từ hash, kể cả gõ thẳng URL) chỉ
     // được nhận nếu U.can(r) đúng — U.can() đã bao gồm cả permission LẪN market applicability
     // (Phase 2), nên 1 route trước đó hợp lệ (vd. phien-cho khi đang TTD) sẽ tự động bị chặn nếu

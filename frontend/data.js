@@ -235,6 +235,7 @@ window.DATA = (function () {
     no: { label: 'Nợ phí', color: '#de3b3d' },
     ngung: { label: 'Tạm ngừng', color: '#ef852e' },
     tranhchap: { label: 'Đang tranh chấp', color: '#7c54cd' },
+    choban_giao: { label: 'Chờ bàn giao', color: '#ef852e' },
     trong: { label: 'Còn trống', color: '#c9d3cf' }
   };
 
@@ -246,6 +247,7 @@ window.DATA = (function () {
     { id: 'dangxuly', label: 'Đang xử lý' },
     { id: 'chonghiemthu', label: 'Chờ nghiệm thu' },
     { id: 'hoanthanh', label: 'Hoàn thành' },
+    { id: 'tuchoi', label: 'Từ chối' },
     { id: 'dong', label: 'Đóng' }
   ];
 

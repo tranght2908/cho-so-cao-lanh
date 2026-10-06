@@ -32,7 +32,10 @@
   // Hạng chợ (enum V1, KHÁC với D.MARKETS[].hang — chuỗi mô tả tự do dùng hiển thị ở Mặt bằng chợ,
   // GIỮ NGUYÊN không đổi/xoá).
   const RANKS = { HANG_1: 'Hạng 1', HANG_2: 'Hạng 2', HANG_3: 'Hạng 3' };
-  const STATUS = { active: ['Hoạt động', 'ok'], inactive: ['Tạm ngừng', 'warn'] };
+  const STATUS = { NOT_ACTIVE: ['Chưa hoạt động', 'warn'], ACTIVE: ['Đang hoạt động', 'ok'] };
+  const LAYOUT_STATUS = { PENDING_SETUP: 'Chờ thiết lập', SETUP_COMPLETED: 'Đã thiết lập' };
+  const normalizeStatus = value => value === 'ACTIVE' || value === 'active' ? 'ACTIVE' : 'NOT_ACTIVE';
+  const normalizeLayoutStatus = value => value === 'SETUP_COMPLETED' ? 'SETUP_COMPLETED' : 'PENDING_SETUP';
   // Cả 12 chợ thuộc một Tổ Quản lý chợ. Không suy ra đơn vị hoặc nhân sự theo từng market.
   const MANAGEMENT_UNIT = 'Tổ Quản lý chợ';
 
@@ -71,7 +74,7 @@
       manager: '',
       phone: '',
       priceConfigId: m.id === 'CL' ? 'QD480_CHO_CAO_LANH' : 'QD480_NHOM_CON_LAI',
-      status: 'active',
+      status: 'ACTIVE', layoutStatus: 'PENDING_SETUP', layoutLifecycleVersion: 0,
       createdBy: 'Hệ thống (seed mặc định)', createdAt: 'seed', updatedBy: null, updatedAt: null
     };
   }
@@ -90,6 +93,12 @@
   // LIST đã lưu) — idempotent, không đụng bản ghi đã có/đã tuỳ biến.
   function ensureSeeded() {
     let changed = false;
+    LIST.forEach(row => {
+      if (!row) return;
+      const status = normalizeStatus(row.status), layoutStatus = normalizeLayoutStatus(row.layoutStatus);
+      if (row.status !== status) { row.status = status; changed = true; }
+      if (row.layoutStatus !== layoutStatus) { row.layoutStatus = layoutStatus; changed = true; }
+    });
     (D.MARKETS || []).forEach(m => {
       if (!LIST.some(x => x.id === m.id)) { LIST.push(defaultMetaFor(m)); changed = true; }
     });
@@ -136,7 +145,7 @@
       return Object.assign({
         id: m.id, code: meta.code || m.id, name: m.name, address: m.address,
         rank: meta.rank, unit: meta.unit, manager: meta.manager, phone: meta.phone,
-        priceConfigId: meta.priceConfigId, status: meta.status, isCustom: false,
+        priceConfigId: meta.priceConfigId, status: normalizeStatus(meta.status), layoutStatus: normalizeLayoutStatus(meta.layoutStatus), layoutLifecycleVersion: meta.layoutLifecycleVersion || 0, isCustom: false,
         createdBy: meta.createdBy, createdAt: meta.createdAt, updatedBy: meta.updatedBy, updatedAt: meta.updatedAt
       }, scaleOf(meta));
     }
@@ -181,6 +190,8 @@
     KEY: CKEY,
     RANKS: RANKS,
     STATUS: STATUS,
+    LAYOUT_STATUS: LAYOUT_STATUS,
+    normalizeStatus: normalizeStatus,
     MANAGEMENT_UNIT: MANAGEMENT_UNIT,
     marketManagementUnit: marketManagementUnit,
     PRICE_CONFIGS: PRICE_CONFIGS,
@@ -203,7 +214,7 @@
         rank: rec.rank, unit: MANAGEMENT_UNIT,
         // Retained solely for compatibility with legacy persisted records; Markets never assigns it.
         manager: (rec.manager || '').trim(),
-        phone: (rec.phone || '').trim(), priceConfigId: rec.priceConfigId, status: rec.status || 'active',
+        phone: (rec.phone || '').trim(), priceConfigId: rec.priceConfigId, status: 'NOT_ACTIVE', layoutStatus: 'PENDING_SETUP', layoutLifecycleVersion: 1,
         totalArea: num(rec.totalArea), businessArea: num(rec.businessArea),
         allowedAreaTypeIds: Array.isArray(rec.allowedAreaTypeIds) ? rec.allowedAreaTypeIds.slice() : null,
         // Legacy: chỉ giữ nếu nơi gọi truyền vào (màn Danh mục chợ không còn truyền).
@@ -227,11 +238,21 @@
         if (patch.name !== undefined) meta.name = String(patch.name || '').trim();
         if (patch.address !== undefined) meta.address = String(patch.address || '').trim();
       }
-      ['rank', 'unit', 'manager', 'phone', 'priceConfigId', 'status', 'totalArea', 'businessArea', 'allowedAreaTypeIds', 'capacityByAreaType'].forEach(k => {
+      ['rank', 'unit', 'manager', 'phone', 'priceConfigId', 'totalArea', 'businessArea', 'allowedAreaTypeIds', 'capacityByAreaType'].forEach(k => {
         if (patch[k] !== undefined) meta[k] = patch[k];
       });
+      if (patch.status !== undefined) meta.status = normalizeStatus(patch.status);
+      if (patch.layoutStatus !== undefined) meta.layoutStatus = normalizeLayoutStatus(patch.layoutStatus);
       meta.updatedBy = user || 'Không rõ';
       meta.updatedAt = new Date().toISOString();
+      save();
+      return mergedRow(id);
+    },
+    completeLayoutSetup: (id, user) => {
+      const meta = metaRow(id);
+      if (!meta) return null;
+      meta.status = 'ACTIVE'; meta.layoutStatus = 'SETUP_COMPLETED'; meta.layoutLifecycleVersion = 1;
+      meta.updatedBy = user || 'Hệ thống'; meta.updatedAt = new Date().toISOString();
       save();
       return mergedRow(id);
     },
@@ -247,6 +268,7 @@
       nextCode: MC.nextCode,
       add: MC.add,
       update: MC.update,
+      completeLayoutSetup: MC.completeLayoutSetup,
       RANKS: MC.RANKS,
       STATUS: MC.STATUS,
       PRICE_CONFIGS: MC.PRICE_CONFIGS

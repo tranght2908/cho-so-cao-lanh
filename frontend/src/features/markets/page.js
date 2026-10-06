@@ -11,7 +11,7 @@
   'use strict';
   const U = A.U, ui = A.ui, MC = A.features.markets.service;
 
-  const LAYOUT_STATE = { set: 'Đã thiết lập', unset: 'Chưa thiết lập' };
+  const LAYOUT_STATE = { set: 'Đã thiết lập', unset: 'Chờ thiết lập' };
   const fmtNum = n => Number(n || 0).toLocaleString('vi-VN', { maximumFractionDigits: 2 });
   const fmtM2 = n => fmtNum(n) + ' m²';
 
@@ -86,7 +86,7 @@
     const missing = all.length - declared.length;
     const card = (label, value, sub) => `<div class="card kpi"><div class="k-label">${label}</div><div class="k-value">${value}</div><div class="k-sub">${sub}</div></div>`;
     return `<div class="kpis dmc-kpis">
-      ${card('Tổng số chợ', fmtNum(all.length), fmtNum(all.filter(r => r.status === 'active').length) + ' chợ đang hoạt động')}
+      ${card('Tổng số chợ', fmtNum(all.length), fmtNum(all.filter(r => r.status === 'ACTIVE').length) + ' chợ đang hoạt động')}
       ${card('Đã thiết lập mặt bằng', fmtNum(set), 'Đã có cấu trúc Khu/Tầng/Dãy')}
       ${card('Chưa thiết lập mặt bằng', fmtNum(all.length - set), 'Chờ Tổ trưởng thiết lập')}
       ${declared.length ? card('Tổng quy mô kinh doanh', fmtM2(area), fmtNum(declared.length) + ' chợ đã khai báo' + (missing ? ' · ' + fmtNum(missing) + ' chợ chưa khai báo' : '')) : card('Tổng quy mô kinh doanh', 'Chưa cập nhật', 'Chưa có chợ nào khai báo quy mô')}
@@ -137,7 +137,7 @@
   }
   const err = id => `<div class="dmc-err" id="dmc-err-${id}"></div>`;
   function marketForm(r) {
-    const x = r || { code: MC.nextCode(), name: '', address: '', rank: 'HANG_3', phone: '', priceConfigId: MC.PRICE_CONFIGS[0].id, status: 'active', totalArea: null, businessArea: null, allowedAreaTypeIds: null };
+    const x = r || { code: MC.nextCode(), name: '', address: '', rank: 'HANG_3', phone: '', priceConfigId: MC.PRICE_CONFIGS[0].id, status: 'NOT_ACTIVE', totalArea: null, businessArea: null, allowedAreaTypeIds: null };
     const builtin = r && !r.isCustom;
     const usage = r ? MC.usage(r.id) : {};
     const required = !r || r.businessArea !== null;
@@ -265,7 +265,7 @@
     if (errors.name || errors.address || !scale.ok || !types.ok) { showErrors(errors); return; }
     const patch = {
       address, rank: inputValue('dmc-rank') || 'HANG_3', phone: inputValue('dmc-phone'),
-      priceConfigId: inputValue('dmc-price') || MC.PRICE_CONFIGS[0].id, status: inputValue('dmc-status') || 'active'
+      priceConfigId: inputValue('dmc-price') || MC.PRICE_CONFIGS[0].id
     };
     Object.assign(patch, scale.value, { allowedAreaTypeIds: types.value });
     if (existing) {

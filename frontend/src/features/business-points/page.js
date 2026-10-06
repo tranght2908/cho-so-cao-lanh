@@ -127,7 +127,7 @@
     const BP = A.features.businessPoints.service, today = U.today(), canContract = U.can('hop-dong');
     const list = A.db.contracts.filter(x => (x.businessPointId || x.stallId) === st.id).sort((a, b) => String(b.start).localeCompare(String(a.start)));
     if (!list.length) return '<div class="small muted">Chưa có hợp đồng nào gắn với điểm này.</div>';
-    const phaseTag = c => { const ph = BP.contractPhase(c, today); return ph === 'current' ? '<span class="tag ok">Đang hiệu lực</span>' : ph === 'future' ? '<span class="tag info">Sắp hiệu lực</span>' : `<span class="tag">${c.status === 'chamdut' ? 'Đã chấm dứt' : c.status === 'thanhly' ? 'Đã thanh lý' : 'Đã kết thúc'}</span>`; };
+    const phaseTag = c => { const ph = BP.contractPhase(c, today), lifecycle = A.features.contracts.service.lifecycle(c); return ph === 'current' ? '<span class="tag ok">Đang hiệu lực</span>' : lifecycle === 'PENDING_LIQUIDATION' ? '<span class="tag warn">Chờ thanh lý</span>' : `<span class="tag">${lifecycle === 'LIQUIDATED' ? 'Đã thanh lý' : 'Đã kết thúc'}</span>`; };
     return `<div class="contract-copy-list">${list.map(c => { const t = A.idx.trader.get(c.traderId); return `<div class="contract-copy dk-contract-row"><span class="contract-copy-icon">${U.icon('file')}</span><span><b>${U.esc(c.id)} · ${t ? U.esc(t.name) : U.esc(c.traderId)}</b><small>${U.dmy(c.start)} → ${c.end ? U.dmy(c.end) : 'không thời hạn'}</small></span>${phaseTag(c)}${canContract ? `<button class="btn sm" data-act="ct-view" data-id="${c.id}">Xem hợp đồng</button>` : ''}</div>`; }).join('')}</div>`;
   }
   // Point → trader → contract, date-aware through the shared availability rule (business-points

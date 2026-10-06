@@ -19,24 +19,34 @@
   // No availablePoints store: every answer is derived from A.db.stalls + A.db.contracts at call time.
   // Dates are ISO 'YYYY-MM-DD'; contract `end` is inclusive; a missing end means open-ended.
   //   hieuluc          → occupies [start, end]
-  //   chamdut/thanhly  → occupies [start, min(end, termination.date − 1 day)] (the point is released
-  //                      on the termination date, as contracts.service.terminate does); a liquidated
-  //                      contract without termination occupied its full term
+  //   chamdut/thanhly  → historic occupancy ends at termination/full term. A
+  //                      terminated/expired point is separately locked by
+  //                      pendingHandover until liquidation confirms release.
   //   any other status → never occupies
   const contracts = () => (A.features.contracts && A.features.contracts.service ? A.features.contracts.service.list() : []);
+  const usage = st => st && st.usageStatus || 'VACANT';
+  const operational = st => st && (st.operationalStatus || st.status) || 'active';
   const MAX = '9999-12-31';
   const dayBefore = d => new Date(Date.parse(d) - 86400000).toISOString().slice(0, 10);
   const dayAfter = d => new Date(Date.parse(d) + 86400000).toISOString().slice(0, 10);
   // Operational point states that are not open for allocation (stall.status v16) and retired
   // structural records (merged/split). Occupancy/debt are derived, never stored on the point.
   const BLOCKED_STATUS = ['suspended', 'disputed', 'inactive'];
+  // A terminated or normally expired contract locks the point for handover.
+  // It is not an occupancy interval, but it must block every new allocation
+  // until the contract is liquidated.
+  service.pendingHandover = function (pointId, date) {
+    const day = date || A.U.today();
+    return contracts().find(c => (c.businessPointId || c.stallId) === pointId &&
+      c.status === 'PENDING_LIQUIDATION') || null;
+  };
   service.occupyingInterval = function (c) {
     if (!c || !c.start) return null;
     const end = c.end || MAX;
-    if (c.status === 'hieuluc') return { start: c.start, end };
-    if (c.status === 'chamdut' || c.status === 'thanhly') {
+    if (c.status === 'ACTIVE') return { start: c.start, end };
+    if (c.status === 'PENDING_LIQUIDATION' || c.status === 'LIQUIDATED') {
       const stop = c.termination && c.termination.date;
-      if (!stop) return c.status === 'thanhly' ? { start: c.start, end } : null;
+      if (!stop) return c.status === 'LIQUIDATED' ? { start: c.start, end } : null;
       const last = dayBefore(stop) < end ? dayBefore(stop) : end;
       return last >= c.start ? { start: c.start, end: last } : null;
     }
@@ -49,7 +59,7 @@
       .sort((a, b) => a.interval.start.localeCompare(b.interval.start));
   };
   const overlaps = (i, from, to) => i.start <= to && i.end >= from;
-  service.isAllocatable = function (st) { return !!st && BLOCKED_STATUS.indexOf(st.status) === -1 && st.structuralStatus !== 'MERGED' && st.structuralStatus !== 'SPLIT'; };
+  service.isAllocatable = function (st) { return !!st && BLOCKED_STATUS.indexOf(operational(st)) === -1 && usage(st) === 'VACANT' && st.structuralStatus !== 'MERGED' && st.structuralStatus !== 'SPLIT'; };
   // Contracts that overlap [from, to] on the point (exceptId: contract being edited).
   service.conflicts = function (pointId, from, to, exceptId) {
     return service.occupancies(pointId).filter(x => x.contract.id !== exceptId && overlaps(x.interval, from, to || from));
@@ -58,7 +68,7 @@
     const st = repository.getById(pointId);
     if (!st || !from || (to && to < from)) return false;
     if (opts && opts.market && st.market !== opts.market) return false;
-    return service.isAllocatable(st) && !service.conflicts(pointId, from, to || from, opts && opts.exceptId).length;
+    return service.isAllocatable(st) && !service.pendingHandover(pointId, A.U.today()) && !service.conflicts(pointId, from, to || from, opts && opts.exceptId).length;
   };
   // Single date = range [date, date].
   service.availablePoints = function (market, from, to) {
@@ -120,10 +130,11 @@
   // Tình trạng hiển thị tổng hợp (khoá chú giải D.STATUS): vận hành → sử dụng → công nợ của hợp đồng hiện hành.
   service.displayStatus = function (st, date) {
     if (!st) return 'trong';
-    if (st.status === 'suspended' || st.status === 'inactive') return 'ngung';
-    if (st.status === 'disputed') return 'tranhchap';
+    if (operational(st) === 'suspended' || operational(st) === 'inactive' || usage(st) === 'SUSPENDED') return 'ngung';
+    if (operational(st) === 'disputed') return 'tranhchap';
+    if (usage(st) === 'VACANT') return 'trong';
     const c = service.contractOn(st.id, date || A.U.today());
-    if (!c) return 'trong';
+    if (!c) return 'thue';
     return service.debtStatus(st, c.id) === 'overdue' ? 'no' : 'thue';
   };
   service.activeSeller = function (st) { return st ? (A.db.directSellerAssignments || []).find(x => x.pointId === st.id && x.status === 'ACTIVE') || null : null; };

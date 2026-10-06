@@ -28,11 +28,11 @@
  * thuộc nghiệp vụ mặt bằng/cấu trúc/điểm kinh doanh (cau-truc.*, so-do.*, diem-kd.tach-diem/gop-diem/
  * chuyen-doi.*) gộp về market_manager (đúng mục 3.C "Quản lý mặt bằng. Quản lý điểm kinh doanh.");
  * quyền hồ sơ tiểu thương/hợp đồng/thu tiền/điện nước/công nợ (tieu-thuong.*, hop-dong.*, dien-nuoc.*,
- * phai-thu.yeu-cau-dieu-chinh, cong-no.*, phien-cho vận hành theo ngày) gộp về collector (đúng mục
+ * phien-cho vận hành theo ngày) gộp về collector (đúng mục
  * 3.D); quyền xử lý sự cố giới hạn (su-co.cap-nhat-xu-ly) gộp về technician (đúng mục 3.E —
  * technician V1 trước đây 0 action, nay chính thức có action cập nhật tiến độ/kết quả theo hồ sơ
- * được giao); mọi quyền tài chính trước đây accountant giữ (phai-thu.phat-hanh, doi-soat.*,
- * v.v.) không có role kế thừa 1:1 → gộp về market_manager (đúng mục 3.C "Duyệt nghiệp vụ theo
+ * được giao); mọi quyền tài chính trước đây accountant giữ (nay là phát hành kỳ,
+ * đối soát v.v.) không có role kế thừa 1:1 → gộp về market_manager (đúng mục 3.C "Duyệt nghiệp vụ theo
  * permission... Xác nhận tiền nhân viên thu phí nộp về"), KHÔNG tự tạo lại alias "accountant" dưới
  * tên khác.
  */
@@ -56,9 +56,6 @@
     // Danh mục chợ = quản lý thông tin CẤP CHỢ (tên, mã, địa điểm, hạng, BQL, bảng giá, trạng thái)
     // — KHÁC screen:mat-bang (cấu trúc BÊN TRONG 1 chợ, không đổi gì ở đó). Xem js/v-danhmuccho.js.
     { key: 'screen:danh-muc-cho', kind: 'screen', group: 'Điều hành', label: 'Danh mục chợ' },
-    // Nhân sự & phân công = nghiệp vụ của Tổ trưởng (A02): xem nhân sự Tổ Quản lý chợ (derive từ Account) và
-    // phân công/điều chuyển Chợ cho NV thu phí (Account.marketScopes). KHÔNG phải quản trị tài khoản (tai-khoan.*).
-    { key: 'screen:nhan-su-phan-cong', kind: 'screen', group: 'Điều hành', label: 'Nhân sự & phân công' },
     // Phase 7 — chuẩn hóa RBAC theo UI đã gộp "Thiết lập mặt bằng chợ" + "Sơ đồ mặt bằng" thành 1
     // workspace (MARKET_LAYOUT_UX_HOTFIX_REPORT.md): 2 screen permission cũ 'cau-truc'/'so-do' gộp
     // thành DUY NHẤT 'mat-bang'. Xem MARKET_LAYOUT_SCREEN_PERMISSION_AUDIT.md +
@@ -74,11 +71,10 @@
     { key: 'screen:cau-hinh-gia', kind: 'screen', group: 'Tài chính / Quản lý khai báo', label: 'Chính sách thu và biểu phí' },
     { key: 'screen:tai-khoan-ngan-hang', kind: 'screen', group: 'Tài chính / Quản lý khai báo', label: 'Danh sách tài khoản ngân hàng' },
     { key: 'screen:dien-nuoc', kind: 'screen', group: 'Tài chính', label: 'Chỉ số điện, nước' },
+    { key: 'screen:theo-doi-ky-thu', kind: 'screen', group: 'Tài chính', label: 'Theo dõi kỳ thu' },
     { key: 'screen:phai-thu', kind: 'screen', group: 'Tài chính', label: 'Khoản phải thu' },
     { key: 'screen:thu-tien', kind: 'screen', group: 'Tài chính', label: 'Thu tiền & biên lai' },
-    { key: 'screen:doi-soat', kind: 'screen', group: 'Tài chính', label: 'Đối soát buổi thu' },
     { key: 'screen:theo-doi-ky-doi-soat', kind: 'screen', group: 'Tài chính', label: 'Đối soát thu tiền' },
-    { key: 'screen:cong-no', kind: 'screen', group: 'Tài chính', label: 'Công nợ & nhắc nợ' },
     { key: 'screen:su-co', kind: 'screen', group: 'Vận hành', label: 'Phản ánh & sự cố' },
     { key: 'screen:thong-bao', kind: 'screen', group: 'Vận hành', label: 'Thông báo đa kênh' },
     { key: 'screen:bao-cao', kind: 'screen', group: 'Vận hành', label: 'Báo cáo thống kê' },
@@ -91,9 +87,10 @@
     { key: 'action:danh-muc-cho.tao', kind: 'action', group: 'Điều hành', screenId: 'danh-muc-cho', label: 'Tạo chợ mới trong danh mục' },
     { key: 'action:danh-muc-cho.sua', kind: 'action', group: 'Điều hành', screenId: 'danh-muc-cho', label: 'Cập nhật thông tin chợ trong danh mục' },
     { key: 'action:danh-muc-cho.xuat-excel', kind: 'action', group: 'Điều hành', screenId: 'danh-muc-cho', label: 'Xuất Excel danh mục chợ' },
-    { key: 'action:nhan-su-phan-cong.xem-phan-cong', kind: 'action', group: 'Điều hành', screenId: 'nhan-su-phan-cong', label: 'Xem phân công hiện tại (theo nhân viên / theo chợ)' },
-    { key: 'action:nhan-su-phan-cong.phan-cong', kind: 'action', group: 'Điều hành', screenId: 'nhan-su-phan-cong', label: 'Phân công chợ chưa có người phụ trách / gỡ phân công cho NV thu phí' },
-    { key: 'action:nhan-su-phan-cong.dieu-chuyen', kind: 'action', group: 'Điều hành', screenId: 'nhan-su-phan-cong', label: 'Điều chuyển chợ giữa các NV thu phí / xử lý xung đột phân công' },
+    { key: 'action:theo-doi-ky-thu.phan-cong-cho', kind: 'action', group: 'Tài chính', screenId: 'theo-doi-ky-thu', label: 'Phân công chợ chưa có NV thu phí phụ trách' },
+    { key: 'action:theo-doi-ky-thu.doi-nv-phu-trach', kind: 'action', group: 'Tài chính', screenId: 'theo-doi-ky-thu', label: 'Đổi NV thu phí phụ trách chợ' },
+    { key: 'action:theo-doi-ky-thu.phat-hanh-ky', kind: 'action', group: 'Tài chính', screenId: 'theo-doi-ky-thu', label: 'Phát hành kỳ thu (đồng loạt mọi chợ Sẵn sàng phát hành / Không áp dụng)' },
+    { key: 'action:theo-doi-ky-thu.chot-ky', kind: 'action', group: 'Tài chính', screenId: 'theo-doi-ky-thu', label: 'Chốt kỳ thu tháng (mọi chợ Hoàn tất / Không áp dụng)' },
     { key: 'action:cau-truc.edit', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Thêm/sửa khối, tầng, khu, loại điểm; lưu nháp/chính thức' },
     { key: 'action:cau-truc.delete', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Xoá khối, tầng, khu, loại điểm' },
     { key: 'action:cau-truc.reset', kind: 'action', group: 'Điều hành', screenId: 'mat-bang', label: 'Khôi phục cấu trúc mặc định' },
@@ -117,7 +114,6 @@
     { key: 'action:phien-cho.huy-phien', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Hủy phiên chợ quê' },
     { key: 'action:phien-cho.xem-bao-cao', kind: 'action', group: 'Điều hành', screenId: 'phien-cho', label: 'Xem báo cáo phiên chợ quê' },
     // THU_HOI_NO (P chốt 29/09/2026): tiểu thương tự trả nợ quá hạn bằng QR thu nợ trong mini app (nợ của chính mình).
-    { key: 'action:mini-app.tra-no-qr', kind: 'action', group: 'Dành cho tiểu thương', screenId: 'mini-app', label: 'Tiểu thương trả nợ quá hạn bằng QR thu nợ (nợ của chính mình)' },
     { key: 'action:mini-app.stall-registration.create', kind: 'action', group: 'Dành cho tiểu thương', screenId: 'mini-app', label: 'Tiểu thương tự đăng ký quầy chợ quê trong mini app' },
     { key: 'action:mini-app.thanh-toan', kind: 'action', group: 'Dành cho tiểu thương', screenId: 'mini-app', label: 'Thanh toán trực tuyến trong mini app' },
     { key: 'action:mini-app.gui-phan-anh', kind: 'action', group: 'Dành cho tiểu thương', screenId: 'mini-app', label: 'Gửi phản ánh trong mini app' },
@@ -137,34 +133,23 @@
     { key: 'action:hop-dong.cap-nhat-ban-ky', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Cập nhật bản số hóa hợp đồng' },
     { key: 'action:hop-dong.cham-dut', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Chấm dứt hợp đồng trước hạn' },
     { key: 'action:dien-nuoc.ghi-chi-so', kind: 'action', group: 'Tài chính', screenId: 'dien-nuoc', label: 'Nhập / lưu nháp chỉ số điện, nước' },
-    { key: 'action:dien-nuoc.chot-ky', kind: 'action', group: 'Tài chính', screenId: 'dien-nuoc', label: 'Chốt kỳ ghi chỉ số điện, nước' },
-    { key: 'action:dien-nuoc.yeu-cau-dieu-chinh', kind: 'action', group: 'Tài chính', screenId: 'dien-nuoc', label: 'Yêu cầu điều chỉnh chỉ số kỳ đã chốt' },
+    { key: 'action:dien-nuoc.chot-ky', kind: 'action', group: 'Tài chính', screenId: 'dien-nuoc', label: 'Hoàn tất ghi chỉ số điện, nước của chợ (khóa chỉ số, hệ thống tự tính nháp)' },
     // PHAI_THU_PHAM_VI_XEM: quyền XEM (không thao tác) khoản phải thu của TOÀN chợ đang chọn. Không có
     // quyền này (vd Nhân viên thu phí) thì màn Khoản phải thu chỉ hiện khoản của điểm KD được phân công
     // cho chính tài khoản (stall.collectorId === account.id). Vẫn luôn giới hạn trong marketScopes/ui.market.
     { key: 'action:phai-thu.xem-toan-cho', kind: 'action', group: 'Tài chính', screenId: 'phai-thu', label: 'Xem khoản phải thu toàn chợ (không giới hạn điểm được phân công)' },
-    { key: 'action:phai-thu.ban-do-thu', kind: 'action', group: 'Tài chính', screenId: 'phai-thu', label: 'Xem Bản đồ thu (phạm vi theo quyền xem toàn chợ / điểm được phân công)' },
-    { key: 'action:phai-thu.phat-hanh', kind: 'action', group: 'Tài chính', screenId: 'phai-thu', label: 'Phát hành khoản phải thu tự động' },
-    { key: 'action:phai-thu.yeu-cau-dieu-chinh', kind: 'action', group: 'Tài chính', screenId: 'phai-thu', label: 'Gửi yêu cầu miễn giảm / điều chỉnh khoản phải thu' },
-    { key: 'action:phai-thu.mien-giam', kind: 'action', group: 'Tài chính', screenId: 'phai-thu', label: 'Miễn giảm / điều chỉnh khoản phải thu' },
+    // ISSUE_PERIOD v1: phát hành chỉ ở cấp KỲ THU (Theo dõi kỳ thu); màn Khoản phải thu chỉ kiểm tra + tính lại nháp.
+    { key: 'action:phai-thu.tinh-lai', kind: 'action', group: 'Tài chính', screenId: 'phai-thu', label: 'Tính lại khoản phải thu nháp (trước khi phát hành kỳ)' },
     { key: 'action:thu-tien.thu', kind: 'action', group: 'Tài chính', screenId: 'thu-tien', label: 'Thu tiền (mọi nơi có nút "Thu tiền")' },
-    { key: 'action:doi-soat.xem-ngan-hang', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Xem đối soát ngân hàng / QR' },
-    { key: 'action:doi-soat.gan-thu-cong', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Gắn khoản thu thủ công cho giao dịch ngân hàng' },
-    { key: 'action:doi-soat.xem-tien-mat', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Xem đối soát tiền mặt' },
-    { key: 'action:doi-soat.xac-nhan-nop-quy', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Xác nhận đối soát nộp quỹ tiền mặt' },
     // DOI_SOAT_CUOI_NGAY (P chốt 29/09/2026): NV thu phí chốt buổi thu → phiếu nộp tiền; Kế toán BQL nhận tiền
     // và bấm "Đã đối soát" từng phiếu (chợ thu theo phần). Tách action riêng, không đổi action nộp quỹ cũ
     // (đang dùng cho đối soát tiền mặt phiên chợ quê TTĐ).
     { key: 'action:thu-tien.chot-buoi', kind: 'action', group: 'Tài chính', screenId: 'thu-tien', label: 'Chốt buổi thu — lập phiếu nộp tiền mặt của chính mình' },
-    { key: 'action:doi-soat.xac-nhan-phieu-nop', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Đối soát phiếu nộp tiền mặt theo buổi của NV thu phí' },
-    { key: 'action:doi-soat.xem-truy-vet', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Xem lịch sử truy vết đối soát' },
-    { key: 'action:doi-soat.xuat-excel', kind: 'action', group: 'Tài chính', screenId: 'doi-soat', label: 'Xuất Excel dữ liệu đối soát' },
+    // FEE_FLOW v1: hoàn tất thu của chợ (100% đã thu, tiền mặt đã chốt buổi) → chuyển Kế toán Trung tâm đối soát.
+    { key: 'action:thu-tien.hoan-tat-thu', kind: 'action', group: 'Tài chính', screenId: 'thu-tien', label: 'Hoàn tất thu & chuyển đối soát (theo chợ)' },
     { key: 'action:theo-doi-ky-doi-soat.xac-nhan-hoan-tat', kind: 'action', group: 'Tài chính', screenId: 'theo-doi-ky-doi-soat', label: 'Xác nhận kết quả đối soát thu tiền (1 chợ · 1 kỳ)' },
-    { key: 'action:cong-no.nhac-no', kind: 'action', group: 'Tài chính', screenId: 'cong-no', label: 'Nhắc nợ 1 tiểu thương' },
-    { key: 'action:cong-no.nhac-no-hang-loat', kind: 'action', group: 'Tài chính', screenId: 'cong-no', label: 'Nhắc nợ hàng loạt' },
+    { key: 'action:theo-doi-ky-doi-soat.xu-ly-ngan-hang', kind: 'action', group: 'Tài chính', screenId: 'theo-doi-ky-doi-soat', label: 'Xử lý giao dịch ngân hàng cần tra soát (đối chiếu khoản phải thu, khớp thủ công)' },
     // THU_HOI_NO (P chốt 29/09/2026): NV thu phí phụ trách gian thu nợ (không thu một phần).
-    { key: 'action:cong-no.thu-no', kind: 'action', group: 'Tài chính', screenId: 'cong-no', label: 'Thu hồi nợ quá hạn (phần gian mình phụ trách)' },
-    { key: 'action:cong-no.xuat-excel', kind: 'action', group: 'Tài chính', screenId: 'cong-no', label: 'Xuất Excel công nợ' },
     { key: 'action:su-co.tao-phan-anh', kind: 'action', group: 'Vận hành', screenId: 'su-co', label: 'Tạo phản ánh / sự cố thủ công' },
     { key: 'action:su-co.phan-cong', kind: 'action', group: 'Vận hành', screenId: 'su-co', label: 'Phân công người xử lý' },
     { key: 'action:su-co.cap-nhat-xu-ly', kind: 'action', group: 'Vận hành', screenId: 'su-co', label: 'Kiểm tra và cập nhật xử lý sự cố' },
@@ -172,6 +157,8 @@
     { key: 'action:su-co.vuot-cap', kind: 'action', group: 'Vận hành', screenId: 'su-co', label: 'Chuyển phản ánh vượt cấp lên phường' },
     { key: 'action:su-co.chi-dao', kind: 'action', group: 'Vận hành', screenId: 'su-co', label: 'Gửi ý kiến chỉ đạo (cho phản ánh đã vượt cấp)' },
     { key: 'action:thong-bao.gui', kind: 'action', group: 'Vận hành', screenId: 'thong-bao', label: 'Gửi thông báo đa kênh' },
+    // BR-06: quyền chỉnh Lịch nghiệp vụ (lịch kỳ thu hàng tháng) tách khỏi quyền gửi thông báo.
+    { key: 'action:thong-bao.lich-nghiep-vu', kind: 'action', group: 'Vận hành', screenId: 'thong-bao', label: 'Chỉnh Lịch nghiệp vụ (lịch kỳ thu hàng tháng)' },
     { key: 'action:tai-khoan.tao-moi', kind: 'action', group: 'Vận hành', screenId: 'tai-khoan', label: 'Thêm tài khoản người dùng' },
     { key: 'action:tai-khoan.sua', kind: 'action', group: 'Vận hành', screenId: 'tai-khoan', label: 'Sửa thông tin tài khoản' },
     { key: 'action:tai-khoan.khoa-mo-khoa', kind: 'action', group: 'Vận hành', screenId: 'tai-khoan', label: 'Khoá / mở khoá tài khoản' },
@@ -190,8 +177,6 @@
     { key: 'action:bao-cao.xuat-excel', kind: 'action', group: 'Vận hành', screenId: 'bao-cao', label: 'Xuất Excel báo cáo thống kê' },
     { key: 'action:bao-cao.xuat-pdf-in', kind: 'action', group: 'Vận hành', screenId: 'bao-cao', label: 'Xuất PDF / in báo cáo thống kê' },
     { key: 'action:bao-cao.luu-mau', kind: 'action', group: 'Vận hành', screenId: 'bao-cao', label: 'Lưu mẫu báo cáo' },
-    { key: 'action:cai-dat.ky-thu', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Cấu hình kỳ thu' },
-    { key: 'action:cai-dat.quy-tac-thu-phi', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Cấu hình quy tắc thu phí' },
     { key: 'action:cai-dat.vai-tro.tao', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Tạo vai trò mới' },
     { key: 'action:cai-dat.vai-tro.sua', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Sửa thông tin vai trò' },
     { key: 'action:cai-dat.vai-tro.khoa', kind: 'action', group: 'Vận hành', screenId: 'cai-dat', label: 'Vô hiệu hoá / kích hoạt lại vai trò' },
@@ -303,7 +288,7 @@
   const ACTOR_SCREEN_ACCESS = {
     'tong-quan': ['system_admin', 'market_manager', 'central_accountant', 'ward_leader'],
     'danh-muc-cho': ['system_admin', 'market_manager', 'ward_leader'],
-    'nhan-su-phan-cong': ['market_manager'],
+    'theo-doi-ky-thu': ['market_manager'],
     'mat-bang': ['system_admin', 'market_manager', 'collector', 'ward_leader'],
     'diem-kd': ['system_admin', 'market_manager', 'collector', 'ward_leader'],
     'tai-san': ['system_admin', 'market_manager', 'technician'],
@@ -314,14 +299,12 @@
     'dien-nuoc': ['system_admin', 'market_manager', 'collector', 'central_accountant'],
     'phai-thu': ['system_admin', 'market_manager', 'collector', 'central_accountant', 'ward_leader'],
     'thu-tien': ['system_admin', 'market_manager', 'collector', 'central_accountant'],
-    // PHAM_VI_THU_KY (chốt): không quản lý Công nợ/nộp muộn và không còn màn Đối soát buổi thu độc lập. Chốt buổi nằm
-    // trong "Thu tiền & biên lai"; đối soát tiền bàn giao là "Đối soát thu tiền" (theo-doi-ky-doi-soat) của Kế toán.
-    // Route/code legacy giữ nguyên; không actor nào được cấp mặc định (thu hồi 1 lần: migrateRetiredWorkflowScreens).
-    'doi-soat': [],
-    'cong-no': [],
+    // Công nợ và Đối soát buổi thu đã retire (screen gỡ khỏi CATALOG, route redirect ở bootstrap). Chốt buổi nằm trong
+    // "Thu tiền & biên lai"; đối soát là "Đối soát thu tiền" (theo-doi-ky-doi-soat) của Kế toán Trung tâm.
     'su-co': ['system_admin', 'market_manager', 'technician', 'ward_leader'],
     'thong-bao': ['system_admin', 'market_manager', 'collector', 'technician', 'central_accountant'],
     'bao-cao': ['system_admin', 'market_manager', 'collector', 'technician', 'central_accountant', 'ward_leader'],
+    // Tổ trưởng KHÔNG vào màn Tài khoản: phân công NV thu phí làm ngay trên Theo dõi kỳ thu (action:theo-doi-ky-thu.*).
     'tai-khoan': ['system_admin'],
     'cai-dat': ['system_admin']
   };
@@ -344,9 +327,10 @@
     const actionRoles = {
       'danh-muc-cho.tao': ['system_admin'],
       'danh-muc-cho.sua': ['system_admin'],
-      'nhan-su-phan-cong.xem-phan-cong': ['market_manager'],
-      'nhan-su-phan-cong.phan-cong': ['market_manager'],
-      'nhan-su-phan-cong.dieu-chuyen': ['market_manager'],
+      'theo-doi-ky-thu.phan-cong-cho': ['market_manager'],
+      'theo-doi-ky-thu.doi-nv-phu-trach': ['market_manager'],
+      'theo-doi-ky-thu.chot-ky': ['market_manager'],
+      'theo-doi-ky-thu.phat-hanh-ky': ['market_manager'],
       // cau-truc.*/so-do.* (mặt bằng, cấu trúc) là nghiệp vụ "Quản lý mặt bằng" — mục 3.C, chỉ
       // market_manager (market_staff cũ gộp về đây, không còn role thứ 2 nào thao tác cấu trúc).
       'cau-truc.edit': ['market_manager'],
@@ -375,7 +359,6 @@
       'phien-cho.huy-phien': ['market_manager'],
       'phien-cho.xem-bao-cao': ['ward_leader', 'market_manager', 'collector'],
       'mini-app.stall-registration.create': ['trader'],
-      'mini-app.tra-no-qr': ['trader'],
       'mini-app.gui-phan-anh': ['trader'],
       'mini-app.danh-gia-phan-anh': ['trader'],
       // Hồ sơ tiểu thương/hợp đồng: Tổ trưởng Tổ Quản lý chợ tạo và quản lý theo market scope.
@@ -391,40 +374,26 @@
       // Người dùng chốt 29/09/2026: chỉ NV thu phí được phân công khu ghi chỉ số khu đó (kiểm tra thêm
       // stall.collectorId ở handler). Trưởng Ban xem/chốt kỳ, không ghi thay.
       'dien-nuoc.ghi-chi-so': ['collector'],
-      // HOAN_TAT_GHI_CHI_SO_NV (01/10/2026): NV thu phí tự bấm "Hoàn tất ghi chỉ số" để khóa số đã ghi.
-      'dien-nuoc.chot-ky': ['market_manager', 'collector'],
-      'dien-nuoc.yeu-cau-dieu-chinh': ['market_manager', 'collector'],
-      // accountant cũ không có role kế thừa 1:1 — "phát hành khoản phải thu tự động" thuộc "mở/chốt
-      // kỳ thu" (mục 3.C) nên gộp về market_manager, KHÔNG tái lập accountant dưới tên khác.
-      'phai-thu.phat-hanh': ['market_manager'],
+      // BR-03: CHỈ NV thu phí hoàn tất ghi chỉ số; Tổ trưởng chỉ theo dõi tiến độ (thu hồi 1 lần: migrateFeeFlowPerms).
+      'dien-nuoc.chot-ky': ['collector'],
+      // Tổ trưởng tính lại nháp khoản phải thu của chợ; phát hành chỉ ở cấp kỳ (theo-doi-ky-thu.phat-hanh-ky).
+      'phai-thu.tinh-lai': ['market_manager'],
       // Người dùng xác nhận 28/09/2026: NV thu phí chỉ xem khoản của điểm được phân công; Trưởng Ban xem
       // toàn chợ; Lãnh đạo phường giữ quyền xem như trước (chỉ xem, không thao tác).
       'phai-thu.xem-toan-cho': ['ward_leader', 'market_manager', 'central_accountant'],
       // PHAI_THU_BAN_DO (P xác nhận 29/09/2026): Trưởng Ban + NV thu phí; Lãnh đạo phường KHÔNG cần bản đồ;
       // Kế toán (nay là central_accountant): NEED_CONFIRMATION → mặc định DENY (P "tính sau").
-      'phai-thu.ban-do-thu': ['market_manager', 'collector'],
-      'phai-thu.yeu-cau-dieu-chinh': ['collector'],
-      'phai-thu.mien-giam': ['market_manager'],
       'thu-tien.thu': ['market_manager', 'collector'],
-      'doi-soat.xem-ngan-hang': ['ward_leader', 'market_manager', 'central_accountant'],
-      'doi-soat.gan-thu-cong': ['market_manager'],
-      'doi-soat.xem-tien-mat': ['ward_leader', 'market_manager', 'central_accountant'],
       'thu-tien.chot-buoi': ['collector'],
-      'doi-soat.xac-nhan-phieu-nop': ['central_accountant'],
+      'thu-tien.hoan-tat-thu': ['collector'],
       'theo-doi-ky-doi-soat.xac-nhan-hoan-tat': ['central_accountant'],
+      'theo-doi-ky-doi-soat.xu-ly-ngan-hang': ['central_accountant'],
       // "Xác nhận tiền nhân viên thu phí nộp về" — đúng mục 3.C, chỉ market_manager.
-      'doi-soat.xac-nhan-nop-quy': ['market_manager'],
-      'doi-soat.xem-truy-vet': ['market_manager', 'central_accountant'],
       // Xuất dữ liệu kế toán: A05 (không cấp bao-cao.luu-mau — lưu/cấu hình mẫu báo cáo).
-      'doi-soat.xuat-excel': ['central_accountant'],
-      'cong-no.xuat-excel': ['central_accountant'],
       'bao-cao.xuat-excel': ['central_accountant'],
       'bao-cao.xuat-pdf-in': ['central_accountant'],
       // "Nhắc nợ" — đúng mục 3.D, collector; nhắc hàng loạt vẫn cùng 1 nghiệp vụ (mở rộng số lượng),
       // không phải quyền mới.
-      'cong-no.nhac-no': ['market_manager', 'collector'],
-      'cong-no.nhac-no-hang-loat': ['market_manager', 'collector'],
-      'cong-no.thu-no': ['collector'],
       'su-co.tao-phan-anh': ['market_manager'],
       'su-co.phan-cong': ['market_manager'],
       'su-co.cap-nhat-xu-ly': ['market_manager', 'technician'],
@@ -434,6 +403,7 @@
       'su-co.vuot-cap': ['market_manager'],
       'su-co.chi-dao': ['ward_leader'],
       'thong-bao.gui': ['market_manager'],
+      'thong-bao.lich-nghiep-vu': ['system_admin', 'market_manager'],
       'tai-khoan.tao-moi': ['system_admin'],
       'tai-khoan.sua': ['system_admin'],
       'tai-khoan.khoa-mo-khoa': ['system_admin'],
@@ -454,8 +424,6 @@
       // Thêm/sửa/xoá/đổi trạng thái tài khoản ngân hàng: chỉ Quản trị hệ thống (yêu cầu gốc, không
       // có sắc thái khác nhau giữa 4 hành động nên dùng 1 action key duy nhất).
       'tai-khoan-ngan-hang.quan-ly': ['system_admin'],
-      'cai-dat.ky-thu': ['system_admin'],
-      'cai-dat.quy-tac-thu-phi': ['system_admin'],
       'cai-dat.vai-tro.tao': ['system_admin'],
       'cai-dat.vai-tro.sua': ['system_admin'],
       'cai-dat.vai-tro.khoa': ['system_admin'],
@@ -545,7 +513,7 @@
   //        lệch khiến loadState() đi thẳng nhánh RESEED TOÀN BỘ (freshState(), không qua
   //        mergeIntoCurrentSeed()), nên seedVersion v15 ở đây chỉ còn ý nghĩa tài liệu/đánh dấu, không
   //        phải cơ chế migrate chính cho lần đổi này (xem RBAC_MARKET_SCOPE_MIGRATION_REPORT.md).
-  const PERM_SEED_VERSION = 21; // 21: cấp lại quyền mini-app gửi/đánh giá phản ánh cho role trader
+  const PERM_SEED_VERSION = 21; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: (Bản đồ thu — đã retire); 19: trader/contract creation belongs to market_manager; 20: đối soát chuyển sang central_accountant (A05), A05 xem/xuất số liệu thu, technician bỏ màn Mặt bằng/Tài sản; 21: retire screen Nhân sự & phân công, chuyển action phân công chợ sang Theo dõi kỳ thu + quyền mini-app gửi/đánh giá phản ánh cho trader
   const RATE_POLICY_PERM_VERSION = 1;
   const BANK_ACCOUNT_PERM_VERSION = 1;
   const PC3A_SESSION_PERM_VERSION = 1;
@@ -560,20 +528,28 @@
   const METER_RECORD_PERM_VERSION = 1;
   const METER_COMPLETE_PERM_VERSION = 1;
   const CASH_HANDOVER_PERM_VERSION = 1;
-  const PHAI_THU_MAP_PERM_VERSION = 1;
-  const PHAI_THU_MAP_KEY = 'action:phai-thu.ban-do-thu';
   const TRADER_CONTRACT_CREATION_PERM_VERSION = 1;
   const CENTRAL_ACCOUNTANT_PERM_VERSION = 2;
   const TECHNICIAN_SCREEN_PERM_VERSION = 1;
-  // NHAN_SU_PHAN_CONG v1: 4 permKey của màn "Nhân sự & phân công" — cấp theo default seed ĐÚNG 1 LẦN (marker),
-  // không qua vòng "key mới → seed" chung để quyền quản trị viên thu hồi sau đó không bị cấp lại khi reload.
-  const STAFF_ASSIGNMENT_PERM_VERSION = 1;
-  const SCREEN_ACCESS_BY_ACTOR_VERSION = 1;
+  // MARKET_ASSIGNMENT v1: action phân công chợ thuộc Theo dõi kỳ thu; không còn screen/module nhân sự riêng.
+  const MARKET_ASSIGNMENT_PERM_VERSION = 1;
+  const SCREEN_ACCESS_BY_ACTOR_VERSION = 4; // 4: thu hồi screen:tai-khoan của market_manager (v3 từng cấp tạm cho link tên NV)
   const ACCOUNTANT_RECON_SCREEN_VERSION = 1;
   const RETIRED_WORKFLOW_SCREEN_VERSION = 1;
   const RETIRED_WORKFLOW_SCREENS = ['screen:doi-soat', 'screen:cong-no'];
-  const STAFF_ASSIGNMENT_PERM_KEYS = new Set(['screen:nhan-su-phan-cong', 'action:nhan-su-phan-cong.xem-phan-cong',
-    'action:nhan-su-phan-cong.phan-cong', 'action:nhan-su-phan-cong.dieu-chuyen']);
+  const MARKET_ASSIGNMENT_PERM_KEYS = new Set(['action:theo-doi-ky-thu.phan-cong-cho', 'action:theo-doi-ky-thu.doi-nv-phu-trach']);
+  // FEE_FLOW v1 (chuẩn hóa luồng thu phí): cấp 3 action mới theo default seed ĐÚNG 1 LẦN (marker) và thu hồi quyền hoàn tất
+  // chỉ số của Tổ trưởng (BR-03). Key retire (Công nợ, Đối soát buổi thu, điều chỉnh/miễn giảm, Bản đồ thu, cấu hình kỳ thu
+  // trong Cài đặt) bị lọc khỏi state đã lưu vì không còn trong CATALOG.
+  const FEE_FLOW_PERM_VERSION = 1;
+  const FEE_FLOW_PERM_KEYS = new Set(['action:thu-tien.hoan-tat-thu', 'action:theo-doi-ky-thu.chot-ky', 'action:thong-bao.lich-nghiep-vu']);
+  // ISSUE_PERIOD v1: phát hành đồng loạt theo kỳ (theo-doi-ky-thu.phat-hanh-ky) + tính lại nháp (phai-thu.tinh-lai) thay cho
+  // phai-thu.phat-hanh (retire — key bị lọc khỏi state đã lưu vì không còn trong CATALOG). Cấp theo default seed 1 lần.
+  const ISSUE_PERIOD_PERM_VERSION = 1;
+  const ISSUE_PERIOD_PERM_KEYS = new Set(['action:theo-doi-ky-thu.phat-hanh-ky', 'action:phai-thu.tinh-lai']);
+  // BANK_REVIEW v1: Kế toán Trung tâm xử lý giao dịch ngân hàng cần tra soát tại Đối soát thu tiền — cấp theo default seed 1 lần.
+  const BANK_REVIEW_PERM_VERSION = 1;
+  const BANK_REVIEW_PERM_KEYS = new Set(['action:theo-doi-ky-doi-soat.xu-ly-ngan-hang']);
   function freshState() {
     return {
       schemaVersion: A.RBAC_SCHEMA,
@@ -590,11 +566,13 @@
       meterRecordPermVersion: METER_RECORD_PERM_VERSION,
       meterCompletePermVersion: METER_COMPLETE_PERM_VERSION,
       cashHandoverPermVersion: CASH_HANDOVER_PERM_VERSION,
-      phaiThuMapPermVersion: PHAI_THU_MAP_PERM_VERSION,
       traderContractCreationPermVersion: TRADER_CONTRACT_CREATION_PERM_VERSION,
       centralAccountantPermVersion: CENTRAL_ACCOUNTANT_PERM_VERSION,
       technicianScreenPermVersion: TECHNICIAN_SCREEN_PERM_VERSION,
-      staffAssignmentPermVersion: STAFF_ASSIGNMENT_PERM_VERSION,
+      marketAssignmentPermVersion: MARKET_ASSIGNMENT_PERM_VERSION,
+      feeFlowPermVersion: FEE_FLOW_PERM_VERSION,
+      issuePeriodPermVersion: ISSUE_PERIOD_PERM_VERSION,
+      bankReviewPermVersion: BANK_REVIEW_PERM_VERSION,
       screenAccessByActorVersion: SCREEN_ACCESS_BY_ACTOR_VERSION,
       accountantReconScreenVersion: ACCOUNTANT_RECON_SCREEN_VERSION,
       retiredWorkflowScreenVersion: RETIRED_WORKFLOW_SCREEN_VERSION,
@@ -668,16 +646,6 @@
     stored.cashHandoverPermVersion = CASH_HANDOVER_PERM_VERSION;
     return true;
   }
-  // PHAI_THU_BAN_DO v1: cấp action:phai-thu.ban-do-thu theo default seed MỘT LẦN cho state đã lưu (marker
-  // phaiThuMapPermVersion) — sau đó quản trị viên gỡ/cấp thế nào thì giữ nguyên, không bị cấp lại.
-  function migratePhaiThuMapPerms(stored) {
-    if (stored.phaiThuMapPermVersion >= PHAI_THU_MAP_PERM_VERSION) return false;
-    defaultRolePermissions().filter(r => r.permKey === PHAI_THU_MAP_KEY).forEach(r => {
-      if (!stored.rolePerms.some(x => x.roleId === r.roleId && x.permKey === r.permKey)) stored.rolePerms.push(Object.assign({}, r, { grantedAt: 'migrate-phai-thu-map', grantedBy: 'Hệ thống' }));
-    });
-    stored.phaiThuMapPermVersion = PHAI_THU_MAP_PERM_VERSION;
-    return true;
-  }
   // Task 5: collector's former profile/contract-create grants came from the old default matrix.
   // Remove only those obsolete default-role grants once; subsequent administrator changes remain
   // dynamic because runtime authorization continues to read stored rolePerms through A.canDo().
@@ -719,13 +687,38 @@
     stored.technicianScreenPermVersion = TECHNICIAN_SCREEN_PERM_VERSION;
     return true;
   }
-  // Additive + idempotent: chỉ thêm dòng (role, key) theo default seed còn thiếu; không thu hồi/ghi đè quyền nào.
-  function migrateStaffAssignmentPerms(stored) {
-    if (stored.staffAssignmentPermVersion >= STAFF_ASSIGNMENT_PERM_VERSION) return false;
-    defaultRolePermissions().filter(r => STAFF_ASSIGNMENT_PERM_KEYS.has(r.permKey)).forEach(r => {
-      if (!stored.rolePerms.some(x => x.roleId === r.roleId && x.permKey === r.permKey)) stored.rolePerms.push(Object.assign({}, r, { grantedAt: 'migrate-staff-assignment', grantedBy: 'Hệ thống' }));
+  // Additive + idempotent: chỉ cấp action thay thế; các key UI retired sẽ bị lọc vì không còn trong CATALOG.
+  function migrateMarketAssignmentPerms(stored) {
+    if (stored.marketAssignmentPermVersion >= MARKET_ASSIGNMENT_PERM_VERSION) return false;
+    defaultRolePermissions().filter(r => MARKET_ASSIGNMENT_PERM_KEYS.has(r.permKey)).forEach(r => {
+      if (!stored.rolePerms.some(x => x.roleId === r.roleId && x.permKey === r.permKey)) stored.rolePerms.push(Object.assign({}, r, { grantedAt: 'migrate-market-assignment', grantedBy: 'Hệ thống' }));
     });
-    stored.staffAssignmentPermVersion = STAFF_ASSIGNMENT_PERM_VERSION;
+    stored.marketAssignmentPermVersion = MARKET_ASSIGNMENT_PERM_VERSION;
+    return true;
+  }
+  function migrateBankReviewPerms(stored) {
+    if (stored.bankReviewPermVersion >= BANK_REVIEW_PERM_VERSION) return false;
+    defaultRolePermissions().filter(r => BANK_REVIEW_PERM_KEYS.has(r.permKey)).forEach(r => {
+      if (!stored.rolePerms.some(x => x.roleId === r.roleId && x.permKey === r.permKey)) stored.rolePerms.push(Object.assign({}, r, { grantedAt: 'migrate-bank-review', grantedBy: 'Hệ thống' }));
+    });
+    stored.bankReviewPermVersion = BANK_REVIEW_PERM_VERSION;
+    return true;
+  }
+  function migrateIssuePeriodPerms(stored) {
+    if (stored.issuePeriodPermVersion >= ISSUE_PERIOD_PERM_VERSION) return false;
+    defaultRolePermissions().filter(r => ISSUE_PERIOD_PERM_KEYS.has(r.permKey)).forEach(r => {
+      if (!stored.rolePerms.some(x => x.roleId === r.roleId && x.permKey === r.permKey)) stored.rolePerms.push(Object.assign({}, r, { grantedAt: 'migrate-issue-period', grantedBy: 'Hệ thống' }));
+    });
+    stored.issuePeriodPermVersion = ISSUE_PERIOD_PERM_VERSION;
+    return true;
+  }
+  function migrateFeeFlowPerms(stored) {
+    if (stored.feeFlowPermVersion >= FEE_FLOW_PERM_VERSION) return false;
+    defaultRolePermissions().filter(r => FEE_FLOW_PERM_KEYS.has(r.permKey)).forEach(r => {
+      if (!stored.rolePerms.some(x => x.roleId === r.roleId && x.permKey === r.permKey)) stored.rolePerms.push(Object.assign({}, r, { grantedAt: 'migrate-fee-flow', grantedBy: 'Hệ thống' }));
+    });
+    stored.rolePerms = stored.rolePerms.filter(r => !(r.roleId === 'market_manager' && r.permKey === 'action:dien-nuoc.chot-ky'));
+    stored.feeFlowPermVersion = FEE_FLOW_PERM_VERSION;
     return true;
   }
   // SCREEN_ACCESS_BY_ACTOR v1 — chạy ĐÚNG 1 LẦN (marker) cho state đã lưu: đưa quyền VÀO MÀN của 6 actor nội bộ về
@@ -851,8 +844,10 @@
       if (stored.pc3aSessionPermVersion >= PC3A_SESSION_PERM_VERSION && d.permKey.indexOf('action:phien-cho.') === 0) return;
       if (stored.phaiThuScopePermVersion >= PHAI_THU_SCOPE_PERM_VERSION && d.permKey === PHAI_THU_SCOPE_KEY) return;
       if (stored.utilityModePermVersion >= UTILITY_MODE_PERM_VERSION && d.permKey === UTILITY_MODE_KEY) return;
-      if (d.permKey === PHAI_THU_MAP_KEY) return; // cấp qua migratePhaiThuMapPerms (một lần)
-      if (STAFF_ASSIGNMENT_PERM_KEYS.has(d.permKey)) return; // cấp qua migrateStaffAssignmentPerms (một lần)
+      if (MARKET_ASSIGNMENT_PERM_KEYS.has(d.permKey)) return; // cấp qua migrateMarketAssignmentPerms (một lần)
+      if (FEE_FLOW_PERM_KEYS.has(d.permKey)) return; // cấp qua migrateFeeFlowPerms (một lần)
+      if (ISSUE_PERIOD_PERM_KEYS.has(d.permKey)) return; // cấp qua migrateIssuePeriodPerms (một lần)
+      if (BANK_REVIEW_PERM_KEYS.has(d.permKey)) return; // cấp qua migrateBankReviewPerms (một lần)
       if (!knownKeys.has(d.permKey)) stored.rolePerms.push(d);
     });
     migratePc3aSessionPerms(stored);
@@ -864,11 +859,13 @@
     migrateMeterRecordPerms(stored);
     migrateMeterCompletePerms(stored);
     migrateCashHandoverPerms(stored);
-    migratePhaiThuMapPerms(stored);
     migrateTraderContractCreationPerms(stored);
     migrateCentralAccountantPerms(stored);
     migrateTechnicianScreenPerms(stored);
-    migrateStaffAssignmentPerms(stored);
+    migrateMarketAssignmentPerms(stored);
+    migrateFeeFlowPerms(stored); // sau migrateMeterCompletePerms (từng cấp dien-nuoc.chot-ky)
+    migrateIssuePeriodPerms(stored);
+    migrateBankReviewPerms(stored);
     migrateScreenAccessByActor(stored); // sau mọi migration screen cũ (vd. migrateTechnicianScreenPerms)
     migrateAccountantReconScreen(stored); // sau migrateCentralAccountantPerms v1 (từng cấp screen:doi-soat)
     migrateRetiredWorkflowScreens(stored); // sau mọi migration từng cấp screen:doi-soat/cong-no
@@ -927,7 +924,10 @@
       if (s.pc3aSessionPermVersion >= PC3A_SESSION_PERM_VERSION && d.permKey.indexOf('action:phien-cho.') === 0) return;
       if (s.phaiThuScopePermVersion >= PHAI_THU_SCOPE_PERM_VERSION && d.permKey === PHAI_THU_SCOPE_KEY) return;
       if (s.utilityModePermVersion >= UTILITY_MODE_PERM_VERSION && d.permKey === UTILITY_MODE_KEY) return;
-      if (STAFF_ASSIGNMENT_PERM_KEYS.has(d.permKey)) return; // cấp qua migrateStaffAssignmentPerms (một lần)
+      if (MARKET_ASSIGNMENT_PERM_KEYS.has(d.permKey)) return; // cấp qua migrateMarketAssignmentPerms (một lần)
+      if (FEE_FLOW_PERM_KEYS.has(d.permKey)) return; // cấp qua migrateFeeFlowPerms (một lần)
+      if (ISSUE_PERIOD_PERM_KEYS.has(d.permKey)) return; // cấp qua migrateIssuePeriodPerms (một lần)
+      if (BANK_REVIEW_PERM_KEYS.has(d.permKey)) return; // cấp qua migrateBankReviewPerms (một lần)
       if (!known.has(d.permKey)) s.rolePerms.push(d);
     });
     if (migratePc3aSessionPerms(s)) needSave = true;
@@ -944,7 +944,10 @@
     if (migrateCashHandoverPerms(s)) needSave = true;
     if (migrateCentralAccountantPerms(s)) needSave = true;
     if (migrateTechnicianScreenPerms(s)) needSave = true;
-    if (migrateStaffAssignmentPerms(s)) needSave = true;
+    if (migrateMarketAssignmentPerms(s)) needSave = true;
+    if (migrateFeeFlowPerms(s)) needSave = true;
+    if (migrateIssuePeriodPerms(s)) needSave = true;
+    if (migrateBankReviewPerms(s)) needSave = true;
     if (migrateScreenAccessByActor(s)) needSave = true; // sau mọi migration screen cũ
     if (migrateAccountantReconScreen(s)) needSave = true;
     if (migrateRetiredWorkflowScreens(s)) needSave = true;

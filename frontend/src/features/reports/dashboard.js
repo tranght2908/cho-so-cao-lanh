@@ -20,7 +20,7 @@
       noncashAug: U.pct(U.sum(payAug.filter(p => p.method !== 'tm'), p => p.amount), U.sum(payAug, p => p.amount)),
       over: U.sum(over, U.due), overTraders: new Set(over.map(i => i.traderId)).size,
       inc: inc.length, incLate: inc.filter(i => i.deadline < U.today()).length,
-      expiring: db.contracts.filter(c => f(c) && c.status === 'hieuluc' && U.days(U.today(), c.end) <= 30).length,
+      expiring: db.contracts.filter(c => f(c) && c.status === 'ACTIVE' && U.days(U.today(), c.end) <= 30).length,
       app: U.pct(traders.filter(t => t.app).length, traders.length)
     };
   }
@@ -70,15 +70,14 @@
     const rs = revenueSeries(xmMkt);
     const counts = Object.keys(D.STATUS).map(k => ({ label: D.STATUS[k].label, value: db.stalls.filter(x => U.inScope(x, xmMkt) && x.status === k).length, color: D.STATUS[k].color }));
     const alerts = [];
-    const exp = db.contracts.filter(c => U.inScope(c, xmMkt) && c.status === 'hieuluc' && U.days(U.today(), c.end) <= 30).length;
-    const over60 = new Set(db.invoices.filter(i => U.inScope(i, xmMkt) && U.isOver(i) && U.overDays(i) > 60).map(i => i.traderId)).size;
+    const exp = db.contracts.filter(c => U.inScope(c, xmMkt) && c.status === 'ACTIVE' && U.days(U.today(), c.end) <= 30).length;
     const abn = db.readings.filter(r => r.period === '2026-09' && U.inScope(A.idx.stall.get(r.stallId), xmMkt) && r.elecCur != null && (r.elecCur - r.elecPrev) > r.elecAvg * 1.5).length;
     const unmatched = db.bank.filter(b => !b.matched).length;
     if (exp) alerts.push(['warn', `${exp} hợp đồng hết hạn trong 30 ngày tới`, 'tieu-thuong']);
-    if (over60) alerts.push(['danger', `${over60} tiểu thương nợ phí quá hạn trên 60 ngày`, 'cong-no']);
+    // BR-07: Công nợ đã retire — không còn cảnh báo "nợ phí quá hạn" dẫn tới màn Công nợ.
     if (s.incLate) alerts.push(['danger', `${s.incLate} phản ánh, sự cố quá thời hạn xử lý`, 'su-co']);
     if (abn) alerts.push(['warn', `${abn} chỉ số điện tăng bất thường so với trung bình`, 'dien-nuoc']);
-    if (unmatched) alerts.push(['warn', `${unmatched} giao dịch chuyển khoản chưa khớp khoản thu`, 'doi-soat']);
+    if (unmatched) alerts.push(['warn', `${unmatched} giao dịch chuyển khoản chưa khớp khoản thu`, 'theo-doi-ky-doi-soat']);
     const escal = db.incidents.filter(i => U.inScope(i, xmMkt) && i.escalated && i.state !== 'dong');
 
     // RBAC_MARKET_SCOPE_MIGRATION mục 3.B/24: Lãnh đạo/Quản trị (GLOBAL) "xem dữ liệu tổng hợp
