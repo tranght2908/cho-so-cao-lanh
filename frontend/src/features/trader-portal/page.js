@@ -1124,17 +1124,12 @@
       <div class="tp-pay-meta"><div><span>Số tiền</span><b>${U.money(p.amount)}</b></div><div><span>Phương thức</span><b>${U.esc(payMethodLabel(p.method))}</b></div><div><span>Mã giao dịch</span><b>${U.esc(p.id)}</b></div><div><span>Mã biên lai</span><b>${U.esc(p.receipt)}</b></div><div><span>Thời gian</span><b>${U.dmy(p.date)} ${U.esc(p.time || '')}</b></div><div><span>Khoản thu</span><b>${U.esc(i.id)} · Kỳ ${U.per(i.period)}</b></div></div>
     </div><div class="modal-f"><button class="btn" data-act="tp-pay-back-list">Về danh sách thanh toán</button><button class="btn primary" data-act="tp-pay-receipt" data-id="${U.esc(p.id)}">Xem biên lai</button></div>`);
   }
-  // Biên lai phía Tiểu thương: render từ CHÍNH bản ghi A.db.payments mà NV thu phí/ngân hàng đã tạo.
+  // Biên lai phía Tiểu thương: CÙNG mẫu với màn Thu tiền & biên lai của NV thu phí (features/finance/receipt.js), render từ
+  // chính bản ghi A.db.payments mà NV thu phí/ngân hàng đã tạo. Tiểu thương chỉ In / Đóng (không gửi lại qua Zalo).
   function payReceiptModal(p) {
-    const i = A.idx.invoice.get(p.invoiceId), t = A.idx.trader.get(p.traderId) || {};
-    const lines = i && Number(p.amount) === Number(i.amount) ? payPointGroups(i).map(g => `<div class="tp-pay-line"><span>Điểm ${U.esc(g.stall ? g.stall.code : g.id || '—')}</span><b>${U.money(g.total)}</b></div>`).join('')
-      : `<div class="tp-pay-line"><span>Khoản thu ${U.esc(p.invoiceId)}${p.debtId ? ' · thu hồi nợ ' + U.esc(p.debtId) : ''}</span><b>${U.money(p.amount)}</b></div>`;
-    A.modal(A.mHead('Biên lai thu tiền') + `<div class="modal-b"><div class="tp-receipt">
-      <div class="tp-receipt-org"><b>UBND PHƯỜNG CAO LÃNH</b><span>${U.esc(payMarketName(p.market || (i && i.market)).toUpperCase())}</span></div>
-      <h4>BIÊN LAI THU TIỀN</h4>
-      <div class="tp-pay-meta"><div><span>Số biên lai</span><b>${U.esc(p.receipt)}</b></div><div><span>Tiểu thương</span><b>${U.esc(t.name || '—')}</b></div><div><span>Mã TT</span><b>${U.esc(t.id || p.traderId)}</b></div><div><span>Kỳ thu</span><b>${i ? U.per(i.period) : '—'}</b></div><div><span>Ngày thanh toán</span><b>${U.dmy(p.date)} ${U.esc(p.time || '')}</b></div><div><span>Phương thức</span><b>${U.esc(payMethodLabel(p.method))}</b></div><div><span>Mã giao dịch</span><b>${U.esc(p.id)}</b></div><div><span>Mã tra cứu</span><b>${U.esc(p.lookup || '—')}</b></div><div><span>Người thu</span><b>${U.esc(A.paymentActorLabel(p))}</b></div></div>
-      <h4 class="tp-pay-sub">Nội dung thu</h4><div class="tp-pay-lines">${lines}<div class="tp-pay-line is-sum"><span>Tổng cộng</span><b>${U.money(p.amount)}</b></div></div>
-    </div></div><div class="modal-f"><button class="btn" data-act="close">Đóng</button><button class="btn primary" data-act="print">In biên lai</button></div>`);
+    const R = A.features.finance.receipt;
+    R.style();
+    A.modal(A.mHead('Biên lai điện tử') + `<div class="modal-b">${R.html(p)}</div><div class="modal-f"><button class="btn" data-act="print">In biên lai</button><button class="btn primary" data-act="close">Đóng</button></div>`, true);
   }
   // Mọi handler kiểm tra lại: đúng vai trò Tiểu thương + khoản thu thuộc hồ sơ đang đăng nhập + chợ trong scope.
   function payGuard(el) {
