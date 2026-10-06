@@ -425,7 +425,7 @@
         : canCollect ? `<button class="btn sm primary" data-act="tt-pay-open" data-id="${r.inv.id}">Thu tiền</button>` : '';
       return `<tr><td><b>${U.esc(r.t.name)}</b>${r.t.phone ? `<div class="small muted">${U.maskPhone(r.t.phone)}</div>` : ''}</td><td>${U.esc(r.t.id)}<div class="small muted">${U.esc(r.inv.id)}</div></td>
         <td>${codes.length} điểm<div class="small muted">${U.esc(codes.join(', '))}</div></td><td class="num">${U.money(r.inv.amount)}</td><td class="num">${U.money(r.inv.amount - r.remaining)}</td><td class="num"><b>${U.money(r.remaining)}</b></td>
-        <td>${U.dmy(r.inv.due)}</td><td>${ttTag(st[0], st[1])}</td><td>${method}</td><td class="nowrap tt-actions">${action}${detail}</td></tr>`;
+        <td>${U.dmy(r.inv.due)}</td><td>${r.status !== 'PAID' && ttTransferIntent(r.inv.id) ? ttTag('Chờ ghi nhận CK', 'info') : ttTag(st[0], st[1])}</td><td>${r.status !== 'PAID' && ttTransferIntent(r.inv.id) ? 'Chuyển khoản <div class="small muted">chờ ngân hàng báo có</div>' : method}</td><td class="nowrap tt-actions">${action}${detail}</td></tr>`;
     });
     ttReplaceTraderCodeColumn(rows.slice(pg.start, pg.end));
     return `<div class="card-b tt-toolbar">
@@ -531,22 +531,39 @@
     if (!MP().canCollectInvoice(inv)) return { err: 'Khoản phải thu không ở trạng thái được thu' };
     return { inv, p, acc, code, t: A.idx.trader.get(inv.traderId) || { id: inv.traderId, name: inv.traderId }, remaining: U.due(inv) };
   }
+  // ---- THU_CK_QUA_MA_QR (NV thu phí): đưa mã QR của CHÍNH khoản phải thu (cùng mã tiểu thương nhận trên app: tài khoản thu
+  // của chợ + nội dung CHOSO <mã khoản>) cho tiểu thương quét ngay tại chợ. NV KHÔNG tự xác nhận đã nhận tiền chuyển khoản:
+  // chỉ tạo ý định chuyển khoản (A.db.bank, intentType TRADER_TRANSFER — dùng chung với cổng Tiểu thương), tiền được ghi nhận khi
+  // ngân hàng báo có (prototype: nút mô phỏng → A.applyPayment 'ck', người thu = Hệ thống). Quyền: thu-tien.thu + marketScopes
+  // (ttPayContext), kiểm tra lại ở mọi handler. Không thêm permission mới.
+  const ttBankAccount = () => (A.BANK_ACCOUNTS ? A.BANK_ACCOUNTS.listByMarket(ui.market) : []).find(a => a.isCollectionAccount && a.status !== 'inactive') || null;
+  const ttTransferRef = inv => inv.paymentReference || ((inv.qrReference || {}).reference) || ('CHOSO ' + inv.id);
+  const ttTransferIntent = invId => (A.db.bank || []).find(x => x && x.invoiceId === invId && x.intentType === 'TRADER_TRANSFER' && x.status === 'PENDING') || null;
+  const ttNextIntentId = () => 'SK' + U.pad((A.db.bank || []).reduce((m, x) => Math.max(m, Number(String((x || {}).id || '').replace(/\D/g, '')) || 0), 0) + 1, 4);
   function ttPayModal() {
     const st = ui.ttPay, c = st && ttPayContext(st.invId);
     if (!c || c.err) { ui.ttPay = null; A.closeModal(); if (c) U.toast(c.err); return; }
     const mk = U.market(ui.market) || {}, cash = st.method !== 'transfer';
     const amount = st.amount == null ? c.remaining : st.amount, ok = amount === c.remaining;
-    const ref = c.inv.paymentReference || (c.inv.qrReference || {}).reference || '';
-    const account = A.BANK_ACCOUNTS && A.BANK_ACCOUNTS.listByMarket(ui.market).find(a => a.isCollectionAccount && a.status !== 'inactive');
+    const ref = ttTransferRef(c.inv), account = ttBankAccount(), intent = ttTransferIntent(c.inv.id);
     const review = MP().reviewBank(c.p).filter(b => b.receivableId === c.inv.id || String(b.ref || '').includes(c.inv.id));
     const cashHtml = `<div class="tt-cash"><div class="tt-bd-line"><span>Số tiền phải thu</span><b>${U.money(c.remaining)}</b></div>
         <div class="field"><label for="tt-pay-amount">Số tiền nhận (đ)</label><input id="tt-pay-amount" class="input" type="number" min="0" step="1000" inputmode="numeric" data-in="tt-pay-amount" data-remaining="${c.remaining}" value="${amount == null || amount < 0 ? '' : amount}"></div>
         <div id="tt-pay-amount-msg" class="small ${ok ? 'muted' : 'tt-err'}">${ok ? 'Khoản phải thu phải được thanh toán đủ. Hệ thống không hỗ trợ thu một phần.' : 'Số tiền nhận phải bằng đúng ' + U.money(c.remaining) + '. Hệ thống không hỗ trợ thu một phần.'}</div>
         <div class="field"><label for="tt-pay-note">Ghi chú (không bắt buộc)</label><textarea id="tt-pay-note" class="input" rows="2" data-in="tt-pay-note">${U.esc(st.note || '')}</textarea></div></div>`;
-    const transferHtml = `<div class="tt-cash"><dl class="tt-sum">${account ? `<div><dt>Tài khoản nhận</dt><dd>${U.esc(account.accountNumber)} · ${U.esc(A.BANK_ACCOUNTS.bankName(account.bankCode))}</dd></div><div><dt>Chủ tài khoản</dt><dd>${U.esc(account.accountHolderName || '')}</dd></div>` : ''}
-        <div><dt>Số tiền</dt><dd>${U.money(c.remaining)}</dd></div>${ref ? `<div><dt>Nội dung chuyển khoản</dt><dd><b>${U.esc(ref)}</b></dd></div>` : ''}</dl>
-        <div class="note info">Giao dịch chuyển khoản sẽ được hệ thống ghi nhận khi khớp được giao dịch thanh toán. Nhân viên thu phí không tự xác nhận đã nhận tiền chuyển khoản.</div>
-        ${review.length ? `<div class="note" style="margin-top:8px">Có ${review.length} giao dịch ngân hàng liên quan khoản này đang <b>cần tra soát</b>.</div>` : ''}</div>`;
+    const transferHtml = account ? `<div class="tp-pay-transfer">
+        <div class="tp-pay-qr"><b>Đưa tiểu thương quét mã QR</b>${U.qr(ref + ' ' + c.remaining, 260)}<small>Cùng mã QR tiểu thương nhận trên app. Mã minh họa (prototype) — chưa kết nối ngân hàng/VietQR thật.</small></div>
+        <div class="tp-pay-bank"><b>Thông tin chuyển khoản</b>
+          <div><span>Ngân hàng</span><b>${U.esc(A.BANK_ACCOUNTS.bankName(account.bankCode))}</b></div>
+          <div><span>Số tài khoản</span><b>${U.esc(account.accountNumber)}</b></div>
+          <div><span>Chủ tài khoản</span><b>${U.esc(account.accountHolderName || '')}</b></div>
+          <div><span>Số tiền</span><b>${U.money(c.remaining)}</b></div>
+          <div class="tp-pay-ref"><span>Nội dung chuyển khoản</span><b>${U.esc(ref)}</b></div>
+        </div></div>
+        ${intent ? `<div class="note warn" style="margin-top:10px">Đã khởi tạo chuyển khoản lúc ${U.esc(intent.createdAt || intent.at || '')} — đang chờ ngân hàng báo có.</div>` : ''}
+        <div class="note info" style="margin-top:10px">Tiểu thương quét mã và chuyển đúng <b>${U.money(c.remaining)}</b>, giữ nguyên nội dung chuyển khoản. Hệ thống tự ghi nhận khi ngân hàng báo có — nhân viên thu phí không tự xác nhận đã nhận tiền chuyển khoản.</div>
+        ${review.length ? `<div class="note" style="margin-top:8px">Có ${review.length} giao dịch ngân hàng liên quan khoản này đang <b>cần tra soát</b>.</div>` : ''}`
+      : '<div class="note warn">Chợ chưa khai báo tài khoản nhận chuyển khoản. Vui lòng liên hệ Kế toán Trung tâm.</div>';
     A.modal(A.mHead('Thu tiền') + `<div class="modal-b tt-pay">
       <div class="tt-pay-who"><b>${U.esc(c.t.name)}</b> (${U.esc(c.t.id)})<div class="small muted">Kỳ thu ${U.esc(ttPeriodLabel(c.p))} · ${U.esc(mk.name || ui.market)} · ${U.esc(c.inv.id)}</div></div>
       <dl class="tt-sum"><div><dt>Tổng phải thu</dt><dd>${U.money(c.inv.amount)}</dd></div><div><dt>Đã thanh toán</dt><dd>${U.money(c.inv.paid)}</dd></div><div class="is-total"><dt>Còn phải thu</dt><dd>${U.money(c.remaining)}</dd></div></dl>
@@ -554,12 +571,74 @@
       <h4 class="tt-sec-title">Phương thức thanh toán</h4>
       <div class="tt-methods">${[['cash', 'Tiền mặt'], ['transfer', 'Chuyển khoản']].map(x => `<label class="tt-method ${(x[0] === 'cash') === cash ? 'on' : ''}"><input type="radio" name="tt-pay-method" value="${x[0]}" data-ch="tt-pay-method" ${(x[0] === 'cash') === cash ? 'checked' : ''}> ${x[1]}</label>`).join('')}</div>
       ${cash ? cashHtml : transferHtml}</div>
-      <div class="modal-f">${cash ? `<button class="btn" data-act="close">Hủy</button><button id="tt-pay-submit" class="btn primary" data-act="tt-pay-review" ${ok ? '' : 'disabled'}>Xác nhận thu tiền</button>` : '<button class="btn" data-act="close">Đóng</button>'}</div>`);
+      <div class="modal-f">${cash ? `<button class="btn" data-act="close">Hủy</button><button id="tt-pay-submit" class="btn primary" data-act="tt-pay-review" ${ok ? '' : 'disabled'}>Xác nhận thu tiền</button>` : `<button class="btn" data-act="close">Đóng</button>${account ? `<button class="btn primary" data-act="tt-pay-transfer-start">${intent ? 'Xem trạng thái chờ ghi nhận' : 'Tiểu thương đã quét — chờ ghi nhận'}</button>` : ''}`}</div>`);
   }
+  function ttTransferPendingModal(c) {
+    const x = ttTransferIntent(c.inv.id) || {};
+    A.modal(A.mHead('Đang chờ ghi nhận giao dịch') + `<div class="modal-b tt-pay">
+      <div class="tp-pay-state is-pending"><b>Đang chờ ghi nhận giao dịch</b><p>Hệ thống đang chờ ngân hàng báo có cho khoản của ${U.esc(c.t.name)}.</p></div>
+      <dl class="tt-sum"><div><dt>Tiểu thương</dt><dd>${U.esc(c.t.name)} (${U.esc(c.t.id)})</dd></div><div><dt>Mã khoản phải thu</dt><dd>${U.esc(c.inv.id)}</dd></div><div><dt>Nội dung</dt><dd><b>${U.esc(x.ref || ttTransferRef(c.inv))}</b></dd></div><div><dt>Ngân hàng</dt><dd>${U.esc(x.bankName || '—')}</dd></div><div><dt>Thời gian khởi tạo</dt><dd>${U.esc(x.createdAt || x.at || '—')}</dd></div><div class="is-total"><dt>Số tiền</dt><dd>${U.money(c.remaining)}</dd></div></dl>
+      <div class="note info" style="margin-top:10px">Khi ngân hàng báo có, khoản thu tự chuyển sang Đã thu đủ, biên lai điện tử được phát hành và gửi tới app của tiểu thương.</div>
+      <div class="tp-pay-demo"><span>Công cụ demo prototype — mô phỏng ngân hàng gửi báo có, không phải tích hợp ngân hàng thật.</span><button class="btn sm" data-act="tt-pay-demo-bank">Mô phỏng: ngân hàng báo có</button></div>
+    </div><div class="modal-f"><button class="btn" data-act="tt-pay-back-list">Quay về danh sách</button><button class="btn primary" data-act="tt-pay-refresh">Làm mới trạng thái</button></div>`);
+  }
+  function ttTransferSuccessModal(inv) {
+    const pay = A.db.payments.filter(x => x.invoiceId === inv.id && A.receiptBusinessStateOk(x)).pop(), t = A.idx.trader.get(inv.traderId) || {};
+    ui.ttPay = null;
+    if (!pay) { A.closeModal(); A.render(); return U.toast('Khoản phải thu đã được thu đủ.'); }
+    A.modal(A.mHead('Thanh toán thành công') + `<div class="modal-b tt-pay"><div class="tt-success">✓ ĐÃ GHI NHẬN CHUYỂN KHOẢN</div>
+      <div class="tt-pay-who"><b>${U.esc(t.name || inv.traderId)}</b><div class="small muted">${U.esc(inv.id)}</div></div>
+      <dl class="tt-sum"><div class="is-total"><dt>Số tiền</dt><dd>${U.money(pay.amount)}</dd></div><div><dt>Phương thức</dt><dd>${U.esc(D.METHOD[pay.method] || pay.method)}</dd></div><div><dt>Mã giao dịch</dt><dd>${U.esc(pay.id)}</dd></div><div><dt>Mã biên lai</dt><dd>${U.esc(pay.receipt)}</dd></div><div><dt>Thời gian</dt><dd>${U.dmy(pay.date)} ${U.esc(pay.time || '')}</dd></div></dl>
+      <div class="note info" style="margin-top:10px">Biên lai điện tử đã được gửi tới app của tiểu thương; khoản thu trên app chuyển sang Đã thanh toán.</div></div>
+      <div class="modal-f"><button class="btn" data-act="tt-receipt-print" data-id="${U.esc(pay.receipt)}">In biên lai</button><button class="btn" data-act="close">Đóng</button><button class="btn primary" data-act="tt-receipt" data-id="${U.esc(pay.receipt)}">Xem biên lai</button></div>`);
+  }
+  // Khoản đã thu đủ (vd. ngân hàng vừa báo có) → màn thành công; còn lại → ngữ cảnh thu hợp lệ (đủ quyền + đúng chợ/kỳ).
+  function ttTransferContext() {
+    const st = ui.ttPay, inv = st && A.idx.invoice.get(st.invId);
+    if (inv && inv.status === 'paid' && A.receivableMarket(inv) === ui.market && ttCanCollect(ui.market)) return { paid: inv };
+    const c = st && ttPayContext(st.invId);
+    if (!c || c.err) { ui.ttPay = null; A.closeModal(); A.render(); U.toast(c ? c.err : 'Phiên thu tiền không còn hợp lệ'); return null; }
+    return c;
+  }
+  A.ACT['tt-pay-transfer-start'] = () => {
+    const c = ttTransferContext(); if (!c) return;
+    if (c.paid) return ttTransferSuccessModal(c.paid);
+    const bank = ttBankAccount();
+    if (!bank) return U.toast('Chợ chưa khai báo tài khoản nhận chuyển khoản.');
+    if (!ttTransferIntent(c.inv.id)) {
+      const ref = ttTransferRef(c.inv), at = U.today() + ' ' + U.nowTime();
+      A.db.bank.push({ id: ttNextIntentId(), intentType: 'TRADER_TRANSFER', source: 'COLLECTOR_QR', initiatedBy: c.acc.id, invoiceId: c.inv.id, traderId: c.inv.traderId,
+        market: ui.market, marketId: ui.market, periodId: c.inv.billingPeriodId || '', amount: c.remaining, bankAccountId: bank.id,
+        transferContent: ref, ref, bankName: A.BANK_ACCOUNTS.bankName(bank.bankCode), createdAt: at, at, status: 'PENDING', matched: false });
+      U.log('Khởi tạo chuyển khoản qua mã QR tại chợ cho khoản ' + c.inv.id + ' · ' + U.money(c.remaining));
+      A.save();
+    }
+    A.render(); ttTransferPendingModal(c);
+  };
+  // DEMO PROTOTYPE: mô phỏng ngân hàng báo có — thu ĐỦ số còn lại qua A.applyPayment 'ck' (người thu = Hệ thống), khớp ý định
+  // chuyển khoản đang chờ. Vẫn qua kiểm tra trạng thái kỳ của chợ trong ttPayContext.
+  A.ACT['tt-pay-demo-bank'] = () => {
+    const c = ttTransferContext(); if (!c) return;
+    if (c.paid) return ttTransferSuccessModal(c.paid);
+    if (!ttTransferIntent(c.inv.id)) return U.toast('Chưa khởi tạo chuyển khoản cho khoản thu này.');
+    const pays = A.applyPayment([c.inv.id], c.remaining, 'ck', 'Hệ thống');
+    if (!pays.length || c.inv.status !== 'paid') return U.toast('Không ghi nhận được giao dịch.');
+    U.log('Ngân hàng báo có (mô phỏng) khoản ' + c.inv.id + ' · ' + U.money(pays[pays.length - 1].amount) + ' · biên lai ' + pays[pays.length - 1].receipt);
+    A.save(); A.render(); ttTransferSuccessModal(c.inv);
+  };
+  // Làm mới = đọc lại state dùng chung (tiểu thương/ngân hàng có thể đã ghi nhận ở tab khác); không tự biến giao dịch thành công.
+  A.ACT['tt-pay-refresh'] = () => {
+    if (A.refreshSharedState) A.refreshSharedState();
+    const c = ttTransferContext(); if (!c) return;
+    if (c.paid) { A.render(); return ttTransferSuccessModal(c.paid); }
+    U.toast('Chưa có giao dịch được ghi nhận. Vui lòng thử lại sau.');
+    ttTransferPendingModal(c);
+  };
+  A.ACT['tt-pay-back-list'] = () => { ui.ttPay = null; A.closeModal(); A.render(); };
   A.ACT['tt-pay-open'] = el => {
     const c = ttPayContext(el.dataset.id);
     if (c.err) { U.toast(c.err); A.render(); return; }
-    ui.ttPay = { invId: c.inv.id, method: 'cash', amount: null, note: '' };
+    ui.ttPay = { invId: c.inv.id, method: ttTransferIntent(c.inv.id) ? 'transfer' : 'cash', amount: null, note: '' };
     ttPayModal();
   };
   A.ACT['tt-pay-back'] = () => ttPayModal();
