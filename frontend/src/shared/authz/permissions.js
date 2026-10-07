@@ -550,6 +550,10 @@
   // BANK_REVIEW v1: Kế toán Trung tâm xử lý giao dịch ngân hàng cần tra soát tại Đối soát thu tiền — cấp theo default seed 1 lần.
   const BANK_REVIEW_PERM_VERSION = 1;
   const BANK_REVIEW_PERM_KEYS = new Set(['action:theo-doi-ky-doi-soat.xu-ly-ngan-hang']);
+  // v2: force-heal browsers that already persisted the v1 marker while still
+  // missing one of the trader complaint permissions.
+  const TRADER_COMPLAINT_PERM_VERSION = 2;
+  const TRADER_COMPLAINT_PERM_KEYS = new Set(['screen:mini-app', 'action:mini-app.gui-phan-anh', 'action:mini-app.danh-gia-phan-anh']);
   function freshState() {
     return {
       schemaVersion: A.RBAC_SCHEMA,
@@ -573,6 +577,7 @@
       feeFlowPermVersion: FEE_FLOW_PERM_VERSION,
       issuePeriodPermVersion: ISSUE_PERIOD_PERM_VERSION,
       bankReviewPermVersion: BANK_REVIEW_PERM_VERSION,
+      traderComplaintPermVersion: TRADER_COMPLAINT_PERM_VERSION,
       screenAccessByActorVersion: SCREEN_ACCESS_BY_ACTOR_VERSION,
       accountantReconScreenVersion: ACCOUNTANT_RECON_SCREEN_VERSION,
       retiredWorkflowScreenVersion: RETIRED_WORKFLOW_SCREEN_VERSION,
@@ -771,6 +776,16 @@
     stored.bankAccountPermVersion = BANK_ACCOUNT_PERM_VERSION;
     return true;
   }
+  function migrateTraderComplaintPerms(stored) {
+    if (stored.traderComplaintPermVersion >= TRADER_COMPLAINT_PERM_VERSION) return false;
+    defaultRolePermissions().filter(r => r.roleId === 'trader' && TRADER_COMPLAINT_PERM_KEYS.has(r.permKey)).forEach(r => {
+      if (!stored.rolePerms.some(x => x.roleId === r.roleId && x.permKey === r.permKey)) {
+        stored.rolePerms.push(Object.assign({}, r, { grantedAt: 'migrate-trader-complaints', grantedBy: 'Hệ thống' }));
+      }
+    });
+    stored.traderComplaintPermVersion = TRADER_COMPLAINT_PERM_VERSION;
+    return true;
+  }
   function migratePc3aSessionPerms(stored) {
     if (stored.pc3aSessionPermVersion >= PC3A_SESSION_PERM_VERSION) return false;
     const knownKeys = new Set(stored.rolePerms.map(r => r.permKey));
@@ -866,6 +881,7 @@
     migrateFeeFlowPerms(stored); // sau migrateMeterCompletePerms (từng cấp dien-nuoc.chot-ky)
     migrateIssuePeriodPerms(stored);
     migrateBankReviewPerms(stored);
+    migrateTraderComplaintPerms(stored);
     migrateScreenAccessByActor(stored); // sau mọi migration screen cũ (vd. migrateTechnicianScreenPerms)
     migrateAccountantReconScreen(stored); // sau migrateCentralAccountantPerms v1 (từng cấp screen:doi-soat)
     migrateRetiredWorkflowScreens(stored); // sau mọi migration từng cấp screen:doi-soat/cong-no
@@ -948,6 +964,7 @@
     if (migrateFeeFlowPerms(s)) needSave = true;
     if (migrateIssuePeriodPerms(s)) needSave = true;
     if (migrateBankReviewPerms(s)) needSave = true;
+    if (migrateTraderComplaintPerms(s)) needSave = true;
     if (migrateScreenAccessByActor(s)) needSave = true; // sau mọi migration screen cũ
     if (migrateAccountantReconScreen(s)) needSave = true;
     if (migrateRetiredWorkflowScreens(s)) needSave = true;
