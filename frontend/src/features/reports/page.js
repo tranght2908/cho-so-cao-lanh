@@ -5,6 +5,12 @@
   const U = A.U, ui = A.ui;
   const isOpen = i => A.features.complaints.isOpen(i);
   const late = i => A.features.complaints.late(i);
+  const traderCommodities = t => {
+    const BP = A.features.businessPoints && A.features.businessPoints.service;
+    if (!BP) return [];
+    return Array.from(new Set((A.db.contracts || []).filter(c => c.traderId === t.id && BP.contractPhase(c, U.today()) === 'current')
+      .map(c => BP.industry(A.idx.stall.get(c.businessPointId || c.stallId))).filter(Boolean)));
+  };
   // ---------- Báo cáo ----------
   // xmMkt: A.xmMarket() — 'CL'/'TTD' cụ thể hoặc 'ALL' (gộp trong phạm vi account, xem core.js).
   // Báo cáo thống kê là màn cross-market nên dùng xmMkt thay vì selectedMarket (ui.market) toàn
@@ -40,7 +46,7 @@
       miengiam: { t: 'Miễn giảm, điều chỉnh', cols: ['Khoản', 'Tiểu thương', 'Kỳ', 'Mức %', 'Số tiền giảm (đ)', 'Lý do'],
         rows: [['PT-202609-00412', 'Lê Thị Kim Hoa', '09/2026', 50, 180000, 'Sửa chữa mái che khu thủy hải sản']].concat(inv.filter(i => i.adjust).map(i => [i.id, A.idx.trader.get(i.traderId).name, U.per(i.period), i.adjust.pct, i.adjust.value, i.adjust.reason])) },
       miniapp: { t: 'Mức độ sử dụng mini app', cols: ['Chợ', 'Ngành hàng', 'Tiểu thương', 'Đã cài', 'Tỷ lệ %'],
-        rows: (() => { const m = {}; db.traders.filter(x => U.inScope(x, xmMkt)).forEach(t => { const k = t.market + '|' + t.cat; m[k] = m[k] || [0, 0]; m[k][0]++; if (t.app) m[k][1]++; }); return Object.keys(m).map(k => [U.mShort(k.split('|')[0]), k.split('|')[1], m[k][0], m[k][1], U.pct(m[k][1], m[k][0])]); })() }
+        rows: (() => { const m = {}; db.traders.filter(x => U.inScope(x, xmMkt)).forEach(t => { (traderCommodities(t).length ? traderCommodities(t) : ['Chưa bố trí']).forEach(cat => { const k = t.market + '|' + cat; m[k] = m[k] || [0, 0]; m[k][0]++; if (t.app) m[k][1]++; }); }); return Object.keys(m).map(k => [U.mShort(k.split('|')[0]), k.split('|')[1], m[k][0], m[k][1], U.pct(m[k][1], m[k][0])]); })() }
     };
   }
   const fmtCell = (v, col) => typeof v === 'number' ? (/%/.test(col) ? U.pctTxt(v) : /\(đ\)/.test(col) ? U.money(v) : v.toLocaleString('vi-VN')) : U.esc(v);

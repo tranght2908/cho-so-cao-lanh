@@ -33,7 +33,7 @@
   // GIỮ NGUYÊN không đổi/xoá).
   const RANKS = { HANG_1: 'Hạng 1', HANG_2: 'Hạng 2', HANG_3: 'Hạng 3' };
   const STATUS = { NOT_ACTIVE: ['Chưa hoạt động', 'warn'], ACTIVE: ['Đang hoạt động', 'ok'] };
-  const LAYOUT_STATUS = { PENDING_SETUP: 'Chờ thiết lập', SETUP_COMPLETED: 'Đã thiết lập' };
+  const LAYOUT_STATUS = { PENDING_SETUP: 'Chưa thiết lập', SETUP_COMPLETED: 'Đã thiết lập' };
   const normalizeStatus = value => value === 'ACTIVE' || value === 'active' ? 'ACTIVE' : 'NOT_ACTIVE';
   const normalizeLayoutStatus = value => value === 'SETUP_COMPLETED' ? 'SETUP_COMPLETED' : 'PENDING_SETUP';
   // Cả 12 chợ thuộc một Tổ Quản lý chợ. Không suy ra đơn vị hoặc nhân sự theo từng market.
@@ -74,7 +74,9 @@
       manager: '',
       phone: '',
       priceConfigId: m.id === 'CL' ? 'QD480_CHO_CAO_LANH' : 'QD480_NHOM_CON_LAI',
-      status: 'ACTIVE', layoutStatus: 'PENDING_SETUP', layoutLifecycleVersion: 0,
+      // A catalog record or declared area never activates a market. Only the
+      // lifecycle migration/complete-layout command may mark it active.
+      status: 'NOT_ACTIVE', layoutStatus: 'PENDING_SETUP', layoutLifecycleVersion: 0,
       createdBy: 'Hệ thống (seed mặc định)', createdAt: 'seed', updatedBy: null, updatedAt: null
     };
   }
@@ -89,6 +91,13 @@
   }
   let LIST = loadList();
   function save() { try { localStorage.setItem(CKEY, JSON.stringify(LIST)); } catch (e) { /* bỏ qua */ } }
+  function reload() {
+    const next = loadList();
+    if (JSON.stringify(next) === JSON.stringify(LIST)) return { changed: false };
+    LIST = next;
+    ensureSeeded();
+    return { changed: true };
+  }
   // Bổ sung meta mặc định cho market builtin MỚI xuất hiện trong D.MARKETS (chưa từng có trong
   // LIST đã lưu) — idempotent, không đụng bản ghi đã có/đã tuỳ biến.
   function ensureSeeded() {
@@ -107,6 +116,25 @@
   ensureSeeded();
 
   function metaRow(id) { return LIST.find(x => x.id === id); }
+
+  // Single catalog-side lifecycle normalizer. The lifecycle service supplies
+  // whether the canonical layout graph is complete; this function persists the
+  // matching pair atomically and is safe to invoke on every application load.
+  function normalizeLifecycle(id, layoutComplete, user) {
+    const meta = metaRow(id);
+    if (!meta) return null;
+    const layoutStatus = layoutComplete ? 'SETUP_COMPLETED' : 'PENDING_SETUP';
+    const status = layoutComplete ? 'ACTIVE' : 'NOT_ACTIVE';
+    const changed = meta.layoutStatus !== layoutStatus || meta.status !== status || !meta.layoutLifecycleVersion;
+    if (!changed) return { changed: false, market: mergedRow(id) };
+    meta.layoutStatus = layoutStatus;
+    meta.status = status;
+    meta.layoutLifecycleVersion = 1;
+    meta.updatedBy = user || 'Migration lifecycle';
+    meta.updatedAt = new Date().toISOString();
+    save();
+    return { changed: true, market: mergedRow(id) };
+  }
   // Quy mô chợ & loại diện tích kinh doanh áp dụng do Quản trị hệ thống khai báo:
   //   totalArea          : tổng diện tích chợ (m²)
   //   businessArea       : diện tích phục vụ kinh doanh (m²), 0 <= businessArea <= totalArea
@@ -124,7 +152,8 @@
     const cap = Array.isArray(meta.capacityByAreaType)
       ? meta.capacityByAreaType.filter(x => x && x.areaTypeId).map(x => ({ areaTypeId: String(x.areaTypeId), maxPointCount: num(x.maxPointCount) || 0, maxArea: num(x.maxArea) || 0 }))
       : null;
-    return { totalArea: num(meta.totalArea), businessArea: num(meta.businessArea), capacityByAreaType: cap, allowedAreaTypeIds: allowedAreaTypesOf(meta) };
+    const totalArea = num(meta.totalArea), businessArea = num(meta.businessArea);
+    return { totalArea, businessArea, nonBusinessArea: totalArea !== null && businessArea !== null ? totalArea - businessArea : null, capacityByAreaType: cap, allowedAreaTypeIds: allowedAreaTypesOf(meta) };
   }
   // Đọc tương thích: ưu tiên allowedAreaTypeIds; bản ghi cũ chỉ có capacityByAreaType → suy ra các loại
   // đã thực sự khai báo chỉ tiêu (> 0 điểm hoặc > 0 m²). Form cũ luôn ghi đủ 4 loại kể cả dòng 0/0, nên
@@ -200,6 +229,7 @@
     get: id => { ensureSeeded(); return mergedRow(id); },
     isBuiltin: isBuiltin,
     effectiveMarkets: effectiveMarkets,
+    reload: reload,
     codeTaken: (code, excludeId) => {
       const c = String(code || '').trim().toUpperCase();
       if (!c) return false;
@@ -233,6 +263,7 @@
         // app, vd. Mặt bằng chợ, MARKET_LABELS ở js/core.js) — cập nhật TRỰC TIẾP tại đây khi có,
         // không lưu bản sao trong meta để tránh 2 nguồn lệch nhau. Không đổi `short`/`hang`/`floors`.
         const m = D.MARKETS.find(x => x.id === id);
+        if (m && patch.name !== undefined) m.name = String(patch.name || '').trim();
         if (m && patch.address !== undefined) m.address = String(patch.address || '').trim();
       } else {
         if (patch.name !== undefined) meta.name = String(patch.name || '').trim();
@@ -248,6 +279,7 @@
       save();
       return mergedRow(id);
     },
+    normalizeLifecycle: normalizeLifecycle,
     completeLayoutSetup: (id, user) => {
       const meta = metaRow(id);
       if (!meta) return null;
@@ -265,9 +297,11 @@
       priceConfig: MC.priceConfig,
       codeTaken: MC.codeTaken,
       effectiveMarkets: MC.effectiveMarkets,
+      reload: MC.reload,
       nextCode: MC.nextCode,
       add: MC.add,
       update: MC.update,
+      normalizeLifecycle: MC.normalizeLifecycle,
       completeLayoutSetup: MC.completeLayoutSetup,
       RANKS: MC.RANKS,
       STATUS: MC.STATUS,

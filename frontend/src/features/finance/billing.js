@@ -18,6 +18,9 @@
     return rows.sort((a, b) => String(b.effectiveFrom || '').localeCompare(String(a.effectiveFrom || '')))[0] || null;
   }
   function landRate(st, date) {
+    const resolved = A.SERVICE_CFG && A.SERVICE_CFG.resolveApplicableMarketFeePolicy
+      ? A.SERVICE_CFG.resolveApplicableMarketFeePolicy({ point: st, startDate: date }) : null;
+    if (resolved) return resolved;
     // DON_GIA_MAT_BANG_DUNG_CHUNG: ưu tiên mức dùng chung (scope SHARED) có chợ của điểm trong marketIds và đúng loại
     // diện tích của điểm; không có thì giữ cách cũ (đơn giá theo chợ).
     const shared = (A.SERVICE_CFG ? A.SERVICE_CFG.list('stallPrices') : []).filter(x => x.scope === 'SHARED' && active(x, date) && (x.marketIds || []).includes(st.market) && x.areaTypeId && x.areaTypeId === st.areaTypeId)

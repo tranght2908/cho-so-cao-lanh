@@ -132,9 +132,11 @@
     if (!st) return 'trong';
     if (operational(st) === 'suspended' || operational(st) === 'inactive' || usage(st) === 'SUSPENDED') return 'ngung';
     if (operational(st) === 'disputed') return 'tranhchap';
-    if (usage(st) === 'VACANT') return 'trong';
     const c = service.contractOn(st.id, date || A.U.today());
-    if (!c) return 'thue';
+    // Occupancy belongs to the active contract interval, not the denormalized
+    // usageStatus cache. This keeps layout, point list and contract views in
+    // agreement even while legacy data is being normalized.
+    if (!c) return 'trong';
     return service.debtStatus(st, c.id) === 'overdue' ? 'no' : 'thue';
   };
   service.activeSeller = function (st) { return st ? (A.db.directSellerAssignments || []).find(x => x.pointId === st.id && x.status === 'ACTIVE') || null : null; };

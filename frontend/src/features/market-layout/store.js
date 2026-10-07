@@ -360,7 +360,12 @@
     const next = [];
     (groups || []).forEach(g => (check.pointCodes[g.id] || []).forEach((code, i) => next.push({ id: mid + '-' + code, code, market: mid, rowId, num: Number((code.match(/(\d+)$/) || [0, i + 1])[1]), area: n(g.areaPerPoint), areaTypeId: g.areaTypeId, status: 'active', operationalStatus: 'active', usageStatus: 'VACANT', usageReason: null, hasMeter: false, type: '', note: '', history: [] })));
     // Build all points first; one array swap + one save prevents a partial create.
-    db().stalls = list('stalls').concat(next); A.reindex(); A.save();
+    db().stalls = list('stalls').concat(next); A.reindex();
+    // The incremental workspace is a valid setup path. A market becomes
+    // operational only after its canonical graph has a valid point.
+    const lifecycle = A.features && A.features.lifecycle && A.features.lifecycle.service;
+    if (lifecycle && lifecycle.normalizeMarketLifecycle) lifecycle.normalizeMarketLifecycle(mid, 'Thiết lập mặt bằng');
+    A.save();
     return { ok: true, stalls: next, check };
   }
   function setupPreview(draft) {

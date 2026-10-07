@@ -15,6 +15,10 @@
   const point = id => A.idx && A.idx.stall ? A.idx.stall.get(id) : null;
   const trader = id => A.idx && A.idx.trader ? A.idx.trader.get(id) : null;
   const day = value => value || A.U.today();
+  // A signed contract may start in the future. `ACTIVE` is its persisted
+  // contractual state; occupancy and trader business status are day-specific.
+  const effectiveOn = (c, date) => !!c && c.status === CONTRACT.ACTIVE &&
+    (!c.start || c.start <= day(date)) && (!c.end || c.end >= day(date));
   const normalizeContract = c => {
     if (!c) return null;
     if (c.status === 'LIQUIDATED' || c.status === 'thanhly') c.status = CONTRACT.LIQUIDATED;
@@ -43,18 +47,21 @@
     s.usageReason = status === USAGE.SUSPENDED ? reason || null : null;
     return s;
   };
-  const activeContractsFor = traderId => (A.db.contracts || []).filter(c => c.traderId === traderId && c.status === CONTRACT.ACTIVE);
-  service.recalculateTrader = function (traderOrId) {
+  const activeContractsFor = (traderId, date) => (A.db.contracts || []).filter(c => c.traderId === traderId && effectiveOn(c, date));
+  service.recalculateTrader = function (traderOrId, date) {
     const t = typeof traderOrId === 'string' ? trader(traderOrId) : traderOrId;
     if (!t) return null;
     normalizeTrader(t);
-    t.status = activeContractsFor(t.id).length ? TRADER.ACTIVE : (t.status === TRADER.INACTIVE ? TRADER.INACTIVE : TRADER.WAITING_ALLOCATION);
+    t.status = activeContractsFor(t.id, date).length ? TRADER.ACTIVE : (t.status === TRADER.INACTIVE ? TRADER.INACTIVE : TRADER.WAITING_ALLOCATION);
     return t;
   };
-  service.activateContract = function (contractOrId) {
+  service.activateContract = function (contractOrId, date) {
     const c = typeof contractOrId === 'string' ? (A.idx.contract && A.idx.contract.get(contractOrId)) : contractOrId;
     if (!c) return null;
     c.status = CONTRACT.ACTIVE; c.endReason = null;
+    // A future contract reserves its interval but must not rent the point or
+    // activate the trader before its start date.
+    if (!effectiveOn(c, date)) return c;
     setPointUsage(contractPointId(c), USAGE.RENTED);
     const t = trader(c.traderId); if (t) { t.status = TRADER.ACTIVE; if (!Array.isArray(t.stalls)) t.stalls = []; if (!t.stalls.includes(contractPointId(c))) t.stalls.push(contractPointId(c)); }
     return c;
@@ -88,7 +95,14 @@
   service.syncExpiry = function (date) {
     const today = day(date); let changed = false;
     (A.db.contracts || []).forEach(c => {
-      if (c.status === CONTRACT.ACTIVE && c.end && c.end < today) { service.expireContract(c); changed = true; }
+      if (c.status !== CONTRACT.ACTIVE) return;
+      if (c.end && c.end < today) { service.expireContract(c); changed = true; return; }
+      if (effectiveOn(c, today)) {
+        const s = point(contractPointId(c)), t = trader(c.traderId);
+        const before = JSON.stringify([s && s.usageStatus, t && t.status]);
+        service.activateContract(c, today);
+        if (before !== JSON.stringify([s && s.usageStatus, t && t.status])) changed = true;
+      }
     });
     return changed;
   };
@@ -96,16 +110,27 @@
     const markets = features.markets && features.markets.service;
     return markets && markets.completeLayoutSetup ? markets.completeLayoutSetup(marketId, user) : null;
   };
+  // Market lifecycle is derived only from the canonical layout graph. A market
+  // with an incomplete/missing graph is never active, regardless of legacy
+  // catalog flags, declared area, price configuration or business-area types.
+  service.marketLayoutComplete = function (marketId) {
+    const markets = features.markets && features.markets.service;
+    return !!(markets && markets.layoutGraphReady && markets.layoutGraphReady(marketId));
+  };
+  service.normalizeMarketLifecycle = function (marketId, user) {
+    const markets = features.markets && features.markets.service;
+    if (!markets || !markets.normalizeLifecycle) return null;
+    return markets.normalizeLifecycle(marketId, service.marketLayoutComplete(marketId), user || 'Migration lifecycle');
+  };
   service.migrate = function () {
     if (!A.db) return false;
     let changed = false;
     const markets = features.markets && features.markets.service;
     if (markets) markets.rows().forEach(m => {
-      // One-time migration only: legacy markets had no completion marker, so an
-      // existing graph is evidence of setup already completed before this model.
-      if (!m.layoutLifecycleVersion && (A.db.rows || []).some(r => r.market === m.id)) {
-        service.completeMarketLayout(m.id, 'Migration lifecycle'); changed = true;
-      }
+      // Idempotent backfill: normalize both fields from the actual layout
+      // graph, including legacy PENDING_SETUP + ACTIVE combinations.
+      const out = service.normalizeMarketLifecycle(m.id, 'Migration lifecycle');
+      if (out && out.changed) changed = true;
     });
     (A.db.stalls || []).forEach(s => {
       const before = JSON.stringify([s.operationalStatus, s.usageStatus, s.usageReason]);
@@ -116,9 +141,12 @@
     (A.db.contracts || []).forEach(c => { const before = JSON.stringify([c.status, c.endReason]); normalizeContract(c); if (before !== JSON.stringify([c.status, c.endReason])) changed = true; });
     if (service.syncExpiry()) changed = true;
     // Contracts are authoritative for usage and trader business status after normalization.
+    // A future contract is not current occupancy; this repairs legacy RENTED
+    // values that were written at signing time.
     (A.db.stalls || []).forEach(s => {
-      const c = (A.db.contracts || []).find(x => contractPointId(x) === s.id && x.status === CONTRACT.ACTIVE);
+      const c = (A.db.contracts || []).find(x => contractPointId(x) === s.id && effectiveOn(x));
       if (c && s.usageStatus !== USAGE.RENTED) { setPointUsage(s, USAGE.RENTED); changed = true; }
+      if (!c && s.usageStatus === USAGE.RENTED) { setPointUsage(s, USAGE.VACANT); changed = true; }
     });
     (A.db.traders || []).forEach(t => { const before = t.status; service.recalculateTrader(t); if (before !== t.status) changed = true; });
     return changed;

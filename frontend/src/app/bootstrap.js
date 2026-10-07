@@ -198,10 +198,16 @@
   };
 
   A.saveUi = function () { try { localStorage.setItem(UIKEY, JSON.stringify({ schemaVersion: RBAC_SCHEMA, currentDemoAccountId: ui.currentDemoAccountId, market: ui.market })); } catch (e) { /* bỏ qua */ } };
+  // One lifecycle normalization path for initial load and cross-tab hydration.
+  A.normalizeLifecycleAfterHydrate = function () {
+    const lifecycle = A.features && A.features.lifecycle && A.features.lifecycle.service;
+    if (!lifecycle || !lifecycle.migrate || !lifecycle.migrate()) return false;
+    A.reindex(); A.save();
+    return true;
+  };
   A.load = function () {
     A.data.loadDb();
-    const lifecycle = A.features && A.features.lifecycle && A.features.lifecycle.service;
-    if (lifecycle && lifecycle.migrate && lifecycle.migrate()) { A.reindex(); A.save(); }
+    A.normalizeLifecycleAfterHydrate();
     // KY_11_DA_PHAT_HANH (dữ liệu mẫu, 1 lần): sau khi trạng thái HĐ đã chuẩn hóa (lifecycle.migrate) mới chạy luồng phát hành.
     const marketPeriod = A.features && A.features.finance && A.features.finance.marketPeriod;
     if (marketPeriod && marketPeriod.applySeedIssue && marketPeriod.applySeedIssue()) A.reindex();
@@ -746,12 +752,15 @@
   }
   A.refreshSharedState = function () {
     const state = A.data && A.data.reloadSharedState ? A.data.reloadSharedState() : { changed: false };
+    const catalog = A.MARKET_CATALOG && A.MARKET_CATALOG.reload ? A.MARKET_CATALOG.reload() : { changed: false };
     const accounts = A.ACCOUNTS && A.ACCOUNTS.reload ? A.ACCOUNTS.reload() : { changed: false };
-    if (!state.changed && !accounts.changed) return { changed: false };
+    const serviceConfig = A.SERVICE_CFG && A.SERVICE_CFG.reload ? A.SERVICE_CFG.reload() : { changed: false };
+    const lifecycleChanged = (state.changed || catalog.changed) ? A.normalizeLifecycleAfterHydrate() : false;
+    if (!state.changed && !catalog.changed && !accounts.changed && !serviceConfig.changed && !lifecycleChanged) return { changed: false };
     if (A.syncAccountContext) A.syncAccountContext();
     if (sharedRefreshCanRender() && A.render) A.render();
     else ui.sharedStateRefreshPending = true;
-    return { changed: true, state, accounts };
+    return { changed: true, state, catalog, accounts, serviceConfig, lifecycleChanged };
   };
   function refreshSharedWhenSafe() {
     const result = A.refreshSharedState();
@@ -785,7 +794,7 @@
     document.addEventListener('keydown', e => { if (e.key === 'Escape') A.closeModal(); });
     window.addEventListener('hashchange', A.route);
     window.addEventListener('storage', e => {
-      if (e && ['choso-caolanh-state', 'choso-caolanh-accounts', 'choso-caolanh-accounts-schema'].indexOf(e.key) === -1) return;
+      if (e && ['choso-caolanh-state', 'choso-caolanh-marketcatalog', 'choso-caolanh-accounts', 'choso-caolanh-accounts-schema', 'choso-caolanh-serviceconfig'].indexOf(e.key) === -1) return;
       A.refreshSharedState();
     });
     window.addEventListener('focus', refreshSharedWhenSafe);

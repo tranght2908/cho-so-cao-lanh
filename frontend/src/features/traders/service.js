@@ -66,18 +66,32 @@
   service.updateProfile = function (id, profile) {
     const t = repository.get(id);
     if (!t || service.validateProfileUnique(Object.assign({}, profile, { market: t.market }), id)) return null;
-    return repository.updateProfile(id, profile);
+    const updated = repository.updateProfile(id, profile);
+    if (updated) service.linkExistingMerchantAccount(updated);
+    return updated;
   };
   service.updateDocuments = function (id, files, updatedAt) { return repository.updateDocuments(id, files, updatedAt); };
   // In-memory link used by contract orchestration; the use case saves once.
   service.linkPoint = function (id, pointId) { return repository.linkPoint(id, pointId); };
   service.unlinkPoint = function (id, pointId) { return repository.unlinkPoint(id, pointId); };
   service.save = function () { return repository.save(); };
+  // A person may have one profile in each market. Match an existing merchant
+  // account by its globally unique login phone and add this profile to it.
+  service.linkExistingMerchantAccount = function (profile) {
+    const accounts = A.ACCOUNTS;
+    const phone = accounts && accounts.normalizePhone ? accounts.normalizePhone(profile && profile.phone) : '';
+    const account = phone && accounts && accounts.byPhone ? accounts.byPhone(phone) : null;
+    if (!account || accounts.primaryRole(account) !== 'trader') return null;
+    return accounts.linkTraderProfile(account.id, profile.id);
+  };
   // Profile create: push + reindex + single save (the effective tt-new flow).
   // Trùng SĐT/CCCD trong cùng chợ → null, không ghi.
   service.create = function (profile) {
     if (service.validateProfileUnique(profile, profile && profile.id)) return null;
     profile.status = service.BUSINESS_STATUS.WAITING_ALLOCATION;
-    repository.add(profile); repository.save(); return profile;
+    repository.add(profile);
+    // Linking does not alter this profile's independent placement status.
+    service.linkExistingMerchantAccount(profile);
+    repository.save(); return profile;
   };
 })(window.APP);
