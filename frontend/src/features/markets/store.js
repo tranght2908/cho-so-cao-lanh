@@ -72,7 +72,6 @@
       unit: MANAGEMENT_UNIT,
       // Legacy/deprecated: personnel assignment belongs to Account/RBAC/marketScopes, not Market.
       manager: '',
-      phone: '',
       priceConfigId: m.id === 'CL' ? 'QD480_CHO_CAO_LANH' : 'QD480_NHOM_CON_LAI',
       // A catalog record or declared area never activates a market. Only the
       // lifecycle migration/complete-layout command may mark it active.
@@ -90,7 +89,12 @@
     return defaultCatalog();
   }
   let LIST = loadList();
-  function save() { try { localStorage.setItem(CKEY, JSON.stringify(LIST)); } catch (e) { /* bỏ qua */ } }
+  // Trả về false khi localStorage từ chối ghi (vd. hết dung lượng do ảnh đại diện) — add/update hoàn tác
+  // bản ghi trong bộ nhớ để màn hình báo lỗi thay vì "lưu" một trạng thái sẽ mất sau khi tải lại.
+  function save() {
+    try { localStorage.setItem(CKEY, JSON.stringify(LIST)); return true; }
+    catch (e) { if (typeof console !== 'undefined' && console.error) console.error('[market-catalog] Không ghi được localStorage:', e); return false; }
+  }
   function reload() {
     const next = loadList();
     if (JSON.stringify(next) === JSON.stringify(LIST)) return { changed: false };
@@ -118,13 +122,18 @@
   function metaRow(id) { return LIST.find(x => x.id === id); }
 
   // Single catalog-side lifecycle normalizer. The lifecycle service supplies
-  // whether the canonical layout graph is complete; this function persists the
-  // matching pair atomically and is safe to invoke on every application load.
-  function normalizeLifecycle(id, layoutComplete, user) {
+  // whether the canonical layout graph is complete and whether the market may be
+  // activated (layout + fee coverage — lifecycle.service.canActivateMarket); this
+  // function persists the matching pair atomically and is safe on every load.
+  //   layout chưa xong          → PENDING_SETUP + NOT_ACTIVE (giữ quy tắc cũ).
+  //   layout xong, đủ điều kiện → ACTIVE.
+  //   layout xong, chưa đủ      → giữ nguyên status hiện có: chợ mới ở NOT_ACTIVE; chợ legacy đã ACTIVE
+  //                               KHÔNG bị hạ hàng loạt (lifecycle.marketLifecycle báo legacyActiveGap).
+  function normalizeLifecycle(id, layoutComplete, user, opts) {
     const meta = metaRow(id);
     if (!meta) return null;
     const layoutStatus = layoutComplete ? 'SETUP_COMPLETED' : 'PENDING_SETUP';
-    const status = layoutComplete ? 'ACTIVE' : 'NOT_ACTIVE';
+    const status = !layoutComplete ? 'NOT_ACTIVE' : (opts && opts.canActivate) ? 'ACTIVE' : normalizeStatus(meta.status);
     const changed = meta.layoutStatus !== layoutStatus || meta.status !== status || !meta.layoutLifecycleVersion;
     if (!changed) return { changed: false, market: mergedRow(id) };
     meta.layoutStatus = layoutStatus;
@@ -147,6 +156,12 @@
   // Field TUỲ CHỌN, thêm tương thích ngược: bản ghi đã lưu trước đây (chưa có field) đọc ra null =
   // "Chưa cập nhật" — không migration ghi đè, không tự bịa số liệu cho 12 chợ hiện có. Phần "đã sử
   // dụng" KHÔNG lưu ở đây (suy ra từ điểm kinh doanh thật, xem features/markets/service.js).
+  // Ảnh đại diện chợ (prototype: Data URL lưu trong danh mục, không upload server). null = dùng placeholder.
+  // Bản ghi cũ chưa có field → null; giá trị hỏng (không phải data:image/jpeg|png) cũng coi như chưa có ảnh.
+  function imageOf(v) {
+    if (!v || typeof v !== 'object' || !/^data:image\/(jpeg|png);base64,/.test(String(v.dataUrl || ''))) return null;
+    return { name: String(v.name || ''), type: String(v.type || ''), dataUrl: String(v.dataUrl) };
+  }
   function num(v) { return v === null || v === undefined || v === '' || !isFinite(Number(v)) ? null : Number(v); }
   function scaleOf(meta) {
     const cap = Array.isArray(meta.capacityByAreaType)
@@ -173,12 +188,13 @@
       const m = D.MARKETS.find(x => x.id === id);
       return Object.assign({
         id: m.id, code: meta.code || m.id, name: m.name, address: m.address,
-        rank: meta.rank, unit: meta.unit, manager: meta.manager, phone: meta.phone,
+        // phone: LEGACY — chỉ đọc lại giá trị cũ đã lưu; số liên hệ thuộc tài khoản người phụ trách.
+        rank: meta.rank, unit: meta.unit, manager: meta.manager, phone: meta.phone, image: imageOf(meta.image),
         priceConfigId: meta.priceConfigId, status: normalizeStatus(meta.status), layoutStatus: normalizeLayoutStatus(meta.layoutStatus), layoutLifecycleVersion: meta.layoutLifecycleVersion || 0, isCustom: false,
         createdBy: meta.createdBy, createdAt: meta.createdAt, updatedBy: meta.updatedBy, updatedAt: meta.updatedAt
       }, scaleOf(meta));
     }
-    return Object.assign({ isCustom: true }, meta, scaleOf(meta));
+    return Object.assign({ isCustom: true }, meta, { image: imageOf(meta.image) }, scaleOf(meta));
   }
   // Mã cho CHỢ MỚI do hệ thống tự sinh (CHO13, CHO14…) — không trùng id D.MARKETS lẫn mã danh mục đã
   // có; mã/id của các chợ hiện có giữ nguyên, không đổi tên.
@@ -237,14 +253,19 @@
     },
     nextCode: nextCode,
     // Chỉ tạo bản ghi DANH MỤC (không tạo D.MARKETS[] mới — xem ghi chú đầu file).
+    // Bước 1 của quy trình (tạo chợ / thông tin cơ bản): KHÔNG gán bảng giá, loại diện tích, đơn vị quản
+    // lý (đơn vị chung suy ra từ marketManagementUnit), không tạo mặt bằng/điểm kinh doanh. Chợ mới luôn
+    // Chưa hoạt động + Chưa thiết lập mặt bằng; chỉ completeLayoutSetup/normalizeLifecycle được kích hoạt.
+    // Trả về null nếu không ghi được localStorage (bản ghi được hoàn tác).
     add: (rec, user) => {
       const id = String(rec.code || '').trim().toUpperCase() || nextCode();
       const row = {
         id: id, code: id, name: (rec.name || '').trim(), address: (rec.address || '').trim(),
-        rank: rec.rank, unit: MANAGEMENT_UNIT,
+        rank: rec.rank,
         // Retained solely for compatibility with legacy persisted records; Markets never assigns it.
         manager: (rec.manager || '').trim(),
-        phone: (rec.phone || '').trim(), priceConfigId: rec.priceConfigId, status: 'NOT_ACTIVE', layoutStatus: 'PENDING_SETUP', layoutLifecycleVersion: 1,
+        image: imageOf(rec.image),
+        priceConfigId: rec.priceConfigId || null, status: 'NOT_ACTIVE', layoutStatus: 'PENDING_SETUP', layoutLifecycleVersion: 1,
         totalArea: num(rec.totalArea), businessArea: num(rec.businessArea),
         allowedAreaTypeIds: Array.isArray(rec.allowedAreaTypeIds) ? rec.allowedAreaTypeIds.slice() : null,
         // Legacy: chỉ giữ nếu nơi gọi truyền vào (màn Danh mục chợ không còn truyền).
@@ -252,12 +273,16 @@
         createdBy: user || 'Không rõ', createdAt: new Date().toISOString(), updatedBy: user || 'Không rõ', updatedAt: new Date().toISOString()
       };
       LIST.push(row);
-      save();
+      if (!save()) { LIST.pop(); return null; }
       return mergedRow(row.id);
     },
     update: (id, patch, user) => {
       const meta = metaRow(id);
       if (!meta) return null;
+      // Ảnh chụp trước khi sửa để hoàn tác nếu localStorage từ chối ghi (trả về null).
+      const metaBefore = JSON.stringify(meta);
+      const base = isBuiltin(id) ? D.MARKETS.find(x => x.id === id) : null;
+      const baseBefore = base ? { name: base.name, address: base.address } : null;
       if (isBuiltin(id)) {
         // Tên/Địa điểm của 2 chợ hệ thống hiện có thuộc D.MARKETS (nguồn hiển thị dùng chung toàn
         // app, vd. Mặt bằng chợ, MARKET_LABELS ở js/core.js) — cập nhật TRỰC TIẾP tại đây khi có,
@@ -269,21 +294,29 @@
         if (patch.name !== undefined) meta.name = String(patch.name || '').trim();
         if (patch.address !== undefined) meta.address = String(patch.address || '').trim();
       }
-      ['rank', 'unit', 'manager', 'phone', 'priceConfigId', 'totalArea', 'businessArea', 'allowedAreaTypeIds', 'capacityByAreaType'].forEach(k => {
+      ['rank', 'unit', 'manager', 'priceConfigId', 'totalArea', 'businessArea', 'allowedAreaTypeIds', 'capacityByAreaType'].forEach(k => {
         if (patch[k] !== undefined) meta[k] = patch[k];
       });
+      if (patch.image !== undefined) meta.image = imageOf(patch.image);
       if (patch.status !== undefined) meta.status = normalizeStatus(patch.status);
       if (patch.layoutStatus !== undefined) meta.layoutStatus = normalizeLayoutStatus(patch.layoutStatus);
       meta.updatedBy = user || 'Không rõ';
       meta.updatedAt = new Date().toISOString();
-      save();
+      if (!save()) {
+        const prev = JSON.parse(metaBefore);
+        Object.keys(meta).forEach(k => { delete meta[k]; });
+        Object.assign(meta, prev);
+        if (base) Object.assign(base, baseBefore);
+        return null;
+      }
       return mergedRow(id);
     },
     normalizeLifecycle: normalizeLifecycle,
+    // Hoàn tất mặt bằng CHỈ đặt tình trạng mặt bằng; không tự kích hoạt chợ (xem normalizeLifecycle).
     completeLayoutSetup: (id, user) => {
       const meta = metaRow(id);
       if (!meta) return null;
-      meta.status = 'ACTIVE'; meta.layoutStatus = 'SETUP_COMPLETED'; meta.layoutLifecycleVersion = 1;
+      meta.layoutStatus = 'SETUP_COMPLETED'; meta.layoutLifecycleVersion = 1;
       meta.updatedBy = user || 'Hệ thống'; meta.updatedAt = new Date().toISOString();
       save();
       return mergedRow(id);

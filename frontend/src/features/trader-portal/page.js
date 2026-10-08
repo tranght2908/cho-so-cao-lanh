@@ -765,7 +765,7 @@
         <div class="it"><span class="muted">Thời hạn</span><span>${U.dmy(c.start)} – ${U.dmy(c.end)}</span></div>
         <div class="it"><span class="muted">Đơn giá</span><span>${U.unitLabel(s)}</span></div>
         ${c.monthly ? `<div class="it"><span class="muted">Giá dịch vụ/tháng</span><b>${U.money(c.monthly)}</b></div>` : ''}
-        <div class="it"><span class="muted">Trạng thái</span><span class="tag ${c.status === 'ACTIVE' ? 'ok' : c.status === 'PENDING_LIQUIDATION' ? 'warn' : ''}">${c.status === 'ACTIVE' ? 'Đang hiệu lực' : c.status === 'PENDING_LIQUIDATION' ? 'Chờ thanh lý' : 'Đã thanh lý'}</span></div></div>
+        <div class="it"><span class="muted">Trạng thái</span>${(d => `<span class="tag ${d.tone}">${d.label}</span>`)(A.features.contracts.service.DISPLAY_STATUS[A.features.contracts.service.displayStatus(c)])}</div></div>
         <button class="m-btn" style="border:1px solid var(--line);margin-top:8px" data-act="mini-pdf">📄 Xem bản hợp đồng (PDF)</button></div>`;
     }).join('');
   }
@@ -913,9 +913,13 @@
     });
     return Array.from(ids).map(id => A.idx.stall.get(id)).filter(Boolean).filter(st => miniOwnsStall(t, st));
   };
-  const portalContractPhaseOrder = { current: 0, upcoming: 1, expired: 2, terminated: 3, liquidated: 4, ended: 5 };
+  // Trạng thái hiển thị DÙNG CHUNG với module Hợp đồng (contracts.service.displayStatus): Chưa hiệu lực / Còn hiệu lực /
+  // Đã hết hạn theo ngày; dữ liệu cũ chỉ đọc "(dữ liệu cũ)". Chỉ là display state — không ghi gì. Class CSS giữ nguyên.
+  const portalContractPhaseOrder = { ACTIVE: 0, UPCOMING: 1, EXPIRED: 2, LEGACY_PENDING_LIQUIDATION: 3, LEGACY_TERMINATED: 4, LEGACY_LIQUIDATED: 5 };
   const portalContractService = () => A.features.contracts && A.features.contracts.service;
-  const portalContractPhase = c => (portalContractService() && portalContractService().presentationStatus(c)) || 'ended';
+  const portalContractPhase = c => (portalContractService() && portalContractService().displayStatus ? portalContractService().displayStatus(c) : 'EXPIRED');
+  const portalStatusInfo = c => (portalContractService() && portalContractService().DISPLAY_STATUS && portalContractService().DISPLAY_STATUS[portalContractPhase(c)]) || { label: '—' };
+  const PORTAL_STATUS_CLASS = { ACTIVE: 'current', UPCOMING: 'upcoming', EXPIRED: 'expired', LEGACY_PENDING_LIQUIDATION: 'terminated', LEGACY_TERMINATED: 'terminated', LEGACY_LIQUIDATED: 'liquidated' };
   const portalContracts = t => A.db.contracts.filter(c => c.traderId === t.id).sort((a, b) => (portalContractPhaseOrder[portalContractPhase(a)] - portalContractPhaseOrder[portalContractPhase(b)]) || String(b.start || '').localeCompare(String(a.start || '')));
   const portalInvoices = t => A.db.invoices.filter(i => i.traderId === t.id).sort((a, b) => b.period.localeCompare(a.period));
   const portalPayments = t => {
@@ -956,14 +960,14 @@
   const portalContractPointId = c => c && (c.businessPointId || c.stallId);
   const portalContractPoint = c => A.idx.stall.get(portalContractPointId(c));
   function portalContractStatus(c) {
-    const phase = portalContractPhase(c);
-    const labels = { current: 'Đang hiệu lực', upcoming: 'Chưa đến hiệu lực', expired: 'Đã hết hạn', terminated: 'Đã chấm dứt', liquidated: 'Đã thanh lý', ended: 'Đã kết thúc' };
-    return `<span class="portal-contract-status ${phase}">${labels[phase] || '—'}</span>`;
+    return `<span class="portal-contract-status ${PORTAL_STATUS_CLASS[portalContractPhase(c)] || ''}">${U.esc(portalStatusInfo(c).label)}</span>`;
   }
+  // Hết hạn không giải phóng điểm: hợp đồng còn hiệu lực hoặc đã hết hạn → điểm vẫn "Đang thuê".
   function portalPointUsage(c) {
-    const labels = { current: 'Đang thuê', upcoming: 'Chưa đến hiệu lực', expired: 'Đã hết hạn', terminated: 'Đã chấm dứt', liquidated: 'Đã thanh lý', ended: 'Đã kết thúc' };
-    return labels[portalContractPhase(c)] || '—';
+    const phase = portalContractPhase(c);
+    return phase === 'ACTIVE' || phase === 'EXPIRED' ? 'Đang thuê' : portalStatusInfo(c).label;
   }
+  const portalExpiredNote = c => portalContractPhase(c) === 'EXPIRED' ? `<div class="note warn portal-contract-expired">Hợp đồng này đã hết hạn từ ngày ${U.dmy(c.end)}.</div>` : '';
   function portalTraderBusinessStatus(t) {
     const TS = A.features.traders && A.features.traders.service;
     const state = TS && TS.deriveBusinessStatus ? TS.deriveBusinessStatus(t) : '';
@@ -988,7 +992,7 @@
     const industry = BP.industry(point) || '—';
     const areaType = U.areaTypeLabel(point.areaTypeId || point.areaType) || '—';
     return `<article class="portal-contract-point">
-      <div class="portal-point-head"><div class="portal-point-icon">${U.icon('store')}</div><div><b>${U.esc(point.code || '—')}</b><small>${U.esc((row && row.name) || point.sectionName || 'Điểm kinh doanh')}</small></div><span class="portal-point-usage ${portalContractPhase(c)}">${portalPointUsage(c)}</span></div>
+      <div class="portal-point-head"><div class="portal-point-icon">${U.icon('store')}</div><div><b>${U.esc(point.code || '—')}</b><small>${U.esc((row && row.name) || point.sectionName || 'Điểm kinh doanh')}</small></div><span class="portal-point-usage ${['ACTIVE', 'EXPIRED'].includes(portalContractPhase(c)) ? 'current' : (PORTAL_STATUS_CLASS[portalContractPhase(c)] || '')}">${portalPointUsage(c)}</span></div>
       <div class="portal-point-detail-list"><div><span>Vị trí</span><b>${U.esc(portalLocation(point))}</b></div><div><span>Ngành hàng</span><b>${U.esc(industry)}</b></div><div><span>Diện tích</span><b>${Number.isFinite(Number(point.area)) ? Number(point.area).toLocaleString('vi-VN') + ' m²' : '—'}</b></div><div><span>Loại diện tích</span><b>${U.esc(areaType)}</b></div>${collector ? `<div><span>Nhân viên thu phí phụ trách</span><b>${U.esc(collector.fullName || collector.name || '—')}</b></div>` : ''}</div>
     </article>`;
   }
@@ -1003,7 +1007,7 @@
           const hasPoint = !!portalContractPoint(c);
           return `<button class="portal-contract-choice${c.id === selected.id ? ' selected' : ''}" data-act="mini-contract-select" data-id="${U.esc(c.id)}" aria-pressed="${c.id === selected.id}"><div><b>${U.esc(c.id)}</b>${portalContractStatus(c)}</div><span>${U.dmy(c.start)} – ${U.dmy(c.end)}</span><span>${U.esc(U.market(c.market || t.market).name)}</span><small>${hasPoint ? '01 điểm kinh doanh' : 'Chưa có điểm kinh doanh'} <i>›</i></small></button>`;
         }).join('')}</aside>
-        <section class="merchant-panel portal-contract-detail"><header class="portal-detail-head"><div><h2>${U.esc(selected.id)}</h2><p>Hợp đồng thuê điểm kinh doanh</p></div>${portalContractStatus(selected)}</header>
+        <section class="merchant-panel portal-contract-detail"><header class="portal-detail-head"><div><h2>${U.esc(selected.id)}</h2><p>Hợp đồng thuê điểm kinh doanh</p></div>${portalContractStatus(selected)}</header>${portalExpiredNote(selected)}
           <section class="portal-contract-section portal-contract-overview"><h3>Thông tin hợp đồng</h3><div class="portal-contract-detail-list"><div><span>Thời hạn</span><b>${U.dmy(selected.start)} – ${U.dmy(selected.end)}</b></div><div><span>Chợ</span><b>${U.esc(U.market(selected.market || t.market).name)}</b></div><div><span>Loại hợp đồng</span><b>${U.esc(selected.kind || '—')}</b></div><div><span>Ngày ký hợp đồng</span><b>${signedDate ? U.dmy(signedDate) : '—'}</b></div><div><span>Trạng thái tiểu thương</span><b>${portalTraderBusinessStatus(t)}</b></div></div></section>
           <section class="portal-contract-section"><h3>Điểm kinh doanh thuộc hợp đồng</h3>${portalContractPointCard(selected)}</section>
           <section class="portal-contract-section"><h3>Giá và các khoản thu áp dụng</h3>${portalChargeHtml(selected)}<p class="small muted">Khoản phải thu thực tế được xác định theo chính sách, biểu phí có hiệu lực tại từng kỳ thu.</p></section>

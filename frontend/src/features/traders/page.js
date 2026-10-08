@@ -202,7 +202,7 @@
     };
     const body = U.table([{ t: 'Mã TT' }, { t: 'Họ tên' }, { t: privacyHead('Số điện thoại', 'phone', !!ui.ttclShowPhone) }, { t: privacyHead('Số giấy tờ', 'idNo', !!ui.ttclShowIdNo) }, { t: 'Điểm KD' }, { t: 'Ngành hàng' }, { t: 'Trạng thái' }, { t: 'Thao tác' }],
       rows.slice(pg.start, pg.end).map(ttRowHtmlCL), { empty: 'Không có tiểu thương phù hợp.' });
-    return `${ttPendingSummaryHtml()}<div class="card trader-table-card"><div class="card-h" style="flex-direction:column;align-items:stretch;gap:10px">
+    return `<div class="card trader-table-card"><div class="card-h" style="flex-direction:column;align-items:stretch;gap:10px">
       <div class="row" style="justify-content:space-between;flex-wrap:wrap"><h3 style="margin:0">Hồ sơ tiểu thương</h3>
         ${A.canDo('tieu-thuong.them-moi', ui.market) ? '<button class="btn primary" data-act="tt-new">+ Thêm hồ sơ tiểu thương</button>' : ''}</div>
       <div class="row" style="flex-wrap:wrap;gap:8px">
@@ -257,12 +257,6 @@
     A.render();
   };
 
-  // "Cần xử lý" of the trader page: summary only; the records open in the contract-owned worklist
-  // (same qualification rule and the same "Tạo hợp đồng" form as the Hợp đồng page).
-  function ttPendingSummaryHtml() {
-    const task = A.features.contracts && A.features.contracts.contractTaskHtml;
-    return task ? task({ title: 'Tiểu thương chưa có hợp đồng', actionLabel: 'Xem & xử lý' }) : '';
-  }
   // ---- Chợ quê TTĐ / fallback: danh sách tổng quát cũ, KHÔNG đổi (ngoài phạm vi task CL) ----
   function ttRows() {
     const q = (f.ttSearch || '').toLowerCase();
@@ -273,7 +267,7 @@
   }
   function ttViewGeneric() {
     const rows = ttRows(), pg = U.pager('tt', rows.length, 25);
-    return `${ttPendingSummaryHtml()}<div class="card trader-table-card"><div class="card-h"><h3>${ui.role === 'ward_leader' ? 'Tra cứu tiểu thương' : 'Hồ sơ tiểu thương'}</h3>
+    return `<div class="card trader-table-card"><div class="card-h"><h3>${ui.role === 'ward_leader' ? 'Tra cứu tiểu thương' : 'Hồ sơ tiểu thương'}</h3>
       <select class="input" data-ch="tt-app"><option value="">Web app: tất cả</option><option value="ACTIVE" ${f.ttApp === 'ACTIVE' ? 'selected' : ''}>Đã kích hoạt</option><option value="PENDING_ACTIVATION" ${f.ttApp === 'PENDING_ACTIVATION' ? 'selected' : ''}>Chưa kích hoạt</option><option value="NO_ACCOUNT" ${f.ttApp === 'NO_ACCOUNT' ? 'selected' : ''}>Chưa có tài khoản</option><option value="LOCKED" ${f.ttApp === 'LOCKED' ? 'selected' : ''}>Đã khóa</option></select>
       <select class="input" data-ch="tt-status"><option value="">Trạng thái: Tất cả</option>${Object.entries(TT_PROFILE_LABEL).map(([value, label]) => `<option value="${value}" ${f.ttStatus === value ? 'selected' : ''}>${label}</option>`).join('')}</select>
       <input class="input" placeholder="Tên, SĐT, mã điểm KD" data-in="tt-search" value="${U.esc(f.ttSearch || '')}">
@@ -434,18 +428,18 @@
   }
   // Chi tiết hồ sơ theo mô hình mới: dữ liệu kinh doanh nằm theo từng điểm,
   // không còn đưa Contract hoặc Mini App vào popup hồ sơ. Bố cục/cỡ chữ/màu dùng CHUNG class của
-  // popup Chi tiết hợp đồng (contract-detail-* trong styles.css, xem contracts/detail.js).
+  // popup Chi tiết hợp đồng cũ (contract-detail-* trong styles.css; renderer cũ đã gỡ).
   function ttSection(icon, key, title, body, tone) {
     return `<section class="contract-detail-section ${tone || ''}"><h4><span>${U.icon(icon)}</span>${key}. ${title}</h4>${body}</section>`;
   }
   function ttPairs(rows) { return `<dl class="contract-detail-kv">${rows.map(r => `<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('')}</dl>`; }
   // Trader → contracts (date-aware: current / future / ended), each resolving its point. Derived from
   // Contract records; nothing is copied into the trader profile.
-  const TT_PHASE = { current: '<span class="tag ok">Đang hiệu lực</span>', future: '<span class="tag info">Sắp hiệu lực</span>' };
+  // Nhãn trạng thái hợp đồng dùng chung (contracts.service.displayStatus): Chưa hiệu lực / Còn hiệu lực / Đã hết hạn;
+  // dữ liệu cũ chấm dứt / thanh lý chỉ đọc.
   function ttContractPhaseTag(c) {
-    const phase = BP.contractPhase(c, U.today());
-    if (TT_PHASE[phase]) return TT_PHASE[phase];
-    return `<span class="tag">${CS.lifecycle(c) === 'PENDING_LIQUIDATION' ? 'Chờ thanh lý' : CS.lifecycle(c) === 'LIQUIDATED' ? 'Đã thanh lý' : 'Đã kết thúc'}</span>`;
+    const d = CS.DISPLAY_STATUS[CS.displayStatus(c, U.today())];
+    return `<span class="tag ${d.tone}">${d.label}</span>`;
   }
   function ttContractsHtml(t) {
     const order = { current: 0, future: 1, ended: 2 }, today = U.today();
@@ -456,7 +450,7 @@
   }
   function ttDrawerHtmlCL(t) {
     const canEdit = A.canDo('tieu-thuong.them-moi', t.market), editing = canEdit && ttEditId === t.id;
-    // Tạo hợp đồng từ hồ sơ: cùng form tạo hợp đồng (wf-contract-open, tiểu thương cố định).
+    // Tạo hợp đồng từ hồ sơ: mở màn Hợp đồng (contracts/workspace) với hồ sơ chọn sẵn — chỉ các điểm chờ hợp đồng.
     // A trader may hold multiple concurrent contracts; point/time availability,
     // not the trader's existing contracts, decides whether a new one can be made.
     const canCreateContract = A.canDo('hop-dong.tao', t.market) || A.canDo('so-do.tao-hop-dong', t.market);
@@ -466,7 +460,7 @@
     const points = ttSection('store', 'C', 'ĐIỂM KINH DOANH & HỢP ĐỒNG', `<div class="contract-policy-subhead">1. Điểm kinh doanh đang sử dụng</div>${activePoints.length ? activePoints.map(st => ttPointCardHtml(t, st.id)).join('') : '<div class="small muted">Tiểu thương chưa có điểm kinh doanh đang sử dụng.</div>'}<div class="contract-policy-subhead">2. Hợp đồng</div>${ttContractsHtml(t)}`, 'contract-mint');
     const footer = editing
       ? `<button class="btn" data-act="tt-edit-cancel" data-id="${t.id}">Hủy</button><button class="btn primary" data-act="tt-edit-save" data-id="${t.id}">Lưu thay đổi</button>`
-      : `${canEdit ? `<button class="btn primary" data-act="tt-edit-open" data-id="${t.id}">${U.icon('edit')}Chỉnh sửa thông tin</button>` : ''}${canCreateContract ? `<button class="btn" data-act="wf-contract-open" data-id="${t.id}">${U.icon('file')}Tạo hợp đồng</button>` : ''}<button class="btn" data-act="close">Đóng</button>`;
+      : `${canEdit ? `<button class="btn primary" data-act="tt-edit-open" data-id="${t.id}">${U.icon('edit')}Chỉnh sửa thông tin</button>` : ''}${canCreateContract ? `<button class="btn" data-act="ctw-open-create" data-id="${t.id}">${U.icon('file')}Tạo hợp đồng</button>` : ''}<button class="btn" data-act="close">Đóng</button>`;
     return `<div class="drawer-h tt-dossier-head"><div class="row" style="gap:8px"><h3>${U.icon('users')}Hồ sơ tiểu thương ${t.id}</h3>${ttProfileStatusTag(t)}</div><button class="x" data-act="close" aria-label="Đóng">×</button></div><div class="drawer-b contract-detail-body"><div class="contract-detail-grid">${info}${docs}${points}</div></div><div class="drawer-f contract-detail-footer">${footer}</div>`;
   }
   A.ACT['tt-placement-view'] = el => {
@@ -518,16 +512,10 @@
       </dl></div>
       <div class="modal-f"><button class="btn primary" data-act="close">Đóng</button></div>`);
   };
-  // Điều hướng "Xem" hợp đồng → màn Hợp đồng, tái dùng ĐÚNG state search/tab sẵn có của màn đó
-  // (f.hdSearch/ui.contractTab) — không sửa 1 dòng nào trong A.VIEWS['hop-dong'].
+  // Điều hướng "Xem" hợp đồng → trang chi tiết hợp đồng (contracts/workspace, ct-view).
   A.ACT['tt-open-contract'] = (el, e) => {
     if (e) e.preventDefault();
-    const c = A.idx.contract.get(el.dataset.id);
-    if (!c) return;
-    ui.contractTab = CS.isActive(c) ? 'all' : 'end';
-    f.hdSearch = c.id;
-    ui.page['hd' + ui.contractTab] = 0;
-    A.go('hop-dong');
+    if (A.idx.contract.get(el.dataset.id)) A.ACT['ct-view']({ dataset: { id: el.dataset.id } });
   };
   A.ACT['tt-open-point'] = el => {
     const t=A.idx.trader.get(el.dataset.trader), st=A.idx.stall.get(el.dataset.id);

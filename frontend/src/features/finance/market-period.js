@@ -134,8 +134,44 @@
     const market = inv.marketId || inv.market, byId = inv.billingPeriodId && periods().getById(inv.billingPeriodId);
     return byId && byId.marketId === market ? byId : svc.get(market, inv.period);
   };
-  svc.contracts = mp => !mp ? [] : (A.db.contracts || []).filter(c => c.market === mp.marketId && c.status === 'ACTIVE'
-    && c.start <= svc.dateOf(mp, 'endDate') && (!c.end || c.end >= svc.dateOf(mp, 'startDate')));
+  // ---------- Tháng nghiệp vụ của một đợt thu (tách khỏi khoảng đi thu) ----------
+  // Một đợt thu (kỳ của chợ) gồm các khoản thuộc KHÁC tháng:
+  //   - Ngày ghi chỉ số (meterReadDate, vd 28/10)            → Điện / Nước / Dịch vụ của THÁNG SỬ DỤNG = tháng của ngày ghi (10).
+  //   - Khoảng sử dụng điện nước = lần ghi trước → lần ghi này (vd 28/09 → 28/10).
+  //   - Mặt bằng thu TRƯỚC cho tháng kế tiếp tháng sử dụng (11).
+  //   - startDate / dueDate (vd 29/10 → 03/11) chỉ là khoảng đi thu / hạn thu — KHÔNG dùng để xét hợp đồng thuộc tháng nào.
+  const monthStart = month => month + '-01';
+  const monthEnd = month => { const [y, m] = month.split('-').map(Number); return month + '-' + pad(lastDay(y, m)); };
+  svc.monthRange = month => ({ from: monthStart(month), to: monthEnd(month) });
+  svc.usageMonth = mp => {
+    if (!mp) return '';
+    const read = svc.dateOf(mp, 'meterReadDate');
+    return read ? read.slice(0, 7) : addMonths(monthOf(mp), -1);
+  };
+  svc.landMonth = mp => mp ? addMonths(svc.usageMonth(mp), 1) : '';
+  // Khoảng sử dụng điện nước của đợt: (ngày ghi chỉ số đợt trước, ngày ghi chỉ số đợt này].
+  svc.usageWindow = mp => {
+    if (!mp) return null;
+    const to = svc.dateOf(mp, 'meterReadDate') || monthEnd(svc.usageMonth(mp));
+    const prev = svc.get(mp.marketId, addMonths(monthOf(mp), -1));
+    const prevRead = prev ? svc.dateOf(prev, 'meterReadDate') : '';
+    const [y, m, d] = to.split('-').map(Number);
+    return { from: prevRead && prevRead < to ? prevRead : isoDate(y, m - 2, d), to };
+  };
+  const signed = (c, marketId) => !!c && c.market === marketId && c.status === 'ACTIVE' && !!c.start;
+  const overlaps = (c, from, to) => c.start <= to && (!c.end || c.end >= from);
+  // Hợp đồng dùng điện/nước trong khoảng sử dụng (ngày kết thúc phải SAU lần ghi trước — ngày đó thuộc đợt trước).
+  svc.usageContracts = mp => !mp ? [] : (() => { const w = svc.usageWindow(mp); return (A.db.contracts || []).filter(c => signed(c, mp.marketId) && c.start <= w.to && (!c.end || c.end > w.from)); })();
+  // Hợp đồng có hiệu lực trong tháng sử dụng (dịch vụ theo tháng).
+  svc.serviceContracts = mp => !mp ? [] : (() => { const r = svc.monthRange(svc.usageMonth(mp)); return (A.db.contracts || []).filter(c => signed(c, mp.marketId) && overlaps(c, r.from, r.to)); })();
+  // Hợp đồng có hiệu lực trong tháng mặt bằng được thu trước.
+  svc.landContracts = mp => !mp ? [] : (() => { const r = svc.monthRange(svc.landMonth(mp)); return (A.db.contracts || []).filter(c => signed(c, mp.marketId) && overlaps(c, r.from, r.to)); })();
+  // Mọi hợp đồng phát sinh ít nhất một khoản trong đợt (điện/nước, dịch vụ hoặc mặt bằng tháng sau).
+  svc.contracts = mp => {
+    if (!mp) return [];
+    const seen = new Set();
+    return svc.usageContracts(mp).concat(svc.serviceContracts(mp), svc.landContracts(mp)).filter(c => !seen.has(c.id) && seen.add(c.id));
+  };
   svc.invoices = mp => !mp ? [] : (A.db.invoices || []).filter(i => (i.marketId || i.market) === mp.marketId && i.billingStatus !== 'DRAFT'
     && (i.billingPeriodId === mp.id || (!i.billingPeriodId && i.period === monthOf(mp))));
   svc.drafts = mp => !mp ? [] : (A.db.billingDrafts || []).filter(x => periods().matchesEntity(x, mp, mp.marketId));
@@ -150,9 +186,12 @@
   svc.meterPoints = function (mp) {
     if (!mp || svc.utilityByService(mp.marketId)) return [];
     const ids = new Set();
-    svc.contracts(mp).forEach(c => {
-      const st = A.idx.stall.get(c.businessPointId || c.stallId), sa = c.serviceApplicability || {};
-      if (st && st.hasMeter && (sa.electricity || sa.water || !c.serviceApplicability)) ids.add(st.id);
+    svc.usageContracts(mp).forEach(c => {
+      // Chỉ số ghi cho khoảng sử dụng của đợt; khoản đã ngừng áp dụng tại ngày ghi thì không cần ghi.
+      const st = A.idx.stall.get(c.businessPointId || c.stallId), sa = c.serviceApplicability || {}, day = svc.usageWindow(mp).to;
+      // Khoản điện / nước chợ đã ngừng áp dụng (Chính sách thu) không cần ghi chỉ số ở kỳ mới.
+      const on = k => !A.SERVICE_CFG || !A.SERVICE_CFG.chargeActiveAt || A.SERVICE_CFG.chargeActiveAt(mp.marketId, k, day);
+      if (st && st.hasMeter && (((sa.electricity || !c.serviceApplicability) && on('electricity')) || ((sa.water || !c.serviceApplicability) && on('water')))) ids.add(st.id);
     });
     return Array.from(ids).map(id => A.idx.stall.get(id));
   };

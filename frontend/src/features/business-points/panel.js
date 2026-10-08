@@ -1,14 +1,14 @@
 /* Business-point quick panels (Phase 15.15, from js/v-dieuhanh.js): A.stallPanel (non-CL point detail),
- * the CL quick drawer opened from the layout diagram, and the point status change (stall-status). */
+ * the CL quick drawer opened from the layout diagram, and the point status change (stall-status).
+ * Không hiển thị "Nợ phí"/công nợ ở đây: không phải trạng thái điểm KD; khoản chưa thu chỉ xem/thu tại
+ * module Thu phí/Khoản phải thu. */
 (function (A) {
   'use strict';
   const D = A.D, U = A.U, ui = A.ui;
   A.stallPanel = function (st) {
     const t = st.traderId ? A.idx.trader.get(st.traderId) : null;
     const c = st.contractId ? A.idx.contract.get(st.contractId) : null;
-    const unpaid = A.db.invoices.filter(i => U.invStallIds(i).indexOf(st.id) !== -1 && i.status !== 'paid');
     const loc = A.features.businessPoints.service.location(st);
-    const canThuTien = A.canCollectReceivable(st.market);
     const canXemHoSo = A.canDo('so-do.xem-ho-so', st.market);
     const canTaoHopDong = A.canDo('so-do.tao-hop-dong', st.market) || A.canDo('hop-dong.tao', st.market);
     const canDoiTrangThai = A.canDo('so-do.doi-trang-thai', st.market);
@@ -21,11 +21,9 @@
       <div class="divider"></div>
       ${t ? `<dl class="kv"><dt>Tiểu thương</dt><dd><a href="#" data-act="trader" data-id="${t.id}">${U.esc(t.name)}</a> (${t.id})</dd>
         <dt>Điện thoại</dt><dd>${U.maskPhone(t.phone)}</dd><dt>Mini app</dt><dd>${t.app ? '<span class="tag ok">Đã cài</span>' : '<span class="tag">Chưa cài</span>'}</dd>
-        ${c ? `<dt>Hợp đồng</dt><dd>${c.id}<br><span class="small muted">${U.dmy(c.start)} – ${U.dmy(c.end)} · ${left <= 30 ? `<b style="color:#df2225">còn ${left} ngày</b>` : 'còn ' + left + ' ngày'}</span></dd>` : ''}
-        <dt>Công nợ</dt><dd>${unpaid.length ? `<b style="color:#df2225">${U.money(U.sum(unpaid, U.due))}</b> <span class="small muted">(${unpaid.length} kỳ)</span>` : '<span class="tag ok">Không nợ</span>'}</dd></dl>`
+        ${c ? `<dt>Hợp đồng</dt><dd>${c.id}<br><span class="small muted">${U.dmy(c.start)} – ${U.dmy(c.end)} · ${left < 0 ? '<b style="color:#df2225">Đã hết hạn</b>' : left <= 30 ? `<b style="color:#df2225">còn ${left} ngày</b>` : 'còn ' + left + ' ngày'}</span></dd>` : ''}</dl>`
         : '<div class="note info">Điểm kinh doanh đang trống, có thể cho thuê.</div>'}
-      ${(canThuTien || canXemHoSo || canTaoHopDong || canDoiTrangThai) ? `<div class="row" style="margin-top:14px">
-        ${canThuTien && t && unpaid.length ? `<button class="btn primary" data-act="pay-open" data-id="${t.id}">${U.icon('card')}Thu tiền</button>` : ''}
+      ${(canXemHoSo || canTaoHopDong || canDoiTrangThai) ? `<div class="row" style="margin-top:14px">
         ${t ? (canXemHoSo ? `<button class="btn" data-act="trader" data-id="${t.id}">Hồ sơ</button>` : '') : (canTaoHopDong ? `<button class="btn primary" data-act="ct-new" data-point="${st.id}">Tạo hợp đồng</button>` : '')}
         ${canDoiTrangThai ? `<button class="btn" data-act="stall-status" data-id="${st.id}">Đổi trạng thái</button>` : ''}</div>` : ''}
       ${st.history && st.history.length ? `<div class="divider"></div><div class="small"><b>Lịch sử thay đổi</b>${st.history.map(h => `<div class="muted">${h}</div>`).join('')}</div>` : ''}`;
@@ -54,8 +52,6 @@
     // screenMarketOk/marketScopes) — không action permission riêng, không hard-code role/market.
     const canXemHoSo = U.can('tieu-thuong');
     const canXemDiemKD = U.can('diem-kd');
-    const unpaid = t ? A.db.invoices.filter(i => U.invStallIds(i).indexOf(st.id) !== -1 && i.status !== 'paid') : [];
-    const owe = U.sum(unpaid, U.due);
     const left = c ? U.days(U.today(), c.end) : null;
     const sec = (label, body) => `<div class="row"><b style="font-size:var(--font-size-sm)">${label}</b></div><div style="margin:6px 0 14px">${body}</div>`;
     const actions = [];
@@ -75,13 +71,10 @@
       <div class="divider"></div>
       ${sec('C. Hợp đồng hiện hành', c
         ? `<dl class="kv"><dt>Số hợp đồng</dt><dd>${c.id}</dd>
-        <dt>Thời hạn</dt><dd>${U.dmy(c.start)} – ${U.dmy(c.end)}<br><span class="small muted">${left <= 30 ? `<b style="color:#df2225">còn ${left} ngày</b>` : 'còn ' + left + ' ngày'}</span></dd>
-        <dt>Trạng thái</dt><dd>${A.features.contracts.service.isActive(c) ? '<span class="tag ok">Đang hiệu lực</span>' : A.features.contracts.service.lifecycle(c) === 'PENDING_LIQUIDATION' ? '<span class="tag warn">Chờ thanh lý</span>' : '<span class="tag">Đã thanh lý</span>'}</dd></dl>`
+        <dt>Thời hạn</dt><dd>${U.dmy(c.start)} – ${U.dmy(c.end)}<br><span class="small muted">${left < 0 ? '<b style="color:#df2225">Đã hết hạn</b>' : left <= 30 ? `<b style="color:#df2225">còn ${left} ngày</b>` : 'còn ' + left + ' ngày'}</span></dd>
+        <dt>Trạng thái</dt><dd>${(d => `<span class="tag ${d.tone}">${d.label}</span>`)(A.features.contracts.service.DISPLAY_STATUS[A.features.contracts.service.displayStatus(c)])}</dd></dl>`
         : '<div class="note info">Chưa có hợp đồng hiệu lực.</div>')}
       <div class="divider"></div>
-      ${sec('D. Công nợ', !t ? '<span class="tag">Không có nghĩa vụ hiện tại</span>'
-        : owe ? `<span class="tag danger">Nợ phí</span> <b style="color:#df2225;margin-left:6px">${U.money(owe)}</b>`
-        : '<span class="tag ok">Không nợ</span>')}
       ${actions.length ? `<div class="row" style="gap:8px;flex-wrap:wrap">${actions.join('')}</div>` : ''}`;
   }
 
@@ -93,27 +86,19 @@
   // push/reset navigation stack) để dùng lại được cả khi mở làm drawer GỐC (action `stall`) LẪN khi
   // dùng làm "cách vẽ lại drawer nguồn" cho nút "← Quay lại" (A.drawerPush, xem core.js).
   function mbOpenStallDrawer(st) {
-    if (st && st.market === 'CL') {
-      A.openDkDrawer(st);
-      return;
-    }
-    ui.sel = st.id;
-    A.$('#modal-root').innerHTML = `<div class="drawer-overlay" data-act="close"></div><div class="drawer">${A.drawerBackHtml()}
-        <div class="drawer-h"><div><h3>${st.code}</h3><div class="small muted" style="margin-top:2px">${A.mbStatusTag(A.pointDisplayStatus(st))}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
-        <div class="drawer-b">${st.market === 'CL' ? mbStallPanelCL(st) : A.stallPanel(st)}</div></div>`;
-    A.render();
+    if (st && A.openDkDrawer) A.openDkDrawer(st);
   }
   Object.assign(A.ACT, {
     'stall-status': el => {
       const st = A.mbBusinessPointById(ui.market, el.dataset.id);
       if (!st) { U.toast('Không tìm thấy điểm kinh doanh trong chợ hiện tại'); return; }
       if (!A.canDo('so-do.doi-trang-thai', st.market)) return;
-      // Chỉ đổi trạng thái VẬN HÀNH; Đang thuê/Còn trống theo hợp đồng, Nợ phí theo khoản phải thu.
+      // Chỉ đổi trạng thái VẬN HÀNH; Đang thuê/Còn trống theo hợp đồng. Không có "Nợ phí" (không phải trạng thái điểm).
       const opts = Object.keys(D.POINT_STATUS);
       A.modal(A.mHead('Đổi trạng thái vận hành điểm ' + st.code) + `<div class="modal-b"><div class="form-grid">
         <div class="field"><label>Trạng thái vận hành</label><select class="input" id="ss-status">${opts.map(k => `<option value="${k}" ${(st.operationalStatus || st.status) === k ? 'selected' : ''}>${A.pointOpLabel(k)}</option>`).join('')}</select></div>
         <div class="field"><label>Lý do</label><input class="input" id="ss-reason" placeholder="VD: tiểu thương xin tạm nghỉ 1 tháng"></div></div>
-        <div class="small muted" style="margin-top:10px">Tình trạng sử dụng do hợp đồng quyết định; "Nợ phí" do hệ thống xác định theo khoản phải thu quá hạn.</div></div>
+        <div class="small muted" style="margin-top:10px">Tình trạng sử dụng (Đang thuê/Còn trống) do hợp đồng quyết định.</div></div>
         <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="stall-status-save" data-id="${st.id}">Lưu</button></div>`);
     },
     'stall-status-save': el => {

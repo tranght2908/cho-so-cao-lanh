@@ -170,6 +170,8 @@
     // không gọi revoke action nào, vì vậy assignment action đang có vẫn được giữ nguyên.
     if (perm && perm.kind === 'action' && !A.PERM.hasPerm(el.dataset.role, 'screen:' + perm.screenId)) { A.render(); return; }
     const roleName = role ? role.name : el.dataset.role, permLabel = perm ? perm.label : el.dataset.key;
+    // Quyền đã retire (ẩn khỏi ma trận) không được cấp mới, kể cả khi handler bị gọi trực tiếp.
+    if (el.checked && A.PERM.isRetiredPermission && A.PERM.isRetiredPermission(el.dataset.key)) { A.render(); return; }
     if (el.checked) {
       A.PERM.grant(el.dataset.role, el.dataset.key, actor);
       U.log('Cấp quyền "' + permLabel + '" cho vai trò "' + roleName + '"');

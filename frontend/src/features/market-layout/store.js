@@ -361,12 +361,28 @@
     (groups || []).forEach(g => (check.pointCodes[g.id] || []).forEach((code, i) => next.push({ id: mid + '-' + code, code, market: mid, rowId, num: Number((code.match(/(\d+)$/) || [0, i + 1])[1]), area: n(g.areaPerPoint), areaTypeId: g.areaTypeId, status: 'active', operationalStatus: 'active', usageStatus: 'VACANT', usageReason: null, hasMeter: false, type: '', note: '', history: [] })));
     // Build all points first; one array swap + one save prevents a partial create.
     db().stalls = list('stalls').concat(next); A.reindex();
-    // The incremental workspace is a valid setup path. A market becomes
-    // operational only after its canonical graph has a valid point.
-    const lifecycle = A.features && A.features.lifecycle && A.features.lifecycle.service;
-    if (lifecycle && lifecycle.normalizeMarketLifecycle) lifecycle.normalizeMarketLifecycle(mid, 'Thiết lập mặt bằng');
+    // Adding points only changes the layout graph. Layout completion is an
+    // explicit command in the workspace; it must not activate the market.
     A.save();
     return { ok: true, stalls: next, check };
+  }
+  // Excel import reaches this single graph writer only after its complete batch
+  // has been validated. Recheck codes/capacity here so a stale preview cannot
+  // create a partial or over-capacity layout.
+  function importPointsAtomic(mid, points) {
+    const errors = [], seen = new Set(), additions = {};
+    (points || []).forEach(p => {
+      const row = list('rows').find(r => r.id === p.rowId && r.market === mid), code = norm(p.code);
+      if (!row) errors.push('Dãy nhập không còn hợp lệ.');
+      if (!code || seen.has(code) || list('stalls').some(s => s.market === mid && norm(s.code) === code)) errors.push('Mã điểm kinh doanh bị trùng.');
+      seen.add(code); additions[p.rowId] = (additions[p.rowId] || 0) + n(p.area);
+    });
+    Object.keys(additions).forEach(id => { const row = list('rows').find(r => r.id === id); if (row && additions[id] > rowBudget(row).remaining + 1e-9) errors.push('Tổng diện tích điểm nhập vượt diện tích còn lại của Dãy ' + row.code + '.'); });
+    if (errors.length) return { ok: false, errors: Array.from(new Set(errors)) };
+    const next = points.map((p, i) => ({ id: mid + '-' + p.code, code: p.code, market: mid, rowId: p.rowId, num: Number((String(p.code).match(/(\d+)$/) || [0, i + 1])[1]), area: n(p.area), areaTypeId: p.areaTypeId, status: 'active', operationalStatus: 'active', usageStatus: 'VACANT', usageReason: null, hasMeter: false, type: '', note: p.note || '', history: [] }));
+    const old = db().stalls;
+    try { db().stalls = old.concat(next); A.reindex(); A.save(); return { ok: true, stalls: next }; }
+    catch (error) { db().stalls = old; A.reindex(); return { ok: false, errors: ['Không thể lưu dữ liệu import. Dữ liệu chưa được thay đổi.'], error }; }
   }
   function setupPreview(draft) {
     const codes = draftRowCodeMap(draft);
@@ -467,6 +483,7 @@
     blocksOf, findBlock, floorsOfBlock, findFloor, firstFloorKey, firstZonePlace, findFloorOfZone, findZone, flatZones, codeTaken, marketLayoutStats,
     addBuilding, updateBuilding, renameBuilding, removeBuilding, addFloor, updateFloor, renameFloor, removeFloor, addRow, updateRow, removeRow, resetMarket,
     initialSetup: { graphExists, createDraft: createInitialDraft, preview: setupPreview, validate: validateInitialSetup, commit: commitInitialSetup },
-    pointGroups: { validate: validateRowPointGroups, commit: commitRowPoints, preview: pointCodesForGroups }
+    pointGroups: { validate: validateRowPointGroups, commit: commitRowPoints, preview: pointCodesForGroups },
+    importPointsAtomic
   };
 })(window.APP);

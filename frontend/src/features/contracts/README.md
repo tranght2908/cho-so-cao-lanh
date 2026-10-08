@@ -1,18 +1,27 @@
 # Contracts feature
 
-Owns contract records (`A.db.contracts`), the "Hợp đồng" screen, the contract dossier and the contract lifecycle use cases.
+Owns contract records (`A.db.contracts`) and the "Hợp đồng" screen (scope 10/2026).
 
 | File | Responsibility |
 |---|---|
-| `repository.js` | Contract data access via `APP.data`: `list`, `getById`, and contract-only writes `add`, `addHistory`, `addSignedCopy`, `applyTermination`, `applyLiquidation`. No persistence of its own. |
-| `service.js` | Reads (`list`, `get`, `listByTrader`, `activeForTrader`, `hasActiveForTrader`, `hasActiveForPoint`, `availablePoints`, `tradersWithoutActive`, `nextId`, `isActive`) and use cases (`createWithPointAllocation`, `terminate`, `liquidate`, `addSignedCopy`, `recordEvent`). Each use case saves exactly once. |
-| `detail.js` | Dossier renderer `A.contractDetailLayoutV2` (moved from `js/v-tieuthuong.js`). |
-| `page.js` | Effective `hop-dong` view + status filter wrapper, `ct-*` UI handlers (moved from `js/v-tieuthuong.js`). |
+| `repository.js` | Contract data access via `APP.data`: `list`, `getById`, contract-only writes (`add`, `addHistory`, `addSignedCopy`, legacy `applyRenewal` / `applyTermination` / `applyLiquidation`). No persistence of its own. |
+| `service.js` | Reads (`list`, `get`, `listByTrader`, `isActive`, `holdsPointForTrader`, `displayStatus`, `isExpiringSoon`, …) and use cases. Current flow: `createFromRentalDraft` → `createBatchWithPointAllocation` (pre-validation + full rollback) → `createWithPointAllocation` per point. |
+| `workspace.js` | The ONLY contract UI: list (KPI, filters incl. "Khoảng hiệu lực"), create form from `trader.rentalDraft` (one contract per point, own dates), success view, detail page (4 blocks, `priceTerms` snapshot), `ct-new`, `ct-view`, `ct-print`. |
 
-Load order is significant: `detail.js` and `page.js` load immediately after `js/v-tieuthuong.js` and before `js/vehicles.js`, which wraps `ct-new`/`ct-new-save`. `js/workflow.js` then wraps `hop-dong`, replaces `ct-new` and owns the effective create form (`wf-contract-save`).
+Current flow: Hồ sơ tiểu thương → rental item `pending_contract` → Tạo hợp đồng (workspace) → each point its own dates →
+batch create → point "Đang thuê", trader linked, `priceTerms` snapshot. From Mặt bằng a point opens the same form only when
+it is registered (`pending_contract`) in a profile; otherwise the user is sent to Hồ sơ tiểu thương.
 
-Cross-aggregate rule: the service orchestrates. Point occupancy/release goes through `APP.features.businessPoints.service` (`occupy`, `vacate`, `addHistory`) and trader links through `APP.features.traders.service` (`linkPoint`, `unlinkPoint`). The contracts repository never writes other aggregates.
+Contract display status is date-derived only: Chưa hiệu lực / Còn hiệu lực / Đã hết hạn. Expiry is a warning on the contract
+and has NO side effects (point stays "Đang thuê", trader link and profile status unchanged — see `lifecycle/service.js`
+`holdsPoint` and `businessPoints.service.contractOn`). Legacy PENDING_LIQUIDATION / LIQUIDATED records are read-only "(dữ liệu cũ)".
 
-This is a frontend orchestration boundary without a real transaction. The Spring Boot implementation of create/terminate/liquidate MUST be `@Transactional` use cases.
+Retired (removed from the codebase): the old create form (`create.js`, `wf-contract-*`, `wf-ct-*`), the old list/popup
+(`page.js`, `detail.js`, `hd-*`, `ct-copy-*`), the renew / terminate / liquidate forms and handlers (`ct-renew*`, `ct-extend*`,
+`ct-end*`, `ct-terminate*`, `ct-liquidate*`) and the old available-point picker (`business-points/availability.js`).
 
-Known legacy retained: V1 `ct-new`/`ct-new-save` (plus the `vehicles.js` wrappers) are unreachable because `workflow.js` replaced their only entry, but they are the only path that snapshots vehicle fees. Removing them is a product decision. `syncExpiry` writes notifications during render (unchanged).
+LEGACY / DEPRECATED / NOT EXPOSED IN UI: `service.renew`, `terminate`, `liquidate`, their eligibility helpers and
+`lifecycle.expireContract` are kept only for legacy data compatibility and lifecycle regressions. No current flow calls them.
+
+This is a frontend orchestration boundary without a real transaction. The backend implementation of contract creation MUST be
+one `@Transactional` use case.

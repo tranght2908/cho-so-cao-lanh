@@ -17,7 +17,10 @@ const hb = createApp(ROOT), B = hb.A, TS = B.features.traders.service, BP = B.fe
 const today = B.U.today(), end = (() => { const d = new Date(today + 'T00:00:00Z'); d.setUTCFullYear(d.getUTCFullYear() + 1); return d.toISOString().slice(0, 10); })();
 const t = TS.create({ id: 'TT-CD1', name: 'Tiểu thương TT-CD1', phone: PHONE, idNo: '087000000901', idType: 'CCCD', market: 'CL', stalls: [], source: 'STAFF', since: today, app: false });
 const free = B.db.stalls.filter(p => p.market === 'CL' && BP.row(p) && BP.isAvailable(p.id, today, end));
-const mkContract = (id, p) => B.features.contracts.service.createWithPointAllocation({ contract: { id, traderId: t.id, stallId: p.id, businessPointId: p.id, market: 'CL', kind: 'Hợp đồng thuê điểm kinh doanh', start: today, end, monthly: 810000, status: 'hieuluc', history: [] }, traderId: t.id, pointId: p.id, pointHistoryEntry: 'test' });
+// Current contract shape: price snapshot (priceTerms) + serviceApplicability are captured at creation, as the
+// canonical create flow does — so viewing never triggers the legacy price-term migration.
+const APPLIES = { electricity: true, water: true, marketService: false };
+const mkContract = (id, p) => B.features.contracts.service.createWithPointAllocation({ contract: { id, traderId: t.id, stallId: p.id, businessPointId: p.id, market: 'CL', kind: 'Hợp đồng thuê điểm kinh doanh', start: today, end, monthly: 810000, status: 'ACTIVE', history: [], serviceApplicability: APPLIES, priceTerms: B.features.finance.billing.buildPriceTerms('CL', p, p.area, today, APPLIES, 'CONTRACT') }, traderId: t.id, pointId: p.id, pointHistoryEntry: 'test' });
 mkContract('HĐ-CD-1', free[0]); mkContract('HĐ-CD-2', free[1]);
 B.ACCOUNTS.add({ id: 'AC-CD', code: 'CD', fullName: t.name, phone: PHONE, roleIds: ['trader'], organization: '', marketScopes: [], status: 'ACTIVE', traderIds: [t.id], traderId: t.id });
 B.save();
@@ -38,7 +41,7 @@ ok('master-detail kept: list on the left, selected contract on the right', () =>
 
 ok('header + contract info grid holds signed date and trader status; no "Thông tin khác"', () => {
   const d = detail();
-  assert(/<header class="portal-detail-head"><div><h2>HĐ-CD-\d<\/h2><p>Hợp đồng thuê điểm kinh doanh<\/p><\/div><span class="portal-contract-status current">Đang hiệu lực<\/span><\/header>/.test(d));
+  assert(/<header class="portal-detail-head"><div><h2>HĐ-CD-\d<\/h2><p>Hợp đồng thuê điểm kinh doanh<\/p><\/div><span class="portal-contract-status current">Còn hiệu lực<\/span><\/header>/.test(d));
   const info = section(d, 'Thông tin hợp đồng');
   ['Thời hạn', 'Chợ', 'Loại hợp đồng', 'Ngày ký hợp đồng', 'Trạng thái tiểu thương'].forEach(x => assert(info.includes('<span>' + x + '</span>'), x));
   assert(!d.includes('Thông tin khác') && !d.includes('portal-contract-other'));

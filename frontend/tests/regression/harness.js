@@ -71,7 +71,7 @@ function createApp(root, opts) {
   if (opts.storage) Object.keys(opts.storage).forEach(k => localStorage.setItem(k, opts.storage[k]));
   if (opts.sessionStorage) Object.keys(opts.sessionStorage).forEach(k => sessionStorage.setItem(k, opts.sessionStorage[k]));
   const scripts = indexScripts(root);
-  scripts.forEach(src => vm.runInContext(fs.readFileSync(path.join(root, src), 'utf8'), ctx, { filename: src }));
+  scripts.filter(src => !/^https?:\/\//.test(src)).forEach(src => vm.runInContext(fs.readFileSync(path.join(root, src), 'utf8'), ctx, { filename: src }));
   const A = ctx.APP;
   const flush = () => { let n = 0; while (timers.length && n++ < 50) timers.shift()(); };
   (listeners.DOMContentLoaded || []).forEach(fn => fn());

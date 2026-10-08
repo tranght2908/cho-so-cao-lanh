@@ -1,0 +1,22 @@
+const assert = require('assert');
+const path = require('path');
+const { createApp } = require('./harness');
+const h = createApp(path.resolve(__dirname, '../..')), A = h.A, S = A.features.marketLayout.store, I = A.features.marketLayout.importer;
+A.ui.sessionAccountId = 'AC-QT01'; A.ui.currentDemoAccountId = 'AC-QT01'; A.ui.market = 'HA'; A.syncAccountContext();
+A.features.markets.service.update('HA', { totalArea: 500, businessArea: 100 }, 'test');
+const b=S.addBuilding('HA',{name:'Nhà C',code:'NHC',businessArea:100}).building, f=S.addFloor(b.id,'Tầng 1',100,{code:'T1'}).floor, r=S.addRow('HA',{blockId:b.id,floorId:f.id},'HS-A','Dãy HS-A','Thủy hải sản',30).row;
+const line=(code,area,type='Có mái che',industry='Thủy hải sản')=>({MaCho:'HA',MaKhoiNha:'NHC',MaTang:'T1',MaDay:'HS-A',MaDiem:code,DienTich:String(area),LoaiDienTich:type,NganhHang:industry,GhiChu:''});
+let p=I.validate('HA',[line('HS-A07',5),line('HS-A08',4.5)]); assert.strictEqual(p.errors,0); let out=S.importPointsAtomic('HA',p.plan); assert(out.ok && out.stalls.every(x=>x.usageStatus==='VACANT'));
+// A selected, unrelated branch must not hide imports in the market-wide List tab.
+A.ui.mb={ view:'table', filter:{search:'HS-A07',status:'',cat:'',areaType:''}, sel:{k:'row',id:'other-row'} };
+assert.strictEqual(A.mbCurrentPoints('HA').filter(x=>x.code==='HS-A07').length,1,'imported-point-visible-in-list');
+assert.strictEqual(A.mbBusinessPointsForMarket('HA').filter(x=>x.code==='HS-A07').length,1,'map canonical source');
+const hReload=createApp(path.resolve(__dirname, '../..'),{localStorage:h.localStorage});
+assert(hReload.A.db.stalls.some(x=>x.code==='HS-A07'),'import persists after reload');
+assert(I.validate('HA',[line('HS-A07',1)]).errors);
+assert(I.validate('HA',[line('X1',1),line('X1',1)]).errors);
+assert(I.validate('HA',[line('X2',1,'Theo phiên')]).errors);
+assert(I.validate('HA',[line('X3',0)]).errors);
+assert(I.validate('HA',[line('X4',1,'Có mái che','Sai ngành')]).errors);
+assert(I.validate('HA',[line('X5',20),line('X6',20)]).errors, 'batch capacity must block all');
+console.log('mat-bang-excel-import: PASS');

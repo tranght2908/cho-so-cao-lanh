@@ -22,8 +22,9 @@
     stalls.forEach(s => { if (!secs.find(x => x.key === s.rowId)) secs.push({ key: s.rowId, name: s.sectionName, m: s.market }); });
     const periods = db.issuedPeriods.filter(p => p <= '2026-09');
     return {
-      lapday: { t: 'Tình trạng lấp đầy điểm kinh doanh', cols: ['Chợ', 'Dãy', 'Tổng', 'Đang thuê', 'Nợ phí', 'Tạm ngừng', 'Tranh chấp', 'Còn trống', 'Lấp đầy %'],
-        rows: secs.map(sc => { const xs = stalls.filter(s => s.rowId === sc.key), st = xs.map(s => A.pointDisplayStatus(s)), c = k => st.filter(x => x === k).length; return [U.mShort(sc.m), sc.name, xs.length, c('thue'), c('no'), c('ngung'), c('tranhchap'), c('trong'), U.pct(xs.length - c('trong'), xs.length)]; }) },
+      lapday: { t: 'Tình trạng lấp đầy điểm kinh doanh', cols: ['Chợ', 'Dãy', 'Tổng', 'Đang thuê', 'Tạm ngừng', 'Tranh chấp', 'Còn trống', 'Lấp đầy %'],
+        // Lấp đầy dùng helper chung businessPoints.service.occupancy (cùng công thức với Tổng quan liên chợ).
+        rows: secs.map(sc => { const o = A.features.businessPoints.service.occupancy(stalls.filter(s => s.rowId === sc.key)), c = k => o.byStatus[k] || 0; return [U.mShort(sc.m), sc.name, o.total, c('thue'), c('ngung'), c('tranhchap'), c('trong'), o.pct]; }) },
       biendong: { t: 'Biến động tiểu thương', cols: ['Tháng', 'Đăng ký mới', 'Chấm dứt', 'Cuối kỳ'],
         rows: (() => { let total = db.traders.filter(x => U.inScope(x, xmMkt)).length; const out = []; for (let k = 0; k < 6; k++) { const nw = 2 + (k * 7) % 5, lv = 1 + (k * 3) % 3; out.unshift(['0' + (9 - k) + '/2026', nw, lv, total]); total = total - nw + lv; } return out; })() },
       hethan: { t: 'Hợp đồng sắp hết hạn (60 ngày)', cols: ['Số hợp đồng', 'Tiểu thương', 'Điểm KD', 'Ngày hết hạn', 'Còn lại (ngày)'],
@@ -56,7 +57,8 @@
   const RP_SUB = { lapday: 'Tình trạng từng khu vực, tỷ lệ lấp đầy', biendong: 'Đăng ký mới, chấm dứt theo tháng', hethan: 'Hợp đồng cần gia hạn trong 60 ngày', doanhthu: 'Phải thu, đã thu, tỷ lệ thu theo kỳ', congno: 'Nợ quá hạn, chưa đến hạn theo khu vực', khongtienmat: 'Tiền mặt, QR, chuyển khoản theo kỳ', doisoat: 'Sao kê ngân hàng và kết quả khớp', suco: 'Phản ánh, sự cố và kết quả xử lý', nhanvien: 'Biên lai và số tiền theo người thu', miengiam: 'Các khoản được miễn giảm, điều chỉnh', miniapp: 'Tiểu thương đã cài mini app theo ngành hàng' };
   const RP_NOTOTAL = /Cuối kỳ|Còn lại|Đánh giá|Mức|Giờ|Ngày|Tháng|Kỳ/i;
   const RP_PCT = {
-    lapday: rows => { const t = U.sum(rows, r => r[2]), e = U.sum(rows, r => r[7]); return U.pct(t - e, t); },
+    // Tổng hợp = Đang thuê / Tổng điểm hợp lệ (cùng công thức businessPoints.service.occupancy).
+    lapday: rows => U.pct(U.sum(rows, r => r[3]), U.sum(rows, r => r[2])),
     doanhthu: rows => U.pct(U.sum(rows, r => r[3]), U.sum(rows, r => r[2])),
     khongtienmat: rows => { const tm = U.sum(rows, r => r[1]), qr = U.sum(rows, r => r[2]), ck = U.sum(rows, r => r[3]); return U.pct(qr + ck, tm + qr + ck); },
     miniapp: rows => U.pct(U.sum(rows, r => r[3]), U.sum(rows, r => r[2]))
@@ -77,7 +79,7 @@
   function rpKpis(key, rows) {
     const S = k => U.sum(rows, r => r[k]), n = rows.length, last = rows[n - 1] || [];
     switch (key) {
-      case 'lapday': return [['Tổng điểm KD', num(S(2))], ['Đang thuê', num(S(3))], ['Còn trống', num(S(7))], ['Lấp đầy', U.pctTxt(RP_PCT.lapday(rows))]];
+      case 'lapday': return [['Tổng điểm KD', num(S(2))], ['Đang thuê', num(S(3))], ['Còn trống', num(S(6))], ['Lấp đầy', U.pctTxt(RP_PCT.lapday(rows))]];
       case 'biendong': return [['Đăng ký mới', num(S(1))], ['Chấm dứt', num(S(2))], ['Tiểu thương cuối kỳ', num(last[3] || 0)], ['Biến động ròng', (S(1) - S(2) >= 0 ? '+' : '') + num(S(1) - S(2))]];
       case 'hethan': return [['Hợp đồng sắp hết hạn', num(n)], ['Trong 30 ngày', num(rows.filter(r => r[4] <= 30).length)], ['Từ 31–60 ngày', num(rows.filter(r => r[4] > 30).length)], ['Gần nhất', n ? rows[0][4] + ' ngày' : '—']];
       case 'doanhthu': return [['Phải thu', U.moneyShort(S(2))], ['Đã thu', U.moneyShort(S(3))], ['Tỷ lệ thu', U.pctTxt(RP_PCT.doanhthu(rows))], ['Còn phải thu', U.moneyShort(S(2) - S(3))]];
@@ -92,7 +94,7 @@
     return [];
   }
   // Biểu đồ tổng hợp: [cột nhãn, cột giá trị, kiểu] cho các báo cáo chưa có biểu đồ riêng
-  const RP_CHART = { lapday: [1, 8, '%'], biendong: [0, 3, 'n'], congno: [1, 3, 'đ'], suco: [0, 1, 'n'], nhanvien: [0, 2, 'đ'], miniapp: [1, 4, '%'], hethan: null, doisoat: null, miengiam: null };
+  const RP_CHART = { lapday: [1, 7, '%'], biendong: [0, 3, 'n'], congno: [1, 3, 'đ'], suco: [0, 1, 'n'], nhanvien: [0, 2, 'đ'], miniapp: [1, 4, '%'], hethan: null, doisoat: null, miengiam: null };
   // Biểu đồ cột ngang: nhãn dài đặt bên trái, không chồng chữ khi có nhiều dòng
   function hbars(labels, values, o) {
     const W = 660, L = 230, R = 70, rowH = 26, H = labels.length * rowH + 16;

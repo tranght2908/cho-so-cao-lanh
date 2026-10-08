@@ -29,6 +29,9 @@
   service.listByTrader = function (traderId) { return repository.list().filter(c => c.traderId === traderId); };
   service.activeForTrader = function (traderId) { return repository.list().find(c => isActive(c) && c.traderId === traderId); };
   service.hasActiveForTrader = function (traderId) { return repository.list().some(c => isActive(c) && c.traderId === traderId); };
+  // Quan hệ thuê chính thức (scope 10/2026): hợp đồng ACTIVE đã bắt đầu — kể cả đã hết hạn (hết hạn chỉ là cảnh báo).
+  const holdsPoint = (c, date) => !!c && c.status === 'ACTIVE' && (!c.start || c.start <= (date || A.U.today()));
+  service.holdsPointForTrader = function (traderId, date) { return repository.list().some(c => c.traderId === traderId && holdsPoint(c, date)); };
   service.hasActiveForPoint = function (pointId) { return repository.list().some(c => isActive(c) && (c.businessPointId || c.stallId) === pointId); };
   // Contract creation is not restricted to traders without an existing contract:
   // one trader may rent multiple business points through separate contracts. Point
@@ -58,6 +61,34 @@
   service.presentationStatus = function (contract, date) {
     return ({ ACTIVE: 'current', UPCOMING: 'upcoming', PENDING_LIQUIDATION: 'pending_liquidation', LIQUIDATED: 'liquidated', ENDED: 'ended' })[service.lifecycle(contract, date)] || 'ended';
   };
+  // ---- Trạng thái hiển thị (scope 10/2026): chỉ Chưa hiệu lực / Còn hiệu lực / Đã hết hạn, suy từ ngày ----
+  // Hết hạn CHỈ là trạng thái/cảnh báo của hợp đồng: không giải phóng điểm, không đổi hồ sơ, không chờ thanh lý.
+  // Hợp đồng dữ liệu cũ đã chấm dứt / chờ thanh lý / đã thanh lý vẫn đọc được, hiển thị chỉ đọc.
+  service.DISPLAY_STATUS = {
+    UPCOMING: { label: 'Chưa hiệu lực', tone: 'info' },
+    ACTIVE: { label: 'Còn hiệu lực', tone: 'ok' },
+    EXPIRED: { label: 'Đã hết hạn', tone: 'danger' },
+    LEGACY_TERMINATED: { label: 'Đã chấm dứt (dữ liệu cũ)', tone: '', legacy: true },
+    LEGACY_PENDING_LIQUIDATION: { label: 'Chờ thanh lý (dữ liệu cũ)', tone: '', legacy: true },
+    LEGACY_LIQUIDATED: { label: 'Đã thanh lý (dữ liệu cũ)', tone: '', legacy: true }
+  };
+  service.displayStatus = function (contract, date) {
+    if (!contract) return 'EXPIRED';
+    if (contract.status === 'LIQUIDATED') return 'LEGACY_LIQUIDATED';
+    if (contract.status === 'PENDING_LIQUIDATION') return contract.endReason === 'EARLY_TERMINATION' ? 'LEGACY_TERMINATED' : 'LEGACY_PENDING_LIQUIDATION';
+    const at = date || A.U.today();
+    if (contract.start && contract.start > at) return 'UPCOMING';
+    if (contract.end && contract.end < at) return 'EXPIRED';
+    return 'ACTIVE';
+  };
+  service.displayStatusLabel = function (contract, date) { return service.DISPLAY_STATUS[service.displayStatus(contract, date)].label; };
+  // Còn hiệu lực và còn ≤ 30 ngày (tính cả ngày kết thúc).
+  service.isExpiringSoon = function (contract, date) {
+    const at = date || A.U.today();
+    return service.displayStatus(contract, at) === 'ACTIVE' && !!contract.end && A.U.days(at, contract.end) <= 30;
+  };
+  // LEGACY (đã ra khỏi scope 10/2026): gia hạn / chấm dứt / thanh lý không còn entry point UI. Các use case
+  // bên dưới chỉ giữ để đọc/kiểm thử dữ liệu cũ; không gọi từ màn hình mới.
   service.terminationEligibility = function (contractOrId, date, permission) {
     const c = typeof contractOrId === 'string' ? repository.getById(contractOrId) : contractOrId;
     if (!c) return { allowed:false, message:'Không tìm thấy hợp đồng.' };
@@ -90,7 +121,7 @@
     return 'HĐ-' + market + '-' + year + '-' + pad(max + 1, 4);
   };
 
-  // ---- Gia hạn hợp đồng ----
+  // ---- Gia hạn hợp đồng — LEGACY, không còn entry point UI (scope 10/2026) ----
   // Chỉ cho gia hạn kỳ đang hiệu lực trong 30 ngày cuối, bao gồm ngày hết hạn.
   // Permission được nhận riêng để UI luôn có thể hiển thị nút nhưng handler và
   // service vẫn chặn được thao tác không được cấp quyền.
@@ -165,7 +196,7 @@
   // Frontend orchestration boundary only: there is no real transaction or rollback
   // in the prototype. The Spring Boot implementation MUST be one @Transactional use
   // case covering the same record changes. Mutation order mirrors the legacy
-  // wf-contract-save command; persistence happens exactly once at the end.
+  // legacy create command; persistence happens exactly once at the end.
   service.createWithPointAllocation = function (input) {
     const contract = input.contract, traderId = input.traderId, pointId = input.pointId;
     // INVARIANT (tầng service): Contract.market = Trader.market = Point.market, đúng hồ sơ/điểm của hợp đồng. Lệch → null,
@@ -175,9 +206,9 @@
       || t.market !== contract.market || p.market !== contract.market) return null;
     const markets = features.markets && features.markets.service;
     const market = markets && markets.get ? markets.get(contract.market) : null;
-    const allowedTraderStates = traders().BUSINESS_STATUS || { WAITING_ALLOCATION: 'WAITING_ALLOCATION', ACTIVE: 'ACTIVE' };
+    const allowedTraderStates = traders().BUSINESS_STATUS || { WAITING_ALLOCATION: 'WAITING_ALLOCATION', PENDING_CONTRACT: 'PENDING_CONTRACT', ACTIVE: 'ACTIVE' };
     if (!market || market.layoutStatus !== 'SETUP_COMPLETED' || market.status !== 'ACTIVE'
-      || ![allowedTraderStates.WAITING_ALLOCATION, allowedTraderStates.ACTIVE].includes(traders().deriveBusinessStatus(t))
+      || ![allowedTraderStates.WAITING_ALLOCATION, allowedTraderStates.PENDING_CONTRACT, allowedTraderStates.ACTIVE].includes(traders().deriveBusinessStatus(t))
       || !contract.start || !contract.end || contract.end < contract.start
       || repository.getById(contract.id)
       || !points().isAvailable(pointId, contract.start, contract.end, { market: contract.market })) return null;
@@ -213,7 +244,127 @@
     }
   };
 
-  // ---- Lifecycle use cases (Phase 10) ----
+  // Profile rental drafts may create several normal, one-point contracts at once.
+  // Every individual record still goes through createWithPointAllocation; this
+  // wrapper pre-validates the whole set and restores the in-memory/persisted
+  // aggregates if any later creation fails. This is the strongest atomicity a
+  // localStorage prototype can provide (the backend counterpart must be one DB
+  // transaction).
+  service.createBatchWithPointAllocation = function (inputs) {
+    if (!Array.isArray(inputs) || !inputs.length) return null;
+    const ids = new Set(), pointsInBatch = new Set();
+    for (const input of inputs) {
+      const c = input && input.contract, p = input && input.pointId, t = input && input.traderId;
+      if (!c || !p || !t || ids.has(c.id) || pointsInBatch.has(p)
+        || repository.getById(c.id) || !points().isAvailable(p, c.start, c.end, { market:c.market })) return null;
+      ids.add(c.id); pointsInBatch.add(p);
+    }
+    const snapshot = JSON.parse(JSON.stringify({ contracts: A.db.contracts, stalls: A.db.stalls, traders: A.db.traders }));
+    const saved = [];
+    try {
+      for (const input of inputs) {
+        const created = service.createWithPointAllocation(input);
+        if (!created) throw new Error('BATCH_CONTRACT_CREATE_FAILED');
+        saved.push(created);
+      }
+      return saved;
+    } catch (err) {
+      // Mutate existing arrays so all legacy references remain valid.
+      ['contracts', 'stalls', 'traders'].forEach(key => { A.db[key].splice(0, A.db[key].length, ...snapshot[key]); });
+      A.data.reindex(); A.data.save();
+      console.warn('[choso] Batch contract creation rolled back.', err);
+      return null;
+    }
+  };
+
+  // ---- Use case: tạo hợp đồng từ hồ sơ đăng ký thuê (trader.rentalDraft) ----
+  // 1 rental item (status pending_contract) = 1 hợp đồng 1 điểm, mỗi dòng có ngày bắt đầu/kết thúc và
+  // thời hạn RIÊNG. Giá không nhập tay: priceTerms được chụp từ cấu hình mức thu của chợ tại ngày bắt đầu
+  // của từng hợp đồng theo khoản thu đã đăng ký trong hồ sơ (item.charges). Một dòng lỗi → không tạo gì.
+  const billingService = () => features.finance && features.finance.billing;
+  service.contractDuration = function (start, end) {
+    if (!start || !end || end < start) return 0;
+    return A.U.days(start, end) + 1;
+  };
+  service.rentalPriceTerms = function (item, pointRecord, start) {
+    const b = billingService();
+    if (!b || !b.buildPriceTerms || !pointRecord) return null;
+    const ch = Object.assign({}, item && item.charges || {});
+    const applies = { electricity: !!ch.electricity, water: !!ch.water, marketService: !!ch.marketService };
+    return b.buildPriceTerms(pointRecord.market, pointRecord, pointRecord.area, start || A.U.today(), applies, 'CONTRACT');
+  };
+  service.pendingRentalItems = function (traderOrId) {
+    return traders().rentalItems(traderOrId).filter(x => x && x.status === 'pending_contract' && !x.contractId);
+  };
+  service.tradersWithPendingRental = function (market) {
+    return traders().list().filter(t => t.market === market && service.pendingRentalItems(t).length);
+  };
+  // Kiểm tra MỘT dòng (dùng chung cho form và submit). Trả về null hoặc { field, message }.
+  service.validateRentalRow = function (traderRecord, row, opts) {
+    const o = opts || {};
+    const item = service.pendingRentalItems(traderRecord).find(x => x.pointId === (row && row.pointId));
+    if (!item) return { field: 'point', message: 'Điểm không còn ở trạng thái chờ tạo hợp đồng.' };
+    const start = String(row.start || ''), end = String(row.end || '');
+    if (!start) return { field: 'start', message: 'Vui lòng nhập ngày bắt đầu.' };
+    if (!end) return { field: 'end', message: 'Vui lòng nhập ngày kết thúc.' };
+    if (end < start) return { field: 'end', message: 'Ngày kết thúc phải từ ngày bắt đầu trở về sau.' };
+    if (service.contractDuration(start, end) <= 0) return { field: 'end', message: 'Thời hạn hợp đồng phải lớn hơn 0.' };
+    if (o.datesOnly) return null;
+    const p = points().get(item.pointId);
+    if (!p || p.market !== traderRecord.market) return { field: 'point', message: 'Điểm kinh doanh không thuộc chợ của hồ sơ.' };
+    if (!points().isAvailable(p.id, start, end, { market: p.market })) return { field: 'point', message: 'Điểm ' + p.code + ' đã có hợp đồng trùng thời gian hoặc không còn khả dụng.' };
+    const terms = service.rentalPriceTerms(item, p, start);
+    if (!terms || !terms.land) return { field: 'point', message: 'Chợ chưa có mức thu mặt bằng áp dụng cho điểm ' + p.code + ' tại ngày bắt đầu.' };
+    const ch = item.charges || {};
+    const lacking = [ch.electricity && !terms.electricity ? 'đơn giá điện' : '', ch.water && !terms.water ? 'đơn giá nước' : '', ch.marketService && !(terms.services || []).length ? 'mức thu dịch vụ chợ' : ''].filter(Boolean);
+    if (lacking.length) return { field: 'point', message: 'Chợ chưa có ' + lacking.join(', ') + ' đang áp dụng tại ngày bắt đầu. Cần cập nhật cấu hình mức thu.' };
+    return null;
+  };
+  // rows: [{ pointId, start, end }] — chỉ các điểm được chọn; điểm không chọn giữ pending_contract.
+  // Kết quả: { ok:true, contracts } hoặc { ok:false, message, errors:{ pointId: {field,message} } }.
+  service.createFromRentalDraft = function (traderId, rows, opts) {
+    const o = opts || {}, t = traders().getProfile ? traders().getProfile(traderId) : (A.idx.trader && A.idx.trader.get(traderId));
+    if (!t) return { ok: false, message: 'Không tìm thấy hồ sơ tiểu thương.', errors: {} };
+    const list = Array.isArray(rows) ? rows.filter(Boolean) : [];
+    if (!list.length) return { ok: false, message: 'Vui lòng chọn ít nhất một điểm kinh doanh.', errors: {} };
+    if (new Set(list.map(r => r.pointId)).size !== list.length) return { ok: false, message: 'Một điểm chỉ được tạo một hợp đồng.', errors: {} };
+    const markets = features.markets && features.markets.service, m = markets && markets.get ? markets.get(t.market) : null;
+    if (!m || m.status !== 'ACTIVE' || m.layoutStatus !== 'SETUP_COMPLETED') return { ok: false, message: 'Chợ chưa hoạt động hoặc chưa hoàn tất cấu hình mức thu — chưa thể tạo hợp đồng.', errors: {} };
+    const errors = {};
+    list.forEach(r => { const e = service.validateRentalRow(t, r); if (e) errors[r.pointId] = e; });
+    if (Object.keys(errors).length) return { ok: false, message: 'Có ' + Object.keys(errors).length + ' dòng chưa hợp lệ. Chưa tạo hợp đồng nào.', errors };
+    const items = service.pendingRentalItems(t);
+    // Mã HĐ tuần tự trong batch (nextId chỉ đọc dữ liệu đã lưu nên phải tự tăng).
+    const base = repository.list().reduce((n, c) => Math.max(n, +(String(c.id).match(/-(\d+)$/) || [0, 0])[1]), 0);
+    const stamp = A.U.dmy(A.U.today()) + ' ' + A.U.nowTime();
+    const inputs = list.map((r, i) => {
+      const item = items.find(x => x.pointId === r.pointId), p = points().get(r.pointId);
+      const terms = service.rentalPriceTerms(item, p, r.start), ch = item.charges || {};
+      const id = 'HĐ-' + t.market + '-' + String(r.start).slice(0, 4) + '-' + A.U.pad(base + 1 + i, 4);
+      const contract = {
+        id, traderId: t.id, stallId: p.id, businessPointId: p.id, market: t.market, kind: 'Hợp đồng thuê điểm kinh doanh',
+        signedDate: r.start, start: r.start, end: r.end,
+        monthly: terms.land.monthly, unit: terms.land.amount, unitLabel: terms.land.unit || '',
+        feePolicy: { id: terms.land.policyId, amount: terms.land.amount, unit: terms.land.unit || '', legalBasis: { docNo: terms.land.docNo || '' } },
+        priceTerms: terms,
+        serviceApplicability: { electricity: !!ch.electricity, water: !!ch.water, marketService: !!ch.marketService },
+        rentalSource: { traderId: t.id, pointId: p.id, charges: Object.assign({}, ch), feeRefs: Object.assign({}, item.feeRefs || {}) },
+        deposit: 0, signedCopies: [], status: 'ACTIVE', endReason: null, createdAt: A.U.today(), createdBy: o.actor || '',
+        history: [{ at: stamp, action: 'Khởi tạo hợp đồng', detail: 'Tạo từ hồ sơ đăng ký thuê ' + t.id + ' · ' + A.U.dmy(r.start) + ' → ' + A.U.dmy(r.end), by: o.actor || '' }]
+      };
+      // Đánh dấu rental item ngay trong unit of work → rollback của batch khôi phục luôn rentalDraft.
+      return { contract, traderId: t.id, pointId: p.id,
+        pointHistoryEntry: A.U.dmy(A.U.today()) + ': ký ' + id + ' với ' + t.name + ' (' + A.U.dmy(r.start) + ' → ' + A.U.dmy(r.end) + ')',
+        beforeSave: c => { const x = (t.rentalDraft || []).find(y => y.pointId === p.id); if (x) { x.status = 'contracted'; x.contractId = c.id; } } };
+    });
+    const created = service.createBatchWithPointAllocation(inputs);
+    if (!created) return { ok: false, message: 'Không thể tạo đầy đủ các hợp đồng; hệ thống đã hoàn tác toàn bộ, chưa có hợp đồng nào được tạo.', errors: {} };
+    const lifecycle = lifecycleService(); if (lifecycle && lifecycle.recalculateTrader) lifecycle.recalculateTrader(t.id);
+    A.data.save();
+    return { ok: true, contracts: created };
+  };
+
+  // ---- Lifecycle use cases (Phase 10) — chấm dứt / thanh lý: LEGACY, không còn entry point UI (scope 10/2026) ----
   // Point release is deliberately performed ONLY after liquidation, never at
   // termination. This preserves the pending-handover lock on the business point.
   // point is vacated only when no OTHER active contract uses it; the trader link is
@@ -243,6 +394,8 @@
     A.data.save();
     return c;
   };
+  // LEGACY / NOT EXPOSED IN UI: bản ký số hóa đã retire cùng popup Hợp đồng cũ (quyền cap-nhat-ban-ky đã ẩn).
+  // Giữ để tương thích dữ liệu cũ (contract.signedCopies vẫn được đọc ở trang tiểu thương).
   service.addSignedCopy = function (id, file, historyEntry) {
     const c = repository.addSignedCopy(id, file);
     if (!c) return null;

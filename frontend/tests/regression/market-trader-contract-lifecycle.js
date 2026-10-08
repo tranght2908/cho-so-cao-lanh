@@ -14,6 +14,16 @@ const plus = n => new Date(Date.parse(today) + n * 86400000).toISOString().slice
 
 // 1-3: creation is empty/pending; partial graph stays pending; first valid
 // point through the incremental workspace completes the market lifecycle.
+// Vòng đời 10/2026: hoàn tất mặt bằng KHÔNG kích hoạt chợ; cần cấu hình mức thu RIÊNG của chợ (mặt bằng cho
+// loại diện tích đang dùng + điện + nước + dịch vụ). Bản ghi cuối cùng được lưu là bước làm chợ ACTIVE.
+const addFeePolicy = (marketId, areaTypeId) => {
+  A.SERVICE_CFG.setChargeApplicability(marketId, { electricity: true, water: true, service: true }, 'test');
+  const base = { marketId, status: 'active', effectiveFrom: '2026-01-01', effectiveTo: null, legalBasis: {}, attachments: [] };
+  A.SERVICE_CFG.add('utilities', Object.assign({ name: 'Điện', kind: 'ELECTRICITY', elecPrice: 3000, elecUnit: 'đ/kWh' }, base), 'test');
+  A.SERVICE_CFG.add('utilities', Object.assign({ name: 'Nước', kind: 'WATER', waterPrice: 11000, waterUnit: 'đ/m³' }, base), 'test');
+  A.SERVICE_CFG.add('extraServices', Object.assign({ name: 'Vệ sinh', category: 'SANITATION', calcMethod: 'fixed', amount: 20000, unit: 'đ/điểm/tháng' }, base), 'test');
+  return A.SERVICE_CFG.add('stallPrices', Object.assign({ name: 'Mức thu test', scope: 'MARKET', areaTypeId, stallType: '', amount: 1000, unit: 'đ/m²/ngày' }, base), 'test');
+};
 const m = A.MARKET_CATALOG.add({ name: 'Chợ lifecycle liên module', address: 'Test', rank: 'HANG_3', priceConfigId: 'QD480_NHOM_CON_LAI', totalArea: 100, businessArea: 80, allowedAreaTypeIds: ['covered'] }, 'test');
 assert.equal(m.layoutStatus, 'PENDING_SETUP');
 assert.equal(m.status, 'NOT_ACTIVE');
@@ -26,7 +36,14 @@ const built = ML.pointGroups.commit(m.id, r.id, [{ id: 'G1', quantity: 1, areaPe
 assert(built.ok);
 const p = built.stalls[0];
 assert.equal(p.usageStatus, 'VACANT');
+// Thêm điểm KD chỉ đổi graph; "Hoàn tất mặt bằng" là lệnh tường minh (nút mb-complete-layout).
+assert.equal(MC.get(m.id).layoutStatus, 'PENDING_SETUP', 'graph ready but layout not confirmed yet');
+assert(L.completeMarketLayout(m.id, 'test'), 'Hoàn tất mặt bằng');
 assert.equal(MC.get(m.id).layoutStatus, 'SETUP_COMPLETED');
+assert.equal(MC.get(m.id).status, 'NOT_ACTIVE', 'completing the layout never activates');
+assert.equal(L.marketFeeStatus(m.id).key, 'NONE', 'fee config not configured');
+assert.equal(L.marketLifecycle(m.id).stage, 'PENDING_FEE');
+addFeePolicy(m.id, 'covered');
 assert.equal(MC.get(m.id).status, 'ACTIVE');
 
 // 4-7: profile starts waiting; service prevents a duplicate/overlapping

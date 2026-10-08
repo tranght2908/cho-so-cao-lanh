@@ -21,10 +21,14 @@
 
   if (!ui.qh) ui.qh = { market: 'CL', selZone: null };
   function qhMarket() { return ui.market === 'ALL' ? ui.qh.market : ui.market; }
-  if (!ui.mb) ui.mb = { sel: null, collapsed: {}, treeOpen: false };
+  if (!ui.mb) ui.mb = { sel: null, collapsed: {}, treeOpen: false, mode: 'overview', inspectorOpen: false, treeSearch: '', pointId: null, zoom: 1 };
   if (!ui.mb.collapsed) ui.mb.collapsed = {};
   if (!ui.mb.view) ui.mb.view = 'grid';
   if (!ui.mb.filter) ui.mb.filter = { search: '', status: '', cat: '', areaType: '' };
+  if (!ui.mb.mode) ui.mb.mode = 'overview';
+  if (ui.mb.inspectorOpen === undefined) ui.mb.inspectorOpen = false;
+  if (ui.mb.treeSearch === undefined) ui.mb.treeSearch = '';
+  if (!ui.mb.zoom) ui.mb.zoom = 1;
 
   // ---------- dữ liệu cấu trúc (đọc thẳng graph A.db qua store) ----------
   const floorsOfB = (mid, bid) => S.floorsOf(mid).filter(f => f.buildingId === bid);
@@ -54,7 +58,13 @@
     ui.mb.sel = null; // node đã bị xoá / đổi chợ → về Tổng quan
     return { k: 'overview' };
   }
-  function select(k, id) { ui.mb.sel = k === 'overview' ? null : { k, id }; ui.mb.menu = null; ui.page.dkcl = 0; A.render(); }
+  function select(k, id) {
+    ui.mb.sel = k === 'overview' ? null : { k, id };
+    ui.mb.pointId = null;
+    ui.mb.mode = k === 'overview' ? 'overview' : 'branch';
+    ui.mb.inspectorOpen = k !== 'overview';
+    ui.mb.menu = null; ui.page.dkcl = 0; A.render();
+  }
   const isSel = (mid, k, id) => { const n = selNode(mid); return n.k === k && (k === 'overview' || (n[k === 'building' ? 'b' : k === 'floor' ? 'f' : 'r'] || {}).id === id); };
 
   // ---- API dùng chung cho Sơ đồ/Bảng (business-points/page.js): phạm vi node đang chọn → điểm thật ----
@@ -100,7 +110,13 @@
     }
     return true;
   };
-  A.mbCurrentPoints = function (mid) { return A.mbSelectedStalls(mid).filter(A.mbMatchesFilter); };
+  // The List tab is a market-wide operational list. Tree selection only
+  // controls the map drill-down; otherwise an imported point in another Row
+  // could raise the market KPI but be invisible to an exact code search.
+  A.mbCurrentPoints = function (mid) {
+    const points = ui.mb.view === 'table' ? A.mbBusinessPointsForMarket(mid) : A.mbSelectedStalls(mid);
+    return points.filter(A.mbMatchesFilter);
+  };
   // Ngành hàng của các Dãy trong chợ (nguồn: row.industry).
   A.mbCatOptions = function (mid) { return Array.from(new Set(S.rowsOf(mid).map(r => r.industry).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'vi')); };
   function mbCan(mid) { return { edit: A.canDo('cau-truc.edit', mid), del: A.canDo('cau-truc.delete', mid), reset: A.canDo('cau-truc.reset', mid) }; }
@@ -151,17 +167,24 @@
   const rowNodeHtml = (mid, r, depth) => treeNode(mid, 'row', r, depth, r.name || 'Dãy ' + r.code, r.code + ' · ' + (r.industry || 'Chưa có ngành hàng') + ' · ' + m2(r.allocatedArea));
   function mbTreeHtml(mid) {
     const mk = MS() && MS().get(mid);
+    const q = String(ui.mb.treeSearch || '').trim().toLocaleLowerCase('vi-VN');
+    const matches = value => !q || String(value || '').toLocaleLowerCase('vi-VN').includes(q);
     const overview = `<div class="mb-tnode mb-tnode-overview ${isSel(mid, 'overview') ? 'on' : ''}" style="--d:0"><button class="mb-tlabel" data-act="mb-sel-overview" ${isSel(mid, 'overview') ? 'aria-current="true"' : ''}><span class="mb-tname">${U.esc(U.market(mid).name)}</span><span class="mb-tsub">${areaSub(mk ? mk.businessArea : null)}</span></button></div>`;
     const bs = S.buildingsOf(mid);
     if (!bs.length) return overview + '<div class="mb-tree-empty">Chưa có cấu trúc mặt bằng.</div>';
-    return overview + bs.map(b => {
+    const result = bs.map(b => {
       const floors = floorsOfB(mid, b.id), loose = looseRowsOfB(mid, b.id), bKey = 'b:' + b.id;
-      const kids = floors.map(f => {
-        const fKey = 'f:' + f.id, rows = rowsOfF(mid, f.id);
+      const floorNodes = floors.map(f => {
+        const fKey = 'f:' + f.id, rows = rowsOfF(mid, f.id).filter(r => matches(r.name + ' ' + r.code + ' ' + r.industry));
+        if (q && !matches(f.name + ' ' + f.code) && !rows.length) return '';
         return treeNode(mid, 'floor', f, 1, f.name, areaSub(f.businessArea), rows.length ? fKey : null) + (rows.length && !ui.mb.collapsed[fKey] ? rows.map(r => rowNodeHtml(mid, r, 2)).join('') : '');
-      }).join('') + loose.map(r => rowNodeHtml(mid, r, 1)).join('');
+      }).join('');
+      const looseNodes = loose.filter(r => matches(r.name + ' ' + r.code + ' ' + r.industry)).map(r => rowNodeHtml(mid, r, 1)).join('');
+      if (q && !matches(b.name + ' ' + b.code) && !floorNodes && !looseNodes) return '';
+      const kids = floorNodes + looseNodes;
       return `<div class="mb-tbranch">${treeNode(mid, 'building', b, 0, b.name, areaSub(b.businessArea), floors.length || loose.length ? bKey : null)}${ui.mb.collapsed[bKey] ? '' : kids}</div>`;
     }).join('');
+    return overview + (result || '<div class="mb-tree-empty">Không tìm thấy Khối/Nhà, Tầng hoặc Dãy phù hợp.</div>');
   }
 
   // ---------- breadcrumb ----------
@@ -182,7 +205,7 @@
   const tile = (label, value, sub, cls) => `<div class="mb-stat ${cls || ''}"><div class="mb-stat-l">${label}</div><div class="mb-stat-v">${value}</div>${sub ? `<div class="mb-stat-s">${sub}</div>` : ''}</div>`;
   function statusBreakdown(points) {
     const c = A.mbStatusCounts(points);
-    const parts = ['thue', 'trong', 'no', 'ngung', 'tranhchap'].filter(k => c[k]).map(k => `<span class="mb-sb"><i style="background:${D.STATUS[k].color}"></i>${c[k]} ${U.esc(A.mbStatusLabel(k).toLowerCase())}</span>`);
+    const parts = A.features.businessPoints.service.DISPLAY_STATUSES.filter(k => c[k]).map(k => `<span class="mb-sb"><i style="background:${D.STATUS[k].color}"></i>${c[k]} ${U.esc(A.mbStatusLabel(k).toLowerCase())}</span>`);
     return parts.length ? `<div class="mb-sbs">${parts.join('')}</div>` : '';
   }
   function wsHead(title, sub, actions) {
@@ -190,6 +213,24 @@
   }
   // Chợ đã có bất kỳ Khối/Tầng/Dãy/điểm nào (đọc graph A.db qua store).
   const hasLayout = mid => S.initialSetup.graphExists(mid);
+  // Vòng đời dùng chung: mặt bằng đã thiết lập nhưng chợ chưa đủ điều kiện hoạt động → nhắc cấu hình biểu phí.
+  const LAYOUT_DONE_MSG = 'Đã hoàn tất thiết lập mặt bằng.';
+  const PENDING_FEE_MSG = 'Chợ chưa được chuyển sang trạng thái Đang hoạt động. Cần hoàn tất cấu hình mức thu và biểu phí.';
+  const FEE_WARNING_MSG = 'Chợ đang hoạt động nhưng cần cập nhật cấu hình mức thu.';
+  function lifecycleNoteHtml(mid) {
+    const lc = A.features.markets.service.lifecycle(mid);
+    if (lc && lc.feeConfigWarning) return `<div class="note mb-lifecycle-note"><b>${FEE_WARNING_MSG}</b> ${U.esc(lc.feeGap)}</div>`;
+    return lc && lc.stage === 'PENDING_FEE' ? `<div class="note info mb-lifecycle-note"><b>${LAYOUT_DONE_MSG}</b> ${PENDING_FEE_MSG}</div>` : '';
+  }
+  function marketStatusSummaryHtml(mid) {
+    const lc = A.features.markets.service.lifecycle(mid);
+    const fee = A.features.lifecycle.service.marketFeeStatus(mid);
+    if (!lc || !fee) return '';
+    const layout = lc.layoutReady ? 'Đã thiết lập' : 'Chưa thiết lập';
+    const market = lc.status === 'ACTIVE' ? 'Đang hoạt động' : 'Chưa hoạt động';
+    const warning = lc.feeConfigWarning ? '<span class="mb-status-warning">Cần cập nhật mức thu/biểu phí</span>' : '';
+    return `<div class="mb-status-summary"><span>Tình trạng mặt bằng: <b>${layout}</b></span><span>Trạng thái cấu hình mức thu: <b>${U.esc(fee.label)}</b></span><span>Trạng thái chợ: <b>${market}</b></span><span>Bước hiện tại: <b>${U.esc(lc.hint || lc.label)}</b></span>${warning}</div>`;
+  }
   const areaTxt = v => v == null || v === '' ? 'Chưa khai báo' : m2(v);
   const rowTitle = r => r.name || 'Dãy ' + r.code;
 
@@ -221,7 +262,8 @@
   const canAddLooseRow = (mid, b) => !floorsOfB(mid, b.id).length;
   function rowTileHtml(r) {
     const i = rowInfo(r);
-    return `<button class="mb-rowtile" data-act="mb-sel-row" data-id="${r.id}"><b>${U.esc(rowTitle(r))}</b><span class="mb-rowtile-code">${U.esc(r.code)} · ${U.esc(r.industry || 'Chưa có ngành hàng')}</span><span class="mb-rowtile-meta"><span>${m2(i.alloc)}</span><span>${fmt(i.pts.length)} điểm</span></span></button>`;
+    const preview = i.pts.slice(0, 12).map(st => `<button class="mb-mini-point s-${A.mbStatusAt(st)}" data-act="stall" data-id="${st.id}" title="${U.esc(st.code)}">${U.esc(st.code)}</button>`).join('');
+    return `<section class="mb-rowtile mb-map-node"><button class="mb-rowtile-open" data-act="mb-sel-row" data-id="${r.id}"><b>${U.esc(rowTitle(r))}</b><span class="mb-rowtile-code">${U.esc(r.code)} · ${U.esc(r.industry || 'Chưa có ngành hàng')}</span><span class="mb-rowtile-meta"><span>${m2(i.alloc)}</span><span>${fmt(i.pts.length)} điểm</span></span></button>${preview ? `<div class="mb-mini-grid">${preview}${i.pts.length > 12 ? `<span class="mb-mini-more">+${i.pts.length - 12}</span>` : ''}</div>` : '<div class="mb-mini-empty">Chưa có điểm KD</div>'}</section>`;
   }
   function emptyMarketHtml(mid, can) {
     const m = MS() && MS().get(mid);
@@ -234,11 +276,12 @@
   function marketDiagramHtml(mid, can) {
     const blocks = S.buildingsOf(mid).map(b => {
       const floors = floorsOfB(mid, b.id);
-      const kids = floors.length ? floors.map(f => [f.name, areaTxt(f.businessArea)]) : looseRowsOfB(mid, b.id).map(r => [rowTitle(r), m2(r.allocatedArea)]);
-      return `<button class="mb-block" data-act="mb-sel-building" data-id="${b.id}"><span class="mb-block-h"><span class="mb-kind">Khối/Nhà${b.code ? ' · ' + U.esc(b.code) : ''}</span><b>${U.esc(b.name)}</b><span class="mb-block-area">${areaTxt(b.businessArea)}</span></span>
-        <span class="mb-block-list">${kids.map(k => `<span class="mb-block-li"><span>${U.esc(k[0])}</span><span>${k[1]}</span></span>`).join('') || '<span class="muted">Chưa có tầng hoặc Dãy</span>'}</span></button>`;
+      const groups = floors.length ? floors.map(f => ({ name:f.name, pts:pointsOfRows(rowsOfF(mid,f.id)) })) : [{ name:'Dãy', pts:pointsOfRows(looseRowsOfB(mid,b.id)) }];
+      const count = groups.reduce((n,g)=>n + g.pts.length,0);
+      const preview = groups.map(g => `<div class="mb-block-floor-preview"><span>${U.esc(g.name)}</span><div class="mb-mini-grid">${g.pts.slice(0,24).map(st => `<button class="mb-mini-point s-${A.mbStatusAt(st)}" data-act="stall" data-id="${st.id}" title="${U.esc(st.code)} · ${m2(st.area)} · ${U.esc(A.mbStatusLabel(A.mbStatusAt(st)))}"> </button>`).join('')}${g.pts.length > 24 ? `<span class="mb-mini-more">+${g.pts.length - 24}</span>` : ''}</div></div>`).join('');
+      return `<section class="mb-block"><button class="mb-block-h" data-act="mb-sel-building" data-id="${b.id}"><span class="mb-kind">Khối/Nhà${b.code ? ' · ' + U.esc(b.code) : ''}</span><b>${U.esc(b.name)}</b><span class="mb-block-area">${areaTxt(b.businessArea)} · ${fmt(count)} điểm</span></button>${preview || '<span class="muted">Chưa có điểm KD</span>'}</section>`;
     }).join('');
-    return wsHead('Sơ đồ mặt bằng', U.esc(U.market(mid).name)) + `<div class="mb-blocks">${blocks}${can.edit ? addTile('qh-add-block', 'Thêm Khối/Nhà') : ''}</div>`;
+    return wsHead('Sơ đồ mặt bằng', U.esc(U.market(mid).name)) + `<div class="mb-floorplan-label">ĐƯỜNG PHÍA BẮC · LỐI ĐI TRUNG TÂM · CỔNG CHÍNH</div><div class="mb-blocks">${blocks}</div>`;
   }
   // Cấp Khối/Nhà: các Tầng (mỗi tầng liệt kê Dãy) hoặc các Dãy trực tiếp nếu không chia tầng.
   function buildingDiagramHtml(mid, n, can) {
@@ -248,7 +291,7 @@
       const blocks = floors.map(f => {
         const rows = rowsOfF(mid, f.id);
         return `<div class="mb-block mb-block-floor"><button class="mb-block-h" data-act="mb-sel-floor" data-id="${f.id}"><span class="mb-kind">Tầng${f.code ? ' · ' + U.esc(f.code) : ''}</span><b>${U.esc(f.name)}</b><span class="mb-block-area">${areaTxt(f.businessArea)}</span></button>
-          <span class="mb-block-list">${rows.map(r => `<button class="mb-block-li" data-act="mb-sel-row" data-id="${r.id}"><span>${U.esc(rowTitle(r))}</span><span>${m2(r.allocatedArea)}</span></button>`).join('') || '<span class="muted">Chưa có Dãy</span>'}</span></div>`;
+          <div class="mb-rowtiles">${rows.map(rowTileHtml).join('') || '<span class="muted">Chưa có Dãy</span>'}</div></div>`;
       }).join('');
       return head + `<div class="mb-blocks">${blocks}${can.edit ? addTile('qh-add-floor', 'Thêm tầng', `data-block="${b.id}"`) : ''}</div>`;
     }
@@ -271,12 +314,13 @@
   }
   function mbCenterHtml(mid) {
     const can = mbCan(mid);
-    if (!hasLayout(mid)) return emptyMarketHtml(mid, can);
     const n = selNode(mid);
-    const bar = `<div class="mb-ws-bar">${crumbHtml(mid, n)}${viewSwitcherHtml()}</div>`;
-    if (ui.mb.view === 'table') return bar + (A.dkTableHtml ? A.dkTableHtml(mid) : '');
+    const legend = `<div class="mb-map-legend">${A.features.businessPoints.service.DISPLAY_STATUSES.map(k => `<span><i style="background:${D.STATUS[k].color}"></i>${U.esc(A.mbStatusLabel(k))}</span>`).join('')}</div>`;
+    const controls = `<div class="mb-map-controls"><button class="btn sm" data-act="mb-zoom" data-step="-0.1" title="Thu nhỏ">−</button><button class="btn sm" data-act="mb-zoom" data-step="0.1" title="Phóng to">+</button><button class="btn sm" data-act="mb-zoom-reset">100%</button><button class="btn sm" data-act="mb-zoom-fit">Fit</button><button class="btn sm" data-act="mb-fullscreen">⛶</button></div>`;
+    const bar = `<div class="mb-map-top"><div>${crumbHtml(mid, n)}${legend}</div>${controls}</div>`;
+    if (!hasLayout(mid)) return bar + emptyMarketHtml(mid, can);
     const body = n.k === 'row' ? rowDiagramHtml(mid, n) : n.k === 'floor' ? floorDiagramHtml(mid, n, can) : n.k === 'building' ? buildingDiagramHtml(mid, n, can) : marketDiagramHtml(mid, can);
-    return bar + `<div class="card"><div class="card-b">${body}</div></div>`;
+    return bar + `<div class="mb-map-canvas"><div class="mb-map-content" style="--mb-zoom:${ui.mb.zoom}">${body}</div></div>`;
   }
 
   // ---------- INSPECTOR: thông tin & thiết lập của node đang chọn (chỉ xem ở đây, sửa qua modal nhỏ) ----------
@@ -298,7 +342,17 @@
   function inspectorHtml(mid) {
     const can = mbCan(mid), n = selNode(mid), acts = [];
     let title, body;
-    if (n.k === 'building') {
+    if (ui.mb.pointId) {
+      const st = A.idx.stall.get(ui.mb.pointId);
+      if (st && st.market === mid) {
+        const loc = BP().location(st), occupant = A.mbOccupantAt(st), contract = A.features.businessPoints.service.contractOn(st.id, A.mbStatusDate());
+        title = 'Chi tiết điểm kinh doanh';
+        body = kv([['Mã điểm', U.esc(st.code)], ['Trạng thái', A.mbStatusTag(A.mbStatusAt(st))], ['Vị trí', U.esc(loc.label)], ['Diện tích', m2(st.area)], ['Loại diện tích', U.esc(U.areaTypeLabel(st.areaTypeId) || '—')], ['Ngành hàng', U.esc(BP().industry(st) || '—')], ['Tiểu thương', occupant ? U.esc(occupant.name) : '—'], ['Hợp đồng', contract ? U.esc(contract.id) : '—']]);
+        if (occupant && U.can('tieu-thuong')) acts.push(inspBtn('mb-open-trader', 'Xem hồ sơ', `data-id="${occupant.id}"`));
+        if (contract && U.can('hop-dong')) acts.push(inspBtn('go', 'Xem hợp đồng', 'data-to="hop-dong"'));
+      } else ui.mb.pointId = null;
+    }
+    if (!title && n.k === 'building') {
       const b = n.b, i = buildingInfo(mid, b), bb = S.budget.building(b);
       title = 'Khối/Nhà chợ';
       body = kv([['Tên', U.esc(b.name)], ['Mã', U.esc(b.code || '—')], ['Mô hình', i.floors.length ? fmt(i.floors.length) + ' tầng' : i.loose.length ? 'Không chia tầng' : 'Chưa có tầng/Dãy'], ['Số Dãy', fmt(i.rows.length)], ['Số điểm', fmt(i.pts.length)]])
@@ -309,14 +363,14 @@
         if (canAddLooseRow(mid, b)) acts.push(inspBtn('qh-add-zone', '+ Thêm Dãy', `data-block="${b.id}" data-floor="${S.NO_FLOOR + b.id}"`, i.floors.length ? '' : 'primary'));
       }
       if (can.del) acts.push(inspBtn('qh-del-block', 'Ngừng khai thác', `data-id="${b.id}"`, 'danger'));
-    } else if (n.k === 'floor') {
+    } else if (!title && n.k === 'floor') {
       const f = n.f, rows = rowsOfF(mid, f.id);
       title = 'Tầng';
       body = kv([['Tên', U.esc(f.name)], ['Mã', U.esc(f.code || '—')], ['Khối/Nhà', U.esc(n.b ? n.b.name : '—')], ['Số Dãy', fmt(rows.length)], ['Số điểm', fmt(pointsOfRows(rows).length)]])
         + meterHtml(S.budget.floor(f), { total: 'Diện tích tầng', allocated: 'Đã phân bổ cho Dãy' });
       if (can.edit) acts.push(inspBtn('qh-edit-floor', 'Chỉnh sửa', `data-block="${f.buildingId}" data-id="${f.id}"`), inspBtn('qh-add-zone', '+ Thêm Dãy', `data-block="${f.buildingId}" data-floor="${f.id}"`, 'primary'));
       if (can.del) acts.push(inspBtn('qh-del-floor', 'Ngừng sử dụng', `data-block="${f.buildingId}" data-id="${f.id}"`, 'danger'));
-    } else if (n.k === 'row') {
+    } else if (!title && n.k === 'row') {
       const r = n.r, i = rowInfo(r);
       title = 'Dãy';
       body = kv([['Nhà', U.esc(n.b ? n.b.name : '—')], ['Tầng', U.esc(n.f ? n.f.name : 'Không chia tầng')], ['Ngành hàng', U.esc(r.industry || '—')], ['Tên Dãy', U.esc(rowTitle(r))], ['Mã Dãy', U.esc(r.code)]])
@@ -324,14 +378,14 @@
         + `<div class="mb-insp-sec"><h4>Các điểm kinh doanh trong Dãy</h4><div class="small muted">${fmt(i.pts.length)} điểm · ${m2(i.used)}</div>${pointGroupsHtml(i.pts)}${can.edit ? inspBtn('mb-add-point', '+ Thêm nhóm điểm', `data-id="${r.id}"`, 'primary') : ''}</div>`;
       if (can.edit) acts.push(inspBtn('qh-zone-edit-open', 'Chỉnh sửa Dãy', `data-id="${r.id}"`));
       if (can.del) acts.push(inspBtn('qh-del-zone', 'Ngừng khai thác', `data-id="${r.id}"`, 'danger'));
-    } else {
+    } else if (!title) {
       const m = MS() && MS().get(mid);
       title = 'Chợ';
       body = kv([['Chợ', U.esc(U.market(mid).name)], ['Diện tích phục vụ KD', areaTxt(m ? m.businessArea : null)], ['Khối/Nhà', fmt(S.buildingsOf(mid).length)], ['Tầng', fmt(S.floorsOf(mid).length)], ['Dãy', fmt(S.rowsOf(mid).length)], ['Điểm kinh doanh', fmt(A.mbBusinessPointsForMarket(mid).length)]])
         + areaTypesHtml(mid);
       if (can.edit && hasLayout(mid)) acts.push(inspBtn('qh-add-block', '+ Thêm Khối/Nhà', '', 'primary'));
     }
-    return `<aside class="card mb-insp" aria-label="Thông tin và thiết lập"><div class="card-h"><h3>${title}</h3></div><div class="card-b">${body}${acts.length ? `<div class="mb-insp-actions">${acts.join('')}</div>` : ''}</div></aside>`;
+    return `<aside class="card mb-insp" aria-label="Thông tin và thiết lập"><div class="card-h"><h3>${title}</h3><span class="spacer"></span><button class="x" data-act="mb-inspector-close" aria-label="Đóng panel thông tin">×</button></div><div class="card-b">${body}${acts.length ? `<div class="mb-insp-actions">${acts.join('')}</div>` : ''}</div></aside>`;
   }
 
   // ---------- drawer "Sửa dãy" ----------
@@ -342,7 +396,7 @@
     const blocks = blocksOf(mid), floors = floorsOfBlock(mid, z.blockId).filter(f => !f.virtual);
     const pts = S.pointsOfRow(z.key);
     const used = U.sum(pts, st => Number(st.area) || 0);
-    const byType = U.AREA_TYPE_CODES.map(k => ({ k, list: pts.filter(st => st.areaTypeId === k) })).filter(x => x.list.length);
+    const byType = U.KNOWN_AREA_TYPE_CODES.map(k => ({ k, list: pts.filter(st => st.areaTypeId === k) })).filter(x => x.list.length);
     return `<div class="drawer-h"><div><h3>Sửa Dãy</h3><div class="small muted" style="margin-top:2px">${U.esc(z.code || '')} · ${U.esc(z.catMain || '')}</div></div><span class="spacer"></span><button class="x" data-act="close" aria-label="Đóng">×</button></div>
       <div class="drawer-b">
       <div class="form-grid">
@@ -379,33 +433,41 @@
   }
 
   // ---------- trang ----------
+  function layoutToolbarHtml(mid, can) {
+    const n = selNode(mid), editable = can.edit;
+    const importGuard = A.features.marketLayout.importer && A.features.marketLayout.importer.canOpen(mid);
+    const button = (act, label, enabled, data) => `<button class="btn sm ${enabled ? '' : 'is-disabled'}" data-act="${act}" ${data || ''} ${enabled ? '' : 'disabled'} title="${enabled ? label : 'Chọn đúng cấp cấu trúc để thao tác'}">${label}</button>`;
+    return `<div class="mb-toolbar"><div class="mb-toolbar-actions">
+      ${button('qh-add-block', '+ Khối/Nhà', editable && n.k === 'overview')}
+      ${button('qh-add-floor', '+ Tầng', editable && n.k === 'building', n.k === 'building' ? `data-block="${n.b.id}"` : '')}
+      ${button('qh-add-zone', '+ Dãy', editable && n.k === 'floor', n.k === 'floor' ? `data-block="${n.f.buildingId}" data-floor="${n.f.id}"` : '')}
+      ${button('mb-add-point', '+ Điểm KD', editable && n.k === 'row', n.k === 'row' ? `data-id="${n.r.id}"` : '')}
+      <button class="btn sm ${importGuard && importGuard.ok ? '' : 'is-disabled'}" data-act="mb-import-open" ${importGuard && importGuard.ok ? '' : 'disabled'} title="${U.esc(importGuard && !importGuard.ok ? importGuard.error : 'Nhập điểm KD từ Excel')}">Nhập điểm KD từ Excel</button>
+      <span class="spacer"></span>${button('mb-complete-layout', 'Hoàn tất mặt bằng', editable && MS().layoutGraphReady(mid))}
+    </div></div>`;
+  }
+  function marketKpisHtml(mid) {
+    const m = MS().get(mid), b = S.budget.market(mid), stats = A.mbMarketStats(mid);
+    const kpi = (label, value, sub) => `<div class="mb-market-kpi"><span>${label}</span><b>${value}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
+    return `<div class="mb-market-kpis">${kpi('Tổng diện tích chợ', areaTxt(m && m.totalArea))}${kpi('Diện tích phục vụ KD', areaTxt(m && m.businessArea))}${kpi('Đã phân bổ', m2(b.allocated))}${kpi('Còn lại', b.remaining == null ? '—' : m2(b.remaining))}${kpi('Tổng điểm KD', fmt(stats.total))}${kpi('Tỷ lệ lấp đầy', U.pctTxt(stats.occPct))}</div>`;
+  }
   function mbWorkspaceHtml() {
     const mid = qhMarket(), can = mbCan(mid), m = U.market(mid), open = !!ui.mb.treeOpen;
     const stats = A.mbMarketStats(mid);
     const flt = ui.mb.filter;
     const c = k => stats.byStatus[k] || 0;
-    // Chip trạng thái (bấm để lọc): Tổng điểm = điểm của chợ; Đang thuê/Còn trống theo hợp đồng; Nợ phí
-    // theo khoản phải thu; Tạm ngưng/Tranh chấp theo trạng thái vận hành — tất cả suy ra, không lưu.
+    // Chip trạng thái (bấm để lọc): Tổng điểm = điểm của chợ; Đang thuê/Còn trống theo hợp đồng;
+    // Tạm ngưng/Tranh chấp theo trạng thái vận hành — tất cả suy ra, không lưu. Không có "Nợ phí".
     const chip = (k, label, extra) => `<button class="mb-chip ${k ? 'mb-chip-' + k : 'mb-chip-total'} ${flt.status === (k || '') ? 'on' : ''}" data-act="mb-filter-status" data-id="${k || ''}">${k ? `<i style="background:${D.STATUS[k].color}"></i>` : ''}<b>${extra != null ? extra : c(k)}</b>${label}</button>`;
-    const summary = chip(null, 'Tổng điểm', stats.total) + ['thue', 'trong', 'no', 'ngung', 'tranhchap'].map(k => chip(k, A.mbStatusLabel(k))).join('');
+    const summary = chip(null, 'Tổng điểm', stats.total) + A.features.businessPoints.service.DISPLAY_STATUSES.map(k => chip(k, A.mbStatusLabel(k))).join('');
     const layout = hasLayout(mid);
     const addBtn = layout && can.edit ? '<button class="btn sm primary" data-act="qh-add-block">+ Khối/Nhà</button>' : '';
     const resetBtn = can.reset && layout && !stats.total ? `<button class="btn sm mb-more" data-act="qh-reset" title="Xóa toàn bộ cấu trúc (chợ chưa có điểm kinh doanh)" aria-label="Xóa toàn bộ cấu trúc">⋯</button>` : '';
-    return `<div class="card mb-head"><div class="card-b mb-head-b">
-      <div class="mb-head-info"><h3>Mặt bằng & điểm kinh doanh</h3><div class="mb-head-sub"><b>${U.esc(m.name)}</b></div></div>
-        <div class="mb-status-context">
-          <div class="mb-status-date"><label>Tình trạng tại ngày <input class="input" type="date" data-ch="mb-status-date" value="${A.mbStatusDate()}"></label>${A.mbStatusDate() !== U.today() ? '<button class="btn sm" data-act="mb-status-today">Hôm nay</button>' : ''}</div>
-          <div class="mb-summary">${summary}</div>
-        </div></div></div>
-    ${budgetBarHtml(mid)}
-    <button class="btn sm mb-tree-toggle" data-act="mb-toggle-tree">${open ? '✕ Đóng cấu trúc' : '☰ Cấu trúc chợ'}</button>
-    <div class="mb-workspace">
-      <div class="card mb-tree-card ${open ? 'open' : ''}"><div class="card-h mb-tree-h">
-          <h3>Cấu trúc mặt bằng</h3><span class="spacer"></span>${addBtn}${resetBtn}</div>
-        <div class="card-b mb-tree" role="tree">${mbTreeHtml(mid)}</div></div>
-      <div class="mb-ws">${mbCenterHtml(mid)}</div>
-      ${inspectorHtml(mid)}
-    </div>`;
+    const tabs = `<div class="seg mb-primary-tabs"><button class="${ui.mb.view === 'grid' ? 'on' : ''}" data-act="mb-view" data-id="grid">Sơ đồ mặt bằng</button><button class="${ui.mb.view === 'table' ? 'on' : ''}" data-act="mb-view" data-id="table">Danh sách điểm kinh doanh</button></div>`;
+    const tree = `<aside class="mb-tree-card" aria-label="Cấu trúc chợ"><div class="mb-pane-title"><h3>Cấu trúc chợ</h3>${resetBtn}</div><input class="input mb-tree-search" data-in="mb-tree-search" value="${U.esc(ui.mb.treeSearch)}" placeholder="Tìm Khối/Nhà, Tầng, Dãy..." aria-label="Tìm cấu trúc chợ"><div class="mb-tree" role="tree">${mbTreeHtml(mid)}</div></aside>`;
+    const chrome = `${tabs}${layoutToolbarHtml(mid, can)}${marketStatusSummaryHtml(mid)}${marketKpisHtml(mid)}`;
+    if (ui.mb.view === 'table') return `<section class="mb-redesign">${chrome}<div class="mb-list-workspace">${A.dkTableHtml ? A.dkTableHtml(mid) : ''}</div></section>`;
+    return `<section class="mb-redesign">${chrome}<div class="mb-map-shell">${tree}<main class="mb-ws">${mbCenterHtml(mid)}</main>${ui.mb.inspectorOpen ? inspectorHtml(mid) : ''}</div></section>`;
   }
 
   // ---------- đóng menu ⋮: click ra ngoài / ESC ----------
@@ -534,6 +596,12 @@
     const e = A.$('#mb-pg-err'); if (e) { e.innerHTML = result.errors.map(x => `<div>${U.esc(x)}</div>`).join(''); e.hidden = !result.errors.length; }
     const c = A.$('#mb-pg-commit'); if (c) { c.disabled = !(result.ok && sum.count); c.textContent = 'Tạo ' + fmt(sum.count) + ' điểm'; }
   }
+  function importModal(mid) {
+    const p = ui.mb.importPreview;
+    if (!p) return A.modal(A.mHead('Nhập điểm kinh doanh từ Excel') + `<div class="modal-b mb-import"><p>Chỉ nhập điểm vào Khối/Nhà, Tầng và Dãy đã có của <b>${U.esc(U.market(mid).name)}</b>.</p><div class="row"><button class="btn" data-act="mb-import-template">Tải file mẫu</button><button class="btn primary" data-act="mb-import-file">Chọn file .xlsx</button></div><p class="small muted">Sheet bắt buộc: DiemKinhDoanh. Hệ thống kiểm tra toàn bộ batch trước khi ghi dữ liệu.</p></div><div class="modal-f"><button class="btn" data-act="close">Đóng</button></div>`);
+    const rows = p.rows.map(x => `<tr class="${x.errors.length ? 'mb-import-bad' : ''}"><td>${x.line}</td><td>${U.esc(x.code || '—')}</td><td>${U.esc(x.rowId ? A.idx.row.get(x.rowId).code : '—')}</td><td>${x.area > 0 ? m2(x.area) : '—'}</td><td>${U.esc(U.areaTypeLabel(x.areaTypeId) || '—')}</td><td>${U.esc(x.industry || '—')}</td><td>${x.errors.length ? `<span class="mb-import-error">${U.esc(x.errors.join(' '))}</span>` : '<span class="ok">✓ Hợp lệ</span>'}</td></tr>`).join('');
+    return A.modal(A.mHead('Kiểm tra dữ liệu nhập') + `<div class="modal-b mb-import"><div class="mb-import-stats">Tổng dòng: <b>${p.rows.length}</b> · Hợp lệ: <b>${p.valid}</b> · Lỗi: <b>${p.errors}</b> · DT sẽ thêm: <b>${m2(p.totalArea)}</b></div><div class="tbl-wrap"><table class="tbl"><thead><tr><th>STT</th><th>Mã điểm</th><th>Dãy</th><th>Diện tích</th><th>Loại diện tích</th><th>Ngành hàng</th><th>Kết quả</th></tr></thead><tbody>${rows}</tbody></table></div></div><div class="modal-f"><button class="btn" data-act="mb-import-open">Chọn file khác</button><span class="spacer"></span><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="mb-import-commit" ${p.errors ? 'disabled' : ''}>Nhập dữ liệu</button></div>`);
+  }
   Object.assign(A.ACT, {
     'mb-sel-overview': () => select('overview'),
     'mb-sel-building': el => select('building', el.dataset.id),
@@ -548,7 +616,29 @@
     'mb-menu-run': el => { const fn = A.ACT[el.dataset.run]; ui.mb.menu = null; A.render(); if (fn) fn(el); },
     // Chuyển Sơ đồ/Bảng — chỉ đổi ui.mb.view, giữ nguyên node đang chọn và bộ lọc.
     'mb-view': el => { ui.mb.view = el.dataset.id === 'table' ? 'table' : 'grid'; A.render(); },
-    'mb-filter-status': el => { ui.mb.filter.status = el.dataset.id; A.render(); },
+    'mb-zoom': el => { ui.mb.zoom = Math.max(0.7, Math.min(1.5, Number(ui.mb.zoom || 1) + Number(el.dataset.step || 0))); A.render(); },
+    'mb-zoom-reset': () => { ui.mb.zoom = 1; A.render(); },
+    'mb-zoom-fit': () => { ui.mb.zoom = 1; A.render(); },
+    'mb-fullscreen': el => { const map = el.closest && el.closest('.mb-map-shell'); if (map && map.requestFullscreen) map.requestFullscreen(); },
+    'mb-mode': el => { ui.mb.mode = el.dataset.id === 'branch' && ui.mb.sel ? 'branch' : 'overview'; if (ui.mb.mode === 'overview') ui.mb.sel = null; A.render(); },
+    'mb-inspector-close': () => { ui.mb.inspectorOpen = false; ui.mb.pointId = null; A.render(); },
+    'mb-complete-layout': () => {
+      const mid = qhMarket();
+      if (!A.canDo('cau-truc.edit', mid) || !MS().layoutGraphReady(mid)) return U.toast('Mặt bằng chưa đủ điều kiện hoàn tất. Cần có Khối/Nhà, Dãy và Điểm kinh doanh hợp lệ.');
+      const out = A.features.lifecycle.service.completeMarketLayout(mid, A.currentAccount().fullName || 'Người dùng');
+      if (!out) return U.toast('Không thể hoàn tất thiết lập mặt bằng.');
+      A.save(); A.render();
+      U.toast('Đã hoàn tất thiết lập mặt bằng. Chợ cần hoàn tất cấu hình mức thu trước khi chuyển sang Đang hoạt động.');
+    },
+    'mb-import-open': () => { const mid = qhMarket(), guard = A.features.marketLayout.importer.canOpen(mid); if (!guard.ok) return U.toast(guard.error); ui.mb.importPreview = null; ui.mb.importRowId = selNode(mid).k === 'row' ? selNode(mid).r.id : null; importModal(mid); },
+    'mb-import-template': () => { const mid = qhMarket(); if (A.canDo('cau-truc.edit', mid)) A.features.marketLayout.importer.template(); },
+    'mb-import-file': () => {
+      const mid = qhMarket(), guard = A.features.marketLayout.importer.canOpen(mid); if (!guard.ok) return U.toast(guard.error);
+      const input = document.createElement('input'); input.type = 'file'; input.accept = '.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'; input.style.display = 'none'; document.body.appendChild(input);
+      input.onchange = () => A.features.marketLayout.importer.read(input.files && input.files[0], (data, error) => { input.remove(); if (error) return U.toast(error); ui.mb.importPreview = A.features.marketLayout.importer.validate(mid, data); importModal(mid); }); input.click();
+    },
+    'mb-import-commit': () => { const mid = qhMarket(), out = A.features.marketLayout.importer.commit(mid, ui.mb.importPreview); if (!out.ok) return U.toast(out.errors[0]); const rows = new Set(out.stalls.map(x => x.rowId)).size; ui.mb.importPreview = null; A.closeModal(); A.render(); U.toast('Đã nhập ' + out.stalls.length + ' điểm kinh doanh vào ' + rows + ' Dãy.'); },
+    'mb-filter-status': el => { const k = el.dataset.id || ''; ui.mb.filter.status = A.features.businessPoints.service.DISPLAY_STATUSES.includes(k) ? k : ''; A.render(); },
     'mb-filter-clear': () => { ui.mb.filter = { search: '', status: '', cat: '', areaType: '' }; A.render(); },
     'mb-add-point': el => {
       const mid = qhMarket(), r = A.idx.row.get(el.dataset.id);
@@ -561,9 +651,13 @@
     'mb-point-cancel': () => { ui.mb.pointDraft = null; A.closeModal(); },
     'mb-point-commit': () => {
       const d = pointDraft(); if (!d || !A.canDo('cau-truc.edit', d.marketId)) return;
+      const before = A.features.markets.service.lifecycle(d.marketId);
       const out = S.pointGroups.commit(d.marketId, d.rowId, d.groups);
       if (!out.ok) { renderPointAdd(); U.toast(out.errors[0]); return; }
       const code = A.idx.row.get(d.rowId).code; ui.mb.pointDraft = null; A.closeModal(); A.render(); U.toast(`Đã tạo ${out.stalls.length} điểm kinh doanh tại Dãy ${code}.`);
+      // Lần đầu mặt bằng chuyển sang "Đã thiết lập": báo rõ chợ chưa hoạt động nếu còn chờ biểu phí.
+      const after = A.features.markets.service.lifecycle(d.marketId);
+      if (before && after && !before.layoutReady && after.layoutReady) U.toast(after.stage === 'ACTIVE' ? LAYOUT_DONE_MSG + ' Chợ đã đủ điều kiện và chuyển sang Đang hoạt động.' : LAYOUT_DONE_MSG + ' ' + PENDING_FEE_MSG);
     },
     'qh-zone-edit-open': el => { if (findZone(qhMarket(), el.dataset.id)) qhOpenZoneDrawer(qhMarket(), el.dataset.id); },
     'qh-reset': () => {
@@ -734,6 +828,7 @@
   A.IN['mb-point-field'] = el => { const d = pointDraft(), g = d && d.groups.find(x => x.id === el.dataset.id); if (g) { g[el.dataset.key] = el.value; syncPointAdd(); } };
   A.CH['mb-point-field'] = el => { const d = pointDraft(), g = d && d.groups.find(x => x.id === el.dataset.id); if (g) { g[el.dataset.key] = el.value; renderPointAdd(); } };
   A.IN['mb-filter-search'] = el => { ui.mb.filter.search = el.value; A.render(); };
+  A.IN['mb-tree-search'] = el => { ui.mb.treeSearch = el.value; A.render(); };
   A.CH['mb-filter-cat'] = el => { ui.mb.filter.cat = el.value; A.render(); };
   A.CH['mb-filter-area-type'] = el => { ui.mb.filter.areaType = el.value; A.render(); };
   // "Tình trạng tại ngày": chỉ đổi ngày xem (UI, không lưu); chip/bảng/sơ đồ tính lại theo hợp đồng.

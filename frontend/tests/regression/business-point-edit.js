@@ -101,25 +101,27 @@ ok('11 moving to dãy KB-A preserves only point-owned data (within the row alloc
   assert.strictEqual(occupied.rowId, zKB.key); assert.strictEqual(occupied.section, 'KB-A');
   assert.strictEqual(snapshot(), before, 'moving the point still leaves contracts/invoices untouched');
 });
-ok('12 Nợ phí cannot be cleared from the popup', () => {
+ok('12 overdue receivable does not make "Nợ phí" a point status; popup cannot set it', () => {
   // Seed v29 không còn khoản quá hạn ở CL (kỳ 09 chưa phát hành) → tự tạo 1 khoản quá hạn cho điểm đang thuê.
-  if (!A.db.stalls.some(s => s.market === 'CL' && A.pointDisplayStatus(s) === 'no')) {
+  // Quyết định 10/2026: "Nợ phí" không phải trạng thái điểm KD — điểm có hợp đồng hiệu lực vẫn là Đang thuê.
+  if (!A.db.stalls.some(s => s.market === 'CL' && BP.contractOn(s.id, today) && BP.debtStatus(s, BP.contractOn(s.id, today).id) === 'overdue')) {
     const st = A.db.stalls.find(s => s.market === 'CL' && s.id !== occupied.id && BP.contractOn(s.id, today)), c = BP.contractOn(st.id, today);
     A.db.invoices.push({ id: 'PT-TEST-OVERDUE', period: '2026-08', market: 'CL', stallId: st.id, traderId: c.traderId, contractId: c.id, items: [], amount: 100000, paid: 0, due: '2026-08-15', status: 'unpaid' });
     A.reindex();
   }
-  const debt = A.db.stalls.find(s => s.market === 'CL' && A.pointDisplayStatus(s) === 'no');
+  const debt = A.db.stalls.find(s => s.market === 'CL' && BP.contractOn(s.id, today) && BP.debtStatus(s, BP.contractOn(s.id, today).id) === 'overdue');
+  assert.strictEqual(A.pointDisplayStatus(debt), 'thue');
   open(debt);
-  assert(/Nợ phí/.test(modal()) && !/<option value="no"/.test(modal()) && !/<option value="trong"/.test(modal()));
+  assert(!/<option value="no"/.test(modal()) && !/<option value="trong"/.test(modal()));
   fld('area', String(debt.area).replace('.', ','));
   h.act('dkcl-edit-save', { id: debt.id });
-  assert.strictEqual(A.pointDisplayStatus(debt), 'no'); assert.strictEqual(debt.status, 'active');
+  assert.strictEqual(A.pointDisplayStatus(debt), 'thue'); assert.strictEqual(debt.status, 'active');
 });
 ok('operational status is stored as-is; occupancy stays derived', () => {
   open(free); fld('op', 'suspended'); h.act('dkcl-edit-save', { id: free.id });
-  assert.strictEqual(free.status, 'suspended'); assert.strictEqual(A.pointDisplayStatus(free), 'ngung');
+  assert.strictEqual(free.status, 'suspended'); assert.strictEqual(free.operationalStatus, 'suspended'); assert.strictEqual(A.pointDisplayStatus(free), 'ngung');
   open(free); fld('op', 'active'); h.act('dkcl-edit-save', { id: free.id });
-  assert.strictEqual(free.status, 'active'); assert.strictEqual(A.pointDisplayStatus(free), 'trong');
+  assert.strictEqual(free.status, 'active'); assert.strictEqual(free.operationalStatus, 'active'); assert.strictEqual(A.pointDisplayStatus(free), 'trong');
 });
 ok('14 out-of-scope / no-permission user cannot save', () => {
   open(free); const area = free.area;

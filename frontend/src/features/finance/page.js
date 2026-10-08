@@ -201,10 +201,45 @@
     const traderCode = String(traderId || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
     return 'KPT-' + marketCode + '-' + periodCode + '-' + traderCode + (ordinal > 1 ? '-' + String(ordinal).padStart(2, '0') : '');
   }
-  // BR-05: mặt bằng thu cho THÁNG KẾ TIẾP, điện/nước/dịch vụ cho THÁNG CỦA KỲ — hiển thị thống nhất với calculatePeriod.
-  function ptFeeMonthsNote(p) {
-    const b = A.features.finance.billing, land = b ? b.nextMonth(p.period) : '';
-    return `<div class="small muted" style="margin-top:6px">Mặt bằng tính cho tháng <b>${U.per(land)}</b> · Điện, nước, dịch vụ tính cho tháng <b>${U.per(p.period)}</b>.</div>`;
+  // BR-05: điện/nước/dịch vụ = THÁNG SỬ DỤNG (tháng ghi chỉ số), mặt bằng thu trước cho THÁNG KẾ TIẾP — cùng helper với
+  // calculatePeriod (finance.marketPeriod.usageMonth / landMonth); khoảng đi thu / hạn thu không quyết định tháng của khoản.
+  // Tháng của một dòng khoản đã lưu (phát hành hoặc nháp): ưu tiên metadata mới, fallback feePeriod đã lưu. Không suy đoán.
+  const ptItemMonth = i => (i && (i.chargeMonth || (i.chargeType === 'LAND' ? i.targetMonth : i.usageMonth) || i.feePeriod)) || '';
+  const ptMonths = list => Array.from(new Set(list.map(ptItemMonth).filter(Boolean))).sort().map(U.per).join(', ');
+  // Dòng khoản đang có của kỳ: khoản đã phát hành (bất biến) hoặc nháp đã tính.
+  function ptStoredItems(p) {
+    const svc = MP(), published = svc.invoices(p);
+    return [].concat.apply([], (published.length ? published.map(i => i.items || []) : svc.drafts(p).map(d => d.items || [])));
+  }
+  // Mô tả tháng tính phí: lấy từ CHÍNH các dòng khoản đã lưu (khoản phát hành không bị diễn giải lại theo quy tắc hiện
+  // hành). Chỉ khi kỳ chưa có dòng nào mới hiển thị lịch dự kiến theo quy tắc hiện hành. Khoảng chỉ số / quy ước 30 ngày
+  // chỉ nêu khi chính các dòng có metadata đó.
+  function ptFeeMonthsNote(p, stored) {
+    const items = stored || ptStoredItems(p);
+    if (!items.length) {
+      const svc = MP(), w = svc.usageWindow ? svc.usageWindow(p) : null;
+      const usage = svc.usageMonth ? svc.usageMonth(p) : p.period, land = svc.landMonth ? svc.landMonth(p) : p.period;
+      return `<div class="small muted" style="margin-top:6px">Dự kiến theo lịch kỳ: điện, nước, dịch vụ tháng <b>${U.per(usage)}</b>${w ? ` (chỉ số ${U.dmy(w.from)} → ${U.dmy(w.to)})` : ''} · Mặt bằng thu trước tháng <b>${U.per(land)}</b> (đủ tháng tính 30 ngày).</div>`;
+    }
+    const of = types => items.filter(i => types.includes(i.chargeType));
+    const util = of(['ELECTRICITY', 'WATER']), service = of(['MARKET_SERVICE']), land = of(['LAND']);
+    const windows = Array.from(new Set(util.filter(i => i.usageWindow && i.usageWindow.from && i.usageWindow.to).map(i => i.usageWindow.from + '|' + i.usageWindow.to)));
+    const windowText = util.length && windows.length === 1 && util.every(i => i.usageWindow) ? ` (chỉ số ${U.dmy(windows[0].split('|')[0])} → ${U.dmy(windows[0].split('|')[1])})` : '';
+    const parts = [];
+    const um = ptMonths(util), sm = ptMonths(service);
+    if (um && um === sm) parts.push(`Điện, nước, dịch vụ tháng <b>${um}</b>${windowText}`);
+    else { if (um) parts.push(`Điện, nước tháng <b>${um}</b>${windowText}`); if (sm) parts.push(`Dịch vụ tháng <b>${sm}</b>`); }
+    const lm = ptMonths(land);
+    if (lm) parts.push(`Mặt bằng tháng <b>${lm}</b>${land.length && land.every(i => i.billableDays != null) ? ' (quy ước tháng 30 ngày)' : ''}`);
+    return parts.length ? `<div class="small muted" style="margin-top:6px">Tháng tính phí theo các dòng khoản: ${parts.join(' · ')}.</div>` : '';
+  }
+  // Diễn giải một dòng khi hiển thị. Dòng điện/nước có đủ chỉ số đã lưu → dựng lại "mới − cũ = sản lượng <đơn vị sản lượng>"
+  // (đơn vị suy từ đơn vị giá đã lưu, vd đ/kWh → kWh). Không ghi đè bản gốc; dòng khác giữ nguyên diễn giải đã lưu.
+  function ptItemExplain(i, amount) {
+    const m = i.meter, num = v => Number(v).toLocaleString('vi-VN');
+    const billing = A.features.finance.billing, unit = i.quantityUnit || (m && m.unit) || (billing && billing.consumptionUnit ? billing.consumptionUnit(i.unit) : i.unit) || '';
+    if (m && m.previous != null && m.current != null && m.consumption != null) return `${num(m.current)} − ${num(m.previous)} = ${num(m.consumption)} ${U.esc(unit)} · ${num(m.consumption)} ${U.esc(unit)} × ${U.money(i.unitPrice)} = ${U.money(amount)}`;
+    return U.esc(i.explanation || '') + (i.chargeType === 'LAND' ? ' = ' + U.money(amount) : ' · ' + U.money(amount));
   }
   function ptNewView() {
     const billing = A.features.finance.billing, svc = MP(), p = ptNewPeriod();
@@ -268,10 +303,10 @@
     const rows = group ? group.rows : (invoice ? (invoice.items || []).map(item => ({ contractId: item.contractId, stallId: item.stallId, amount: item.amount, items: [item] })) : []);
     if (!p || p.marketId !== ui.market || !rows.length) return U.toast('Không tìm thấy chi tiết khoản phải thu.');
     const contracts = Array.from(new Set(rows.map(x => x.contractId))).map(id => ({ id, rows: rows.filter(x => x.contractId === id) }));
-    const line = r => { const i = r.items[0] || {}; return `<div style="padding:7px 0;border-bottom:1px solid var(--border,#e5e7eb)"><div class="row"><b>${U.esc(i.name || 'Khoản phí')}</b><span class="spacer"></span><b>${U.money(r.amount)}</b></div><div class="small muted" style="margin-top:3px">${U.esc(i.explanation || '')}${i.chargeType === 'LAND' ? ' = ' + U.money(r.amount) : i.meter ? ' · ' + Number(i.meter.consumption).toLocaleString('vi-VN') + ' ' + U.esc(i.unit || '') + ' × ' + U.money(i.unitPrice) + ' = ' + U.money(r.amount) : ' · ' + U.money(r.amount)}${i.feePeriod ? ' · Tháng tính phí ' + U.per(i.feePeriod) : ''}</div></div>`; };
+    const line = r => { const i = r.items[0] || {}, month = ptItemMonth(i); return `<div style="padding:7px 0;border-bottom:1px solid var(--border,#e5e7eb)"><div class="row"><b>${U.esc(i.name || 'Khoản phí')}</b><span class="spacer"></span><b>${U.money(r.amount)}</b></div><div class="small muted" style="margin-top:3px">${ptItemExplain(i, r.amount)}${month ? ' · Tháng tính phí ' + U.per(month) : ''}</div></div>`; };
     const errors = group ? group.errors || [] : [];
     const errorsHtml = errors.length ? `<div class="note warn" style="margin-top:14px"><b>⚠ CẦN XỬ LÝ</b>${errors.map(e => { const st = A.idx.stall.get(e.businessPointId) || {}, label = e.chargeType === 'LAND' ? 'Mặt bằng' : e.chargeType === 'ELECTRICITY' ? 'Điện' : e.chargeType === 'WATER' ? 'Nước' : e.chargeType === 'MARKET_SERVICE' ? 'Dịch vụ' : 'Dữ liệu hợp đồng'; const go = e.code.indexOf('POLICY') >= 0 ? 'cau-hinh-gia' : e.code.indexOf('METER') >= 0 || e.code === 'ABNORMAL_CONSUMPTION' ? 'dien-nuoc' : e.code.indexOf('POINT') >= 0 || e.code.indexOf('AREA') >= 0 ? 'mat-bang' : 'hop-dong'; return `<div style="margin-top:8px"><b>${U.esc(e.contractId || 'Hợp đồng')} · ${U.esc(st.code || e.businessPointId || '—')}</b><br>${U.esc(label)}: ❌ ${U.esc(e.message)} <button class="btn sm" data-act="go" data-id="${go}">Đi đến dữ liệu nguồn</button></div>`; }).join('')}</div>` : '';
-    A.modal(A.mHead('Chi tiết khoản phải thu') + `<div class="modal-b"><dl class="kv"><dt>Tiểu thương</dt><dd><b>${U.esc(t.name || traderId)}</b> (${U.esc(t.id || traderId)})</dd><dt>Kỳ thu</dt><dd>${U.esc(p.label || U.per(p.period))}</dd><dt>Số hợp đồng</dt><dd>${contracts.length}</dd></dl>${ptFeeMonthsNote(p)}${errorsHtml}${contracts.map(c => { const st = A.idx.stall.get(c.rows[0].stallId) || {}, source = (A.db.contracts || []).find(x => x.id === c.id) || {}, applies = source.serviceApplicability || {}, types = c.rows.map(x => (x.items[0] || {}).chargeType); const absent = [['ELECTRICITY', 'Điện', applies.electricity], ['WATER', 'Nước', applies.water], ['MARKET_SERVICE', 'Dịch vụ', applies.marketService]].filter(x => !x[2] && !types.includes(x[0])).map(x => `<div class="small muted">${x[1]}: Không đăng ký</div>`).join(''); return `<section style="margin-top:16px"><h4 style="margin:0 0 7px">HỢP ĐỒNG ${U.esc(c.id || '—')}</h4><div class="small muted">Điểm KD: <b>${U.esc(st.code || c.rows[0].stallId || '—')}</b></div>${c.rows.map(line).join('')}${absent}<div class="row" style="padding-top:8px"><b>TỔNG ĐIỂM ${U.esc(st.code || '')}</b><span class="spacer"></span><b>${U.money(U.sum(c.rows, x => x.amount))}</b></div></section>`; }).join('')}<div class="note info" style="margin-top:16px"><b>TỔNG KHOẢN PHẢI THU TIỂU THƯƠNG</b><span style="float:right"><b>${U.money(group ? group.amount : invoice.amount)}</b></span></div></div><div class="modal-f"><button class="btn" data-act="close">Đóng</button></div>`, true);
+    A.modal(A.mHead('Chi tiết khoản phải thu') + `<div class="modal-b"><dl class="kv"><dt>Tiểu thương</dt><dd><b>${U.esc(t.name || traderId)}</b> (${U.esc(t.id || traderId)})</dd><dt>Kỳ thu</dt><dd>${U.esc(p.label || U.per(p.period))}</dd><dt>Số hợp đồng</dt><dd>${contracts.length}</dd></dl>${ptFeeMonthsNote(p, [].concat.apply([], rows.map(x => x.items || [])))}${errorsHtml}${contracts.map(c => { const st = A.idx.stall.get(c.rows[0].stallId) || {}, source = (A.db.contracts || []).find(x => x.id === c.id) || {}, applies = source.serviceApplicability || {}, types = c.rows.map(x => (x.items[0] || {}).chargeType); const absent = [['ELECTRICITY', 'Điện', applies.electricity], ['WATER', 'Nước', applies.water], ['MARKET_SERVICE', 'Dịch vụ', applies.marketService]].filter(x => !x[2] && !types.includes(x[0])).map(x => `<div class="small muted">${x[1]}: Không đăng ký</div>`).join(''); return `<section style="margin-top:16px"><h4 style="margin:0 0 7px">HỢP ĐỒNG ${U.esc(c.id || '—')}</h4><div class="small muted">Điểm KD: <b>${U.esc(st.code || c.rows[0].stallId || '—')}</b></div>${c.rows.map(line).join('')}${absent}<div class="row" style="padding-top:8px"><b>TỔNG ĐIỂM ${U.esc(st.code || '')}</b><span class="spacer"></span><b>${U.money(U.sum(c.rows, x => x.amount))}</b></div></section>`; }).join('')}<div class="note info" style="margin-top:16px"><b>TỔNG KHOẢN PHẢI THU TIỂU THƯƠNG</b><span style="float:right"><b>${U.money(group ? group.amount : invoice.amount)}</b></span></div></div><div class="modal-f"><button class="btn" data-act="close">Đóng</button></div>`, true);
   }
   A.ACT['pt-new-detail'] = el => ptNewDetail(el.dataset.trader, el.dataset.period);
   // ---------- Thu tiền: helper dùng chung của workspace ----------

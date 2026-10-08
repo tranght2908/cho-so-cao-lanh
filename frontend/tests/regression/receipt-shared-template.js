@@ -12,7 +12,7 @@ const pays = A.applyPayment([inv.id], U.due(inv), 'ck', 'Hệ thống');
 const pay = pays[pays.length - 1];
 assert(pay && inv.status === 'paid' && A.receiptBusinessStateOk(pay));
 const expected = R.html(pay);
-['BIÊN LAI THU TIỀN', pay.receipt, pay.id, pay.lookup, inv.id, 'Mã khoản phải thu', 'NV thu phí', 'Ngày thu', 'Mặt bằng 12/2026', 'Điện 11/2026', 'Nước 11/2026'].forEach(x => assert(expected.includes(x), 'mẫu có ' + x));
+['BIÊN LAI THU TIỀN', pay.receipt, pay.id, pay.lookup, inv.id, 'Mã khoản phải thu', 'NV thu phí', 'Ngày thu', 'Mặt bằng 11/2026', 'Điện 10/2026', 'Nước 10/2026'].forEach(x => assert(expected.includes(x), 'mẫu có ' + x));
 
 // Tiểu thương xem biên lai của chính mình.
 A.ui.sessionAccountId = 'AC-TT01'; A.ui.currentDemoAccountId = 'AC-TT01'; A.ui.market = 'CL'; A.syncAccountContext();
