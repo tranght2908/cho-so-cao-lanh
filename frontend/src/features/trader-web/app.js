@@ -157,8 +157,11 @@
   const currentPeriod = t => { const ps = myInvoices(t).map(i => i.period).sort(); return ps.length ? ps[ps.length - 1] : null; };
   const contractService = () => A.features.contracts && A.features.contracts.service;
   const contractPointId = c => c && (c.businessPointId || c.stallId);
-  const contractPhase = c => (contractService() && contractService().presentationStatus(c)) || 'ended';
-  const contractOrder = { current: 0, pending_liquidation: 1, liquidated: 2, ended: 3 };
+  // Trạng thái hiển thị DÙNG CHUNG với module Hợp đồng (contracts.service.displayStatus): Chưa hiệu lực / Còn hiệu lực /
+  // Đã hết hạn theo ngày; dữ liệu cũ chấm dứt / thanh lý chỉ đọc "(dữ liệu cũ)". Chỉ là display state — không ghi gì.
+  const contractPhase = c => (contractService() && contractService().displayStatus ? contractService().displayStatus(c) : 'EXPIRED');
+  const contractStatusInfo = c => (contractService() && contractService().DISPLAY_STATUS && contractService().DISPLAY_STATUS[contractPhase(c)]) || { label: '—', tone: '' };
+  const contractOrder = { ACTIVE: 0, UPCOMING: 1, EXPIRED: 2, LEGACY_PENDING_LIQUIDATION: 3, LEGACY_TERMINATED: 4, LEGACY_LIQUIDATED: 5 };
   const contractsOf = t => A.db.contracts.filter(c => c.traderId === t.id).sort((a, b) => (contractOrder[contractPhase(a)] - contractOrder[contractPhase(b)]) || String(b.start || '').localeCompare(String(a.start || '')));
   const daysLeft = c => U.days(String(A.db.today || U.today()), c.end);
   const section = (title, body, action) => `<section class="card tw-sec"><div class="card-h"><h3>${title}</h3>${action || ''}</div><div class="card-b">${body}</div></section>`;
@@ -338,11 +341,11 @@
   }
 
   function contractStatus(c) {
-    const phase = contractPhase(c);
-    const labels = { current: 'Đang hiệu lực', pending_liquidation: 'Chờ thanh lý', liquidated: 'Đã thanh lý', ended: 'Đã kết thúc' };
-    const tones = { current: 'ok', pending_liquidation: 'warn', liquidated: '', ended: '' };
-    return `<span class="tag ${tones[phase] || ''}">${labels[phase] || '—'}</span>`;
+    const d = contractStatusInfo(c);
+    return `<span class="tag ${d.tone || ''}">${U.esc(d.label)}</span>`;
   }
+  // Cảnh báo nhẹ khi hợp đồng đã hết hạn (không có thao tác gia hạn / chấm dứt / thanh lý).
+  const contractExpiredNote = c => contractPhase(c) === 'EXPIRED' ? `<div class="note warn tw-contract-expired">Hợp đồng này đã hết hạn từ ngày ${U.dmy(c.end)}.</div>` : '';
   const contractLeftTag = contractStatus;
   const pointOfContract = c => stallOf(contractPointId(c));
   const formatArea = point => point && Number.isFinite(Number(point.area)) ? `${Number(point.area).toLocaleString('vi-VN')} m²` : '—';
@@ -354,9 +357,11 @@
     // facade scope đã có mặt; fallback vẫn derive đúng Row → collectorId.
     const row = BP.row(point);
     const collector = typeof BP.pointCollector === 'function' ? BP.pointCollector(point.id) : (row && row.collectorId && A.ACCOUNTS.get(row.collectorId));
-    const usage = { current: 'Đang thuê', pending_liquidation: 'Tạm ngưng chờ thanh lý', liquidated: 'Đã thanh lý', ended: 'Đã kết thúc' }[contractPhase(c)] || '—';
+    // Hết hạn không giải phóng điểm: hợp đồng còn hiệu lực hoặc đã hết hạn → điểm vẫn "Đang thuê".
+    const phase = contractPhase(c), held = phase === 'ACTIVE' || phase === 'EXPIRED';
+    const usage = held ? 'Đang thuê' : contractStatusInfo(c).label;
     return `<article class="tw-contract-point">
-      <div class="tw-contract-point-h"><b>${U.esc(point.code || '—')}</b><span class="tag ${contractPhase(c) === 'current' ? 'ok' : ''}">${usage}</span></div>
+      <div class="tw-contract-point-h"><b>${U.esc(point.code || '—')}</b><span class="tag ${held ? 'ok' : ''}">${U.esc(usage)}</span></div>
       <div class="tw-contract-location"><span>Vị trí</span><b>${U.esc(loc.label || '—')}</b></div>
       <div class="tw-point-meta"><div><span>Ngành hàng</span><b>${U.esc(BP.industry(point) || '—')}</b></div><div><span>Diện tích</span><b>${formatArea(point)}</b></div><div><span>Loại diện tích</span><b>${U.esc(U.areaTypeLabel(point.areaTypeId) || '—')}</b></div></div>
       ${collector ? `<div class="tw-contract-extra"><span>Nhân viên thu phí phụ trách</span><b>${U.esc(collector.fullName || collector.name || '—')}</b></div>` : ''}
@@ -389,7 +394,7 @@
         }).join('')}</aside>
         <section class="card tw-contract-detail">
           <div class="card-h tw-contract-detail-h"><div><h3>${U.esc(selected.id)}</h3><span class="small muted">Hợp đồng thuê điểm kinh doanh</span></div>${contractStatus(selected)}</div>
-          <div class="card-b">
+          <div class="card-b">${contractExpiredNote(selected)}
             <section class="tw-contract-section"><h3>Thông tin hợp đồng</h3><div class="tw-contract-info-grid">
               <div><span>Thời hạn</span><b>${U.dmy(selected.start)} – ${U.dmy(selected.end)}</b></div>
               <div><span>Chợ</span><b>${U.esc(marketName(selected.market || t.market))}</b></div>

@@ -17,16 +17,14 @@
     const candidate = comparableName(name);
     return !!candidate && service.rows().some(m => m.id !== excludeId && comparableName(m.name) === candidate);
   };
-  service.validPhone = function (phone) {
-    const value = String(phone || '').trim();
-    return !value || /^0(?:3|5|7|8|9)\d{8}$/.test(value);
-  };
   service.nextCode = function () { return repository.nextCode(); };
   // Danh sách chợ hiệu lực (12 chợ gốc + chợ custom trong danh mục) — xem markets/store.js.
   service.effectiveMarkets = function () { return repository.effectiveMarkets(); };
   service.add = function (record, user) { return repository.add(record, user); };
   service.update = function (id, patch, user) { return repository.update(id, patch, user); };
-  service.normalizeLifecycle = function (id, layoutComplete, user) { return repository.normalizeLifecycle(id, layoutComplete, user); };
+  service.normalizeLifecycle = function (id, layoutComplete, user, opts) { return repository.normalizeLifecycle(id, layoutComplete, user, opts); };
+  // Vòng đời hiển thị (mặt bằng × trạng thái × biểu phí) — một nguồn: lifecycle.service.marketLifecycle.
+  service.lifecycle = function (id) { const lc = A.features.lifecycle && A.features.lifecycle.service; return lc && lc.marketLifecycle ? lc.marketLifecycle(id) : null; };
   service.completeLayoutSetup = function (id, user) {
     if (!service.layoutGraphReady(id)) return null;
     return repository.completeLayoutSetup(id, user);

@@ -114,10 +114,19 @@
         <div class="pm-progress-foot"><div class="pm-progress-text"><div class="small">${U.esc(summaryLine)}</div><div class="pm-alert pm-alert-${alertTone}">${U.esc(alert)}${unassigned && !month.closed ? ` <button class="period-monitor-link small" data-act="period-monitor-unassigned">${unassigned} chợ chưa phân công NV thu phí</button>` : ''}</div></div>
           <div class="pm-progress-actions">${issueBtn}${closeBtn}</div></div>
       </div></section>
+      ${pendingFeeNoteHtml()}
       <section class="card"><div class="card-h period-monitor-table-head"><div><h3>Theo dõi theo chợ</h3><div class="pm-filters"><div class="seg">${chip('all', 'Tất cả', all.length)}${MAIN_FILTERS.map(id => chip(id, svc.FILTERS.find(f => f[0] === id)[1], byFilter(id))).join('')}</div>
           <select class="input pm-more ${moreOn ? 'on' : ''}" data-ch="period-monitor-filter-more"><option value="">Trạng thái khác</option>${more.map(f => `<option value="${f[0]}" ${filter === f[0] ? 'selected' : ''}>${U.esc(f[1])} (${byFilter(f[0])})</option>`).join('')}</select></div></div>
         <input class="input" data-in="period-monitor-search" value="${U.esc(ui.periodMonitorSearch || '')}" placeholder="Tìm tên chợ..."></div>
         <div class="card-b">${U.table([{ t: 'Chợ' }, { t: 'NV thu phí' }, { t: 'Điện / Nước' }, { t: 'Khoản phải thu' }, { t: 'Phát hành' }, { t: 'Thu tiền' }, { t: 'Đối soát' }, { t: 'Trạng thái' }], rows.map(r => monitorRowHtml(r, key)), { empty: 'Không có chợ phù hợp bộ lọc.' })}</div></section></div>`;
+  }
+  // Chợ trong phạm vi đã thiết lập mặt bằng nhưng chưa hoạt động (chờ cấu hình mức thu) không có kỳ thu —
+  // nêu rõ lý do (vòng đời dùng chung lifecycle.service.marketLifecycle).
+  function pendingFeeNoteHtml() {
+    const lc = A.features.lifecycle && A.features.lifecycle.service;
+    if (!lc || !lc.marketLifecycle) return '';
+    const names = A.allowedMarkets(A.currentAccount()).map(id => lc.marketLifecycle(id)).filter(x => x && x.stage === 'PENDING_FEE').map(x => U.mShort(x.marketId));
+    return names.length ? `<div class="note pm-pending-fee">Chưa tạo kỳ thu cho ${names.length} chợ: ${U.esc(names.join(', '))}. Chợ chưa hoàn tất cấu hình mức thu.</div>` : '';
   }
   A.VIEWS['theo-doi-ky-thu'] = () => U.can('theo-doi-ky-thu') ? monitorView() : '<div class="card"><div class="empty">Bạn chưa được cấp quyền xem Theo dõi kỳ thu.</div></div>';
   A.CH['period-monitor-period'] = el => { ui.periodMonitorPeriod = el.value; A.render(); };

@@ -126,7 +126,8 @@
   A.SCREEN_MARKET = {
     'tong-quan': 'CROSS', 'bao-cao': 'CROSS', 'danh-muc-cho': 'CROSS',
     'mat-bang': 'BOTH', 'tai-san': 'CL', 'diem-kd': 'BOTH', 'tieu-thuong': 'BOTH', 'hop-dong': 'BOTH',
-    'cau-hinh-gia': 'BOTH',
+    // Chính sách thu: danh sách cấu hình mức thu của MỌI chợ trong phạm vi + chi tiết từng chợ (market-config.js).
+    'cau-hinh-gia': 'CROSS',
     // Danh sách tài khoản ngân hàng hiển thị theo chợ đang chọn (U.market(ui.market)) — cần 1 chợ cụ thể như
     // các màn Tài chính khác; thiếu khai báo này thì route render cả khi chưa có chợ (ui.market ''/'ALL') và lỗi.
     'tai-khoan-ngan-hang': 'BOTH',
@@ -754,7 +755,7 @@
     const catalog = A.MARKET_CATALOG && A.MARKET_CATALOG.reload ? A.MARKET_CATALOG.reload() : { changed: false };
     const accounts = A.ACCOUNTS && A.ACCOUNTS.reload ? A.ACCOUNTS.reload() : { changed: false };
     const serviceConfig = A.SERVICE_CFG && A.SERVICE_CFG.reload ? A.SERVICE_CFG.reload() : { changed: false };
-    const lifecycleChanged = (state.changed || catalog.changed) ? A.normalizeLifecycleAfterHydrate() : false;
+    const lifecycleChanged = (state.changed || catalog.changed || serviceConfig.changed) ? A.normalizeLifecycleAfterHydrate() : false;
     if (!state.changed && !catalog.changed && !accounts.changed && !serviceConfig.changed && !lifecycleChanged) return { changed: false };
     if (A.syncAccountContext) A.syncAccountContext();
     if (sharedRefreshCanRender() && A.render) A.render();

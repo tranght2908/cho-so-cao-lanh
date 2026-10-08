@@ -1,0 +1,20 @@
+/* Rental draft remains profile-only until the regular contract service runs. */
+const assert = require('assert');
+const path = require('path');
+const { createApp } = require('./harness');
+const h = createApp(path.resolve(__dirname, '../..'));
+const A = h.A;
+const TS = A.features.traders.service;
+const BP = A.features.businessPoints.service;
+const trader = A.db.traders.find(x => x.market === 'CL');
+const point = A.db.stalls.find(x => x.market === trader.market && BP.isAllocatable(x));
+assert(trader && point, 'fixture trader and point');
+const before = { status: point.status, traderId: point.traderId, contractId: point.contractId, contracts: A.db.contracts.length };
+assert(TS.setRentalDraft(trader.id, [{ pointId: point.id, charges: { land:true }, feeRefs:{} }]), 'rental draft saves');
+const item = TS.rentalItems(trader)[0];
+assert.equal(item.pointId, point.id);
+assert.equal(item.status, 'pending_contract');
+assert.equal(A.db.contracts.length, before.contracts, 'draft never creates a contract');
+assert.equal(point.status, before.status, 'draft never allocates a point');
+assert.equal(point.traderId, before.traderId, 'draft never links a trader to a point');
+console.log('trader-rental-draft regression PASS (7 checks)');

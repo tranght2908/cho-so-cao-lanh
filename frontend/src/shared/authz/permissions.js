@@ -169,6 +169,9 @@
     // HINH_THUC_THU_DIEN_NUOC: chọn hình thức thu điện, nước của 1 chợ (theo công tơ / chia đều như dịch vụ).
     { key: 'action:cau-hinh-gia.hinh-thuc-dien-nuoc', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Cấu hình hình thức thu điện, nước của chợ (theo công tơ / chia đều như dịch vụ)' },
     { key: 'action:cau-hinh-gia.chinh-sach-chung.them-muc', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Thêm mức giá chính sách chung' },
+    // DAT_LAI_CAU_HINH_CHO (10/2026): thao tác đặc biệt — đặt lại TOÀN BỘ cấu hình mức thu riêng của một chợ (chỉ mức thu
+    // chưa từng được sử dụng; có sao lưu). Không thay quyền thiết lập / đổi giá thường ngày của Tổ trưởng.
+    { key: 'action:cau-hinh-gia.dat-lai-cau-hinh-cho', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Đặt lại toàn bộ cấu hình mức thu của một chợ' },
     { key: 'action:cau-hinh-gia.chinh-sach-chung.ap-dung', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Áp dụng mức giá chính sách chung' },
     { key: 'action:cau-hinh-gia.chinh-sach-chung.khoa-mo', kind: 'action', group: 'Tài chính', screenId: 'cau-hinh-gia', label: 'Khóa / mở khóa mức giá chính sách chung' },
     { key: 'action:tai-khoan-ngan-hang.quan-ly', kind: 'action', group: 'Tài chính', screenId: 'tai-khoan-ngan-hang', label: 'Thêm/sửa/xoá/đổi trạng thái tài khoản ngân hàng' },
@@ -227,7 +230,11 @@
   // trong CATALOG (nội bộ) chỉ để rolePerms đã lưu KHÔNG bị bộ lọc validKeys xoá (không reset/không ghi đè RBAC) —
   // nhưng bị loại khỏi catalog HIỆN HÀNH (PERM.catalog(): màn Phân quyền, Thông tin cá nhân) và khỏi seed mặc định.
   // Không có menu/route nên screen:phien-cho không còn mở được màn nào (U.can cần A.menuItem).
-  const RETIRED_PERMISSION_KEYS = new Set(CATALOG.filter(p => p.key === 'screen:phien-cho' || p.screenId === 'phien-cho').map(p => p.key));
+  // HOP_DONG_SCOPE_10_2026: Gia hạn / Chấm dứt / Thanh lý hợp đồng đã ra khỏi scope — cùng cơ chế: key giữ nội bộ
+  // (rolePerms cũ không bị xoá, không migration) nhưng không hiển thị ở ma trận phân quyền, không seed, không cấp mới.
+  // Bản ký số hóa (cap-nhat-ban-ky) retire cùng popup Hợp đồng cũ.
+  const RETIRED_CONTRACT_ACTIONS = ['action:hop-dong.gia-han', 'action:hop-dong.cham-dut', 'action:hop-dong.thanh-ly', 'action:hop-dong.cap-nhat-ban-ky'];
+  const RETIRED_PERMISSION_KEYS = new Set(CATALOG.filter(p => p.key === 'screen:phien-cho' || p.screenId === 'phien-cho' || RETIRED_CONTRACT_ACTIONS.includes(p.key)).map(p => p.key));
   const CURRENT_CATALOG = CATALOG.filter(p => !RETIRED_PERMISSION_KEYS.has(p.key));
 
   // ============================================================
@@ -417,6 +424,7 @@
       // Chính sách chung về đơn giá sử dụng mặt bằng thuộc Quản trị hệ thống;
       // các quyền này cố ý không gắn selectedMarket hay marketScopes.
       'cau-hinh-gia.chinh-sach-chung.them-muc': ['system_admin'],
+      'cau-hinh-gia.dat-lai-cau-hinh-cho': ['system_admin'],
       // Người dùng xác nhận 28/09/2026: cấu hình hình thức thu điện, nước do Quản trị hệ thống thực hiện.
       'cau-hinh-gia.hinh-thuc-dien-nuoc': ['system_admin'],
       'cau-hinh-gia.chinh-sach-chung.ap-dung': ['system_admin'],
@@ -513,7 +521,7 @@
   //        lệch khiến loadState() đi thẳng nhánh RESEED TOÀN BỘ (freshState(), không qua
   //        mergeIntoCurrentSeed()), nên seedVersion v15 ở đây chỉ còn ý nghĩa tài liệu/đánh dấu, không
   //        phải cơ chế migrate chính cho lần đổi này (xem RBAC_MARKET_SCOPE_MIGRATION_REPORT.md).
-  const PERM_SEED_VERSION = 21; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: (Bản đồ thu — đã retire); 19: trader/contract creation belongs to market_manager; 20: đối soát chuyển sang central_accountant (A05), A05 xem/xuất số liệu thu, technician bỏ màn Mặt bằng/Tài sản; 21: retire screen Nhân sự & phân công, chuyển action phân công chợ sang Theo dõi kỳ thu + quyền mini-app gửi/đánh giá phản ánh cho trader
+  const PERM_SEED_VERSION = 22; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: (Bản đồ thu — đã retire); 19: trader/contract creation belongs to market_manager; 20: đối soát chuyển sang central_accountant (A05), A05 xem/xuất số liệu thu, technician bỏ màn Mặt bằng/Tài sản; 21: retire screen Nhân sự & phân công, chuyển action phân công chợ sang Theo dõi kỳ thu + quyền mini-app gửi/đánh giá phản ánh cho trader
   const RATE_POLICY_PERM_VERSION = 1;
   const BANK_ACCOUNT_PERM_VERSION = 1;
   const PC3A_SESSION_PERM_VERSION = 1;

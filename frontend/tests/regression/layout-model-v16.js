@@ -50,7 +50,8 @@ ok('4 every row has exactly one industry from the single catalog; rows may share
 ok('5 one row can hold several area types; area type lives on the point', () => {
   const types = new Set(db.stalls.filter(s => s.rowId === 'CL-R-HS-A').map(s => s.areaTypeId));
   assert(types.size >= 2);
-  db.stalls.forEach(s => assert(A.U.AREA_TYPE_CODES.includes(s.areaTypeId), s.id));
+  // Seed TTD còn điểm 'session' (Theo phiên — loại đã ngừng, chỉ giữ để đọc dữ liệu cũ).
+  db.stalls.forEach(s => assert(A.U.KNOWN_AREA_TYPE_CODES.includes(s.areaTypeId), s.id));
 });
 ok('6 referential integrity of the layout graph (floorId null allowed)', () => {
   db.stalls.forEach(s => { const r = R.get(s.rowId); assert(r && r.market === s.market, s.id); });

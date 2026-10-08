@@ -27,8 +27,8 @@
     return { market: mid, row, floor: row.floorId ? A.idx.floor.get(row.floorId) || null : null, matched: true, reason: 'row' };
   };
   // Tình trạng điểm TẠI NGÀY đang xem trên Mặt bằng — suy ra (businessPoints.service.displayStatus):
-  // trạng thái vận hành (Tạm ngừng/Đang tranh chấp) → hợp đồng tại ngày (Đang thuê / Còn trống) →
-  // khoản phải thu quá hạn của hợp đồng đó (Nợ phí). Ngày xem là state UI, không lưu.
+  // trạng thái vận hành (Tạm ngừng/Đang tranh chấp) → hợp đồng tại ngày (Đang thuê / Còn trống). Không có
+  // "Nợ phí" (không phải trạng thái điểm KD). Ngày xem là state UI, không lưu.
   let mbDate = null;
   A.mbStatusDate = () => mbDate || U.today();
   A.mbSetStatusDate = d => { mbDate = d && d !== U.today() ? d : null; };
@@ -57,14 +57,12 @@
     points.forEach(st => { const k = A.mbStatusAt(st); byStatus[k] = (byStatus[k] || 0) + 1; });
     return byStatus;
   };
-  A.mbMarketStats = function (mid) {
-    const points = A.mbBusinessPointsForMarket(mid);
-    return { total: points.length, byStatus: A.mbStatusCounts(points), points: points };
-  };
-  A.mbZoneStats = function (mid, zone) {
-    const points = A.mbBusinessPointsForZone(mid, zone);
-    return { total: points.length, byStatus: A.mbStatusCounts(points), points: points };
-  };
+  // Số liệu tổng (Tổng điểm, theo tình trạng, lấp đầy) dùng helper chung businessPoints.service.occupancy —
+  // cùng tập điểm hợp lệ (bỏ MERGED/SPLIT) và công thức với Tổng quan liên chợ/Báo cáo. `points` vẫn là toàn bộ
+  // điểm của chợ/dãy để vẽ sơ đồ như trước.
+  const statsOf = points => { const o = A.features.businessPoints.service.occupancy(points, A.mbStatusDate()); return { total: o.total, byStatus: o.byStatus, occPct: o.pct, points: points }; };
+  A.mbMarketStats = function (mid) { return statsOf(A.mbBusinessPointsForMarket(mid)); };
+  A.mbZoneStats = function (mid, zone) { return statsOf(A.mbBusinessPointsForZone(mid, zone)); };
   // Ô điểm kinh doanh của 1 Dãy (1 hàng vật lý): màu theo tình trạng hiển thị suy ra; điểm không khớp
   // chip trạng thái đang chọn (A.mbMatchesFilter) mờ đi. `data-id` là id kỹ thuật, nhãn là mã điểm.
   // opts.detail: ô điểm hiển thị thêm diện tích + tình trạng (sơ đồ cấp Dãy của workspace Mặt bằng).
@@ -74,7 +72,7 @@
       const t = st.traderId ? A.idx.trader.get(st.traderId) : null;
       const dim = !A.mbMatchesFilter(st), s = A.mbStatusAt(st);
       const extra = detail ? `<small class="cell-meta">${(Number(st.area) || 0).toLocaleString('vi-VN')} m² · ${U.esc(A.mbStatusLabel(s))}</small>` : '';
-      return `<button class="cell s-${s} ${st.type === 'kiot' ? 'kiot' : ''} ${dim ? 'dim' : ''} ${ui.sel === st.id ? 'sel' : ''}" data-act="stall" data-id="${st.id}" title="${mbPointTitle(st, t)}" aria-label="Điểm ${U.esc(st.code)}">${st.code}${extra}${A.WORKFLOW && A.WORKFLOW.isRecentPoint(st.id) ? '<small class="workflow-grid-new">Mới</small>' : ''}</button>`;
+      return `<button class="cell s-${s} ${st.type === 'kiot' ? 'kiot' : ''} ${dim ? 'dim' : ''} ${ui.sel === st.id ? 'sel' : ''}" data-act="stall" data-id="${st.id}" title="${mbPointTitle(st, t)}" aria-label="Điểm ${U.esc(st.code)}">${st.code}${extra}</button>`;
     }).join('') || '<span class="small muted">Chưa có điểm kinh doanh</span>'}</div></div>`;
   };
 
@@ -82,7 +80,13 @@
     legend: el => { ui.hidden[el.dataset.s] = !ui.hidden[el.dataset.s]; A.render(); },
     // Click 1 điểm trên sơ đồ = mở drawer GỐC (không phải drill-down từ drawer khác) — luôn reset
     // navigation stack trước, đảm bảo không hiện "← Quay lại" giả.
-    stall: el => { A.drawerReset(); mbOpenStallDrawer(A.idx.stall.get(el.dataset.id)); },
+    stall: el => {
+      const st = A.idx.stall.get(el.dataset.id);
+      if (!st) return;
+      // Sơ đồ và Danh sách cùng mở một drawer chuẩn từ business-points/page.js.
+      // Không ghi vào state inspector để selection/filter của workspace không bị mất.
+      A.drawerReset(); mbOpenStallDrawer(st);
+    },
     // Điều hướng "xem sâu" từ drawer điểm: ở lại màn 'mat-bang', đẩy cách vẽ lại drawer nguồn vào
     // navigation stack dùng chung để "← Quay lại <mã điểm>" hoạt động.
     'mb-open-trader': el => {

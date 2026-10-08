@@ -74,9 +74,14 @@
   service.availablePoints = function (market, from, to) {
     return repository.list().filter(st => st.market === market && service.isAvailable(st.id, from, to || from));
   };
+  // Hợp đồng gắn với điểm tại ngày `date`. Scope 10/2026: hợp đồng ACTIVE đã hết hạn KHÔNG tự giải phóng điểm —
+  // nó vẫn là quan hệ tiểu thương ↔ điểm ("Đang thuê") cho tới khi có xử lý nghiệp vụ khác; hết hạn chỉ là
+  // cảnh báo tại hợp đồng. Khoảng chiếm dụng dùng cho kiểm tra trùng lịch (occupyingInterval) giữ nguyên.
   service.contractOn = function (pointId, date) {
-    const x = service.occupancies(pointId).find(o => overlaps(o.interval, date, date));
-    return x ? x.contract : null;
+    const occ = service.occupancies(pointId), x = occ.find(o => overlaps(o.interval, date, date));
+    if (x) return x.contract;
+    const held = occ.filter(o => o.contract.status === 'ACTIVE' && o.interval.start <= date);
+    return held.length ? held[held.length - 1].contract : null;
   };
   // "Trống từ": day after the last occupancy that ended before `date`; null = no recorded contract.
   service.freeSince = function (pointId, date) {
@@ -127,7 +132,11 @@
   service.debtStatus = function (st, contractId) {
     return st && (A.db.invoices || []).some(i => i.stallId === st.id && (!contractId || i.contractId === contractId) && A.U.isOver(i)) ? 'overdue' : 'none';
   };
-  // Tình trạng hiển thị tổng hợp (khoá chú giải D.STATUS): vận hành → sử dụng → công nợ của hợp đồng hiện hành.
+  // Tình trạng hiển thị tổng hợp (khoá chú giải D.STATUS): vận hành → sử dụng (hợp đồng tại ngày xem).
+  // "Nợ phí" KHÔNG phải trạng thái điểm KD (công nợ đã bỏ khỏi scope): điểm có hợp đồng hiệu lực luôn là
+  // 'thue' kể cả khi còn khoản phải thu quá hạn. D.STATUS.no chỉ giữ nhãn cho dữ liệu/mã cũ, không trả về nữa.
+  // DISPLAY_STATUSES = đúng tập giá trị hàm này trả về — mọi chip/bộ lọc/thống kê trạng thái dùng danh sách này.
+  service.DISPLAY_STATUSES = ['thue', 'trong', 'ngung', 'tranhchap'];
   service.displayStatus = function (st, date) {
     if (!st) return 'trong';
     if (operational(st) === 'suspended' || operational(st) === 'inactive' || usage(st) === 'SUSPENDED') return 'ngung';
@@ -136,8 +145,24 @@
     // Occupancy belongs to the active contract interval, not the denormalized
     // usageStatus cache. This keeps layout, point list and contract views in
     // agreement even while legacy data is being normalized.
-    if (!c) return 'trong';
-    return service.debtStatus(st, c.id) === 'overdue' ? 'no' : 'thue';
+    return c ? 'thue' : 'trong';
+  };
+  // ---- Tỷ lệ lấp đầy: MỘT công thức dùng chung (Tổng quan liên chợ, Báo cáo, thống kê Mặt bằng) ----
+  // Điểm hợp lệ = bỏ bản ghi đã gộp/tách (MERGED/SPLIT — chỉ giữ để truy vết).
+  // Lấp đầy = Đang thuê (displayStatus 'thue') / Tổng điểm hợp lệ × 100; tổng = 0 → 0%.
+  service.isCountable = function (st) { return !!st && st.structuralStatus !== 'MERGED' && st.structuralStatus !== 'SPLIT'; };
+  service.occupancy = function (points, date) {
+    const byStatus = {};
+    service.DISPLAY_STATUSES.forEach(k => { byStatus[k] = 0; });
+    let total = 0;
+    (points || []).forEach(st => {
+      if (!service.isCountable(st)) return;
+      total++;
+      const k = service.displayStatus(st, date);
+      byStatus[k] = (byStatus[k] || 0) + 1;
+    });
+    const occupied = byStatus.thue || 0, vacant = byStatus.trong || 0;
+    return { total, occupied, vacant, blocked: total - occupied - vacant, byStatus, pct: A.U.pct(occupied, total) };
   };
   service.activeSeller = function (st) { return st ? (A.db.directSellerAssignments || []).find(x => x.pointId === st.id && x.status === 'ACTIVE') || null : null; };
   service.POINT_STATUS = A.D.POINT_STATUS;

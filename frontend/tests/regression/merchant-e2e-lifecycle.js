@@ -23,6 +23,16 @@ const step = (name, fn) => { try { fn(); result.push([name, 'PASS']); } catch (e
 function createMarket(id, name) {
   return A.MARKET_CATALOG.add({ code: id, name, address: 'Địa chỉ test', rank: 'HANG_3', priceConfigId: 'QD480_NHOM_CON_LAI', totalArea: 100, businessArea: 80, allowedAreaTypeIds: ['covered'] }, 'E2E');
 }
+// Vòng đời 10/2026: hoàn tất mặt bằng KHÔNG kích hoạt chợ; cần cấu hình mức thu RIÊNG của chợ (mặt bằng cho
+// loại diện tích đang dùng + điện + nước + dịch vụ). Bản ghi cuối cùng được lưu là bước làm chợ ACTIVE.
+const addFeePolicy = (marketId, areaTypeId) => {
+  A.SERVICE_CFG.setChargeApplicability(marketId, { electricity: true, water: true, service: true }, 'test');
+  const base = { marketId, status: 'active', effectiveFrom: '2026-01-01', effectiveTo: null, legalBasis: {}, attachments: [] };
+  A.SERVICE_CFG.add('utilities', Object.assign({ name: 'Điện', kind: 'ELECTRICITY', elecPrice: 3000, elecUnit: 'đ/kWh' }, base), 'test');
+  A.SERVICE_CFG.add('utilities', Object.assign({ name: 'Nước', kind: 'WATER', waterPrice: 11000, waterUnit: 'đ/m³' }, base), 'test');
+  A.SERVICE_CFG.add('extraServices', Object.assign({ name: 'Vệ sinh', category: 'SANITATION', calcMethod: 'fixed', amount: 20000, unit: 'đ/điểm/tháng' }, base), 'test');
+  return A.SERVICE_CFG.add('stallPrices', Object.assign({ name: 'Mức thu test', scope: 'MARKET', areaTypeId, stallType: '', amount: 1000, unit: 'đ/m²/ngày' }, base), 'test');
+};
 function completeMarket(market, suffix) {
   const building = ML.addBuilding(market.id, { name: 'Nhà ' + suffix, businessArea: 80 }).building;
   const row = ML.addRow(market.id, { blockId: building.id, floorId: null }, 'R-' + suffix, 'Dãy ' + suffix, 'Thực phẩm', 40).row;
@@ -31,6 +41,11 @@ function completeMarket(market, suffix) {
     { id: 'G-' + suffix + '-2', quantity: 1, areaPerPoint: 10, areaTypeId: 'covered' }
   ]);
   assert(made.ok, (made.errors || []).join('; '));
+  // "Hoàn tất mặt bằng" là lệnh tường minh (nút mb-complete-layout), không suy từ việc thêm điểm.
+  assert(A.features.lifecycle.service.completeMarketLayout(market.id, 'E2E'), 'Hoàn tất mặt bằng');
+  assert.equal(MS.get(market.id).layoutStatus, 'SETUP_COMPLETED');
+  assert.equal(MS.get(market.id).status, 'NOT_ACTIVE', 'layout completion alone does not activate');
+  addFeePolicy(market.id, 'covered');
   return { building, row, points: made.stalls };
 }
 function profile(id, market, phone, idNo, name) {

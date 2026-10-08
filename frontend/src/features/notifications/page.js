@@ -339,6 +339,7 @@
   // không phụ thuộc quy tắc nên 2 quy tắc trùng mốc không gửi lặp). Người nhận theo mốc (quyết định nghiệp vụ):
   //   Chuẩn bị kỳ → Tổ trưởng + NV thu phí · Ghi chỉ số → NV thu phí · Mở kỳ → Tổ trưởng + NV + Tiểu thương có hợp đồng áp dụng
   //   Nhắc thanh toán / Hạn thanh toán → chỉ Tiểu thương còn khoản chưa thanh toán (kỳ đã phát hành, đang thu).
+  const INTERNAL_MILESTONES = new Set(['PREPARATION', 'METER_READ']);
   const MILESTONE_RECIPIENTS = { PREPARATION: ['market_manager', 'fee_collector'], METER_READ: ['fee_collector'], COLLECTION_START: ['market_manager', 'fee_collector', 'contract_traders'],
     REMINDER_1: ['unpaid_traders'], REMINDER_2: ['unpaid_traders'], DUE_DATE: ['unpaid_traders'] };
   const RECIPIENT_TEXT = { market_manager: 'Tổ trưởng / Trưởng Ban quản lý', fee_collector: 'NV thu phí phụ trách chợ', contract_traders: 'Tiểu thương có hợp đồng áp dụng trong kỳ', unpaid_traders: 'Tiểu thương còn khoản chưa thanh toán', trader: 'Tiểu thương có khoản vừa phát hành', central_accountant: 'Kế toán Trung tâm' };
@@ -396,7 +397,9 @@
       if ((rule.marketIds || []).length && !rule.marketIds.includes(mp.marketId)) return;
       const date = svc.dateOf(mp, PERIOD_DATE_FIELD[rule.triggerEvent]);
       if (!date || date > today) return;
-      (rule.recipients || []).forEach(entry => recipientsForEntry(entry, mp, {}).forEach(r => { if (send(rule, r.role, r, mp, ['MILESTONE', rule.triggerEvent])) n++; }));
+      // Mốc nội bộ (Chuẩn bị kỳ, Ghi chỉ số) chỉ dành cho Tổ trưởng + NV thu phí: tiểu thương chỉ nhận thông báo sau khi
+      // khoản phải thu đã phát hành (lúc đó mới là nghĩa vụ thanh toán) — kể cả khi quy tắc được cấu hình thêm Tiểu thương.
+      (rule.recipients || []).forEach(entry => recipientsForEntry(entry, mp, {}).filter(r => !(INTERNAL_MILESTONES.has(rule.triggerEvent) && r.type === 'TRADER')).forEach(r => { if (send(rule, r.role, r, mp, ['MILESTONE', rule.triggerEvent])) n++; }));
     }));
     if (n) A.save();
     return n;

@@ -22,6 +22,7 @@
   // the only reader used by views and compatibility callers.
   service.BUSINESS_STATUS = {
     WAITING_ALLOCATION: 'WAITING_ALLOCATION',
+    PENDING_CONTRACT: 'PENDING_CONTRACT',
     ACTIVE: 'ACTIVE',
     INACTIVE: 'INACTIVE'
   };
@@ -30,6 +31,13 @@
     if (!trader) return service.BUSINESS_STATUS.WAITING_ALLOCATION;
     const lifecycle = A.features.lifecycle && A.features.lifecycle.service;
     if (lifecycle && lifecycle.recalculateTrader) lifecycle.recalculateTrader(trader);
+    const contractService = A.features.contracts && A.features.contracts.service;
+    // Scope 10/2026: "Đang hoạt động" = hồ sơ đang có quan hệ thuê chính thức (hợp đồng ACTIVE đã bắt đầu, kể cả
+    // đã hết hạn). Hết hạn KHÔNG làm hồ sơ tụt trạng thái; còn điểm chờ hợp đồng vẫn là "Đang hoạt động".
+    const hasActive = contractService && (contractService.holdsPointForTrader ? contractService.holdsPointForTrader(trader.id) : contractService.hasActiveForTrader && contractService.hasActiveForTrader(trader.id));
+    if (hasActive) return service.BUSINESS_STATUS.ACTIVE;
+    const pending = (trader.rentalDraft || []).some(x => x && x.status === 'pending_contract');
+    if (pending) return service.BUSINESS_STATUS.PENDING_CONTRACT;
     return service.BUSINESS_STATUS[trader.status] || service.BUSINESS_STATUS.WAITING_ALLOCATION;
   };
   service.idNoTaken = function (idNo, excludeId) { return repository.idNoTaken(idNo, excludeId); };
@@ -93,5 +101,32 @@
     // Linking does not alter this profile's independent placement status.
     service.linkExistingMerchantAccount(profile);
     repository.save(); return profile;
+  };
+  // Persisted preparation only. It never allocates a point; contract remains
+  // the sole source of occupancy and billing.
+  service.setRentalDraft = function (id, items) {
+    const t = repository.get(id); if (!t) return null;
+    const pointService = A.features.businessPoints && A.features.businessPoints.service;
+    const clean = (items || []).map(x => {
+      const p = pointService && pointService.get(x.pointId);
+      if (!p || p.market !== t.market) return null;
+      return { pointId:p.id, area:p.area, areaTypeId:p.areaTypeId, industry:pointService.industry(p), charges:Object.assign({}, x.charges || {}), feeRefs:Object.assign({}, x.feeRefs || {}), status:x.contractId ? 'contracted' : 'pending_contract', contractId:x.contractId || null };
+    });
+    if (clean.some(x => !x) || new Set(clean.map(x => x.pointId)).size !== clean.length) return null;
+    t.rentalDraft = clean; repository.save(); return t;
+  };
+  // Read adapter for legacy records. We deliberately do not infer old contracts
+  // into rentalDraft: a historical contract is not a pending rental request.
+  service.rentalItems = function (traderOrId) {
+    const t = typeof traderOrId === 'string' ? repository.get(traderOrId) : traderOrId;
+    return t && Array.isArray(t.rentalDraft) ? t.rentalDraft : [];
+  };
+  service.markRentalItemsContracted = function (id, contractByPoint) {
+    const t = repository.get(id); if (!t || !Array.isArray(t.rentalDraft)) return null;
+    t.rentalDraft.forEach(x => {
+      const contractId = contractByPoint && contractByPoint[x.pointId];
+      if (contractId) { x.status = 'contracted'; x.contractId = contractId; }
+    });
+    repository.save(); return t;
   };
 })(window.APP);

@@ -5,8 +5,13 @@
   U.typeLabel = t => ({ kiot: 'Ki-ốt', nhalong: 'Trong nhà lồng', ngoai: 'Ngoài nhà lồng', phien: 'Quầy phiên' }[t]);
   // Physical-area taxonomy for Mặt bằng only; it is separate from `type` and `pointType`.
   U.areaTypeLabel = t => ({ covered: 'Có mái che', uncovered: 'Không mái che', self_produced: 'Tự sản tự tiêu', session: 'Theo phiên' }[t]);
-  // Các mã loại diện tích dùng chung cho dropdown/filter của màn Mặt bằng.
-  U.AREA_TYPE_CODES = ['covered', 'uncovered', 'self_produced', 'session'];
+  // Danh mục loại diện tích kinh doanh HIỆN HÀNH (chỉ 3 loại) — dùng cho mọi dropdown/filter/validation khi
+  // khai báo mới. 'session' (Theo phiên) đã ngừng sử dụng: KHÔNG chọn được cho điểm/nhóm điểm mới, nhưng
+  // điểm cũ đã mang mã này vẫn giữ nguyên dữ liệu và vẫn hiển thị nhãn (U.KNOWN_AREA_TYPE_CODES).
+  U.AREA_TYPE_CODES = ['covered', 'uncovered', 'self_produced'];
+  U.LEGACY_AREA_TYPE_CODES = ['session'];
+  // Chỉ dùng cho đường ĐỌC dữ liệu đã có (nhóm/hiển thị điểm cũ), không dùng làm danh sách chọn.
+  U.KNOWN_AREA_TYPE_CODES = U.AREA_TYPE_CODES.concat(U.LEGACY_AREA_TYPE_CODES);
   U.rentalKind = st => st && st.type === 'phien' ? 'session' : 'fixed';
   U.rentalLabel = st => U.rentalKind(st) === 'session' ? 'Quầy thuê theo phiên / khách vãng lai' : 'Quầy thuê cố định tháng/quý';
   // Màn Mặt bằng & điểm kinh doanh dùng nhãn gọn: Đang thuê / Tạm ngưng / Tranh chấp (yêu cầu người dùng); các màn

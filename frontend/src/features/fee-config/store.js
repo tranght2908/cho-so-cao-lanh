@@ -124,6 +124,29 @@
     if (changed) recalcRequested = true;
     return true;
   }
+  // Migration MỘT LẦN (marker chargeApplicabilityV1), không phá dữ liệu: chợ ĐÃ CÓ bản ghi mức thu riêng từ trước
+  // (dữ liệu cũ — vd. CL, TTD) mà chưa khai báo khoản thu áp dụng → ghi khai báo suy ra từ chính các bản ghi đó
+  // (điện/nước có đơn giá, dịch vụ chợ không tính phí xe). Chợ chưa có bản ghi riêng nào KHÔNG được tự khai báo.
+  function ensureLegacyChargeApplicability(cfg) {
+    if (cfg.chargeApplicabilityV1 >= 1) return;
+    const ownedRec = r => r && r.marketId && r.marketId !== 'ALL' && r.scope !== 'SHARED' && !(Array.isArray(r.marketIds) && r.marketIds.length);
+    const mids = new Set();
+    ['stallPrices', 'utilities', 'extraServices'].forEach(cat => (cfg[cat] || []).forEach(r => { if (ownedRec(r)) mids.add(r.marketId); }));
+    mids.forEach(mid => {
+      const cur = cfg.utilityModes[mid] || { mode: 'METER', history: [] };
+      if (cur.charges) return;
+      const utils = (cfg.utilities || []).filter(u => ownedRec(u) && u.marketId === mid);
+      const charges = { land: true,
+        electricity: utils.some(u => (!u.kind || u.kind === 'ELECTRICITY') && u.elecPrice != null),
+        water: utils.some(u => (!u.kind || u.kind === 'WATER') && u.waterPrice != null),
+        service: (cfg.extraServices || []).some(x => ownedRec(x) && x.marketId === mid && x.category !== 'VEHICLE') };
+      cur.history = cur.history || [];
+      cur.history.unshift({ time: nowStrSafe(), user: 'Hệ thống', action: 'Khai báo khoản thu áp dụng', detail: 'Suy ra từ mức thu riêng đã có (dữ liệu cũ)' });
+      cur.charges = charges;
+      cfg.utilityModes[mid] = cur;
+    });
+    cfg.chargeApplicabilityV1 = 1;
+  }
   function normalizeConfig(cfg) {
     // HINH_THUC_THU_DIEN_NUOC: mỗi chợ chọn 1 trong 2 hình thức (mặc định METER — giữ hành vi cũ):
     //   METER   = theo công tơ từng điểm KD, ghi chỉ số hằng tháng, khoản phải thu tính theo chỉ số;
@@ -137,6 +160,15 @@
         cfg.utilityModes[mid].history.unshift({ time: nowStrSafe(), user: 'Hệ thống', action: 'Chuẩn hóa hình thức thu', detail: 'Chia đều → Theo công tơ từng điểm kinh doanh' });
       }
     });
+    // KHOAN_THU_AP_DUNG (10/2026): utilityModes[marketId].charges = { land, electricity, water, service } (boolean)
+    // — chợ khai báo rõ khoản nào ÁP DỤNG. Mặt bằng là khoản chính, luôn áp dụng. Không có `charges` = chưa khai báo.
+    Object.keys(cfg.utilityModes).forEach(mid => {
+      const c = cfg.utilityModes[mid] && cfg.utilityModes[mid].charges;
+      if (c && typeof c === 'object') cfg.utilityModes[mid].charges = { land: true, electricity: !!c.electricity, water: !!c.water, service: !!c.service };
+    });
+    ensureLegacyChargeApplicability(cfg);
+    // DAT_LAI_CAU_HINH_CHO: bản sao lưu các lần đặt lại cấu hình mức thu của một chợ (đủ dữ liệu để phục hồi thủ công).
+    cfg.marketConfigResets = Array.isArray(cfg.marketConfigResets) ? cfg.marketConfigResets : [];
     cfg.waiverTypes = Array.isArray(cfg.waiverTypes) ? cfg.waiverTypes : clone(D.WAIVER_TYPES || []);
     cfg.complaintRules = cfg.complaintRules && typeof cfg.complaintRules === 'object' ? cfg.complaintRules : {};
     if (cfg.complaintRules.ratingAutoCloseDays === undefined) cfg.complaintRules.ratingAutoCloseDays = null;
@@ -248,6 +280,16 @@
     if (!listed.length && policy.marketId && policy.marketId !== 'ALL' && policy.marketId !== marketId) return false;
     return !(Array.isArray(policy.marketGrades) && policy.marketGrades.length) || policy.marketGrades.includes(grade);
   }
+  // Bản ghi biểu phí THUỘC RIÊNG một chợ (cấu hình mức thu của chính chợ đó): marketId đúng chợ, không phải
+  // bản ghi dùng chung (scope SHARED / danh sách marketIds — vd. QĐ 480 theo hạng, chỉ là tham chiếu/preset).
+  function isMarketOwnedPolicy(policy, marketId) {
+    return !!policy && !!marketId && policy.marketId === marketId && policy.scope !== 'SHARED' && !(Array.isArray(policy.marketIds) && policy.marketIds.length);
+  }
+  // Bộ giải mức thu mặt bằng DÙNG CHUNG (hợp đồng, khoản phải thu, đơn giá hiển thị, vòng đời chợ).
+  // Quyết định 10/2026: CHỈ dùng cấu hình mức thu RIÊNG của chợ (isMarketOwnedPolicy). Bản ghi dùng chung
+  // (SHARED / marketIds — QĐ 480 theo hạng) chỉ là tham chiếu/preset, KHÔNG BAO GIỜ được trả về làm giá áp
+  // dụng; không tìm được bản ghi riêng → null = thiếu cấu hình, nơi gọi phải chặn thao tác cần tính tiền.
+  // (input.ownedOnly vẫn được chấp nhận để tương thích; hành vi luôn là ownedOnly.)
   function resolveApplicableMarketFeePolicy(input) {
     const point = input && input.point;
     const marketId = (input && input.marketId) || (input && input.market && input.market.id) || (point && point.market);
@@ -257,6 +299,7 @@
     const areaTypeId = point.areaTypeId || point.areaType || null;
     const legacyType = legacyStallType(point);
     return (CFG.stallPrices || []).filter(policy => policyActiveAt(policy, date)
+      && isMarketOwnedPolicy(policy, marketId)
       && policyMarketMatch(policy, marketId, marketGrade(market))
       && (policy.areaTypeId ? policy.areaTypeId === areaTypeId : (policy.stallType === legacyType || policy.stallType === point.cat)))
       .sort((a, b) => {
@@ -265,9 +308,33 @@
         return String(b.effectiveFrom || '').localeCompare(String(a.effectiveFrom || ''));
       })[0] || null;
   }
+  // Giá THAM CHIẾU QĐ 480 (bản ghi dùng chung SHARED) cho 1 chợ theo hạng — CHỈ để xem/preset khi cấu hình,
+  // không bao giờ là giá áp dụng. Khớp theo hạng chợ (marketGrades); bản ghi không khai báo hạng thì theo marketIds.
+  // Trả về { [areaTypeId]: policy } với bản ghi hiệu lực mới nhất mỗi loại diện tích.
+  function referenceLandPrices(marketId, date) {
+    const day = date || (U.today ? U.today() : ''), market = marketFor(marketId), grade = marketGrade(market), out = {};
+    (CFG.stallPrices || []).filter(p => p.scope === 'SHARED' && p.areaTypeId && policyActiveAt(p, day)
+      && (Array.isArray(p.marketGrades) && p.marketGrades.length ? p.marketGrades.includes(grade) : (p.marketIds || []).includes(marketId)))
+      .sort((a, b) => String(b.effectiveFrom || '').localeCompare(String(a.effectiveFrom || '')))
+      .forEach(p => { if (!out[p.areaTypeId]) out[p.areaTypeId] = p; });
+    return { grade, prices: out };
+  }
   // Người nghe thay đổi cấu hình (vd. kỳ thu tự tính lại nháp khi biểu phí đổi). Lỗi của người nghe không chặn việc lưu.
   const changeListeners = [];
+  // Bản sao lưu đặt lại cấu hình chỉ được THÊM, không bao giờ mất: trước khi ghi, hợp nhất các bản đã có trong
+  // localStorage (vd một tab khác / một service đang giữ CFG cũ ghi đè) theo id.
+  function mergeStoredResets() {
+    try {
+      const stored = JSON.parse(localStorage.getItem(SKEY) || 'null');
+      const list = stored && Array.isArray(stored.marketConfigResets) ? stored.marketConfigResets : [];
+      if (!list.length) return;
+      CFG.marketConfigResets = Array.isArray(CFG.marketConfigResets) ? CFG.marketConfigResets : [];
+      const have = new Set(CFG.marketConfigResets.map(x => x && x.id));
+      list.forEach(x => { if (x && x.id && !have.has(x.id)) CFG.marketConfigResets.push(x); });
+    } catch (e) { console.error('[service-config] không đọc được bản sao lưu đặt lại cấu hình đã lưu', e); }
+  }
   function save() {
+    mergeStoredResets();
     try { localStorage.setItem(SKEY, JSON.stringify(CFG)); } catch (e) { /* bỏ qua */ }
     changeListeners.forEach(fn => { try { fn(); } catch (e) { console.error('[service-config] change listener lỗi', e); } });
   }
@@ -284,6 +351,9 @@
     data: () => CFG,
     reload,
     resolveApplicableMarketFeePolicy,
+    isMarketOwnedPolicy,
+    policyActiveAt,
+    referenceLandPrices,
     onChange: fn => { if (typeof fn === 'function') changeListeners.push(fn); },
     // Migration cấu hình lúc nạp (vd. biểu phí demo) chạy TRƯỚC khi dữ liệu kỳ thu sẵn sàng → bên nạp dữ liệu hỏi lại để tính lại nháp.
     takeRecalcRequest: () => { const r = recalcRequested; recalcRequested = false; return r; },
@@ -348,6 +418,33 @@
       save();
       return cur;
     },
+    // Khoản (electricity | water | service) có PHÁT SINH cho chợ tại ngày `date` không — dùng chung cho tính khoản
+    // phải thu và danh sách điểm cần ghi chỉ số. Chưa khai báo / đang áp dụng → có. Khai báo "không áp dụng" →
+    // chỉ còn phát sinh ở những ngày mức giá riêng cũ của khoản đó vẫn còn hiệu lực (trước ngày ngừng áp dụng:
+    // mức cũ được kết thúc hiệu lực, không xóa) — kỳ trước ngày ngừng không đổi, kỳ mới không phát sinh.
+    chargeActiveAt: (mid, charge, date) => {
+      const c = SC.chargeApplicability(mid);
+      if (!c || c[charge] !== false) return true;
+      const day = date || (U.today ? U.today() : ''), own = cat => (CFG[cat] || []).filter(r => isMarketOwnedPolicy(r, mid) && policyActiveAt(r, day));
+      if (charge === 'service') return own('extraServices').some(x => x.category !== 'VEHICLE');
+      const field = charge === 'electricity' ? 'elecPrice' : 'waterPrice', kind = charge === 'electricity' ? 'ELECTRICITY' : 'WATER';
+      return own('utilities').some(u => (!u.kind || u.kind === kind) && u[field] != null);
+    },
+    // Khoản thu áp dụng của chợ (null = chưa khai báo). Lưu cùng utilityModes, có lịch sử thay đổi.
+    chargeApplicability: mid => { const c = ((CFG.utilityModes || {})[mid] || {}).charges; return c ? { land: true, electricity: !!c.electricity, water: !!c.water, service: !!c.service } : null; },
+    setChargeApplicability: (mid, charges, user, reason) => {
+      if (!mid || !charges) return null;
+      CFG.utilityModes = CFG.utilityModes || {};
+      const cur = CFG.utilityModes[mid] || { mode: 'METER', history: [] };
+      const next = { land: true, electricity: !!charges.electricity, water: !!charges.water, service: !!charges.service };
+      const label = c => c ? ['Mặt bằng'].concat(c.electricity ? ['Điện'] : [], c.water ? ['Nước'] : [], c.service ? ['Dịch vụ'] : []).join(', ') : 'Chưa khai báo';
+      cur.history = cur.history || [];
+      cur.history.unshift({ time: nowStr(), user: user, action: 'Khai báo khoản thu áp dụng', detail: label(cur.charges) + ' → ' + label(next) + (reason ? ' · ' + reason : '') });
+      cur.charges = next; cur.updatedBy = user; cur.updatedAt = nowStr();
+      CFG.utilityModes[mid] = cur;
+      save();
+      return next;
+    },
     cycle: () => CFG.billingCycle,
     cycleFor: marketId => {
       if (!marketId) return CFG.billingCycle;
@@ -376,7 +473,43 @@
       rec.attachments = (rec.attachments || []).filter(a => a.id !== attId);
       SC.log(rec, user, 'Xoá tài liệu', att ? att.name : '');
     },
-    resetDefault: () => { CFG = defaultConfig(); save(); }
+    resetDefault: () => { CFG = defaultConfig(); save(); },
+    // DAT_LAI_CAU_HINH_CHO: gỡ các bản ghi mức thu RIÊNG của một chợ (theo danh sách id đã kiểm tra là chưa từng
+    // được sử dụng) và khai báo khoản thu áp dụng của chợ đó, sau khi sao lưu đầy đủ vào marketConfigResets.
+    // Không đụng bảng giá dùng chung (QĐ 480), phí gửi xe, lịch kỳ thu, cấu hình chợ khác. Chỉ chạy khi được gọi
+    // tường minh (không có lời gọi lúc tải trang). Kiểm tra quyền + tham chiếu do service nghiệp vụ thực hiện.
+    resetMarketConfig: (mid, opts) => {
+      const o = opts || {}, ids = new Set(o.ids || []);
+      if (!mid) return null;
+      // Làm việc trên bản mới nhất đã lưu (chỉ khi có bản lưu hợp lệ — không bao giờ quay về cấu hình mặc định).
+      try { const raw = localStorage.getItem(SKEY), x = raw && JSON.parse(raw); if (x && x.stallPrices && x.billingCycle && x.billingRules) reload(); } catch (e) { console.error('[service-config] không đọc được cấu hình đã lưu trước khi đặt lại', e); }
+      const records = { stallPrices: [], utilities: [], extraServices: [] };
+      Object.keys(records).forEach(cat => {
+        const list = CFG[cat] || [];
+        for (let i = list.length - 1; i >= 0; i--) {
+          const r = list[i];
+          if (!ids.has(r.id) || !isMarketOwnedPolicy(r, mid) || (cat === 'extraServices' && r.category === 'VEHICLE')) continue;
+          records[cat].unshift(clone(r));
+          list.splice(i, 1); // giữ nguyên tham chiếu mảng cho mọi nơi đang đọc SC.list(cat)
+        }
+      });
+      CFG.utilityModes = CFG.utilityModes || {};
+      const mode = CFG.utilityModes[mid] || null, utilityMode = mode ? clone(mode) : null;
+      const entry = { id: 'RST-' + mid + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6), marketId: mid, at: nowStr(), atIso: new Date().toISOString(),
+        user: o.user || 'Không rõ', reason: o.reason || '', records, utilityMode,
+        counts: { stallPrices: records.stallPrices.length, utilities: records.utilities.length, extraServices: records.extraServices.length, charges: !!(mode && mode.charges) } };
+      if (mode && mode.charges) {
+        delete mode.charges;
+        mode.history = mode.history || [];
+        mode.history.unshift({ time: entry.at, user: entry.user, action: 'Đặt lại cấu hình mức thu', detail: 'Gỡ khai báo khoản thu áp dụng và ' + (records.stallPrices.length + records.utilities.length + records.extraServices.length) + ' mức thu riêng chưa sử dụng · sao lưu ' + entry.id + (entry.reason ? ' · ' + entry.reason : '') });
+        mode.updatedBy = entry.user; mode.updatedAt = entry.at;
+      }
+      CFG.marketConfigResets = Array.isArray(CFG.marketConfigResets) ? CFG.marketConfigResets : [];
+      CFG.marketConfigResets.push(entry);
+      save();
+      return entry;
+    },
+    marketConfigResets: mid => (CFG.marketConfigResets || []).filter(x => !mid || x.marketId === mid)
   };
 
   // KY_09_DEN_GHI_CHI_SO (seed v29): không tự bổ sung kỳ demo 10/2026.

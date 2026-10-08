@@ -33,7 +33,8 @@ assert(fresh2 && fresh2.priceTerms.land.policyId === newLand.id);
 // Màn Mặt bằng: chỉ 2 trạng thái, không còn Khóa / Mở khóa / Vô hiệu hóa.
 login('AC-NV01', 'CL');
 h.go('cau-hinh-gia');
-A.ui.cfgTab = 'land'; A.render();
+// Màn Chính sách thu = cấu hình mức thu theo chợ: lịch sử mức giá nằm trong chi tiết chợ, tab tương ứng.
+h.act('fcm-open', { id: 'CL' }); h.act('fcm-dtab', { id: 'land' });
 assert(h.view().includes('Ngừng áp dụng từ 01/09/2026'));
 assert(h.view().includes('Đang áp dụng'));
 assert(!/Vô hiệu hóa|Mở khóa|>Khóa<|Hết hiệu lực/.test(h.view()));
@@ -81,7 +82,7 @@ const oldElec = kiot.priceTerms.electricity, elecRecord = SC.get('utilities', ol
 assert(oldElec && elecRecord && elecRecord.marketId === 'CL');
 const file = { name: 'qd-dien.pdf', type: 'application/pdf', size: 1, mock: true };
 const elecCount = () => SC.list('utilities').length;
-A.ui.cfgTab = 'electricity'; A.render();
+h.act('fcm-dtab', { id: 'electricity' });
 const before = elecCount();
 A.ui.feeForm = { tab: 'electricity', marketId: 'CL', name: '', calcMethod: 'fixed', amount: oldElec.price + 900, effectiveFrom: '2026-11-15', effectiveTo: '', file };
 h.act('fee-save', {});
@@ -130,7 +131,7 @@ assert(h.modal().includes('price-cancel-open'));
 h.act('price-cancel', { cat: 'utilities', id: newElec.id });
 assert.strictEqual(newElec.status, 'cancelled');
 assert.strictEqual(elecRecord.effectiveTo, null);
-A.ui.cfgTab = 'electricity'; A.render();
+h.act('fcm-dtab', { id: 'electricity' });
 assert(!h.view().includes('data-id="' + newElec.id + '"'), 'mức đã hủy ẩn khỏi bảng');
 
 // Danh sách HĐ trong drawer không chứa HĐ ngoài marketScopes.
