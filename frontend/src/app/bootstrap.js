@@ -429,7 +429,8 @@
       { id: 'thong-bao', ico: U.icon('bell'), label: 'Thông báo đa kênh' },
       { id: 'bao-cao', ico: U.icon('chart'), label: 'Báo cáo thống kê' },
       { id: 'tai-khoan', ico: U.icon('users'), label: 'Tài khoản người dùng' },
-      { id: 'cai-dat', ico: U.icon('settings'), label: 'Cài đặt & phân quyền' }
+      { id: 'cai-dat', ico: U.icon('settings'), label: 'Cài đặt & phân quyền' },
+      { id: 'mini-app', ico: U.icon('phone'), label: 'Cổng tiểu thương', hidden: true }
     ] }
   ];
   A.menuItem = id => { for (const g of A.MENU) for (const it of g.items) if (it.id === id) return it; return null; };
