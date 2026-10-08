@@ -270,7 +270,7 @@ ok('BANK: transaction needing review blocks Hoàn tất thu; Kế toán matches 
   assert(S.collectionChecklist(cl()).items.find(x => x.key === 'BANK').ok, 'no more blocking bank transactions');
 });
 
-ok('COLLECTION: cash payments on different dates do not require a cash session before completion', () => {
+ok('COLLECTION: every cash session must be closed before completion', () => {
   login('AC-NV02', 'CL'); h.go('thu-tien');
   const open = S.invoices(cl()).filter(i => i.status !== 'paid');
   open.forEach((i, index) => {
@@ -278,10 +278,14 @@ ok('COLLECTION: cash payments on different dates do not require a cash session b
     h.act('tt-pay-open', { id: i.id }); A.ui.ttPay.amount = A.U.due(i); h.act('tt-pay-commit');
   });
   assert(S.invoices(cl()).every(i => i.status === 'paid'), 'all invoices paid');
-  assert(!A.ACT['tt-session-close-confirm'], 'session-close handler retired');
-  assert(!h.view().includes('Tổng hợp theo buổi thu') && !h.view().includes('Chốt buổi thu hôm nay'), 'session UI retired');
+  assert(A.ACT['tt-session-close-confirm'], 'daily session close restored');
+  assert(h.view().includes('Chốt thu theo ngày') && h.view().includes('Chốt buổi thu hôm nay'), 'daily session close UI restored');
   h.act('tt-finish-confirm');
-  assert(cl().collection && cl().collection.reconciliationStatus === 'WAITING', 'completion does not depend on cash sessions');
+  assert(!cl().collection, 'completion refused while cash sessions are open');
+  const dates = Array.from(new Set(A.db.payments.filter(x => x.market === 'CL' && x.method === 'tm' && S.invoices(cl()).some(i => i.id === x.invoiceId)).map(x => x.date)));
+  dates.forEach(date => h.act('tt-session-close-confirm', { date }));
+  h.act('tt-finish-confirm');
+  assert(cl().collection && cl().collection.reconciliationStatus === 'WAITING', 'completion allowed once all cash sessions are closed');
 });
 
 ok('CASE 8 + 9: completion creates one period-level cash handover and excludes transfers', () => {

@@ -47,7 +47,6 @@
     ['NEEDS_ACTION', 'Cần xử lý', ['NEEDS_ACTION', 'METER_COMPLETED', 'NO_PERIOD']],
     ['READY_TO_ISSUE', 'Sẵn sàng phát hành', ['READY_TO_ISSUE']],
     ['COLLECTING', 'Đang thu', ['COLLECTING']],
-    ['COLLECTION_COMPLETED', 'Hoàn tất thu', ['COLLECTION_COMPLETED']],
     ['RECONCILIATION', 'Chờ/Xử lý đối soát', ['WAITING_RECONCILIATION', 'NEEDS_RESOLUTION']],
     ['COMPLETED', 'Hoàn tất', ['COMPLETED']],
     ['NOT_APPLICABLE', 'Không áp dụng', ['NOT_APPLICABLE']]
@@ -237,15 +236,27 @@
     return (A.db.bank || []).filter(b => b.market === (mp && mp.marketId) && REVIEW_BANK.includes(b.status) && (ids.has(b.receivableId) || invs.some(i => String(b.ref || '').includes(i.id))));
   };
   // BR-04: điều kiện Hoàn tất thu — dùng chung cho checklist UI và handler.
+  // Buổi thu chưa chốt = (NV thu phí, ngày) còn giao dịch tiền mặt thu phí của kỳ chưa thuộc phiếu nộp nào
+  // (A.db.cashHandovers — phiếu chốt buổi lập ở màn Thu tiền). Không gồm thu hồi công nợ (payment.debtId).
+  svc.openCashSessions = function (mp) {
+    const invIds = new Set(svc.invoices(mp).map(i => i.id)), handed = new Set();
+    (A.db.cashHandovers || []).forEach(h => (h.paymentIds || []).forEach(id => handed.add(id)));
+    const groups = {};
+    (A.db.payments || []).filter(x => invIds.has(x.invoiceId) && x.method === 'tm' && !x.debtId && !handed.has(x.id) && (!A.receiptBusinessStateOk || A.receiptBusinessStateOk(x)))
+      .forEach(x => { const k = x.by + '|' + x.date; (groups[k] = groups[k] || { collectorCode: x.by, date: x.date, payments: [] }).payments.push(x); });
+    return Object.keys(groups).sort().map(k => groups[k]);
+  };
   svc.collectionChecklist = function (mp) {
     const invs = svc.invoices(mp), unpaid = invs.filter(i => i.status !== 'paid' || Number(i.paid || 0) < Number(i.amount || 0)), review = svc.reviewBank(mp);
     const remaining = unpaid.reduce((s, i) => s + Math.max(0, Number(i.amount || 0) - Number(i.paid || 0)), 0);
+    const openSessions = svc.openCashSessions(mp), openDates = Array.from(new Set(openSessions.map(x => x.date))).sort();
     const items = [
       { key: 'ISSUED', ok: svc.isIssued(mp) && invs.length > 0, text: svc.isIssued(mp) ? 'Đã phát hành ' + invs.length + ' khoản phải thu' : 'Chưa phát hành khoản phải thu' },
       { key: 'PAID', ok: invs.length > 0 && !unpaid.length && remaining === 0, text: unpaid.length ? `Còn ${unpaid.length} khoản chưa thanh toán · còn ${U.money(remaining)}` : 'Tất cả khoản phải thu đã thanh toán đủ' },
-      { key: 'BANK', ok: !review.length, text: review.length ? `Còn ${review.length} giao dịch chuyển khoản cần xử lý` : 'Không còn giao dịch chuyển khoản cần xử lý' }
+      { key: 'BANK', ok: !review.length, text: review.length ? `Còn ${review.length} giao dịch chuyển khoản cần xử lý` : 'Không còn giao dịch chuyển khoản cần xử lý' },
+      { key: 'SESSIONS', ok: !openSessions.length, text: openSessions.length ? `Còn ${openSessions.length} buổi thu chưa chốt (${openDates.map(U.dmy).join(', ')})` : 'Tất cả buổi thu có tiền mặt đã chốt' }
     ];
-    return { items, ok: items.every(x => x.ok), unpaid, review, remaining };
+    return { items, ok: items.every(x => x.ok), unpaid, review, remaining, openSessions };
   };
 
   // ---------- Đối soát ----------
@@ -263,7 +274,9 @@
       const rs = svc.reconStatus(mp);
       return make(rs === 'RECONCILED' ? 'COMPLETED' : rs === 'NEEDS_RESOLUTION' ? 'NEEDS_RESOLUTION' : 'WAITING_RECONCILIATION', mp, { group: 'WAITING_RECONCILIATION' });
     }
-    if (svc.isIssued(mp)) return make(svc.collectionChecklist(mp).ok ? 'COLLECTION_COMPLETED' : 'COLLECTING', mp);
+    // Đã phát hành: luôn "Đang thu" cho tới khi NV thu phí bấm "Hoàn tất thu & chuyển đối soát" (mp.collection) —
+    // thu đủ 100% hay chốt hết buổi KHÔNG tự đổi trạng thái của chợ.
+    if (svc.isIssued(mp)) return make('COLLECTING', mp);
     const collector = A.ACCOUNTS && A.ACCOUNTS.marketCollectorState ? A.ACCOUNTS.marketCollectorState(marketId) : { status: 'ASSIGNED' };
     if (collector.status !== 'ASSIGNED') return make('UNASSIGNED', mp);
     const meter = svc.meterStatus(mp);
@@ -287,7 +300,7 @@
   // BR/XII: chỉ thu khi kỳ của chợ đã phát hành, chưa Hoàn tất thu, chưa chốt kỳ — áp dụng cho tiền mặt, CK/QR và nút demo ngân hàng.
   svc.canCollect = mp => !!mp && svc.isIssued(mp) && !mp.collection && !svc.isClosed(mp);
   svc.canCollectInvoice = inv => !!inv && inv.billingStatus !== 'DRAFT' && inv.status !== 'paid' && svc.canCollect(svc.ofInvoice(inv));
-  svc.canCompleteCollection = mp => !!mp && !svc.isClosed(mp) && svc.stateOf(mp.marketId, monthOf(mp)).id === 'COLLECTION_COMPLETED';
+  svc.canCompleteCollection = mp => !!mp && svc.canCollect(mp) && svc.stateOf(mp.marketId, monthOf(mp)).id === 'COLLECTING' && svc.collectionChecklist(mp).ok;
   svc.canReconcile = mp => !!mp && !!mp.collection && !svc.isClosed(mp) && ['WAITING', 'NEEDS_RESOLUTION'].includes(svc.reconStatus(mp));
 
   // NV thu phí hoàn tất ghi chỉ số (BR-03) → hệ thống tự tính nháp ngay sau đó (quyết định 2).

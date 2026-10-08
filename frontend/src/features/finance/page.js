@@ -383,12 +383,47 @@
   }
   // Điều kiện Hoàn tất thu — một nguồn duy nhất: market-period.collectionChecklist.
   const ttChecklist = p => MP().collectionChecklist(p);
+  // ---- Chốt thu theo ngày (buổi thu) — khôi phục theo yêu cầu người dùng. Buổi thu = 1 ngày của 1 NV thu phí tại 1 chợ.
+  // Chốt buổi lập phiếu A.db.cashHandovers (handoverScope DAY_SESSION) gom tiền mặt chưa chốt trong ngày. KHÔNG khóa kỳ,
+  // KHÔNG chặn thu tiếp; là điều kiện Hoàn tất thu (market-period.collectionChecklist · SESSIONS); đối soát kỳ vẫn đọc phiếu MARKET_PERIOD (summary.cashHandoverId).
+  const TT_SESSION = { COLLECTING: ['Đang thu', 'info'], NOT_CLOSED: ['Chưa chốt', 'warn'], CLOSED: ['Đã chốt', 'ok'], NO_CASH: ['Không có tiền mặt', ''] };
+  const ttCanCloseDay = market => U.can('thu-tien') && A.canDo('thu-tien.chot-buoi', market);
+  const hoDateOk = d => /^\d{4}-\d{2}-\d{2}$/.test(d || '') && d <= U.today();
+  // Phiếu chốt buổi được ưu tiên hơn phiếu nộp cả kỳ khi cùng chứa 1 giao dịch (để hiển thị đúng mã phiếu của buổi).
+  function ttHandedBy(market) {
+    const map = {}, hs = (A.db.cashHandovers || []).filter(h => h.market === market);
+    hs.filter(h => h.handoverScope === 'MARKET_PERIOD').concat(hs.filter(h => h.handoverScope !== 'MARKET_PERIOD')).forEach(h => (h.paymentIds || []).forEach(id => { map[id] = h; }));
+    return map;
+  }
+  function ttDayClosed(market, code, date) {
+    return (A.db.cashHandovers || []).some(h => h.market === market && (h.kind || 'FEE') === 'FEE' && h.collectorCode === code && h.sessionDate === date);
+  }
+  // Tiền mặt thu phí (không gồm thu nợ) của NV trong ngày, chưa thuộc phiếu nào.
+  function hoOpenCash(code, market, date) {
+    const handed = ttHandedBy(market);
+    return A.db.payments.filter(x => x.market === market && x.method === 'tm' && !x.debtId && x.by === code && x.date === date && !handed[x.id] && A.receiptBusinessStateOk(x) && A.idx.invoice.get(x.invoiceId));
+  }
+  // code = null → mọi NV của chợ (người xem).
+  function ttSessions(p, market, code, rows) {
+    const handedBy = ttHandedBy(market), periodInv = new Set(rows.map(r => r.inv.id)), today = U.today();
+    const cashAll = A.db.payments.filter(x => periodInv.has(x.invoiceId) && x.method === 'tm' && !x.debtId && (!code || x.by === code) && A.receiptBusinessStateOk(x));
+    const transfers = A.db.payments.filter(x => periodInv.has(x.invoiceId) && ttIsTransfer(x) && A.receiptBusinessStateOk(x));
+    const hs = (A.db.cashHandovers || []).filter(h => h.market === market && (h.kind || 'FEE') === 'FEE' && h.sessionDate && (!code || h.collectorCode === code) && h.periodId === p.id);
+    const dates = new Set(cashAll.map(x => x.date).concat(transfers.map(x => x.date), hs.map(h => h.sessionDate)));
+    if (ttPeriodState(p, market).id === 'COLLECTING' && today >= p.startDate && today <= p.dueDate) dates.add(today);
+    return Array.from(dates).sort().reverse().map(d => {
+      const cash = cashAll.filter(x => x.date === d), tr = transfers.filter(x => x.date === d), open = cash.filter(x => !handedBy[x.id]);
+      const dayHs = Array.from(new Set(cash.filter(x => handedBy[x.id]).map(x => handedBy[x.id]).concat(hs.filter(h => h.sessionDate === d))));
+      const status = open.length ? (d === today && !dayHs.length ? 'COLLECTING' : 'NOT_CLOSED') : dayHs.length ? 'CLOSED' : d === today ? 'COLLECTING' : 'NO_CASH';
+      return { date: d, cash, transfers: tr, open, handovers: dayHs, status, cashTotal: U.sum(cash, x => x.amount), transferTotal: U.sum(tr, x => x.amount) };
+    });
+  }
   // Ngữ cảnh dùng chung cho view và handler: mọi số liệu KPI/bảng/checklist lấy từ cùng 1 lần tính.
   function ttContext() {
     const acc = A.currentAccount() || {}, market = ui.market, p = financePeriod();
     if (!p || A.allowedMarkets(acc).indexOf(market) === -1) return null;
-    const code = acc.code || acc.id, rows = ttRows(p, market);
-    return { acc, market, p, code, rows, s: ttStats(rows), check: ttChecklist(p), state: ttPeriodState(p, market), canFinish: ttCanFinish(market) };
+    const code = acc.code || acc.id, rows = ttRows(p, market), canClose = ttCanCloseDay(market), state = ttPeriodState(p, market);
+    return { acc, market, p, code, rows, s: ttStats(rows), check: ttChecklist(p), state, canFinish: ttCanFinish(market), canClose, sessions: ttSessions(p, market, canClose ? code : null, rows) };
   }
   const ttCanFinish = market => U.can('thu-tien') && A.canDo('thu-tien.hoan-tat-thu', market);
   const ttChecklistHtml = check => `<ul class="tt-check">${check.items.map(x => `<li class="${x.ok ? 'is-ok' : 'is-bad'}"><span>${x.ok ? '✓' : '✕'}</span>${U.esc(x.text)}</li>`).join('')}</ul>`;
@@ -407,7 +442,10 @@
     const markets = (typeof A.effectiveMarkets === 'function' ? A.effectiveMarkets() : D.MARKETS).filter(m => A.allowedMarkets(c.acc).includes(m.id));
     const periods = A.periods.listForMarket(market).slice().sort((a, b) => String(b.period).localeCompare(String(a.period))).map(x => `<option value="${x.id}" ${x.id === p.id ? 'selected' : ''}>${U.esc(ttPeriodLabel(x))}</option>`).join('');
     const handoff = ttHandoff(p, market);
-    const actions = state.id === 'COLLECTING' && c.canFinish ? `<div class="tt-head-actions"><button class="btn primary" data-act="tt-finish-open" ${c.check.ok ? '' : 'disabled'}>Hoàn tất thu &amp; chuyển đối soát</button></div>` : '';
+    const today = c.sessions.find(x => x.date === U.today()), canCloseToday = c.canClose && state.id === 'COLLECTING' && !!today && today.open.length > 0;
+    const closeDayBtn = c.canClose && state.id === 'COLLECTING' ? `<button class="btn" data-act="tt-session-close-open" data-date="${U.today()}" ${canCloseToday ? '' : 'disabled'} title="${canCloseToday ? '' : 'Không có giao dịch tiền mặt chưa chốt trong ngày hôm nay'}">Chốt buổi thu hôm nay</button>` : '';
+    const finishBtn = c.canFinish ? `<button class="btn primary" data-act="tt-finish-open" ${c.check.ok ? '' : 'disabled'}>Hoàn tất thu &amp; chuyển đối soát</button>` : '';
+    const actions = state.id === 'COLLECTING' && (closeDayBtn || finishBtn) ? `<div class="tt-head-actions">${closeDayBtn}${finishBtn}</div>` : '';
     const reason = state.id === 'COLLECTING' && c.canFinish && !c.check.ok ? `<div class="tt-head-reason">Chưa đủ điều kiện hoàn tất thu: ${c.check.items.filter(x => !x.ok).map(x => U.esc(x.text)).join(' · ')}. <button class="link-btn" data-act="tt-tab" data-id="progress">Xem tiến độ kỳ thu</button></div>` : '';
     const handoffNote = handoff ? `<div class="tt-head-reason">${ttClosedNote(handoff)} Không ghi nhận giao dịch mới trong kỳ này.</div>` : '';
     return `<div class="card tt-head"><div class="card-b"><div class="tt-head-b">
@@ -509,8 +547,17 @@
         { empty: 'Chưa có giao dịch trong kỳ này' })}${pg.html}
         <div class="small muted tt-foot">Giao dịch đã xác nhận không sửa trực tiếp số tiền. Chuyển khoản/QR do hệ thống ghi nhận khi khớp giao dịch thanh toán.</div></div>`;
   }
+  function ttSessionsHtml(c) {
+    const act = s => `<button class="btn sm" data-act="tt-session-view" data-date="${s.date}">Xem chi tiết</button>${c.canClose && c.state.id === 'COLLECTING' && s.open.length ? `<button class="btn sm primary" data-act="tt-session-close-open" data-date="${s.date}">Chốt buổi thu</button>` : ''}`;
+    return `<div class="card-b">${U.table([{ t: 'Ngày' }, { t: 'Tiền mặt', num: true }, { t: 'CK ghi nhận', num: true }, { t: 'Tổng thu', num: true }, { t: 'GD', num: true }, { t: 'Trạng thái' }, { t: 'Thao tác' }],
+      c.sessions.map(s => { const st = TT_SESSION[s.status]; return `<tr class="click" data-act="tt-session-view" data-date="${s.date}"><td><b>${U.dmy(s.date)}</b>${s.handovers.length ? `<div class="small muted">${s.handovers.map(h => U.esc(h.id)).join(', ')}</div>` : ''}</td>
+        <td class="num">${U.money(s.cashTotal)}</td><td class="num">${U.money(s.transferTotal)}</td><td class="num"><b>${U.money(s.cashTotal + s.transferTotal)}</b></td><td class="num">${s.cash.length + s.transfers.length}</td><td>${ttTag(st[0], st[1])}</td><td class="nowrap tt-actions">${act(s)}</td></tr>`; }),
+      { empty: 'Chưa có buổi thu nào trong kỳ này' })}
+      <div class="small muted tt-foot">Mỗi ngày thu là một buổi. Chốt buổi khóa các giao dịch tiền mặt của buổi vào phiếu nộp; không khóa kỳ thu và không thay cho Hoàn tất thu &amp; chuyển đối soát.</div></div>`;
+  }
   function ttProgressHtml(c) {
     const { p, s, check, state } = c, pct = U.pct(s.paid, s.total);
+    const need = c.sessions.filter(x => x.cash.length), closed = need.filter(x => !x.open.length);
     const cta = state.id === 'COLLECTING' && c.canFinish ? `<div class="tt-progress-cta"><button class="btn primary" data-act="tt-finish-open" ${check.ok ? '' : 'disabled'}>Hoàn tất thu &amp; chuyển đối soát</button>${check.ok ? '' : '<span class="small muted">Cần đạt đủ các điều kiện bên trên.</span>'}</div>` : '';
     const handoff = ttHandoff(p, c.market);
     return `<div class="card-b tt-progress">
@@ -519,16 +566,17 @@
         <dl class="tt-sum"><div><dt>Tổng khoản phải thu</dt><dd>${s.total}</dd></div><div><dt>Đã thu đủ</dt><dd>${s.paid}</dd></div><div><dt>Chưa thu</dt><dd>${s.unpaid}</dd></div></dl>
         <dl class="tt-sum"><div><dt>Tổng phải thu</dt><dd>${U.money(s.amount)}</dd></div><div><dt>Đã thu</dt><dd>${U.money(s.collected)}</dd></div><div><dt>Tiền mặt</dt><dd>${U.money(s.cash)}</dd></div><div><dt>Chuyển khoản</dt><dd>${U.money(s.transfer)}</dd></div><div class="is-total"><dt>Còn phải thu</dt><dd>${U.money(s.remaining)}</dd></div></dl>
       </div>
-      <div class="tt-progress-bars"><div><div class="tt-progress-label">Khoản đã thu đủ: <b>${s.paid} / ${s.total}</b> (${U.pctTxt(pct)})</div><div class="bar-mini"><i style="width:${pct}%"></i></div></div></div>
+      <div class="tt-progress-bars"><div><div class="tt-progress-label">Khoản đã thu đủ: <b>${s.paid} / ${s.total}</b> (${U.pctTxt(pct)})</div><div class="bar-mini"><i style="width:${pct}%"></i></div></div>
+        <div><div class="tt-progress-label">Buổi thu đã chốt: <b>${closed.length} / ${need.length}</b> buổi có tiền mặt</div><div class="bar-mini"><i style="width:${U.pct(closed.length, need.length)}%"></i></div></div></div>
       <h4 class="tt-sec-title">Điều kiện hoàn tất thu</h4>${ttChecklistHtml(check)}${cta}
       ${handoff ? `<div class="note info">${ttClosedNote(handoff)} Tiền mặt đã thu bàn giao cho Kế toán Trung tâm để đối soát.</div>` : ''}</div>`;
   }
   A.VIEWS['thu-tien'] = function () {
     const c = ttContext();
     if (!c) return `<div class="card"><div class="card-b"><div class="empty">${financePeriod() ? 'Bạn chưa được phân công Chợ này.' : 'Chưa có kỳ thu.'}</div></div></div>`;
-    const tabs = [['list', 'Danh sách thu'], ['tx', 'Giao dịch & biên lai'], ['progress', 'Tiến độ kỳ thu']];
+    const tabs = [['list', 'Danh sách thu'], ['tx', 'Giao dịch & biên lai'], ['sessions', 'Chốt thu theo ngày'], ['progress', 'Tiến độ kỳ thu']];
     const tab = tabs.some(t => t[0] === f.ttTab) ? f.ttTab : 'list';
-    const body = tab === 'tx' ? ttTxHtml(c) : tab === 'progress' ? ttProgressHtml(c) : ttListHtml(c);
+    const body = tab === 'tx' ? ttTxHtml(c) : tab === 'sessions' ? ttSessionsHtml(c) : tab === 'progress' ? ttProgressHtml(c) : ttListHtml(c);
     return ttHeadHtml(c) + ttKpisHtml(c.s) + `<div class="card tt-work"><div class="card-h tt-tabs"><div class="seg">${tabs.map(t => `<button class="${tab === t[0] ? 'on' : ''}" data-act="tt-tab" data-id="${t[0]}">${t[1]}</button>`).join('')}</div></div>${body}</div>`;
   };
   A.ACT['tt-tab'] = el => { if (!U.can('thu-tien')) return; f.ttTab = el.dataset.id; A.closeModal(); A.render(); };
@@ -760,15 +808,13 @@
     A.save(); U.toast('Đã gửi biên lai tới tiểu thương qua Mini app / Zalo OA (mô phỏng)');
   };
 
-  /* Legacy cash-session close flow: retained read-only in source for historical-data compatibility; it is not registered or reachable. */
-  /*
   // ---- Chốt buổi thu (theo ngày) — KHÔNG phải chốt kỳ ----
   function ttSessionCloseContext(date) {
     const c = U.can('thu-tien') && ttContext();
     if (!c || !c.canClose) return { err: 'Bạn không có quyền chốt buổi thu' };
     if (!hoDateOk(date)) return { err: 'Ngày chốt không hợp lệ' };
     if (c.state.id !== 'COLLECTING') return { err: 'Chỉ chốt buổi khi kỳ đang ở trạng thái Đang thu' };
-    const open = hoOpenCash(c.code, c.market, date, 'FEE');
+    const open = hoOpenCash(c.code, c.market, date);
     if (!open.length) return { err: ttDayClosed(c.market, c.code, date) ? 'Buổi thu ngày ' + U.dmy(date) + ' đã được chốt' : 'Không có giao dịch tiền mặt chưa chốt trong buổi này' };
     const periodInv = new Set(c.rows.map(r => r.inv.id));
     const transfers = A.db.payments.filter(x => periodInv.has(x.invoiceId) && ttIsTransfer(x) && x.date === date && A.receiptBusinessStateOk(x));
@@ -795,7 +841,7 @@
     let n = cashHandovers().filter(h => h.collectorCode === c.code && h.date === c.date && (h.kind || 'FEE') === 'FEE').length + 1;
     while (cashHandovers().some(h => h.id === 'PN-' + d + '-' + c.code + '-' + U.pad(n, 2))) n++;
     const assignedRows = (A.db.rows || []).filter(r => r.market === c.market && r.collectorId === acc.id), at = nowStamp();
-    const h = { id: 'PN-' + d + '-' + c.code + '-' + U.pad(n, 2), kind: 'FEE', market: c.market, marketId: c.market, periodId: c.p.id, collectorId: acc.id, collectorCode: c.code, collectorName: acc.fullName || hoName(c.code),
+    const h = { id: 'PN-' + d + '-' + c.code + '-' + U.pad(n, 2), kind: 'FEE', handoverScope: 'DAY_SESSION', market: c.market, marketId: c.market, periodId: c.p.id, collectorId: acc.id, collectorCode: c.code, collectorName: acc.fullName || hoName(c.code),
       date: c.date, paymentIds: c.open.map(x => x.id), amount: c.cashTotal, declaredAmount: c.cashTotal, assignedRowIds: assignedRows.map(r => r.id), assignedAreas: assignedRows.map(hoAreaLabel), submittedAt: at, status: 'SUBMITTED',
       sessionDate: c.date, sessionNo: n, cashCount: c.open.length, transferPaymentIds: c.transfers.map(x => x.id), transferCount: c.transfers.length, transferAmount: c.transferTotal, closedAt: at, closedBy: acc.fullName || c.code, source: 'THU_TIEN_WORKSPACE' };
     cashHandovers().push(h);
@@ -815,7 +861,6 @@
       <div class="modal-f"><button class="btn" data-act="close">Đóng</button>${c.canClose && c.state.id === 'COLLECTING' && s.open.length ? `<button class="btn primary" data-act="tt-session-close-open" data-date="${s.date}">Chốt buổi thu</button>` : ''}</div>`, true);
   };
 
-  */
   // ---- Hoàn tất thu & chuyển đối soát — NV thu phí, theo chợ/kỳ (100% đã thu, không còn giao dịch CK cần xử lý).
   // giao dịch CK cần xử lý). Sinh (1 lần) bản ghi CHỜ ĐỐI SOÁT trên kỳ của chợ (marketPeriod.collection). Không có
   // chế độ bỏ qua điều kiện. data-act giữ tên nội bộ tt-finish-*.
