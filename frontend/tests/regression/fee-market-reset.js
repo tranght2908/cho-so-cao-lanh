@@ -134,7 +134,7 @@ ok('CASE 3 + CASE 4 + CASE 5: configure again from scratch — water not applied
   const st = fc.marketConfigState('HA'), fee = L.marketLifecycle('HA').fee;
   assert.strictEqual(st.water, 'NA'); assert(!fee.missingCharges.includes('WATER'), 'water not required');
   assert.strictEqual(st.electricity, 'MISSING'); assert(fee.missingCharges.includes('ELECTRICITY'), 'electricity required');
-  assert(/Chưa có đơn giá điện đang hiệu lực \(bắt buộc khi áp dụng\)/.test(h.view()));
+  assert(/data-row=\"electricity\"[\s\S]*?Chưa thiết lập đơn giá/.test(h.view()));
 });
 ok('CASE 9: a future-dated price is not the current price', () => {
   h.act('fcm-edit', { card: 'electricity' });
@@ -144,7 +144,7 @@ ok('CASE 9: a future-dated price is not the current price', () => {
   A.ui.feeCfg.draft.file = FILE; h.act('fcm-save');
   assert.strictEqual(fc.marketConfigState('HA').electricity, 'MISSING', 'future price is not applied today');
   assert(L.marketLifecycle('HA').fee.missingCharges.includes('ELECTRICITY'));
-  assert(/Có giá mới 3\.200 đ\/kWh từ/.test(h.view()));
+  assert(/Mức mới 3\.200 đ\/kWh từ/.test(h.view()) && /Có mức thu mới sắp hiệu lực/.test(h.view()));
 });
 ok('CASE 6 + CASE 11: a current electricity price → no false "missing"; pressing Save twice creates one version', () => {
   h.act('fcm-edit', { card: 'electricity' });

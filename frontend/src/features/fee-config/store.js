@@ -177,9 +177,9 @@
       cfg[cat] = Array.isArray(cfg[cat]) ? cfg[cat] : [];
       cfg[cat].forEach(rec => normalizeRecord(cat, rec));
     });
-    ensureQd480LandPrices(cfg);
     splitUtilityRecords(cfg);
-    ensureDemoMarketPolicies(cfg);
+    // Giá QĐ 480 / cấu hình demo cũ vẫn được giữ nguyên nếu đã tồn tại, nhưng
+    // không được tự tạo thêm khi tải lại. Giá áp dụng phải do từng chợ khai báo.
     // Lịch kỳ thu chỉ cấu hình các mốc vận hành; không kích hoạt phát hành khoản phải thu.
     const cycle = cfg.billingCycle || {};
     cycle.preparationDay = Number(cycle.preparationDay) || Number(cycle.meterCutoffDay) || 25;

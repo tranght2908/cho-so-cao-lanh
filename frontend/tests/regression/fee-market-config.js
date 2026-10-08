@@ -1,6 +1,6 @@
 /* Focused regression: "Chính sách thu và biểu phí" = per-market fee configuration (decision 10/2026).
  * List of markets in scope with config status; detail tabs (applicable charges, land, electricity, water,
- * services, QĐ 480 reference); QĐ 480 preset only fills the draft; saving the market's OWN records (shared
+ * services); saving the market's OWN records (shared
  * versioning rule: day-01 effective date + evidence file) drives the lifecycle to ACTIVE; ACTIVE markets
  * whose prices lapse stay ACTIVE with a warning; non-applicable charges cannot be chosen for a rental point (Hồ sơ
  * tiểu thương — nơi chọn khoản thu cho hợp đồng) and contract creation (màn Hợp đồng) is blocked when an applied
@@ -37,51 +37,49 @@ const thisMonth = A.U.today().slice(0, 8) + '01';
 
 login('AC-NV01'); // Tổ trưởng: quyền cau-hinh-gia.them-phi, phạm vi 12 chợ
 
-ok('screen: list of markets in scope, two tabs, no shared QĐ 480 counted as configured', () => {
+ok('screen: list of markets in scope, two tabs, only market-owned records count as configured', () => {
   h.go('cau-hinh-gia');
   assert.strictEqual(A.current, 'cau-hinh-gia');
   const v = h.view();
-  assert(/Chính sách thu và biểu phí/.test(v) && /Thiết lập mức thu riêng cho từng chợ: mặt bằng, điện, nước và dịch vụ\./.test(v));
+  assert(/Chính sách thu và biểu phí/.test(v) && /Quản lý khoản thu và mức giá áp dụng cho từng chợ\./.test(v));
   assert(/Danh sách cấu hình/.test(v) && /Lịch sử thay đổi/.test(v));
   assert.strictEqual((v.match(/data-act="fcm-open"/g) || []).length, A.allowedMarkets(A.currentAccount()).length);
   assert(/Đã cấu hình/.test(listRow('CL')) && /Đã cấu hình/.test(listRow('TTD')));
-  assert(/Chưa cấu hình/.test(listRow('TVH')), 'TVH has QĐ 480 shared reference but no own config');
+  assert(/Chưa cấu hình/.test(listRow('TVH')), 'TVH has no market-owned configuration');
 });
-ok('CASE 1 HA: QĐ 480 shared exists, no own config → list "Chưa cấu hình", lifecycle PENDING_FEE', () => {
+ok('CASE 1 HA: no own configuration → list "Chưa cấu hình", lifecycle PENDING_FEE', () => {
   setupLayout('HA', ['covered', 'uncovered']);
-  assert(Object.keys(C.referenceLandPrices('HA').prices).length > 0, 'fixture: QĐ 480 reference for HA');
   assert(/Chưa cấu hình/.test(listRow('HA')));
   assert.strictEqual(L.marketLifecycle('HA').stage, 'PENDING_FEE');
   open('HA');
   const v = screen();
   assert(/Cấu hình mức thu – Chợ Hòa An/.test(v) && /Trạng thái cấu hình <span class="tag ">Chưa cấu hình/.test(v), v.slice(0, 600));
-  ['Tiền mặt bằng', 'Tiền điện', 'Tiền nước', 'Phí dịch vụ', 'Tham chiếu QĐ 480', 'Lịch sử đơn giá'].forEach(t => assert(v.includes(t), t));
+  ['Tiền mặt bằng', 'Tiền điện', 'Tiền nước', 'Phí dịch vụ', 'Lịch sử đơn giá'].forEach(t => assert(v.includes(t), t));
+  assert(!/QĐ 480|Giá tham chiếu/.test(v), 'no shared reference UI');
   assert(/Chưa chọn Áp dụng \/ Không áp dụng/.test(v), 'charges not declared yet');
 });
 let m1;
-ok('CASE 7 "Áp dụng giá QĐ 480" only fills the draft — nothing saved, not ACTIVE', () => {
+ok('CASE 7 opening direct land pricing creates no default price or version', () => {
   m1 = newMarket('Chợ cấu hình M1', ['covered']);
   const before = json(C.list('stallPrices'));
-  open(m1, 'qd480');
-  assert(/Giá tham chiếu theo QĐ 480 cho chợ Hạng 3/.test(screen()));
-  h.act('fcm-preset', { mode: 'empty' });
-  assert.strictEqual(A.ui.feeCfg.dtab, 'land');
-  assert.strictEqual(A.ui.feeCfg.draft.land.covered, '2000');
-  assert(/Điền từ QĐ 480 \(bản nháp\)/.test(screen()));
+  open(m1, 'land');
+  assert.strictEqual(A.ui.feeCfg.draft.land.covered, '');
+  assert(!/QĐ 480|Giá tham chiếu|Dùng giá tham chiếu/.test(screen()));
   assert.strictEqual(json(C.list('stallPrices')), before, 'nothing written');
   assert.strictEqual(MC.get(m1).status, 'NOT_ACTIVE');
 });
 ok('CASE 3 electricity applicable without a price → saved, still PENDING_FEE, missing "đơn giá điện"', () => {
   h.act('fcm-dtab', { id: 'charges' });
   charge('electricity', true); charge('water', false); charge('service', false);
+  field('land.covered', 2000);
   field('effectiveFrom', thisMonth);
   const r = save();
   assert(/Chợ vẫn chưa đủ điều kiện hoạt động/.test(r.title), r.title);
   assert(r.items.some(x => /đơn giá điện/.test(x)));
   assert.strictEqual(MC.get(m1).status, 'NOT_ACTIVE');
   assert.strictEqual(json(C.chargeApplicability(m1)), '{"land":true,"electricity":true,"water":false,"service":false}');
-  assert(C.list('stallPrices').some(p => p.marketId === m1 && p.areaTypeId === 'covered' && p.amount === 2000 && /QĐ 480/.test((p.legalBasis || {}).note || '')), 'own land record from the preset');
-  assert(/Chưa có đơn giá điện đang hiệu lực/.test(screen()), 'electricity card shows the missing price');
+  assert(C.list('stallPrices').some(p => p.marketId === m1 && p.areaTypeId === 'covered' && p.amount === 2000 && p.scope === 'MARKET'), 'own land record from direct entry');
+  assert(/data-row="electricity"[\s\S]*?Chưa thiết lập đơn giá[\s\S]*?Chưa thiết lập mức thu/.test(screen()), 'electricity row shows the missing price');
 });
 ok('CASE 4 + 8 electricity price saved → coverage passes → ACTIVE (CASE 6: service=false not required)', () => {
   open(m1, 'electricity');
@@ -135,7 +133,7 @@ ok('CASE 9 ACTIVE market whose own price lapses → stays ACTIVE, ACTIVE_FEE_WAR
     assert.strictEqual(L.marketLifecycle(m1).stage, 'ACTIVE_FEE_WARNING');
     assert(/Chưa hoàn tất/.test(listRow(m1)), 'lapsed price → configuration not complete');
     open(m1);
-    assert(/Còn thiếu:/.test(screen()) && /Chưa có giá riêng/.test(screen()) && /Chưa hoàn tất/.test(screen()));
+    assert(/Còn cần xử lý: Tiền mặt bằng: chưa thiết lập mức thu \(Có mái che\)/.test(screen()) && /Chưa có giá: Có mái che/.test(screen()) && /Chưa hoàn tất/.test(screen()));
   } finally { C.update('stallPrices', p.id, { effectiveTo: prevTo }, 'test', 'Khôi phục'); }
 });
 const traderIn = (market, id) => { const t = { id, name: 'Tiểu thương ' + id, phone: '0977' + String(100000 + A.db.traders.length).slice(-6), idNo: 'ID-' + id, market, stalls: [], source: 'STAFF' }; A.db.traders.push(t); A.reindex(); return t; };
@@ -175,8 +173,8 @@ ok('CASE 11 contract at a market with electricity applicable but no live price �
     assert(!A.db.contracts.some(c => c.traderId === t.id), 'no contract created');
   } finally { elec.forEach(u => { u.status = 'active'; }); h.act('ctw-cancel'); login('AC-NV01'); }
 });
-ok('CASE 12 TTD legacy "Theo phiên": every tab renders, legacy note shown, still ACTIVE', () => {
-  ['charges', 'land', 'electricity', 'water', 'service', 'qd480'].forEach(t => { open('TTD', t); assert(h.view().length > 500, t); });
+ok('CASE 12 TTD legacy "Theo phiên": every market-config view renders, legacy note shown, still ACTIVE', () => {
+  ['charges', 'land', 'electricity', 'water', 'service'].forEach(t => { open('TTD', t); assert(h.view().length > 500, t); });
   open('TTD', 'land');
   assert(/điểm "Theo phiên" \(dữ liệu cũ\) không yêu cầu mức thu/.test(screen()));
   assert.strictEqual(L.marketLifecycle('TTD').stage, 'ACTIVE');
@@ -206,36 +204,27 @@ ok('filters: search, status, rank; history tab lists own-config changes', () => 
   assert(/Tạo cấu hình/.test(hv) && hv.includes(A.U.mShort('HA')), 'own price records of HA are in the history');
   h.act('fcm-tab', { id: 'list' });
 });
-ok('evidence: price kept at the QĐ 480 preset reuses the shared evidence file (reference, no upload); a manual price requires a file', () => {
-  const refs = C.referenceLandPrices('TVH').prices, ref = refs.covered;
-  const shared = { id: 'att-qd480', name: 'QD-480-UBND.pdf', type: 'application/pdf', size: 100, url: 'blob:qd480', mock: true };
-  Object.values(refs).forEach(p => { p.attachments = [shared]; });
-  try {
-    const m4 = newMarket('Chợ căn cứ M4', ['covered', 'uncovered']);
-    open(m4, 'charges'); charge('electricity', false); charge('water', false); charge('service', false);
-    h.act('fcm-dtab', { id: 'qd480' });
-    assert(/Có tệp căn cứ/.test(screen()), 'QĐ 480 evidence shown on the reference popup');
-    h.act('fcm-preset', { mode: 'empty' });
-    field('land.uncovered', 1800); // manual (differs from QĐ 480) → needs its own file
-    field('effectiveFrom', thisMonth);
-    h.act('fcm-save');
-    assert(A.ui.feeCfg.result.items.some(x => /tệp căn cứ/.test(x)), 'manual price requires a file');
-    h.act('fcm-preset', { mode: 'all' }); // re-apply the reference via the preset action → no file needed
-    const n = (C.list('stallPrices') || []).length;
-    h.act('fcm-save');
-    assert.strictEqual(C.list('stallPrices').length, n + 3, 'saved without uploading (3 reference prices from the preset)');
-    const own = C.list('stallPrices').find(p => p.marketId === m4 && p.areaTypeId === 'covered');
-    assert.strictEqual(own.referencePolicyId, ref.id);
-    assert.strictEqual(own.attachments.length, 1);
-    assert.strictEqual(own.attachments[0].url, shared.url, 'same reference, no copy of the file content');
-    assert.strictEqual(own.attachments[0].referenceOf, ref.id);
-    assert.strictEqual(MC.get(m4).status, 'ACTIVE');
-    // A later change to a manual price needs evidence for that change.
-    open(m4, 'land'); field('land.covered', 2200); field('effectiveFrom', A.features.feeConfig.nextMonthStart());
-    h.act('fcm-save');
-    assert(A.ui.feeCfg.result.items.some(x => /tệp căn cứ/.test(x)));
-    h.act('fcm-reset');
-  } finally { Object.values(refs).forEach(p => { p.attachments = []; }); }
+ok('evidence: every new or changed market land price requires its own file', () => {
+  const m4 = newMarket('Chợ căn cứ M4', ['covered', 'uncovered']);
+  open(m4, 'charges'); charge('electricity', false); charge('water', false); charge('service', false);
+  field('land.covered', 2000); field('land.uncovered', 1800); field('effectiveFrom', thisMonth);
+  h.act('fcm-save');
+  assert(A.ui.feeCfg.result.items.some(x => /tệp căn cứ/.test(x)), 'new direct prices require a file');
+  const n = C.list('stallPrices').length;
+  const out = save();
+  assert(/Đã lưu cấu hình/.test(out.title), json(out));
+  assert.strictEqual(C.list('stallPrices').length, n + 2, 'one own version per used area type');
+  assert(!C.list('stallPrices').some(p => p.marketId === m4 && p.areaTypeId === 'self_produced'), 'no price for an unused area type');
+  C.list('stallPrices').filter(p => p.marketId === m4).forEach(p => {
+    assert.strictEqual(p.scope, 'MARKET');
+    assert.strictEqual((p.attachments || []).length, 1);
+    assert(!p.referencePolicyId, 'not linked to a shared reference policy');
+  });
+  assert.strictEqual(MC.get(m4).status, 'ACTIVE');
+  open(m4, 'land'); field('land.covered', 2200); field('effectiveFrom', A.features.feeConfig.nextMonthStart()); A.ui.feeCfg.draft.file = null;
+  h.act('fcm-save');
+  assert(A.ui.feeCfg.result.items.some(x => /tệp căn cứ/.test(x)), 'a later change also requires evidence');
+  h.act('fcm-reset');
 });
 ok('charge switched to "Không áp dụng": prices ended (not deleted), history "Khoản Điện ngừng áp dụng từ …", new periods/contracts exclude it', () => {
   const nextMonth = A.features.feeConfig.nextMonthStart(), monthEnd = A.features.feeConfig.prevDay(nextMonth);
@@ -299,70 +288,15 @@ ok('RBAC: only the market manager (permission + market scope) may save — enfor
   assert.strictEqual(A.PERM.canAction('system_admin', 'cau-hinh-gia.them-phi'), false, 'admin has no per-market fee edit permission');
   assert.strictEqual(A.PERM.canAction('market_manager', 'cau-hinh-gia.them-phi'), true);
 });
-ok('shared QĐ 480 master data: only the system admin manages it; Tổ trưởng calling the handlers directly is refused', () => {
-  const fc = A.features.feeConfig, count = () => C.list('stallPrices').length, shared = C.get('stallPrices', 'sp-qd480-mai-che');
-  const landForm = () => ({ grades: [2, 3], areaTypeId: 'covered', amount: 2100, effectiveFrom: '2027-01-01', effectiveTo: '', file: FILE });
-  // Tổ trưởng (them-phi) — no reference tab, every shared write path refused.
-  login('AC-NV01');
+ok('legacy shared QĐ 480 data remains persisted but is absent from UI and never used as a market price', () => {
+  const legacy = C.add('stallPrices', { id: 'legacy-shared-qd480', scope: 'SHARED', marketId: null, marketIds: ['TVH'], areaTypeId: 'covered', amount: 9999, unit: 'đ/m²/ngày', effectiveFrom: '2026-01-01', effectiveTo: null, status: 'active', legalBasis: {}, attachments: [] }, 'test');
+  h.localStorage.setItem(C.KEY, JSON.stringify(C.data()));
+  const own = C.resolveApplicableMarketFeePolicy({ marketId: 'TVH', point: { market: 'TVH', areaTypeId: 'covered' }, date: A.U.today() });
+  assert(!own || own.scope !== 'SHARED', 'shared record is never resolved as a market price');
   h.go('cau-hinh-gia'); h.act('fcm-back');
-  assert(!/Giá tham chiếu QĐ 480 \(quản trị\)/.test(h.view()), 'no admin tab for Tổ trưởng');
-  h.act('fcm-tab', { id: 'reference' }); assert.notStrictEqual(A.ui.feeCfg.tab, 'reference');
-  let n = count();
-  A.ui.landForm = landForm(); h.act('policy-land-save');
-  assert.strictEqual(count(), n, 'policy-land-save refused');
-  assert(/không có quyền/.test(h.trace.toasts.at(-1)));
-  h.act('policy-land-new'); assert(!A.ui.landForm || A.ui.landForm.amount === 2100, 'form not opened');
-  assert(fc.saveReferenceVersion({ docNo: 'X', effectiveFrom: '2027-01-01', file: FILE, prices: { 2: { covered: 2100 }, 3: { covered: 2100 } } }, 'x').denied);
-  assert.strictEqual(count(), n);
-  const att = (shared.attachments || []).length;
-  A.ui.landEvidenceDraft = { id: shared.id, files: [FILE] }; h.act('policy-land-evidence-save', { id: shared.id });
-  assert.strictEqual((shared.attachments || []).length, att, 'cannot attach evidence to shared policy');
-  h.act('policy-land-view', { id: shared.id });
-  assert(!/data-ch="land-att-add"/.test(h.modal()), 'drawer is read-only for Tổ trưởng');
-  A.closeModal();
-  // Admin (chinh-sach-chung.them-muc) — tab visible, evidence and versions allowed.
-  login('AC-QT01');
-  h.go('cau-hinh-gia'); h.act('fcm-back'); h.act('fcm-tab', { id: 'reference' });
-  assert.strictEqual(A.ui.feeCfg.tab, 'reference');
-  assert(/Giá tham chiếu đang hiệu lực/.test(h.view()) && /Các phiên bản \(lịch sử\)/.test(h.view()) && /không tự cập nhật mức thu riêng của các chợ/.test(h.view()));
-  h.act('policy-land-view', { id: shared.id });
-  assert(/data-ch="land-att-add"/.test(h.modal()), 'admin can manage evidence');
-  A.ui.landEvidenceDraft = { id: shared.id, files: [FILE] }; h.act('policy-land-evidence-save', { id: shared.id });
-  assert.strictEqual(shared.attachments.length, att + 1, 'admin attached evidence');
-  A.closeModal();
-  const snapshot = json(C.list('stallPrices').filter(r => r.scope === 'SHARED').map(r => [r.id, r.effectiveTo, r.replacedById || null]));
-  n = count(); A.ui.landForm = landForm(); h.act('policy-land-save');
-  assert.strictEqual(count(), n + 1, 'admin may use the master-data handler');
-  // Undo the test record so later checks start from the seeded reference data.
-  const created = C.list('stallPrices').at(-1); created.status = 'cancelled';
-  JSON.parse(snapshot).forEach(([id, to, by]) => { const r = C.get('stallPrices', id); r.effectiveTo = to; if (by) r.replacedById = by; else delete r.replacedById; });
-  shared.attachments.pop();
-  login('AC-NV01');
-});
-ok('reference version: new decision creates new records, old kept and ended; market-owned prices, lifecycle and billing unchanged', () => {
-  const fc = A.features.feeConfig;
-  login('AC-QT01');
-  const old = C.get('stallPrices', 'sp-qd480-mai-che');
-  const stages = MC.rows().map(m => m.id + ':' + L.marketLifecycle(m.id).stage + ':' + MC.get(m.id).status).join('|');
-  const owned = json(C.list('stallPrices').filter(r => r.scope !== 'SHARED'));
-  const st = A.db.stalls.find(x => x.market === 'CL'), clTerms = json(A.features.finance.billing.buildPriceTerms('CL', st, st.area, '2027-02-15', { electricity: true, water: true, marketService: true }, 'TEST'));
-  // Must cover every grade of the record it replaces (Hạng 2, 3).
-  let out = fc.saveReferenceVersion({ docNo: '999/QĐ-UBND', effectiveFrom: '2027-01-01', file: FILE, prices: { 2: { covered: 2300 } } }, 'admin');
-  assert(!out.ok && out.errors.some(x => /phải khai báo đủ các hạng này/.test(x)));
-  assert(!fc.saveReferenceVersion({ docNo: '999/QĐ-UBND', effectiveFrom: '2027-01-01', prices: { 2: { covered: 2300 }, 3: { covered: 2300 } } }, 'admin').ok, 'evidence file required');
-  out = fc.saveReferenceVersion({ docNo: '999/QĐ-UBND', docDate: '2026-12-01', issuer: 'UBND tỉnh Đồng Tháp', effectiveFrom: '2027-01-01', file: FILE, prices: { 2: { covered: 2300 }, 3: { covered: 2300 } } }, 'admin');
-  assert(out.ok, json(out.errors));
-  assert.strictEqual(out.created.length, 2);
-  assert.strictEqual(C.get('stallPrices', old.id).effectiveTo, '2026-12-31', 'old version ended, not overwritten');
-  assert.strictEqual(C.get('stallPrices', old.id).amount, 2000, 'old amount untouched');
-  out.created.forEach(r => { assert.strictEqual(r.legalBasis.docNo, '999/QĐ-UBND'); assert.strictEqual(r.attachments.length, 1); assert.strictEqual(r.previousVersionId, old.id); });
-  assert.strictEqual(C.referenceLandPrices('HA', '2026-12-15').prices.covered.amount, 2000, 'before the new decision');
-  assert.strictEqual(C.referenceLandPrices('HA', '2027-01-15').prices.covered.amount, 2300, 'after the new decision');
-  assert.strictEqual(json(C.list('stallPrices').filter(r => r.scope !== 'SHARED')), owned, 'market-owned prices not changed');
-  assert.strictEqual(MC.rows().map(m => m.id + ':' + L.marketLifecycle(m.id).stage + ':' + MC.get(m.id).status).join('|'), stages, 'lifecycle unchanged');
-  assert.strictEqual(json(A.features.finance.billing.buildPriceTerms('CL', st, st.area, '2027-02-15', { electricity: true, water: true, marketService: true }, 'TEST')), clTerms, 'billing unchanged');
-  h.go('cau-hinh-gia'); h.act('fcm-back'); h.act('fcm-tab', { id: 'reference' });
-  assert(h.view().includes('999/QĐ-UBND') && h.view().includes('480/QĐ-UBND'), 'both versions listed');
+  assert(!/QĐ 480|Giá tham chiếu/.test(h.view()), 'legacy data is not rendered in the policy UI');
+  const h2 = createApp(root, { localStorage: h.localStorage });
+  assert(h2.A.SERVICE_CFG.get('stallPrices', legacy.id), 'legacy shared data survives reload');
   login('AC-NV01');
 });
 ok('CASE 13 reload: configuration and statuses persist', () => {
