@@ -28,6 +28,15 @@
     c.history.unshift(entry);
     return c;
   };
+  // Ghi chú theo dõi hợp đồng đã hết hạn thuộc chính bản ghi hợp đồng. Không
+  // dùng history chung vì cần hiển thị như một danh sách ghi chú độc lập.
+  repository.addExpiryNote = function (id, note) {
+    const c = repository.getById(id);
+    if (!c) return null;
+    c.expiryNotes = Array.isArray(c.expiryNotes) ? c.expiryNotes : [];
+    c.expiryNotes.push(note);
+    return note;
+  };
   // Signed paper copy metadata (mock upload): same shape and page numbering as legacy.
   repository.addSignedCopy = function (id, file) {
     const c = repository.getById(id);

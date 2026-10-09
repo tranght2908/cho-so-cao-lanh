@@ -82,6 +82,31 @@
     return 'ACTIVE';
   };
   service.displayStatusLabel = function (contract, date) { return service.DISPLAY_STATUS[service.displayStatus(contract, date)].label; };
+  service.expiryNotes = function (contractOrId) {
+    const c = typeof contractOrId === 'string' ? repository.getById(contractOrId) : contractOrId;
+    return c && Array.isArray(c.expiryNotes) ? c.expiryNotes.slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')) || String(b.id || '').localeCompare(String(a.id || ''))) : [];
+  };
+  // Theo dõi hết hạn chỉ thêm lịch sử ghi chú, tuyệt đối không sửa ngày,
+  // trạng thái hợp đồng, điểm kinh doanh hoặc hồ sơ tiểu thương.
+  service.addExpiryNote = function (id, input) {
+    const c = repository.getById(id);
+    if (!c) return { error: 'NOT_FOUND', message: 'Không tìm thấy hợp đồng.' };
+    if (service.displayStatus(c) !== 'EXPIRED') return { error: 'NOT_EXPIRED', message: 'Chỉ được ghi chú cho hợp đồng đã hết hạn.' };
+    const content = String(input && input.content || '').trim();
+    if (!content) return { error: 'REQUIRED', message: 'Vui lòng nhập nội dung ghi chú.' };
+    const createdAt = new Date().toISOString();
+    const notes = service.expiryNotes(c);
+    const stamp = Date.now();
+    let serial = notes.length + 1, noteId = 'GHCH-' + c.id + '-' + stamp + '-' + String(serial).padStart(4, '0');
+    while (notes.some(x => x && x.id === noteId)) { serial += 1; noteId = 'GHCH-' + c.id + '-' + stamp + '-' + String(serial).padStart(4, '0'); }
+    const note = { id: noteId, contractId: c.id, content, createdBy: String(input && input.createdBy || 'Không rõ'), createdAt };
+    if (!repository.addExpiryNote(id, note)) return { error: 'SAVE_FAILED', message: 'Không thể lưu ghi chú hợp đồng.' };
+    if (!A.data.save()) {
+      c.expiryNotes = (c.expiryNotes || []).filter(x => x !== note);
+      return { error: 'SAVE_FAILED', message: 'Không thể lưu ghi chú vào bộ nhớ của trình duyệt.' };
+    }
+    return { note };
+  };
   // Còn hiệu lực và còn ≤ 30 ngày (tính cả ngày kết thúc).
   service.isExpiringSoon = function (contract, date) {
     const at = date || A.U.today();

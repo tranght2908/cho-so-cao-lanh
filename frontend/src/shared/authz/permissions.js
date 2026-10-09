@@ -127,6 +127,7 @@
     // js/v-tieuthuong.js).
     { key: 'action:tieu-thuong.xac-minh', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'tieu-thuong', label: 'Khoá/mở khoá truy cập tài khoản Mini App của tiểu thương' },
     { key: 'action:hop-dong.tao', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Tạo hợp đồng (từ màn Hợp đồng)' },
+    { key: 'action:hop-dong.ghi-chu-het-han', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Thêm ghi chú hợp đồng đã hết hạn' },
     { key: 'action:hop-dong.gia-han', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Gia hạn hợp đồng' },
     { key: 'action:hop-dong.thanh-ly', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Thanh lý hợp đồng' },
     { key: 'action:hop-dong.in', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'In hợp đồng giấy' },
@@ -373,6 +374,7 @@
       'tieu-thuong.them-moi': ['market_manager'],
       'tieu-thuong.xac-minh': ['market_manager', 'collector'],
       'hop-dong.tao': ['market_manager'],
+      'hop-dong.ghi-chu-het-han': ['market_manager'],
       'hop-dong.gia-han': ['market_manager', 'collector'],
       'hop-dong.thanh-ly': ['market_manager'],
       'hop-dong.in': ['market_manager', 'collector'],
@@ -521,7 +523,7 @@
   //        lệch khiến loadState() đi thẳng nhánh RESEED TOÀN BỘ (freshState(), không qua
   //        mergeIntoCurrentSeed()), nên seedVersion v15 ở đây chỉ còn ý nghĩa tài liệu/đánh dấu, không
   //        phải cơ chế migrate chính cho lần đổi này (xem RBAC_MARKET_SCOPE_MIGRATION_REPORT.md).
-  const PERM_SEED_VERSION = 22; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: (Bản đồ thu — đã retire); 19: trader/contract creation belongs to market_manager; 20: đối soát chuyển sang central_accountant (A05), A05 xem/xuất số liệu thu, technician bỏ màn Mặt bằng/Tài sản; 21: retire screen Nhân sự & phân công, chuyển action phân công chợ sang Theo dõi kỳ thu + quyền mini-app gửi/đánh giá phản ánh cho trader
+  const PERM_SEED_VERSION = 23; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: (Bản đồ thu — đã retire); 19: trader/contract creation belongs to market_manager; 20: đối soát chuyển sang central_accountant (A05), A05 xem/xuất số liệu thu, technician bỏ màn Mặt bằng/Tài sản; 21: retire screen Nhân sự & phân công, chuyển action phân công chợ sang Theo dõi kỳ thu + quyền mini-app gửi/đánh giá phản ánh cho trader; 23: ghi chú hợp đồng đã hết hạn
   const RATE_POLICY_PERM_VERSION = 1;
   const BANK_ACCOUNT_PERM_VERSION = 1;
   const PC3A_SESSION_PERM_VERSION = 1;

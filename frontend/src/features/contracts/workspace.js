@@ -16,6 +16,7 @@
   const areaType = p => p ? (U.areaTypeLabel(p.areaTypeId || p.areaType) || p.areaType || '—') : '—';
   const where = p => p ? BP.location(p).label : '—';
   const canCreate = m => A.canDo('hop-dong.tao', m) || A.canDo('so-do.tao-hop-dong', m);
+  const canAddExpiryNote = m => A.canDo('hop-dong.ghi-chu-het-han', m);
   const actor = () => { const a = A.currentAccount() || {}; return a.fullName || a.name || a.id || 'Không rõ'; };
   const left = c => U.days(U.today(), c.end);
   const life = c => CS.displayStatus(c);
@@ -208,10 +209,13 @@
     // Hết hạn chỉ là cảnh báo của hợp đồng: không đổi điểm KD, hồ sơ hay danh sách đăng ký thuê.
     const notice = life(c) === 'EXPIRED' ? `<div class="note warn ctw-expired">Hợp đồng này đã hết hạn từ ngày ${U.dmy(c.end)}.</div>`
       : isLegacy(c) ? '<div class="note ctw-legacy">Hợp đồng dữ liệu cũ (đã chấm dứt / thanh lý theo quy trình trước đây) — chỉ đọc.</div>' : '';
+    const expiryNotes = CS.expiryNotes(c);
+    const noteTime = n => n.createdAt ? `${U.dmy(String(n.createdAt).slice(0, 10))} ${String(n.createdAt).slice(11, 16)}` : '—';
+    const expiryNotesBlock = life(c) !== 'EXPIRED' ? '' : `<section class="card ctw-block ctw-expiry-notes"><div class="row"><h3>Ghi chú hợp đồng hết hạn</h3><span class="spacer"></span>${canAddExpiryNote(c.market) ? `<button class="btn primary" data-act="ct-expiry-note-open" data-id="${U.esc(c.id)}">+ Thêm ghi chú</button>` : ''}</div>${expiryNotes.length ? `<div class="ctw-note-list">${expiryNotes.map(n => `<article class="ctw-note"><div class="ctw-note-meta"><b>${U.esc(n.createdBy || 'Không rõ')}</b><span>${U.esc(noteTime(n))}</span></div><div>${U.esc(n.content || '')}</div></article>`).join('')}</div>` : '<div class="small muted">Chưa có ghi chú nào cho hợp đồng đã hết hạn này.</div>'}</section>`;
     const hist = (c.history || []).slice(0, 8).map(h => `<tr><td class="nowrap">${U.esc(h.at || '—')}</td><td>${U.esc(h.action || '')}</td><td>${U.esc(h.detail || '')}</td></tr>`).join('');
     return `<div class="ctw-page ctw-form"><div class="page-head ctw-detail-head"><div><h2>Hợp đồng ${U.esc(c.id)} ${statusTag(c)}</h2><p>${t ? U.esc(t.name) : '—'} · Điểm ${p ? U.esc(p.code) : '—'}</p></div><div class="ctw-actions">${btn.join('')}<button class="btn" data-act="ctw-list">← Danh sách</button></div></div>${notice}
       <div class="ctw-detail-grid">${block('Thông tin hợp đồng', info)}${block('Tiểu thương', traderBlock)}${block('Điểm kinh doanh', pointBlock)}${block('Khoản thu áp dụng', charges)}</div>
-      ${hist ? `<section class="card ctw-block"><h3>Lịch sử</h3><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Thời gian</th><th>Sự kiện</th><th>Mô tả</th></tr></thead><tbody>${hist}</tbody></table></div></section>` : ''}</div>`;
+      ${expiryNotesBlock}${hist ? `<section class="card ctw-block"><h3>Lịch sử</h3><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Thời gian</th><th>Sự kiện</th><th>Mô tả</th></tr></thead><tbody>${hist}</tbody></table></div></section>` : ''}</div>`;
   }
 
   // ================= Điều hướng & handler =================
@@ -290,6 +294,23 @@
     const s = st(); s.mode = 'detail'; s.detailId = c.id;
     A.closeModal();
     if (A.current !== 'hop-dong') A.go('hop-dong'); else A.render();
+  };
+  function expiryNoteModal(c) {
+    const t = traderOf(c), p = pointOf(c);
+    return A.mHead('Thêm ghi chú hợp đồng') + `<div class="modal-b"><dl class="kv"><dt>Mã hợp đồng</dt><dd><b>${U.esc(c.id)}</b></dd><dt>Tên tiểu thương</dt><dd>${U.esc(t ? t.name : '—')}</dd><dt>Mã điểm kinh doanh</dt><dd>${U.esc(p ? p.code : '—')}</dd><dt>Ngày kết thúc hợp đồng</dt><dd>${U.dmy(c.end)}</dd><dt>Trạng thái</dt><dd>${statusTag(c)}</dd></dl><div class="field" style="margin-top:14px"><label for="ct-expiry-note-content">Nội dung ghi chú <span class="req">*</span></label><textarea id="ct-expiry-note-content" class="input" rows="5" required placeholder="Nhập nội dung ghi chú"></textarea></div></div><div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="ct-expiry-note-save" data-id="${U.esc(c.id)}">Lưu ghi chú</button></div>`;
+  }
+  A.ACT['ct-expiry-note-open'] = el => {
+    const c = CS.get(el.dataset.id);
+    if (!c || c.market !== ui.market || life(c) !== 'EXPIRED' || !canAddExpiryNote(c.market)) return U.toast('Bạn không có quyền thêm ghi chú cho hợp đồng này.');
+    A.modal(expiryNoteModal(c), true);
+  };
+  A.ACT['ct-expiry-note-save'] = el => {
+    const c = CS.get(el.dataset.id), field = document.getElementById('ct-expiry-note-content');
+    if (!c || c.market !== ui.market || life(c) !== 'EXPIRED' || !canAddExpiryNote(c.market)) return U.toast('Bạn không có quyền thêm ghi chú cho hợp đồng này.');
+    const result = CS.addExpiryNote(c.id, { content: field ? field.value : '', createdBy: actor() });
+    if (result.error) return U.toast(result.message);
+    U.log('Thêm ghi chú hợp đồng hết hạn ' + c.id);
+    A.closeModal(); A.render(); U.toast('Đã lưu ghi chú hợp đồng.');
   };
   A.ACT['ctw-open-trader'] = el => {
     const t = TS.getProfile(el.dataset.id);
