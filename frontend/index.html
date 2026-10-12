@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=84">
+  <link rel="stylesheet" href="styles.css?v=107">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230b4a9e' stroke-width='2'><path d='M3 10h18M5 10v10h14V10M4 4h16l1 6H3l1-6Z'/></svg>">
 </head>
 <body>
@@ -34,7 +34,7 @@
       <header class="topbar">
         <button class="btn menu-toggle" type="button" data-act="menu" aria-label="Mở menu"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
         <h1 id="page-title">Tổng quan</h1>
-        <div class="row" style="align-items:center">
+        <div class="row" id="topbar-user" style="align-items:center">
           <span class="label-sm" id="account-mode-label">Tài khoản demo</span>
           <div id="personal-notification-host"></div>
           <div class="row" id="role-seg" style="gap:10px"></div>
@@ -44,6 +44,7 @@
           <span class="label-sm">Chợ</span>
           <div class="seg" id="market-seg"></div>
         </div>
+        <div class="row" id="period-wrap" style="display:none"></div>
       </header>
       <main class="content" id="view"></main>
     </div>
@@ -59,7 +60,7 @@
   <script src="src/shared/ui/overlays.js?v=74"></script>
   <script src="src/shared/ui/pending-work.js?v=74"></script>
   <script src="src/shared/ui/graphics.js?v=74"></script>
-  <script src="src/app/bootstrap.js?v=74"></script>
+  <script src="src/app/bootstrap.js?v=75"></script>
   <script src="src/shared/data/store.js?v=74"></script>
   <script src="src/shared/data/audit.js?v=74"></script>
   <script src="src/shared/data/repository.js?v=74"></script>
@@ -103,8 +104,8 @@
   <script src="src/features/traders/vehicles.js?v=74"></script>
   <script src="src/features/contracts/workspace.js?v=85"></script>
   <script src="src/features/finance/billing.js?v=84"></script>
-  <script src="src/features/finance/page.js?v=88"></script>
-  <script src="src/features/finance/period-monitoring.js?v=75"></script>
+  <script src="src/features/finance/page.js?v=93"></script>
+  <script src="src/features/finance/period-monitoring.js?v=76"></script>
   <script src="src/features/access-control/page.js?v=75"></script>
   <script src="src/app/settings.js?v=74"></script>
   <script src="src/features/fee-config/page.js?v=74"></script>
@@ -122,9 +123,10 @@
   <script src="src/features/assets/page.js?v=74"></script>
   <script src="src/features/reports/state-forms.js?v=74"></script>
   <script src="src/features/reports/page.js?v=74"></script>
-  <script src="src/features/reports/dashboard.js?v=74"></script>
+  <script src="src/features/reports/dashboard.js?v=75"></script>
   <script src="src/features/trader-portal/page.js?v=76"></script>
   <script src="src/features/trader-portal/login.js?v=74"></script>
   <script src="src/app/auth.js?v=74"></script>
+  <script src="src/mocks/demo-widget.js?v=1"></script>
 </body>
 </html>

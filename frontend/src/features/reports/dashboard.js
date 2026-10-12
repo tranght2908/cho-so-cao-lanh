@@ -195,7 +195,7 @@
 
   A.VIEWS['tong-quan'] = function () {
     const s = buildStats();
-    return `<div class="tq-page">${headerHtml(s)}${kpisHtml(s)}${chartsHtml(s)}${marketsHtml(s)}${alertsHtml(s)}</div>`;
+    return `<div class="tq-page">${headerHtml(s)}${kpisHtml(s)}${chartsHtml(s)}${alertsHtml(s)}${marketsHtml(s)}</div>`;
   };
 
   A.IN['tq-search'] = el => { filterState().search = el.value; A.render(); };
