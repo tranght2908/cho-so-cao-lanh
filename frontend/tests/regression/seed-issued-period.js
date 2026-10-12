@@ -2,10 +2,10 @@
  * tiểu thương có khoản chưa thu + thông báo phát hành để dùng màn thanh toán QR. Chạy lại không phát hành trùng. */
 const assert = require('assert');
 const path = require('path');
-const { createApp } = require('./harness');
+const { createApp, confirmEndingForSeed } = require('./harness');
 
 const ROOT = path.resolve(__dirname, '../..'), M = '2026-11';
-const h = createApp(ROOT, { seedIssue: true });
+const h = createApp(ROOT, { seedIssue: true, beforeSeedIssue: confirmEndingForSeed });
 const A = h.A, S = A.features.finance.marketPeriod;
 assert.strictEqual(A.db.seedIssue.status, 'DONE');
 ['CL', 'TTD'].forEach(m => assert.strictEqual(S.stateOf(m, M).id, 'COLLECTING', m + ' đang thu'));

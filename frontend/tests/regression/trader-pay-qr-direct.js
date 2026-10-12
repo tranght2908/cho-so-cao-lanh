@@ -2,9 +2,9 @@
  * QR luôn cho TOÀN BỘ số tiền còn phải nộp của khoản thu. Dữ liệu: kỳ 11/2026 đã phát hành (opts.seedIssue). */
 const assert = require('assert');
 const path = require('path');
-const { createApp } = require('./harness');
+const { createApp, confirmEndingForSeed } = require('./harness');
 
-const h = createApp(path.resolve(__dirname, '../..'), { seedIssue: true });
+const h = createApp(path.resolve(__dirname, '../..'), { seedIssue: true, beforeSeedIssue: confirmEndingForSeed });
 const A = h.A, U = A.U;
 const inv = A.db.invoices.find(i => i.traderId === 'TT0001' && i.period === '2026-11');
 assert(inv && inv.status === 'unpaid');

@@ -89,6 +89,38 @@
     if (s.review) return 'Còn ' + s.review + ' điểm cần kiểm tra trước khi có thể hoàn tất ghi chỉ số.';
     return 'Tất cả chỉ số hợp lệ, sẵn sàng hoàn tất.';
   }
+  // ---- Ghi BỔ SUNG chỉ số (Giai đoạn B): kỳ đã hoàn tất ghi chỉ số, chưa phát hành; chỉ các điểm còn thiếu chỉ số hợp lệ ----
+  function mrSupplementCard(mp) {
+    const pts = MP().supplementPoints(mp);
+    if (!pts.length) return '';
+    const row = st => { const c = mrContract(mp, st), t = c ? A.idx.trader.get(c.traderId) : null;
+      return `<tr><td><b>${U.esc(st.code)}</b></td><td>${t ? U.esc(t.name) : '—'}</td><td>${c ? U.esc(c.id) : '—'}</td><td>${mrCanRecord(st) ? `<button class="btn sm primary" data-act="mr-supp-open" data-id="${st.id}" data-period="${mp.period}">Ghi bổ sung</button>` : '<span class="small muted">NV thu phí phụ trách ghi</span>'}</td></tr>`; };
+    return `<div class="card"><div class="card-h"><h3>Điểm cần ghi bổ sung (${pts.length})</h3></div><div class="card-b"><div class="small muted" style="margin-bottom:8px">Kỳ đã hoàn tất ghi chỉ số nhưng các điểm dưới đây chưa có chỉ số hợp lệ (vd hợp đồng hết hạn chưa xử lý vẫn là đối tượng ghi chỉ số). Ghi bổ sung không mở lại cả kỳ; bắt buộc nhập lý do; hệ thống tự tính lại khoản dự kiến.</div>${U.table([{ t: 'Điểm KD' }, { t: 'Tiểu thương' }, { t: 'Hợp đồng' }, { t: '' }], pts.map(row))}</div></div>`;
+  }
+  function mrSuppContext(stallId, month) {
+    const mp = MP().get(ui.market, month), st = A.idx.stall.get(stallId);
+    if (!mp || !st) return { err: 'Không tìm thấy điểm kinh doanh trong kỳ.' };
+    if (!mrCanRecord(st)) return { err: 'Bạn không có quyền ghi chỉ số của điểm này.' };
+    if (!MP().canSupplementMeter(mp, st.id)) return { err: MP().isIssued(mp) || MP().isClosed(mp) ? 'Kỳ thu đã phát hành hoặc đã chốt — không ghi bổ sung chỉ số.' : 'Điểm này không thuộc danh sách cần ghi bổ sung chỉ số.' };
+    return { mp, st };
+  }
+  A.ACT['mr-supp-open'] = el => {
+    const c = mrSuppContext(el.dataset.id, el.dataset.period);
+    if (c.err) return U.toast(c.err);
+    const r = MP().ensureReadingRow(c.mp, c.st); A.save();
+    const field = (kind, label, unit, prev) => `<div class="field"><label>${label} — chỉ số kỳ trước: <b>${prev == null ? 'chưa có' : mrNumber(prev) + ' ' + unit}</b></label>${prev == null ? `<input class="input" type="number" min="0" id="mr-supp-${kind}-prev" placeholder="Chỉ số đầu kỳ (${unit}) — bắt buộc" style="margin-bottom:6px">` : ''}<input class="input" type="number" min="${prev == null ? 0 : prev}" id="mr-supp-${kind}" placeholder="Chỉ số kỳ này (${unit})"></div>`;
+    A.modal(A.mHead('Ghi bổ sung chỉ số điện, nước') + `<div class="modal-b"><div class="small muted">Điểm KD: <b>${U.esc(c.st.code)}</b> · Kỳ: ${U.esc(c.mp.label || c.mp.period)}</div>${field('elec', 'Điện', 'kWh', r.elecPrev)}${field('water', 'Nước', 'm³', r.waterPrev)}<div class="field"><label for="mr-supp-reason">Lý do ghi bổ sung <span class="req">*</span></label><textarea id="mr-supp-reason" class="input" rows="3" placeholder="Vd: điểm của hợp đồng hết hạn chưa có trong danh sách ghi ban đầu"></textarea></div><div class="note info">Người ghi, thời điểm và lý do được lưu vào lịch sử kỳ. Sau khi lưu, khoản dự kiến của chợ được tính lại.</div></div><div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="mr-supp-save" data-id="${c.st.id}" data-period="${c.mp.period}">Lưu chỉ số bổ sung</button></div>`, true);
+  };
+  A.ACT['mr-supp-save'] = el => {
+    const c = mrSuppContext(el.dataset.id, el.dataset.period);
+    if (c.err) { A.closeModal(); return U.toast(c.err); }
+    const val = id => { const x = A.$(id); return x ? x.value : ''; };
+    const out = MP().recordSupplementalReading(c.mp, c.st.id, { elecPrev: val('#mr-supp-elec-prev'), waterPrev: val('#mr-supp-water-prev'), elecCur: val('#mr-supp-elec'), waterCur: val('#mr-supp-water'), reason: val('#mr-supp-reason') }, mrMe());
+    if (out.error) return U.toast(out.message);
+    A.closeModal(); A.render();
+    const blocking = out.calc && out.calc.warnings.some(w => String(w.severity || 'BLOCKING').toUpperCase() === 'BLOCKING');
+    U.toast('Đã ghi bổ sung chỉ số điểm ' + c.st.code + (out.calc ? (blocking ? ' · Đã tính lại: còn dữ liệu cần xử lý.' : ' · Đã tính lại khoản dự kiến.') : '.'));
+  };
   A.VIEWS['dien-nuoc'] = function () {
     const mp = mrPeriod(), market = U.market(ui.market) || {};
     if (!mp) return '<div class="card"><div class="empty">Chưa có kỳ thu của chợ này.</div></div>';
@@ -107,7 +139,7 @@
       if (s === 'NOT_RECORDED') return `<button class="btn sm primary" data-act="mr-open" data-id="${x.st.id}" data-period="${mp.period}">Ghi chỉ số</button>`;
       if (s === 'NEEDS_REVIEW') return `<button class="btn sm primary" data-act="mr-review-open" data-id="${x.st.id}" data-period="${mp.period}">Kiểm tra</button>`;
       return `<button class="btn sm" data-act="mr-open" data-id="${x.st.id}" data-period="${mp.period}">Cập nhật</button>`; };
-    return head + `<div class="kpis">${kpi('Điểm cần ghi', stats.required, 'all')}${kpi('Đã ghi', stats.recorded, 'RECORDED')}${kpi('Chưa ghi', stats.unrecorded, 'NOT_RECORDED')}${kpi('Cần kiểm tra', stats.review, 'NEEDS_REVIEW')}</div><div class="card"><div class="card-h"><div class="seg">${[['all', 'Tất cả'], ['NOT_RECORDED', 'Chưa ghi'], ['RECORDED', 'Đã ghi'], ['NEEDS_REVIEW', 'Cần kiểm tra']].map(x => `<button class="${state === x[0] ? 'on' : ''}" data-act="mr-status" data-id="${x[0]}">${x[1]}</button>`).join('')}</div><span class="spacer"></span><input class="input meter-search" data-in="mr-search" placeholder="Tìm mã điểm, tiểu thương, mã hợp đồng..." value="${U.esc(f.mrSearch || '')}">${editable && canComplete ? `<button class="btn primary" data-act="mr-complete-open" ${svc.canCompleteMeter(mp) ? '' : 'disabled'}>Hoàn tất ghi chỉ số</button>` : ''}</div><div class="card-b">${blocked && editable ? `<div class="small muted" style="margin-bottom:10px">${mrHelper(status, stats)}</div>` : ''}${U.table([{ t: 'Điểm KD' }, { t: 'Tiểu thương' }, { t: 'Điện kỳ trước', num: true }, { t: 'Điện kỳ này', num: true }, { t: 'Tiêu thụ điện', num: true }, { t: 'Nước kỳ trước', num: true }, { t: 'Nước kỳ này', num: true }, { t: 'Tiêu thụ nước', num: true }, { t: 'Cảnh báo' }, { t: 'Trạng thái' }, { t: 'Thao tác' }], rows.map(x => { const s = svc.readingState(x.r), tr = A.idx.trader.get(x.st.traderId); return `<tr><td><b>${U.esc(x.st.code)}</b></td><td>${tr ? U.esc(tr.name) : '—'}</td><td class="num">${mrNumber(x.r.elecPrev)}</td><td class="num">${mrNumber(x.r.elecCur)}</td><td class="num">${mrUseText(x.r, 'elec')}</td><td class="num">${mrNumber(x.r.waterPrev)}</td><td class="num">${mrNumber(x.r.waterCur)}</td><td class="num">${mrUseText(x.r, 'water')}</td><td>${s === 'NEEDS_REVIEW' ? `<span class="tag warn">${U.esc(mrWarningText(x.r))}</span>` : '<span class="muted">—</span>'}</td><td>${MR_TAG[s]}</td><td>${action(x)}</td></tr>`; }), { empty: 'Không có điểm kinh doanh cần ghi chỉ số trong phạm vi này.' })}</div></div>`;
+    return head + mrSupplementCard(mp) + `<div class="kpis">${kpi('Điểm cần ghi', stats.required, 'all')}${kpi('Đã ghi', stats.recorded, 'RECORDED')}${kpi('Chưa ghi', stats.unrecorded, 'NOT_RECORDED')}${kpi('Cần kiểm tra', stats.review, 'NEEDS_REVIEW')}</div><div class="card"><div class="card-h"><div class="seg">${[['all', 'Tất cả'], ['NOT_RECORDED', 'Chưa ghi'], ['RECORDED', 'Đã ghi'], ['NEEDS_REVIEW', 'Cần kiểm tra']].map(x => `<button class="${state === x[0] ? 'on' : ''}" data-act="mr-status" data-id="${x[0]}">${x[1]}</button>`).join('')}</div><span class="spacer"></span><input class="input meter-search" data-in="mr-search" placeholder="Tìm mã điểm, tiểu thương, mã hợp đồng..." value="${U.esc(f.mrSearch || '')}">${editable && canComplete ? `<button class="btn primary" data-act="mr-complete-open" ${svc.canCompleteMeter(mp) ? '' : 'disabled'}>Hoàn tất ghi chỉ số</button>` : ''}</div><div class="card-b">${blocked && editable ? `<div class="small muted" style="margin-bottom:10px">${mrHelper(status, stats)}</div>` : ''}${U.table([{ t: 'Điểm KD' }, { t: 'Tiểu thương' }, { t: 'Điện kỳ trước', num: true }, { t: 'Điện kỳ này', num: true }, { t: 'Tiêu thụ điện', num: true }, { t: 'Nước kỳ trước', num: true }, { t: 'Nước kỳ này', num: true }, { t: 'Tiêu thụ nước', num: true }, { t: 'Cảnh báo' }, { t: 'Trạng thái' }, { t: 'Thao tác' }], rows.map(x => { const s = svc.readingState(x.r), tr = A.idx.trader.get(x.st.traderId); return `<tr><td><b>${U.esc(x.st.code)}</b></td><td>${tr ? U.esc(tr.name) : '—'}</td><td class="num">${mrNumber(x.r.elecPrev)}</td><td class="num">${mrNumber(x.r.elecCur)}</td><td class="num">${mrUseText(x.r, 'elec')}</td><td class="num">${mrNumber(x.r.waterPrev)}</td><td class="num">${mrNumber(x.r.waterCur)}</td><td class="num">${mrUseText(x.r, 'water')}</td><td>${s === 'NEEDS_REVIEW' ? `<span class="tag warn">${U.esc(mrWarningText(x.r))}</span>` : '<span class="muted">—</span>'}</td><td>${MR_TAG[s]}</td><td>${action(x)}</td></tr>`; }), { empty: 'Không có điểm kinh doanh cần ghi chỉ số trong phạm vi này.' })}</div></div>`;
   };
   A.ACT['mr-status'] = el => { f.mrStatus = el.dataset.id; A.render(); };
   A.IN['mr-search'] = el => { f.mrSearch = el.value; A.render(); };
@@ -241,6 +273,25 @@
     if (m && m.previous != null && m.current != null && m.consumption != null) return `${num(m.current)} − ${num(m.previous)} = ${num(m.consumption)} ${U.esc(unit)} · ${num(m.consumption)} ${U.esc(unit)} × ${U.money(i.unitPrice)} = ${U.money(amount)}`;
     return U.esc(i.explanation || '') + (i.chargeType === 'LAND' ? ' = ' + U.money(amount) : ' · ' + U.money(amount));
   }
+  // Giai đoạn B: HĐ hết hạn / sắp hết hạn trong tháng mặt bằng của kỳ (contracts.service.usageState, dùng chung).
+  const ptCS = () => A.features.contracts && A.features.contracts.service;
+  const ptExpiredContract = id => { const cs = ptCS(), c = cs && A.idx.contract && A.idx.contract.get(id); return !!(c && cs.usageState(c)); };
+  // Một dòng cảnh báo của kỳ: chặn / lưu ý, khoảng thiếu, liên kết tới nơi xử lý (theo quyền xem màn).
+  function ptWarnLine(w) {
+    const block = String(w.severity || 'BLOCKING').toUpperCase() === 'BLOCKING';
+    const link = w.action && w.action.act === 'ct-view' && w.contractId && U.can('hop-dong') ? ' <button class="btn link sm" data-act="pt-contract-open" data-id="' + U.esc(w.contractId) + '">' + U.esc(w.action.label || 'Xem hợp đồng') + '</button>'
+      : w.supplementRequired && U.can('dien-nuoc') ? ' <button class="btn link sm" data-act="pt-meter-open">Ghi bổ sung chỉ số</button>' : '';
+    return '<div class="pt-warn ' + (block ? 'is-block' : 'is-info') + '">' + (block ? '' : '<span class="tag info">Lưu ý</span> ') + (w.code ? '<code class="small">' + U.esc(w.code) + '</code> ' : '') + U.esc(w.message) + link + '</div>';
+  }
+  function ptExpiredBanner(p, warns) {
+    const cs = ptCS();
+    if (!cs) return '';
+    const list = MP().contracts(p).filter(c => cs.usageState(c));
+    if (!list.length) return '';
+    const missing = new Set(warns.filter(w => /_NOT_COVERED$/.test(w.code || '')).map(w => w.contractId)).size;
+    const planned = new Set(warns.filter(w => w.code === 'PLANNED_BASIS').map(w => w.contractId)).size;
+    return '<div class="note ' + (missing ? 'warn' : 'info') + '"><b>Hợp đồng hết hạn / sắp hết hạn trong kỳ: ' + list.length + '</b> · Thiếu căn cứ sử dụng (chặn phát hành chợ): <b>' + missing + '</b>' + (planned ? ' · Tính theo căn cứ dự kiến: ' + planned : '') + '. <button class="btn link sm" data-act="pt-validation" data-id="expired">Xem HĐ hết hạn</button></div>';
+  }
   function ptNewView() {
     const billing = A.features.finance.billing, svc = MP(), p = ptNewPeriod();
     if (!p || !billing) return '<div class="card"><div class="empty">Chưa có kỳ thu của chợ này.</div></div>';
@@ -250,24 +301,27 @@
     const sourceRows = isPublished ? published.map(i => ({ traderId: i.traderId, rows: (i.items || []).map(item => ({ amount: item.amount, items: [item], contractId: item.contractId, stallId: item.stallId })), contractIds: i.contractIds || [], amount: i.amount, validationStatus: 'VALID', invoice: i, errors: [] })) : groups;
     const codeCounts = {};
     const withCodes = sourceRows.map(g => { const base = ptReceivableCode(market, p.period, g.traderId, 1), ordinal = (codeCounts[base] || 0) + 1; codeCounts[base] = ordinal; return Object.assign({}, g, { receivableCode: ptReceivableCode(market, p.period, g.traderId, ordinal) }); });
-    const shown = withCodes.filter(g => { const t = A.idx.trader.get(g.traderId) || {}; return (rowFilter === 'all' || (rowFilter === 'valid' ? g.validationStatus === 'VALID' : g.validationStatus === 'HAS_ERRORS')) && (!q || [t.name, t.id, g.receivableCode, ...(g.contractIds || [])].join(' ').toLowerCase().includes(q)); });
+    const shown = withCodes.filter(g => { const t = A.idx.trader.get(g.traderId) || {}; return (rowFilter === 'all' || (rowFilter === 'expired' ? (g.contractIds || []).some(ptExpiredContract) : rowFilter === 'valid' ? g.validationStatus === 'VALID' : g.validationStatus === 'HAS_ERRORS')) && (!q || [t.name, t.id, g.receivableCode, ...(g.contractIds || [])].join(' ').toLowerCase().includes(q)); });
     const total = U.sum(shown, g => g.amount), issueCount = groups.filter(g => g.validationStatus === 'HAS_ERRORS').length, calculated = !!p.calculatedAt || groups.length > 0 || warns.length > 0;
     const ready = svc.canIssue(p), canCalc = A.canDo('phai-thu.tinh-lai', market) && svc.canCalculate(p), validOk = calculated && groups.length > 0 && !issueCount && !warns.some(w => String(w.severity || 'BLOCKING').toUpperCase() === 'BLOCKING');
     const periods = svc.months().filter(m => svc.get(market, m)).map(m => { const x = svc.get(market, m); return `<option value="${x.id}" ${x.id === p.id ? 'selected' : ''}>${U.esc(x.label || U.per(m))}</option>`; }).join('');
     const meterText = meterStatus === 'NOT_REQUIRED' ? 'Không cần ghi chỉ số' : meterDone ? 'Đã hoàn tất ' + stats.required + ' điểm' : 'Chưa hoàn tất';
     const readiness = `<div class="row small" style="gap:12px;flex-wrap:wrap;margin-top:10px"><span>${meterDone ? '✓' : '○'} Chỉ số điện, nước: <b>${meterText}</b></span><span>${warns.some(w => w.code && w.code.indexOf('POLICY') >= 0) ? '○' : '✓'} Biểu phí: <b>${warns.some(w => w.code && w.code.indexOf('POLICY') >= 0) ? 'Cần kiểm tra' : 'Đã cấu hình'}</b></span><span>${contracts.length ? '✓' : '○'} Hợp đồng hiệu lực: <b>${contracts.length} hợp đồng</b></span><span>${isPublished || validOk ? '✓' : '○'} Khoản phải thu hợp lệ: <b>${isPublished ? 'Đã phát hành ' + published.length + ' khoản' : !calculated ? 'Chưa tính' : validOk ? groups.length + '/' + groups.length + ' hợp lệ' : issueCount + ' tiểu thương cần xử lý'}</b></span></div>`;
-    const hint = isPublished ? '' : st.id === 'NOT_APPLICABLE' ? 'Chợ không có đối tượng phát sinh khoản thu trong kỳ — không áp dụng.' : svc.isClosed(p) ? 'Kỳ thu đã chốt.' : !meterDone ? 'Cần NV thu phí hoàn tất ghi chỉ số điện, nước — hệ thống sẽ tự tính nháp ngay sau đó.' : warns.length ? 'Có ' + warns.length + ' dữ liệu cần xử lý trước khi phát hành. Sau khi sửa dữ liệu nguồn, bấm Tính lại.' : !calculated ? 'Hệ thống chưa tính nháp kỳ này.' : ready ? 'Sẵn sàng phát hành. Kỳ thu được phát hành đồng loạt tại Theo dõi kỳ thu khi mọi chợ đều đủ điều kiện.' : '';
+    const hint = isPublished ? '' : st.id === 'NOT_APPLICABLE' ? 'Chợ không có đối tượng phát sinh khoản thu trong kỳ — không áp dụng.' : svc.isClosed(p) ? 'Kỳ thu đã chốt.' : !meterDone ? 'Cần NV thu phí hoàn tất ghi chỉ số điện, nước — hệ thống sẽ tự tính nháp ngay sau đó.' : warns.some(w => String(w.severity || 'BLOCKING').toUpperCase() === 'BLOCKING') ? 'Có ' + warns.filter(w => String(w.severity || 'BLOCKING').toUpperCase() === 'BLOCKING').length + ' dữ liệu cần xử lý trước khi phát hành. Sau khi sửa dữ liệu nguồn, bấm Tính lại.' : !calculated ? 'Hệ thống chưa tính nháp kỳ này.' : ready ? 'Sẵn sàng phát hành. Phát hành tại Theo dõi kỳ thu (đồng loạt các chợ đủ điều kiện hoặc riêng chợ này).' : '';
     const issued = p.issuance || {};
     return `<div class="card"><div class="card-b"><h2 style="margin:0">Khoản phải thu</h2><div class="small muted" style="margin-top:4px">Kỳ ${U.esc(p.label || U.per(p.period))} · ${U.esc((U.market(market) || {}).name || market)}</div><div class="row" style="gap:10px;flex-wrap:wrap;margin-top:12px"><label class="small">Kỳ thu</label><select class="input" data-ch="pt-period">${periods}</select><span>${svc.stateTag(st)}</span>${isPublished ? '<span class="tag ok">Đã phát hành</span>' : ''}<span class="spacer"></span>${canCalc ? `<button class="btn" data-act="pt-calc">${calculated ? 'Tính lại khoản phải thu' : 'Tính nháp khoản phải thu'}</button>` : ''}${U.can('theo-doi-ky-thu') ? '<button class="btn" data-act="pt-back-monitor">← Quay lại Theo dõi kỳ thu</button>' : ''}</div>${readiness}${ptFeeMonthsNote(p)}${hint ? `<div class="small muted" style="margin-top:8px">${hint}</div>` : ''}${isPublished ? `<div class="note info" style="margin-top:10px">Đã phát hành ${U.esc(issued.issuedAt || '')} · ${U.esc(issued.issuedBy || '—')}. Snapshot số tiền đã được khóa; theo dõi thanh toán ở màn Thu tiền & biên lai.</div>` : ''}</div></div>
       <div class="kpis"><div class="card kpi"><div class="k-label">Tiểu thương</div><div class="k-value">${shown.length}</div></div><div class="card kpi"><div class="k-label">Hợp đồng / Điểm KD</div><div class="k-value">${isPublished ? U.sum(shown, g => (g.contractIds || []).length) : new Set(groups.flatMap(g => g.contractIds)).size}</div></div><div class="card kpi"><div class="k-label">Tổng dự kiến thu</div><div class="k-value">${U.moneyShort(total)}</div><div class="k-sub">${U.money(total)}</div></div><div class="card kpi"><div class="k-label">Cần xử lý</div><div class="k-value">${issueCount}</div><div class="k-sub">${issueCount ? '' : ready ? '✓ Sẵn sàng phát hành' : ''}</div></div></div>
-      ${warns.length && !isPublished ? `<div class="note warn"><b>Dữ liệu cần xử lý</b>${warns.map(w => `<div>${U.esc(w.message)}</div>`).join('')}</div>` : ''}
-      <div class="card"><div class="card-h"><h3>Danh sách khoản phải thu</h3><div class="seg">${[['all', 'Tất cả'], ['valid', 'Hợp lệ'], ['errors', 'Cần xử lý']].map(x => `<button class="${rowFilter === x[0] ? 'on' : ''}" data-act="pt-validation" data-id="${x[0]}">${x[1]}</button>`).join('')}</div><input class="input" data-in="pt-search" placeholder="Tìm tiểu thương, mã khoản thu, mã HĐ, mã điểm..." value="${U.esc(f.ptSearch || '')}"></div><div class="card-b">${U.table([{ t: 'Tiểu thương' }, { t: 'Mã khoản thu' }, { t: 'HĐ / Điểm KD', num: true }, { t: 'Mặt bằng', num: true }, { t: 'Điện', num: true }, { t: 'Nước', num: true }, { t: 'Dịch vụ', num: true }, { t: 'Tổng phải thu', num: true }, { t: 'Trạng thái' }, { t: 'Thao tác' }], shown.map(g => { const t = A.idx.trader.get(g.traderId) || {}, bad = g.validationStatus === 'HAS_ERRORS'; return `<tr><td><b>${U.esc(t.name || g.traderId)}</b><div class="small muted">${U.esc(t.id || g.traderId)}</div></td><td class="small"><b>${U.esc(g.receivableCode)}</b></td><td class="num">${(g.contractIds || []).length}</td><td class="num">${bad && !ptNewAmount(g.rows, 'LAND') ? '—' : U.money(ptNewAmount(g.rows, 'LAND'))}</td><td class="num">${U.money(ptNewAmount(g.rows, 'ELECTRICITY'))}</td><td class="num">${U.money(ptNewAmount(g.rows, 'WATER'))}</td><td class="num">${U.money(ptNewAmount(g.rows, 'MARKET_SERVICE'))}</td><td class="num"><b>${U.money(g.amount)}</b></td><td>${ptNewStatus(bad ? 'INVALID' : 'VALID')}</td><td><button class="btn sm" data-act="pt-new-detail" data-trader="${U.esc(g.traderId)}" data-period="${p.id}">${bad ? 'Xem lỗi' : 'Xem chi tiết'}</button></td></tr>`; }), { empty: 'Chưa có khoản phải thu nháp trong kỳ này.' })}</div></div>`;
+      ${!isPublished ? ptExpiredBanner(p, warns) : ''}
+      ${warns.length && !isPublished ? `<div class="note warn"><b>Dữ liệu cần xử lý</b>${warns.map(ptWarnLine).join('')}</div>` : ''}
+      <div class="card"><div class="card-h"><h3>Danh sách khoản phải thu</h3><div class="seg">${[['all', 'Tất cả'], ['valid', 'Hợp lệ'], ['errors', 'Cần xử lý'], ['expired', 'HĐ hết hạn']].map(x => `<button class="${rowFilter === x[0] ? 'on' : ''}" data-act="pt-validation" data-id="${x[0]}">${x[1]}</button>`).join('')}</div><input class="input" data-in="pt-search" placeholder="Tìm tiểu thương, mã khoản thu, mã HĐ, mã điểm..." value="${U.esc(f.ptSearch || '')}"></div><div class="card-b">${U.table([{ t: 'Tiểu thương' }, { t: 'Mã khoản thu' }, { t: 'HĐ / Điểm KD', num: true }, { t: 'Mặt bằng', num: true }, { t: 'Điện', num: true }, { t: 'Nước', num: true }, { t: 'Dịch vụ', num: true }, { t: 'Tổng phải thu', num: true }, { t: 'Trạng thái' }, { t: 'Thao tác' }], shown.map(g => { const t = A.idx.trader.get(g.traderId) || {}, bad = g.validationStatus === 'HAS_ERRORS'; return `<tr><td><b>${U.esc(t.name || g.traderId)}</b><div class="small muted">${U.esc(t.id || g.traderId)}</div></td><td class="small"><b>${U.esc(g.receivableCode)}</b></td><td class="num">${(g.contractIds || []).length}</td><td class="num">${bad && !ptNewAmount(g.rows, 'LAND') ? '—' : U.money(ptNewAmount(g.rows, 'LAND'))}</td><td class="num">${U.money(ptNewAmount(g.rows, 'ELECTRICITY'))}</td><td class="num">${U.money(ptNewAmount(g.rows, 'WATER'))}</td><td class="num">${U.money(ptNewAmount(g.rows, 'MARKET_SERVICE'))}</td><td class="num"><b>${U.money(g.amount)}</b></td><td>${ptNewStatus(bad ? 'INVALID' : 'VALID')}</td><td><button class="btn sm" data-act="pt-new-detail" data-trader="${U.esc(g.traderId)}" data-period="${p.id}">${bad ? 'Xem lỗi' : 'Xem chi tiết'}</button></td></tr>`; }), { empty: 'Chưa có khoản phải thu nháp trong kỳ này.' })}</div></div>`;
   }
   A.VIEWS['phai-thu'] = () => ptNewView();
   A.CH['pt-period'] = el => { f.ptPeriod = el.value; A.render(); };
   A.ACT['pt-back-monitor'] = () => { ui.periodTrackerBack = false; A.go('theo-doi-ky-thu'); };
   A.ACT['pt-validation'] = el => { f.ptValidation = el.dataset.id || 'all'; A.render(); };
   A.IN['pt-search'] = el => { f.ptSearch = el.value; A.render(); };
+  A.ACT['pt-contract-open'] = el => { if (U.can('hop-dong') && A.ACT['ct-view']) A.ACT['ct-view']({ dataset: { id: el.dataset.id } }); };
+  A.ACT['pt-meter-open'] = () => { const p = ptNewPeriod(); if (!U.can('dien-nuoc')) return; if (p) f.mrPeriod = p.period; A.go('dien-nuoc'); };
   // Tính lại thủ công (Tổ trưởng) — chỉ trước khi phát hành, sau khi chỉ số đã hoàn tất/không cần ghi.
   A.ACT['pt-calc'] = () => {
     const billing = A.features.finance.billing, p = ptNewPeriod();
@@ -463,6 +517,15 @@
     return `<div class="kpis tt-kpis">${k('Tổng khoản phải thu', s.total)}${k('Đã thu đủ', s.paid, 'tt-ok')}${k('Chưa thu', s.unpaid)}
       ${k('Tiền mặt đã thu kỳ này', U.money(s.cash))}${k('Chuyển khoản đã ghi nhận', U.money(s.transfer))}${k('Còn phải thu', U.money(s.remaining), s.remaining ? 'tt-bad' : 'tt-ok')}</div>`;
   }
+  // Giai đoạn B: khoản của HĐ quá hạn vẫn thu bình thường; chỉ hiện cảnh báo suy từ căn cứ đã chụp trên dòng thu (coverage).
+  function ttExpiredTag(inv) {
+    const covs = (inv && inv.items || []).map(i => i && i.coverage).filter(Boolean);
+    if (!covs.length) return '';
+    const last = covs.reduce((m, c) => !m || String(c.billTo || '') > String(m.billTo || '') ? c : m, null), planned = covs.some(c => c.planned);
+    const head = 'HĐ hết hạn ' + U.dmy(last.contractEnd) + ' – ';
+    const text = head + (last.closedBy === 'STOPPED' ? 'đã ngừng sử dụng' : last.closedBy === 'PLANNED_STOP' ? 'dự kiến ngừng sử dụng' : (planned ? 'dự kiến sử dụng đến ' : 'đã xác nhận sử dụng đến ') + U.dmy(last.billTo));
+    return '<div><span class="tag warn" title="Căn cứ: ' + U.esc(last.records && last.records[0] ? last.records[0].id : '') + '">' + U.esc(text) + '</span></div>';
+  }
   function ttListRows(c) {
     const q = (f.ttSearch || '').trim().toLowerCase(), flt = ['UNPAID', 'PAID'].includes(f.ttStatus) ? f.ttStatus : 'all';
     const base = c.rows.filter(r => !q || [r.t.name, r.t.id, r.t.phone, r.inv.id, r.stallIds.map(id => (A.idx.stall.get(id) || {}).code || id).join(' ')].join(' ').toLowerCase().includes(q));
@@ -496,7 +559,7 @@
       const action = r.status === 'PAID'
         ? (r.last ? `<button class="btn sm" data-act="tt-receipt" data-id="${U.esc(r.last.receipt)}">Xem biên lai</button>` : '')
         : canCollect ? `<button class="btn sm primary" data-act="tt-pay-open" data-id="${r.inv.id}">Thu tiền</button>` : '';
-      return `<tr><td><b>${U.esc(r.t.name)}</b>${r.t.phone ? `<div class="small muted">${U.maskPhone(r.t.phone)}</div>` : ''}</td><td>${U.esc(r.t.id)}<div class="small muted">${U.esc(r.inv.id)}</div></td>
+      return `<tr><td><b>${U.esc(r.t.name)}</b>${r.t.phone ? `<div class="small muted">${U.maskPhone(r.t.phone)}</div>` : ''}${ttExpiredTag(r.inv)}</td><td>${U.esc(r.t.id)}<div class="small muted">${U.esc(r.inv.id)}</div></td>
         <td>${codes.length} điểm<div class="small muted">${U.esc(codes.join(', '))}</div></td><td class="num">${U.money(r.inv.amount)}</td><td class="num">${U.money(r.inv.amount - r.remaining)}</td><td class="num"><b>${U.money(r.remaining)}</b></td>
         <td>${U.dmy(r.inv.due)}</td><td>${r.status !== 'PAID' && ttTransferIntent(r.inv.id) ? ttTag('Chờ ghi nhận CK', 'info') : ttTag(st[0], st[1])}</td><td>${r.status !== 'PAID' && ttTransferIntent(r.inv.id) ? 'Chuyển khoản <div class="small muted">chờ ngân hàng báo có</div>' : method}</td><td class="nowrap tt-actions">${action}${detail}</td></tr>`;
     });

@@ -56,8 +56,54 @@
     A.db.personalNotificationSeedVersion = 1;
     A.save();
   }
+  // Cảnh báo hợp đồng Hết hạn – chờ xử lý cho Tổ trưởng (contracts.service.expiryAlerts). Không có job nền: kiểm tra lại
+  // khi hộp thông báo được đọc. notificationKey (sự kiện + hợp đồng [+ bản ghi xác nhận] + tài khoản) chống gửi trùng;
+  // người nhận = Tổ trưởng đang hoạt động có chợ của hợp đồng trong phạm vi (A.allowedMarkets).
+  function ensureContractExpiryAlerts(date) {
+    const CS = A.features && A.features.contracts && A.features.contracts.service;
+    if (!A.db || !CS || !CS.expiryAlerts || !A.ACCOUNTS) return 0;
+    const managers = (A.ACCOUNTS.currentList ? A.ACCOUNTS.currentList() : A.ACCOUNTS.list()).filter(a => roleId(a) === 'market_manager' && A.ACCOUNTS.isActive(a));
+    const keys = new Set(list().map(n => n && n.notificationKey).filter(Boolean));
+    let added = 0;
+    CS.expiryAlerts(date).forEach(alert => managers.filter(a => A.allowedMarkets(a).indexOf(alert.contract.market) !== -1).forEach(a => {
+      const key = alert.key + '|' + a.id;
+      if (keys.has(key)) return;
+      keys.add(key); added++;
+      list().unshift({ id: uniqueId(), notificationKey: key, recipientAccountId: a.id, type: 'CONTRACT', title: alert.title, message: alert.message, createdAt: now(), readAt: null, targetRoute: 'hop-dong', targetId: alert.contract.id, targetMarket: alert.contract.market });
+    }));
+    if (added) A.save();
+    return added;
+  }
+  // Giai đoạn B: điểm cần GHI BỔ SUNG chỉ số (kỳ đã hoàn tất ghi chỉ số, chưa phát hành) → nhắc NV thu phí phụ trách chợ.
+  // Chống trùng theo kỳ + điểm + tài khoản; chỉ gửi khi NV đang hoạt động và chợ thuộc phạm vi của NV.
+  function ensureMeterSupplementAlerts() {
+    const MP = A.features && A.features.finance && A.features.finance.marketPeriod;
+    if (!A.db || !MP || !MP.supplementPoints || !A.ACCOUNTS || !A.ACCOUNTS.getMarketCollector) return 0;
+    const keys = new Set(list().map(n => n && n.notificationKey).filter(Boolean));
+    let added = 0;
+    (A.db.billingPeriods || []).filter(mp => mp && mp.marketId).forEach(mp => {
+      const pts = MP.supplementPoints(mp), acc = pts.length ? A.ACCOUNTS.getMarketCollector(mp.marketId) : null;
+      if (!acc || !A.ACCOUNTS.isActive(acc) || A.allowedMarkets(acc).indexOf(mp.marketId) === -1) return;
+      pts.forEach(st => {
+        const key = ['METER_SUPPLEMENT_REQUIRED', mp.id, st.id, acc.id].join('|');
+        if (keys.has(key)) return;
+        keys.add(key); added++;
+        list().unshift({ id: uniqueId(), notificationKey: key, recipientAccountId: acc.id, type: 'BILLING', title: 'Cần ghi bổ sung chỉ số', message: 'Điểm ' + st.code + ' chưa có chỉ số điện, nước hợp lệ trong kỳ ' + (mp.label || mp.id) + ' (kỳ đã hoàn tất ghi chỉ số). Vui lòng ghi bổ sung để kỳ thu được phát hành.', createdAt: now(), readAt: null, targetRoute: 'dien-nuoc', targetId: st.id, targetMarket: mp.marketId });
+      });
+    });
+    if (added) A.save();
+    return added;
+  }
+  function uniqueId() {
+    const ids = new Set(list().map(n => n && n.id));
+    let n = 0, id = 'PN-' + Date.now();
+    while (ids.has(id)) id = 'PN-' + Date.now() + '-' + (++n);
+    return id;
+  }
   function mine(account) {
     seed();
+    ensureContractExpiryAlerts();
+    ensureMeterSupplementAlerts();
     return list().filter(n => n && n.recipientAccountId === account.id).sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
   }
   function unread(account) { return mine(account).filter(n => !n.readAt); }
@@ -114,9 +160,13 @@
     headerHtml,
     list: () => { const account = A.currentAccount(); return account ? mine(account) : []; },
     unreadCount: () => { const account = A.currentAccount(); return account ? unread(account).length : 0; },
+    ensureContractExpiryAlerts,
+    ensureMeterSupplementAlerts,
     add(notification) {
       if (!notification || !notification.recipientAccountId) return null;
-      const record = Object.assign({ id: 'PN-' + Date.now(), type: 'GENERAL', title: 'Thông báo mới', message: '', createdAt: now(), readAt: null, targetRoute: null, targetId: null }, notification);
+      // Chống trùng: cùng notificationKey chỉ ghi một lần.
+      if (notification.notificationKey && list().some(n => n && n.notificationKey === notification.notificationKey)) return null;
+      const record = Object.assign({ id: uniqueId(), type: 'GENERAL', title: 'Thông báo mới', message: '', createdAt: now(), readAt: null, targetRoute: null, targetId: null }, notification);
       list().unshift(record); A.save(); return record;
     }
   };
@@ -133,7 +183,10 @@
   A.ACT['personal-notification-open'] = el => {
     const notification = findOwn(el.dataset.id); if (!notification) return;
     markRead(notification); ui.activeHeaderPopover = null; ui.personalNotificationsExpanded = false;
-    if (routeAllowed(notification)) A.go(notification.targetRoute); else A.render();
+    if (!routeAllowed(notification)) return A.render();
+    // Thông báo hợp đồng: mở thẳng chi tiết nếu hợp đồng thuộc chợ đang chọn.
+    if (notification.targetRoute === 'hop-dong' && notification.targetId && notification.targetMarket === ui.market && A.ACT['ct-view']) return A.ACT['ct-view']({ dataset: { id: notification.targetId } });
+    A.go(notification.targetRoute);
   };
   document.addEventListener('click', e => { if (ui.activeHeaderPopover && !e.target.closest('.header-popover-anchor')) { ui.activeHeaderPopover = null; ui.personalNotificationsExpanded = false; A.render(); } });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && ui.activeHeaderPopover) { ui.activeHeaderPopover = null; ui.personalNotificationsExpanded = false; A.render(); } });

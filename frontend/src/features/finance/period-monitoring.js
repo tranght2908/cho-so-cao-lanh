@@ -48,12 +48,13 @@
     const meterText = na ? '—' : row.meterStatus === 'NOT_REQUIRED' ? 'Không cần ghi' : `${row.meter.recorded}/${row.meter.required}${row.meterStatus === 'COMPLETED' ? ' ✓' : ''}`;
     const list = row.issued ? row.invoices : row.groups, sum = list.reduce((a, x) => a + Number(x.amount || 0), 0);
     const invalid = row.issued ? 0 : row.groups.filter(g => g.validationStatus !== 'VALID').length;
-    const receivable = list.length ? `${list.length} khoản · ${U.money(sum)}${invalid ? `<div class="small pm-warn-text">${invalid} cần xử lý</div>` : ''}` : '—';
+    const missing = row.issued || !row.p ? 0 : new Set(MP().blockingWarnings(row.p).filter(w => /_NOT_COVERED$/.test(w.code || '')).map(w => w.contractId)).size;
+    const receivable = (list.length ? `${list.length} khoản · ${U.money(sum)}${invalid ? `<div class="small pm-warn-text">${invalid} cần xử lý</div>` : ''}` : '—') + (missing ? `<div class="small pm-warn-text">${missing} HĐ hết hạn thiếu căn cứ</div>` : '');
     const issue = na ? '—' : row.issued ? dot('Đã phát hành', 'ok') : dot('Chưa phát hành');
     const collection = row.issued ? dot(`${row.paid}/${row.invoices.length}`, row.paid === row.invoices.length ? 'ok' : 'info') : '—';
     const recon = !row.issued ? '—' : row.recon ? dot(RECON_TEXT[row.recon], row.recon === 'RECONCILED' ? 'ok' : row.recon === 'NEEDS_RESOLUTION' ? 'danger' : 'warn') : dot('Chưa đối soát');
     const open = `<button class="period-monitor-link" data-act="period-monitor-open" data-market="${U.esc(row.market)}" data-period="${U.esc(key)}" title="${row.state.id === 'NEEDS_ACTION' ? 'Xem lỗi' : 'Xem chi tiết'}"><b>${U.esc(market.name)}</b></button>`;
-    return `<tr${na ? ' class="pm-row-na"' : ''}><td>${open}</td><td>${collectorCellHtml(row)}</td><td>${U.esc(meterText)}</td><td>${receivable}</td><td>${issue}</td><td>${collection}</td><td>${recon}</td><td>${MP().stateTag(row.state)}</td></tr>`;
+    return `<tr${na ? ' class="pm-row-na"' : ''}><td>${open}</td><td>${collectorCellHtml(row)}</td><td>${U.esc(meterText)}</td><td>${receivable}</td><td>${issue}</td><td>${collection}</td><td>${recon}</td><td>${MP().stateTag(row.state)}${row.state.id === 'READY_TO_ISSUE' && canIssuePeriod() && inScope(row.market) ? `<div><button class="btn sm" data-act="period-monitor-issue-market" data-market="${U.esc(row.market)}" data-period="${U.esc(key)}">Phát hành chợ này</button></div>` : ''}</td></tr>`;
   }
   // Tên chợ dẫn tới màn nghiệp vụ đúng bước hiện tại của chợ.
   function goToMarket(row) {
@@ -92,7 +93,7 @@
     let alert = '', alertTone = 'warn';
     if (month.closed) { const c = month.rows[0].state.mp.monthClose || {}; alert = `Đã chốt kỳ${c.closedBy ? ' bởi ' + c.closedBy : ''}${c.closedAt ? ' · ' + c.closedAt : ''}.`; alertTone = 'ok'; }
     else if (!issueDone) {
-      if (iss.canIssue) { alert = `${iss.ready.length + iss.notApplicable.length + iss.issued.length}/${iss.rows.length} chợ đủ điều kiện phát hành.` + (scopeNote ? ' ' + scopeNote : !canIssuePeriod() ? ' Bạn chưa được cấp quyền phát hành kỳ thu.' : ''); alertTone = canIssue ? 'ok' : 'warn'; }
+      if (iss.canIssue) { alert = `${iss.ready.length + iss.notApplicable.length + iss.issued.length}/${iss.rows.length} chợ đủ điều kiện phát hành.` + (iss.blocking.length ? ` ${iss.blocking.length} chợ chưa đủ điều kiện sẽ được giữ lại.` : '') + (scopeNote ? ' ' + scopeNote : !canIssuePeriod() ? ' Bạn chưa được cấp quyền phát hành kỳ thu.' : ''); alertTone = canIssue ? 'ok' : 'warn'; }
       else alert = iss.blocking.length ? `Còn ${iss.blocking.length} chợ chưa đủ điều kiện phát hành.` : 'Không có chợ nào có khoản phải thu để phát hành.';
     } else if (month.canClose) { alert = 'Mọi chợ đã hoàn tất hoặc không áp dụng — đủ điều kiện chốt kỳ.' + (scopeNote ? ' ' + scopeNote : !canCloseMonth() ? ' Bạn chưa được cấp quyền chốt kỳ thu.' : ''); alertTone = canClose ? 'ok' : 'warn'; }
     else alert = `Còn ${month.pending.length} chợ chưa hoàn tất thu hoặc đối soát.`;
@@ -196,8 +197,16 @@
     A.render();
     U.toast('Lưu phân công thành công.');
   };
-  // ---- Phát hành kỳ thu: popup xác nhận → market-period.issueMonth (pre-validate toàn bộ, ghi từng chợ qua billing.issue,
-  // lỗi giữa chừng thì khôi phục). Chợ Không áp dụng bỏ qua, không tạo khoản rỗng. Không còn phát hành từng chợ.
+  // ---- Phát hành kỳ thu (Giai đoạn B): market-period.issueMonth phát hành ĐỘC LẬP từng chợ đủ điều kiện (mỗi chợ khôi phục
+  // riêng khi lỗi); chợ chưa đủ điều kiện được giữ lại kèm nguyên nhân. Phát hành riêng một chợ: market-period.issueMarket.
+  const blockedListHtml = list => list.length ? `<div class="note warn" style="margin-top:10px"><b>Chợ chưa đủ điều kiện — giữ lại, không phát hành:</b>${list.map(r => `<div>${U.esc(r.market.name || r.market.id)} — ${U.esc((r.reason && r.reason.text) || r.state.label)}</div>`).join('')}</div>` : '';
+  function issueResultModal(key, out) {
+    const ok = out.results || [], failed = out.failed || [], skipped = out.skipped || [];
+    A.modal(A.mHead('KẾT QUẢ PHÁT HÀNH KỲ ' + periodLabel(key)) + `<div class="modal-b">
+      <div class="note ok"><b>Đã phát hành ${ok.length} chợ</b> · ${out.count || 0} khoản phải thu${ok.map(x => `<div>${U.esc(x.market.name || x.market.id)}: ${x.count} khoản · ${U.money(x.amount)}</div>`).join('')}</div>
+      ${failed.length ? `<div class="note danger" style="margin-top:10px"><b>Phát hành lỗi ${failed.length} chợ (đã khôi phục riêng chợ đó):</b>${failed.map(x => `<div>${U.esc(x.market.name || x.market.id)} — ${U.esc(x.error || (x.blocked && x.blocked.text) || x.reason)}</div>`).join('')}</div>` : ''}
+      ${blockedListHtml(skipped)}</div><div class="modal-f"><button class="btn primary" data-act="close">Đóng</button></div>`);
+  }
   function issueContext() {
     const key = ui.periodMonitorPeriod || MP().months()[0], sum = MP().issueSummary(key);
     if (!canIssuePeriod()) return { err: 'Bạn chưa được cấp quyền phát hành kỳ thu.' };
@@ -210,7 +219,7 @@
     if (c.err) return U.toast(c.err);
     const { key, sum } = c;
     A.modal(A.mHead('PHÁT HÀNH KỲ THU ' + periodLabel(key)) + `<div class="modal-b"><dl class="kv"><dt>Tổng số chợ</dt><dd>${sum.rows.length}</dd><dt>Chợ có khoản phải thu</dt><dd>${sum.ready.length}${sum.issued.length ? ' <span class="small muted">(+' + sum.issued.length + ' chợ đã phát hành trước đó)</span>' : ''}</dd><dt>Không áp dụng</dt><dd>${sum.notApplicable.length}</dd><dt>Tổng số khoản phải thu</dt><dd>${sum.receivables}</dd><dt>Tổng dự kiến thu</dt><dd><b>${U.money(sum.amount)}</b></dd></dl>
-      <div class="small muted" style="margin-top:6px">Chợ phát hành: ${sum.ready.map(r => U.esc(r.market.name || r.market.id)).join(', ')}</div>
+      <div class="small muted" style="margin-top:6px">Chợ phát hành: ${sum.ready.map(r => U.esc(r.market.name || r.market.id)).join(', ')}</div>${blockedListHtml(sum.blocking)}
       <div class="note info" style="margin-top:10px">Sau khi phát hành:<br>- khoản phải thu của các chợ áp dụng sẽ được phát hành;<br>- tiểu thương có thể xem và thanh toán;<br>- NV thu phí có thể bắt đầu thu tiền;<br>- hệ thống gửi thông báo khoản phải thu.</div></div>
       <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="period-monitor-issue-confirm" data-period="${U.esc(key)}">Xác nhận phát hành</button></div>`);
   };
@@ -220,8 +229,30 @@
     if (c.err) { A.closeModal(); A.render(); return U.toast(c.err); }
     const out = MP().issueMonth(c.key, A.currentAccount());
     A.closeModal(); A.render();
-    if (!out.ok) return U.toast(out.reason === 'ROLLED_BACK' ? 'Phát hành kỳ thu không thành công — đã khôi phục, chưa chợ nào được phát hành. ' + (out.error || '') : 'Chưa thể phát hành kỳ thu: ' + (out.blocking || []).map(r => (r.market.name || r.market.id) + ' — ' + r.state.label).join('; '));
-    U.toast(`Đã phát hành kỳ thu ${periodLabel(c.key)}: ${out.count} khoản phải thu tại ${out.results.length} chợ; ${out.notApplicable} chợ không áp dụng.`);
+    if (!out.ok && !(out.failed || []).length) return U.toast('Chưa thể phát hành kỳ thu: ' + (out.blocking || []).map(r => (r.market.name || r.market.id) + ' — ' + ((r.reason && r.reason.text) || r.state.label)).join('; '));
+    if ((out.failed || []).length || (out.skipped || []).length) issueResultModal(c.key, out);
+    U.toast(`Đã phát hành kỳ thu ${periodLabel(c.key)}: ${out.count || 0} khoản phải thu tại ${(out.results || []).length} chợ; ${(out.skipped || []).length} chợ giữ lại; ${(out.failed || []).length} chợ lỗi; ${out.notApplicable || 0} chợ không áp dụng.`);
+  };
+  // Phát hành riêng một chợ đã đủ điều kiện (quyền phát hành kỳ + chợ thuộc phạm vi). Không đụng chợ khác.
+  function issueMarketContext(market, key) {
+    if (!canIssuePeriod()) return { err: 'Bạn chưa được cấp quyền phát hành kỳ thu.' };
+    if (!inScope(market)) return { err: 'Chợ không thuộc phạm vi quản lý của bạn.' };
+    const mp = MP().get(market, key);
+    if (!mp || !MP().canIssue(mp)) return { err: 'Chợ chưa đủ điều kiện phát hành: ' + MP().blockReasons(mp).text };
+    return { mp };
+  }
+  A.ACT['period-monitor-issue-market'] = el => {
+    const key = el.dataset.period, market = el.dataset.market, c = issueMarketContext(market, key);
+    if (c.err) return U.toast(c.err);
+    const groups = billing() ? billing().traderGroups(market, c.mp.id) : [], amount = groups.reduce((a, g) => a + Number(g.amount || 0), 0);
+    A.modal(A.mHead('PHÁT HÀNH RIÊNG ' + U.esc((U.market(market) || {}).name || market) + ' · KỲ ' + periodLabel(key)) + `<div class="modal-b"><dl class="kv"><dt>Số khoản phải thu</dt><dd>${groups.length}</dd><dt>Tổng dự kiến</dt><dd>${U.money(amount)}</dd></dl><div class="note info">Chỉ phát hành chợ này; các chợ khác không thay đổi.</div></div><div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="period-monitor-issue-market-confirm" data-market="${U.esc(market)}" data-period="${U.esc(key)}">Xác nhận phát hành</button></div>`);
+  };
+  A.ACT['period-monitor-issue-market-confirm'] = el => {
+    const key = el.dataset.period, market = el.dataset.market, c = issueMarketContext(market, key);
+    if (c.err) { A.closeModal(); A.render(); return U.toast(c.err); }
+    const out = MP().issueMarket(market, key, A.currentAccount());
+    A.closeModal(); A.render();
+    U.toast(out.ok ? `Đã phát hành ${out.count} khoản phải thu của ${(U.market(market) || {}).name || market}.` : 'Phát hành không thành công' + (out.reason === 'ROLLED_BACK' ? ' — đã khôi phục chợ này. ' + (out.error || '') : ': ' + ((out.blocked && out.blocked.text) || out.reason)));
   };
   // XVIII: chốt kỳ tháng — action:theo-doi-ky-thu.chot-ky, phạm vi đủ toàn bộ chợ, mọi chợ COMPLETED/NOT_APPLICABLE.
   A.ACT['period-monitor-close'] = () => {

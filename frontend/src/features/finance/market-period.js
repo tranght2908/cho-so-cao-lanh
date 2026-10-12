@@ -159,13 +159,27 @@
     return { from: prevRead && prevRead < to ? prevRead : isoDate(y, m - 2, d), to };
   };
   const signed = (c, marketId) => !!c && c.market === marketId && c.status === 'ACTIVE' && !!c.start;
-  const overlaps = (c, from, to) => c.start <= to && (!c.end || c.end >= from);
-  // Hợp đồng dùng điện/nước trong khoảng sử dụng (ngày kết thúc phải SAU lần ghi trước — ngày đó thuộc đợt trước).
-  svc.usageContracts = mp => !mp ? [] : (() => { const w = svc.usageWindow(mp); return (A.db.contracts || []).filter(c => signed(c, mp.marketId) && c.start <= w.to && (!c.end || c.end > w.from)); })();
-  // Hợp đồng có hiệu lực trong tháng sử dụng (dịch vụ theo tháng).
+  const nextDay = iso => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); };
+  const contractsService = () => features.contracts && features.contracts.service;
+  // ỨNG VIÊN của khoản thu (Giai đoạn B): hợp đồng ACTIVE đã bắt đầu, chưa có khoảng sử dụng bị KHÉP (ngừng thực tế /
+  // dự kiến ngừng) trước ngày from. Hợp đồng đã qua ngày kết thúc vẫn là ứng viên — tính phí hay cảnh báo chặn do
+  // contracts.service.chargeCoverage quyết định ở billing; không âm thầm loại hợp đồng hết hạn khỏi kỳ.
+  const closedBefore = (c, from) => { const cs = contractsService(), cov = cs && cs.usageCoverage ? cs.usageCoverage(c) : null; return !!cov && cov.closed && cov.end < from; };
+  const reaches = (c, from) => !c.end || c.end >= from || !closedBefore(c, from);
+  const overlaps = (c, from, to) => c.start <= to && reaches(c, from);
+  // Điện/nước: khoảng đo (lần ghi trước, lần ghi này] — ngày ghi trước thuộc đợt trước.
+  svc.usageContracts = mp => !mp ? [] : (() => { const w = svc.usageWindow(mp); return (A.db.contracts || []).filter(c => signed(c, mp.marketId) && overlaps(c, nextDay(w.from), w.to)); })();
+  // Dịch vụ: tháng sử dụng N.
   svc.serviceContracts = mp => !mp ? [] : (() => { const r = svc.monthRange(svc.usageMonth(mp)); return (A.db.contracts || []).filter(c => signed(c, mp.marketId) && overlaps(c, r.from, r.to)); })();
-  // Hợp đồng có hiệu lực trong tháng mặt bằng được thu trước.
+  // Mặt bằng: tháng N+1 thu trước.
   svc.landContracts = mp => !mp ? [] : (() => { const r = svc.monthRange(svc.landMonth(mp)); return (A.db.contracts || []).filter(c => signed(c, mp.marketId) && overlaps(c, r.from, r.to)); })();
+  // Hợp đồng ACTIVE của chợ KHÔNG là ứng viên của kỳ kèm lý do (đối chiếu: ứng viên = có dòng nháp + có cảnh báo + loại có lý do).
+  svc.excludedContracts = mp => {
+    if (!mp) return [];
+    const ids = new Set(svc.contracts(mp).map(c => c.id)), w = svc.usageWindow(mp), land = svc.monthRange(svc.landMonth(mp));
+    return (A.db.contracts || []).filter(c => signed(c, mp.marketId) && !ids.has(c.id)).map(c => ({ contract: c,
+      reason: c.start > land.to ? 'NOT_STARTED' : closedBefore(c, nextDay(w.from)) ? 'USAGE_CLOSED' : 'ENDED_BEFORE_PERIOD' }));
+  };
   // Mọi hợp đồng phát sinh ít nhất một khoản trong đợt (điện/nước, dịch vụ hoặc mặt bằng tháng sau).
   svc.contracts = mp => {
     if (!mp) return [];
@@ -227,6 +241,8 @@
     return st.started ? 'RECORDING' : 'WAITING';
   };
   svc.meterDone = mp => ['COMPLETED', 'NOT_REQUIRED'].includes(svc.meterStatus(mp));
+  // Kỳ đã được NV thu phí bấm Hoàn tất ghi chỉ số (lưu mp.meter) — điểm còn thiếu chỉ số chỉ được ghi BỔ SUNG.
+  svc.meterCompletedRecorded = mp => !!(mp && mp.meter && mp.meter.status === 'COMPLETED');
 
   // ---------- Thu tiền ----------
   svc.isIssued = mp => !!(mp && mp.issuance);
@@ -340,6 +356,60 @@
     return n;
   };
   if (A.SERVICE_CFG && A.SERVICE_CFG.onChange) A.SERVICE_CFG.onChange(() => svc.recalculateAfterSourceChange());
+  // Căn cứ sử dụng của hợp đồng thay đổi (xác nhận / dự kiến / hủy) hoặc ghi bổ sung chỉ số → tính lại MỌI kỳ còn tính được
+  // của ĐÚNG chợ đó (đã xong chỉ số, chưa phát hành, chưa chốt). Kỳ đã phát hành / đã chốt không bao giờ bị tính lại.
+  svc.recalculateMarket = function (marketId) {
+    if (!finance.billing || !A.db || !A.idx || recalculating) return 0;
+    recalculating = true;
+    let n = 0;
+    try {
+      (A.db.billingPeriods || []).filter(mp => mp.marketId === marketId && svc.canCalculate(mp)).forEach(mp => { finance.billing.calculatePeriod(mp.marketId, mp.id, SYSTEM_ACTOR); n++; });
+    } finally { recalculating = false; }
+    return n;
+  };
+
+  // ---------- Ghi BỔ SUNG chỉ số (Giai đoạn B) ----------
+  // Kỳ đã Hoàn tất ghi chỉ số nhưng CHƯA phát hành / chưa chốt; điểm thuộc danh sách cần ghi (vd điểm của HĐ hết hạn vừa trở
+  // thành ứng viên) mà chưa có chỉ số hợp lệ. Không mở lại cả kỳ (mp.meter.status giữ COMPLETED); chỉ đúng các điểm còn thiếu.
+  svc.ensureReadingRow = function (mp, st) {
+    const found = svc.readingOf(mp, st.id);
+    if (found) return found;
+    const prior = (A.db.readings || []).filter(r => r.stallId === st.id && r.period < mp.period && r.elecCur != null).sort((a, b) => b.period.localeCompare(a.period))[0];
+    const row = { stallId: st.id, period: mp.period, billingPeriodId: mp.id, elecPrev: prior ? prior.elecCur : null, elecCur: null, elecAvg: prior ? prior.elecAvg : 0, waterPrev: prior ? prior.waterCur : null, waterCur: null, waterAvg: prior ? prior.waterAvg : 0, status: 'PENDING', recordedBy: null, recordedAt: null, elecPhoto: null, waterPhoto: null };
+    A.db.readings.push(row);
+    return row;
+  };
+  svc.supplementPoints = function (mp) {
+    if (!mp || !svc.meterCompletedRecorded(mp) || svc.isIssued(mp) || svc.isClosed(mp)) return [];
+    return svc.meterPoints(mp).filter(st => svc.readingState(svc.readingOf(mp, st.id)) !== 'RECORDED');
+  };
+  svc.canSupplementMeter = (mp, stallId) => svc.supplementPoints(mp).some(st => st.id === stallId);
+  // Quyền: dien-nuoc.ghi-chi-so (BR-03 — chỉ NV thu phí) + chợ thuộc phạm vi của tài khoản. Lý do bắt buộc.
+  // Bản ghi bổ sung là thao tác có chủ đích kèm lý do → được coi là đã kiểm tra (không tạo vòng "cần kiểm tra" mới).
+  svc.recordSupplementalReading = function (mp, stallId, input, account) {
+    const st = A.idx.stall.get(stallId), acc = account || (A.currentAccount && A.currentAccount());
+    if (!mp || !st || st.market !== mp.marketId) return { error: 'NOT_FOUND', message: 'Không tìm thấy điểm kinh doanh trong kỳ.' };
+    if (svc.isIssued(mp) || svc.isClosed(mp)) return { error: 'LOCKED', message: 'Kỳ thu đã phát hành hoặc đã chốt — không ghi bổ sung chỉ số.' };
+    if (!acc || !A.canDo('dien-nuoc.ghi-chi-so', st.market) || A.allowedMarkets(acc).indexOf(st.market) === -1) return { error: 'FORBIDDEN', message: 'Bạn không có quyền ghi chỉ số của điểm này.' };
+    if (!svc.canSupplementMeter(mp, stallId)) return { error: 'NOT_ALLOWED', message: 'Điểm này không thuộc danh sách cần ghi bổ sung chỉ số.' };
+    const x = input || {}, reason = String(x.reason || '').trim();
+    if (!reason) return { error: 'REQUIRED', field: 'reason', message: 'Vui lòng nhập lý do ghi bổ sung chỉ số.' };
+    const num = v => v === '' || v == null ? null : Number(v), e = num(x.elecCur), w = num(x.waterCur);
+    if (e == null || w == null || !Number.isFinite(e) || !Number.isFinite(w)) return { error: 'INVALID', field: 'value', message: 'Vui lòng nhập đủ chỉ số điện và nước hợp lệ.' };
+    const r = svc.ensureReadingRow(mp, st);
+    // Điểm chưa từng có chỉ số kỳ trước (vd điểm mới / bị bỏ sót từ đầu): bắt buộc nhập chỉ số đầu kỳ để tính sản lượng.
+    const ep = r.elecPrev != null ? r.elecPrev : num(x.elecPrev), wp = r.waterPrev != null ? r.waterPrev : num(x.waterPrev);
+    if (ep == null || wp == null || !Number.isFinite(ep) || !Number.isFinite(wp)) return { error: 'INVALID', field: 'prev', message: 'Điểm chưa có chỉ số kỳ trước — vui lòng nhập chỉ số đầu kỳ điện và nước.' };
+    if (e < ep || w < wp) return { error: 'INVALID', field: 'value', message: 'Chỉ số kỳ này không được nhỏ hơn chỉ số kỳ trước.' };
+    const by = acc.fullName || acc.code || acc.id || '', at = stamp(), entry = { stallId: st.id, code: st.code, at, by, byId: acc.id || '', reason, elecPrev: ep, waterPrev: wp, elecCur: e, waterCur: w, old: { elecPrev: r.elecPrev, waterPrev: r.waterPrev, elecCur: r.elecCur, waterCur: r.waterCur } };
+    Object.assign(r, { elecPrev: ep, waterPrev: wp, elecCur: e, waterCur: w, recordedBy: acc.code || acc.id, recordedAt: at, status: 'RECORDED', billingPeriodId: mp.id, reviewRequired: false, reviewReason: null,
+      reviewedAt: at, reviewedBy: by, reviewResult: 'SUPPLEMENT', reviewNote: reason, supplemental: { at, by, byId: acc.id || '', reason } });
+    mp.meter.supplements = (mp.meter.supplements || []).concat(entry);
+    if (U.log) U.log('Ghi bổ sung chỉ số điểm ' + st.code + ' kỳ ' + (mp.label || mp.id) + ': ' + reason);
+    A.save();
+    const calc = svc.canCalculate(mp) && finance.billing ? finance.billing.calculatePeriod(mp.marketId, mp.id, SYSTEM_ACTOR) : null;
+    return { reading: r, entry, calc };
+  };
 
   // ---------- Kỳ tháng tổng (aggregation) + chốt kỳ ----------
   svc.monthSummary = function (month) {
@@ -349,45 +419,67 @@
     const pending = rows.filter(r => !CLOSABLE.includes(r.state.id));
     return { month, rows, count, closed, completed: count('COMPLETED'), notApplicable: count('NOT_APPLICABLE'), pending, canClose: !closed && rows.length > 0 && !pending.length };
   };
-  // ---------- Phát hành KỲ THU (đồng loạt) — điểm phát hành nghiệp vụ DUY NHẤT ----------
-  // 12 chợ dùng chung kỳ tháng: chỉ phát hành khi MỌI chợ đang hoạt động ở Sẵn sàng phát hành hoặc Không áp dụng.
-  // Tương thích dữ liệu cũ: chợ đã phát hành từ trước (Đang thu trở đi) được coi là đã đạt, không phát hành lại.
+  // ---------- Phát hành KỲ THU — ĐỘC LẬP theo từng chợ (Giai đoạn B, 10/2026) ----------
+  // Bỏ cơ chế "tất cả hoặc không": phát hành đồng loạt chỉ phát hành các chợ Sẵn sàng phát hành; chợ chưa đủ điều kiện
+  // được giữ lại kèm nguyên nhân. Mỗi chợ phát hành trong bản chụp riêng → lỗi của chợ này chỉ khôi phục chợ này, không làm
+  // mất kết quả của chợ khác. Bên trong một chợ vẫn "tất cả hoặc không" (billing.issue đòi mọi nhóm khoản hợp lệ).
+  // Chợ đã phát hành (Đang thu trở đi) không phát hành lại → bấm lại không tạo khoản trùng. Chốt kỳ tháng giữ nguyên.
   const ISSUED_OR_LATER = ['COLLECTING', 'COLLECTION_COMPLETED', 'WAITING_RECONCILIATION', 'NEEDS_RESOLUTION', 'COMPLETED'];
+  // Nguyên nhân chợ chưa đủ điều kiện: trạng thái + các mã cảnh báo chặn (đếm theo mã).
+  svc.blockReasons = function (mp, state) {
+    const st = state || (mp ? svc.stateOf(mp.marketId, monthOf(mp)) : null), codes = {};
+    (mp ? svc.blockingWarnings(mp) : []).forEach(w => { codes[w.code] = (codes[w.code] || 0) + 1; });
+    return { state: st ? st.id : 'NO_PERIOD', label: st ? st.label : 'Chưa có kỳ', codes, text: (st ? st.label : 'Chưa có kỳ') + (Object.keys(codes).length ? ' — ' + Object.keys(codes).map(k => k + ' × ' + codes[k]).join(', ') : '') };
+  };
   svc.issueSummary = function (month) {
     const rows = svc.activeMarkets().map(m => ({ market: m, state: svc.stateOf(m.id, month) }));
     const ready = rows.filter(r => r.state.id === 'READY_TO_ISSUE'), notApplicable = rows.filter(r => r.state.id === 'NOT_APPLICABLE');
     const issued = rows.filter(r => ISSUED_OR_LATER.includes(r.state.id) && !r.state.closed);
-    const blocking = rows.filter(r => r.state.id !== 'READY_TO_ISSUE' && r.state.id !== 'NOT_APPLICABLE' && !ISSUED_OR_LATER.includes(r.state.id));
+    const blocking = rows.filter(r => r.state.id !== 'READY_TO_ISSUE' && r.state.id !== 'NOT_APPLICABLE' && !ISSUED_OR_LATER.includes(r.state.id))
+      .map(r => Object.assign(r, { reason: svc.blockReasons(r.state.mp, r.state) }));
     const billing = finance.billing, groups = r => billing ? billing.traderGroups(r.market.id, r.state.mp.id) : [];
     const receivables = ready.reduce((n, r) => n + groups(r).length, 0), amount = ready.reduce((n, r) => n + groups(r).reduce((a, g) => a + Number(g.amount || 0), 0), 0);
-    return { month, rows, ready, notApplicable, issued, blocking, receivables, amount, closed: rows.length > 0 && rows.every(r => r.state.closed),
-      canIssue: rows.length > 0 && ready.length > 0 && !blocking.length && !rows.some(r => r.state.closed) };
+    const closed = rows.length > 0 && rows.every(r => r.state.closed);
+    return { month, rows, ready, notApplicable, issued, blocking, blocked: blocking, receivables, amount, closed,
+      canIssue: ready.length > 0 && !rows.some(r => r.state.closed) };
   };
-  // Pre-validation TOÀN BỘ trước khi ghi; ghi từng chợ qua billing.issue; lỗi giữa chừng → khôi phục nguyên trạng A.db
-  // (prototype không có transaction thật) để kỳ không bao giờ ở trạng thái nửa phát hành. Quyền kiểm tra ở handler.
+  // Phát hành MỘT chợ trong bản chụp riêng. Quyền + phạm vi kiểm tra ở handler; điều kiện nghiệp vụ kiểm tra lại tại đây.
+  function issueOne(market, month, actor) {
+    const billing = finance.billing, mp = svc.get(market.id, month);
+    if (!mp || !svc.canIssue(mp)) return { ok: false, reason: 'NOT_READY', market, blocked: svc.blockReasons(mp) };
+    if (billing.traderGroups(market.id, mp.id).some(g => g.validationStatus !== 'VALID')) return { ok: false, reason: 'NOT_READY', market, blocked: svc.blockReasons(mp) };
+    const snapshot = JSON.stringify(A.db);
+    try {
+      const out = billing.issue(market.id, mp.id, actor);
+      if (!out.issued.length) throw new Error('Không phát hành được ' + (market.name || market.id));
+      return { ok: true, market, count: out.issued.length, amount: out.issued.reduce((x, i) => x + Number(i.amount || 0), 0) };
+    } catch (e) {
+      console.error('[market-period] Phát hành ' + (market.name || market.id) + ' kỳ ' + month + ' thất bại — khôi phục riêng chợ này', e);
+      A.db = JSON.parse(snapshot); A.reindex(); A.save();
+      return { ok: false, reason: 'ROLLED_BACK', market, error: e.message };
+    }
+  }
+  const actorName = account => (account && (account.fullName || account.code)) || '';
+  // Phát hành đồng loạt các chợ đủ điều kiện. ok = có ít nhất một chợ được phát hành.
   svc.issueMonth = function (month, account) {
     const billing = finance.billing, sum = svc.issueSummary(month);
-    if (!billing) return { ok: false, reason: 'NO_BILLING' };
-    if (!sum.canIssue) return { ok: false, reason: sum.ready.length ? 'NOT_READY' : 'NOTHING_TO_ISSUE', blocking: sum.blocking };
-    const actor = (account && (account.fullName || account.code)) || '';
-    const invalid = sum.ready.filter(r => !svc.canIssue(r.state.mp) || billing.traderGroups(r.market.id, r.state.mp.id).some(g => g.validationStatus !== 'VALID'));
-    if (invalid.length) return { ok: false, reason: 'NOT_READY', blocking: invalid };
-    const snapshot = JSON.stringify(A.db), results = [];
-    try {
-      sum.ready.forEach(r => {
-        const out = billing.issue(r.market.id, r.state.mp.id, actor);
-        if (!out.issued.length) throw new Error('Không phát hành được ' + (r.market.name || r.market.id));
-        results.push({ market: r.market, count: out.issued.length, amount: out.issued.reduce((a, i) => a + Number(i.amount || 0), 0) });
-      });
-    } catch (e) {
-      console.error('[market-period] Phát hành kỳ ' + month + ' thất bại — khôi phục dữ liệu trước phát hành', e);
-      A.db = JSON.parse(snapshot); A.reindex(); A.save();
-      return { ok: false, reason: 'ROLLED_BACK', error: e.message };
-    }
+    if (!billing) return { ok: false, reason: 'NO_BILLING', results: [], failed: [], skipped: [] };
+    if (!sum.canIssue) return { ok: false, reason: sum.closed ? 'CLOSED' : 'NOTHING_TO_ISSUE', blocking: sum.blocking, results: [], failed: [], skipped: sum.blocking };
+    const actor = actorName(account), results = [], failed = [];
+    sum.ready.forEach(r => { const out = issueOne(r.market, month, actor); (out.ok ? results : failed).push(out); });
     const count = results.reduce((n, x) => n + x.count, 0);
-    if (U.log) U.log('Phát hành kỳ thu ' + month.slice(5) + '/' + month.slice(0, 4) + ': ' + count + ' khoản phải thu tại ' + results.length + ' chợ, ' + sum.notApplicable.length + ' chợ không áp dụng');
+    if (U.log) U.log('Phát hành kỳ thu ' + month.slice(5) + '/' + month.slice(0, 4) + ': ' + count + ' khoản phải thu tại ' + results.length + ' chợ' + (failed.length ? ', ' + failed.length + ' chợ lỗi' : '') + (sum.blocking.length ? ', ' + sum.blocking.length + ' chợ chưa đủ điều kiện' : '') + ', ' + sum.notApplicable.length + ' chợ không áp dụng');
     A.save();
-    return { ok: true, results, count, notApplicable: sum.notApplicable.length };
+    return { ok: results.length > 0, results, issued: results, failed, skipped: sum.blocking, blocking: sum.blocking, count, notApplicable: sum.notApplicable.length, reason: results.length ? null : 'ALL_FAILED' };
+  };
+  // Phát hành riêng một chợ đã đủ điều kiện (sau khi khắc phục). Không đụng chợ khác.
+  svc.issueMarket = function (marketId, month, account) {
+    const market = svc.activeMarkets().find(m => m.id === marketId);
+    if (!finance.billing || !market) return { ok: false, reason: 'NOT_FOUND' };
+    const out = issueOne(market, month, actorName(account));
+    if (out.ok && U.log) U.log('Phát hành riêng ' + (market.name || market.id) + ' kỳ ' + month.slice(5) + '/' + month.slice(0, 4) + ': ' + out.count + ' khoản phải thu');
+    if (out.ok) A.save();
+    return out;
   };
   // KY_11_DA_PHAT_HANH (dữ liệu mẫu v34): đưa kỳ seedIssue.month tới "Đã phát hành" bằng ĐÚNG luồng thật, chạy 1 lần:
   // NV thu phí phụ trách từng chợ (marketScopes) hoàn tất ghi chỉ số → hệ thống tự tính nháp → Tổ trưởng phát hành kỳ
@@ -406,7 +498,8 @@
       else if (mp && !mp.calculatedAt) svc.autoCalculate(mp);
     });
     const out = svc.issueMonth(req.month, pick('market_manager', 'CL'));
-    Object.assign(req, { status: out.ok ? 'DONE' : 'FAILED', result: out.ok ? out.count : (out.reason || '') });
+    // Phát hành độc lập: chợ bị chặn được giữ lại → PARTIAL (không ép phát hành, không sửa dữ liệu seed).
+    Object.assign(req, { status: out.ok ? (out.failed.length || out.skipped.length ? 'PARTIAL' : 'DONE') : 'FAILED', result: out.ok ? out.count : (out.reason || ''), skipped: (out.skipped || []).map(r => r.market.id) });
     if (!out.ok) console.warn('[market-period] Dữ liệu mẫu: không phát hành được kỳ ' + req.month, out);
     A.save();
     return out;

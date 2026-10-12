@@ -3,9 +3,9 @@
  * NV thu phí không tự xác nhận tiền chuyển khoản; quyền thu-tien.thu + marketScopes được kiểm tra lại ở handler. */
 const assert = require('assert');
 const path = require('path');
-const { createApp } = require('./harness');
+const { createApp, confirmEndingForSeed } = require('./harness');
 
-const h = createApp(path.resolve(__dirname, '../..'), { seedIssue: true });
+const h = createApp(path.resolve(__dirname, '../..'), { seedIssue: true, beforeSeedIssue: confirmEndingForSeed });
 const A = h.A, U = A.U, R = A.features.finance.receipt;
 const login = (id, market) => { A.ui.sessionAccountId = id; A.ui.currentDemoAccountId = id; A.ui.market = market; A.syncAccountContext(); };
 const inv = A.db.invoices.find(i => i.traderId === 'TT0001' && i.period === '2026-11');

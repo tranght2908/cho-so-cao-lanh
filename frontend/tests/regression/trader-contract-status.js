@@ -1,5 +1,5 @@
 /* Focused regression: trạng thái Hợp đồng ở app tiểu thương (tieu-thuong/index.html → trader-portal screens) dùng CHUNG
- * contracts.service.displayStatus với màn Hợp đồng quản trị: Chưa hiệu lực / Còn hiệu lực / Đã hết hạn (theo ngày);
+ * contracts.service.displayStatus với màn Hợp đồng quản trị: Chưa hiệu lực / Còn hiệu lực / Hết hạn – chờ xử lý (theo ngày);
  * dữ liệu cũ chấm dứt / chờ thanh lý / đã thanh lý chỉ đọc "(dữ liệu cũ)". Hết hạn chỉ là display state:
  * không ghi localStorage, không đổi điểm / hồ sơ / hợp đồng / rentalDraft. */
 const assert = require('assert');
@@ -50,7 +50,7 @@ ok('CASE 2: today in [start, end] → "Còn hiệu lực"', () => {
 });
 ok('CASE 3: today > end → "Đã hết hạn" + warning; point still "Đang thuê"; no action', () => {
   const h = select('HĐ-TWS-EXP');
-  assert(/portal-contract-status expired">Đã hết hạn</.test(header(h)));
+  assert(/portal-contract-status expired">Hết hạn – chờ xử lý</.test(header(h)));
   assert(h.includes(`Hợp đồng này đã hết hạn từ ngày ${T.U.dmy(add(-10))}.`));
   assert(h.includes('portal-point-usage current">Đang thuê'), 'expiry does not release the point');
   assert(!/Gia hạn|Chấm dứt|Thanh lý hợp đồng/.test(h), 'no renew / terminate / liquidate CTA');

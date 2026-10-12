@@ -1,6 +1,6 @@
 /* Focused regression: màn "Hợp đồng" — scope 10/2026.
  * Tạo hợp đồng từ hồ sơ đăng ký thuê (trader.rentalDraft): 1 điểm = 1 hợp đồng, ngày riêng từng điểm, chọn một phần,
- * rollback toàn batch. Trạng thái chỉ Chưa hiệu lực / Còn hiệu lực / Đã hết hạn; hết hạn CHỈ cảnh báo, không side effect.
+ * rollback toàn batch. Trạng thái chỉ Chưa hiệu lực / Còn hiệu lực / Hết hạn – chờ xử lý (Giai đoạn A 10/2026); hết hạn CHỈ cảnh báo, không side effect.
  * Gia hạn / Chấm dứt / Thanh lý đã retire khỏi UI. Chi tiết đọc bản chụp priceTerms. CASE n = mục 27 của yêu cầu. */
 const assert = require('assert');
 const path = require('path');
@@ -30,12 +30,12 @@ const setRow = (id, k, value) => A.CH['ctw-row']({ dataset: { id, k }, value });
 const view = () => h.view();
 const RETIRED_ACTS = /data-act="ct-(renew|extend|terminate|liquidate|end)"|>Gia hạn<|>Chấm dứt<|>Thanh lý</;
 
-ok('list: header, subtitle, + Tạo hợp đồng, KPI Tổng / Còn hiệu lực / Sắp hết hạn / Đã hết hạn, Khoảng hiệu lực', () => {
+ok('list: header, subtitle, + Tạo hợp đồng, KPI Tổng / Còn hiệu lực / Sắp hết hạn / Hết hạn – chờ xử lý, Khoảng hiệu lực', () => {
   h.go('hop-dong');
   const v = view();
   assert(/<h2>Hợp đồng<\/h2>/.test(v) && v.includes('Quản lý hợp đồng thuê điểm kinh doanh của tiểu thương.'));
   assert(/data-act="ct-new">\+ Tạo hợp đồng</.test(v));
-  ['Tổng hợp đồng', 'Còn hiệu lực', 'Sắp hết hạn', 'Đã hết hạn'].forEach(k => assert(v.includes('<div class="k-label">' + k + '</div>'), k));
+  ['Tổng hợp đồng', 'Còn hiệu lực', 'Sắp hết hạn', 'Hết hạn – chờ xử lý'].forEach(k => assert(v.includes('<div class="k-label">' + k + '</div>'), k));
   assert(!/Chờ thanh lý<\/div>/.test(v), 'no "Chờ thanh lý" KPI');
   ['Mã HĐ', 'Tiểu thương', 'Điểm KD', 'Loại diện tích', 'Ngày bắt đầu', 'Ngày kết thúc', 'Thời hạn', 'Trạng thái', 'Thao tác'].forEach(k => assert(v.includes('<th class="">' + k + '</th>'), 'col ' + k));
   assert(/<legend>Khoảng hiệu lực<\/legend>/.test(v) && v.includes('data-ch="ctw-from"') && v.includes('data-ch="ctw-to"'));
@@ -187,13 +187,13 @@ ok('expiry: lifecycle sync + reload normalisation produce NO side effect', () =>
   TS.deriveBusinessStatus(tA.id);
   assert.strictEqual(snap(), before, 'nothing mutated by expiry');
 });
-ok('CASE 5 + CASE 6: badge "Đã hết hạn" + warning on the detail', () => {
+ok('CASE 5 + CASE 6: badge "Hết hạn – chờ xử lý" + warning on the detail', () => {
   h.go('hop-dong'); h.act('ctw-list');
   A.IN['ctw-q']({ value: expired().id });
-  assert(/<span class="tag danger">Đã hết hạn<\/span>/.test(view()));
+  assert(/<span class="tag danger">Hết hạn – chờ xử lý<\/span>/.test(view()));
   h.act('ctw-clear');
   h.act('ct-view', { id: expired().id });
-  assert(view().includes(`Hợp đồng này đã hết hạn từ ngày ${A.U.dmy(expired().end)}.`));
+  assert(view().includes(`Hợp đồng này đã hết hạn từ ngày ${A.U.dmy(expired().end)}`));
   assert(!RETIRED_ACTS.test(view()));
 });
 ok('CASE 7 + CASE 8 + CASE 9: expired → point still Đang thuê, trader-point relation kept, not Chờ thanh lý', () => {
@@ -236,12 +236,12 @@ ok('E: ACTIVE-by-date and expired contracts — neither produces a side effect',
   TS.deriveBusinessStatus(tA.id); TS.deriveBusinessStatus(tB.id);
   assert.strictEqual(snap(), before);
 });
-ok('KPI: Đã hết hạn counts the expired contract; Sắp hết hạn = còn hiệu lực ≤ 30 ngày', () => {
+ok('KPI: Hết hạn – chờ xử lý counts the expired contract; Sắp hết hạn = còn hiệu lực ≤ 30 ngày', () => {
   h.go('hop-dong'); h.act('ctw-list');
   const all = CS.list().filter(c => c.market === M), v = view();
   const k = label => +(v.match(new RegExp(`k-label">${label}</div><div class="k-value">(\\d+)<`)) || [0, -1])[1];
-  assert.strictEqual(k('Đã hết hạn'), all.filter(c => CS.displayStatus(c) === 'EXPIRED').length);
-  assert(k('Đã hết hạn') >= 1);
+  assert.strictEqual(k('Hết hạn – chờ xử lý'), all.filter(c => CS.displayStatus(c) === 'EXPIRED').length);
+  assert(k('Hết hạn – chờ xử lý') >= 1);
   assert.strictEqual(k('Sắp hết hạn'), all.filter(c => CS.displayStatus(c) === 'ACTIVE' && A.U.days(today, c.end) <= 30).length);
 });
 ok('CASE 18: Khoảng hiệu lực uses overlap semantics (start <= Đến AND end >= Từ)', () => {

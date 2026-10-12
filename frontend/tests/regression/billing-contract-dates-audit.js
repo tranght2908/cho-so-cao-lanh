@@ -67,6 +67,8 @@ const rows = (k, o) => (o || out).drafts.filter(d => d.contractId === K[k].c.id)
 const line = (k, type, o) => rows(k, o).find(d => d.items[0].chargeType === type);
 const warns = (k, o) => (o || out).warnings.filter(w => w.contractId === K[k].c.id).map(w => w.code);
 const landOf = (k, days) => Math.round(Number(K[k].p.area) * K[k].c.priceTerms.land.amount * days);
+// Giai đoạn B (10/2026): phần khoảng tính sau ngày kết thúc HĐ phải có căn cứ (xác nhận / dự kiến / ngừng) — thiếu → cảnh báo chặn.
+const blocking = (k, code, o) => (o || out).warnings.filter(w => w.contractId === K[k].c.id && w.code === code && w.severity === 'BLOCKING');
 
 ok('round months: usage = month of the meter read date, land = the following month', () => {
   assert.strictEqual(USAGE, MP.dateOf(mp, 'meterReadDate').slice(0, 7));
@@ -85,6 +87,9 @@ ok('CASE 1: contract covering the whole land month → area × rate × 30', () =
 ok('CASE 2 (ISSUE-01): contract ending 15/11 → land 11/2026 = 15 days, never the following month', () => {
   const l = line('endMid', 'LAND');
   assert.strictEqual(l.items[0].days, 15); assert.strictEqual(l.amount, landOf('endMid', 15)); assert.strictEqual(l.items[0].fullMonth, false);
+  // Giai đoạn B: 16/11 → 30/11 chưa có căn cứ → chặn phát hành (không âm thầm bỏ phần sau ngày hết hạn).
+  const g = blocking('endMid', 'LAND_NOT_COVERED')[0];
+  assert(g && g.gapFrom === '2026-11-16' && g.gapTo === '2026-11-30', 'LAND_NOT_COVERED 16/11 → 30/11');
   assert.strictEqual(B.landBillableDays({ start: '2026-01-01', end: '2026-11-15' }, '2026-11') * 10 * 2000, 300000, 'spec example');
   const o12 = B.calculatePeriod('CL', dec.id, 'audit');
   assert(!line('endMid', 'LAND', o12), 'no land 12/2026 for a contract that ends in 11');
@@ -95,7 +100,8 @@ ok('CASE 3: contract starting 15/11 → land 15..30 = 16 days (not 30)', () => {
 });
 ok('CASE 4 + CASE 11 (ISSUE-04): contract ending 30/10 with collection start 29/10 → no land 11; only its October usage', () => {
   assert.strictEqual(MP.dateOf(mp, 'startDate'), '2026-10-29', 'fixture: collection window starts 29/10');
-  assert(!line('end1030', 'LAND'), 'no land 11/2026');
+  assert(!line('end1030', 'LAND'), 'no land 11/2026 line without a basis');
+  assert(blocking('end1030', 'LAND_NOT_COVERED').some(w => w.gapFrom === '2026-11-01' && w.gapTo === '2026-11-30'), 'Giai đoạn B: land 11 flagged, not silently dropped');
   assert.strictEqual(line('end1030', 'ELECTRICITY').items[0].name, 'Điện 10/2026', 'its October consumption is still billed');
   assert(rows('end1030').every(d => d.items[0].chargeMonth === '2026-10'), 'nothing attributed to 11/2026');
 });
@@ -121,9 +127,11 @@ ok('CASE 7 + CASE 8: meter read 25–28/10 → "Điện 10/2026" / "Nước 10/2
   });
   assert(!out.drafts.some(d => /^(Điện|Nước) 11\/2026/.test(d.items[0].name)), 'no utility labelled 11/2026');
 });
-ok('CASE 9: point still RENTED but contract expired before the usage window → no electricity / water / service', () => {
+ok('CASE 9 (Giai đoạn B): point still RENTED, contract expired before the usage window, no confirmation → no line but BLOCKING per charge', () => {
   assert.strictEqual(BP.get(K.expiredHeld.p.id).usageStatus, 'RENTED');
   assert.strictEqual(rows('expiredHeld').length, 0);
+  ['LAND_NOT_COVERED', 'USAGE_NOT_COVERED', 'SERVICE_NOT_COVERED'].forEach(code => assert(blocking('expiredHeld', code).length, code));
+  assert(MP.contracts(mp).some(c => c.id === K.expiredHeld.c.id), 'still a candidate of the period');
 });
 ok('CASE 10 (ISSUE-03): today 29/10, contract from 15/11 → no INVALID_CONTRACT_SOURCE; deterministic', () => {
   assert.strictEqual(A.U.today(), '2026-10-29');
@@ -135,9 +143,9 @@ ok('CASE 10 (ISSUE-03): today 29/10, contract from 15/11 → no INVALID_CONTRACT
 ok('CASE 12: service = usage month, monthly fee (no day proration)', () => {
   const s = rows('full').filter(d => d.items[0].chargeType === 'MARKET_SERVICE');
   assert(s.length && s.every(d => d.items[0].name.startsWith('Dịch vụ 10/2026') && d.items[0].chargeMonth === '2026-10'));
-  // A contract that ends 30/10 still pays the full monthly service fee of October (no day proration in this scope).
-  const e = rows('end1030').filter(d => d.items[0].chargeType === 'MARKET_SERVICE');
-  assert(e.length && e.every(d => d.amount === Math.round(d.items[0].quantity * d.items[0].unitPrice)));
+  // Giai đoạn B: HĐ kết thúc 30/10 → 31/10 chưa có căn cứ → dịch vụ 10 bị chặn cho tới khi Tổ trưởng xác nhận.
+  assert(blocking('end1030', 'SERVICE_NOT_COVERED').some(w => w.gapFrom === '2026-10-31' && w.gapTo === '2026-10-31'));
+  assert(!rows('end1030').some(d => d.items[0].chargeType === 'MARKET_SERVICE'));
 });
 ok('CASE 13: fee config changed after the contract → the old contract keeps its priceTerms', () => {
   const pol = A.SERVICE_CFG.list('stallPrices').find(x => x.id === K.full.c.priceTerms.land.policyId), old = pol.amount;
@@ -191,5 +199,24 @@ ok('pending rental (no contract) → no receivable', () => {
   TS.create({ id: 'TT-BLD-PEND', name: 'Billing pending', phone: '0977399999', idType: 'CCCD', idNo: 'BLD-P', address: 'x', market: 'CL', stalls: [], status: 'WAITING_ALLOCATION', source: 'STAFF', since: A.U.today() });
   TS.setRentalDraft('TT-BLD-PEND', [{ pointId: p.id, charges: { land: true, electricity: true }, feeRefs: {} }]);
   assert.strictEqual(B.calculatePeriod('CL', mp.id, 'audit').drafts.filter(d => d.traderId === 'TT-BLD-PEND').length, 0);
+});
+ok('Giai đoạn B: dự kiến ngừng sử dụng (PLANNED_STOP) khép khoảng → không chặn; dịch vụ trọn tháng là GIẢ ĐỊNH (cảnh báo, không chặn)', () => {
+  const CS = A.features.contracts.service, ui = A.ui, keep = [ui.sessionAccountId, ui.currentDemoAccountId, ui.market];
+  ui.sessionAccountId = ui.currentDemoAccountId = 'AC-NV01'; ui.market = 'CL'; A.syncAccountContext();
+  try {
+    [['end1030', '2026-10-31'], ['endMid', '2026-11-16']].forEach(([k, d]) => {
+      const r = CS.confirmContinuation(K[k].c.id, { kind: 'PLANNED_STOP', plannedStopOn: d, evidence: 'COMMITMENT', note: 'Không tiếp tục thuê' });
+      assert(!r.error, k + ': ' + r.message);
+    });
+    const o = B.calculatePeriod('CL', mp.id, 'audit');
+    assert(!blocking('endMid', 'LAND_NOT_COVERED', o).length && line('endMid', 'LAND', o).items[0].days === 15, 'land 15 days, closed by planned stop');
+    assert.strictEqual(line('endMid', 'LAND', o).items[0].coverage.closedBy, 'PLANNED_STOP');
+    assert(!blocking('end1030', 'SERVICE_NOT_COVERED', o).length && !blocking('end1030', 'LAND_NOT_COVERED', o).length);
+    const e = rows('end1030', o).filter(d => d.items[0].chargeType === 'MARKET_SERVICE');
+    assert(e.length && e.every(d => d.amount === Math.round(d.items[0].quantity * d.items[0].unitPrice)), 'full monthly service fee (unchanged formula)');
+    assert(o.warnings.some(w => w.contractId === K.end1030.c.id && w.code === 'SERVICE_FULL_MONTH_ASSUMPTION' && w.severity === 'WARNING'));
+    // Các HĐ / điểm / hồ sơ không đổi vì dự kiến ngừng.
+    assert.strictEqual(K.endMid.c.status, 'ACTIVE'); assert.strictEqual(BP.get(K.endMid.p.id).usageStatus, 'RENTED');
+  } finally { [ui.sessionAccountId, ui.currentDemoAccountId, ui.market] = keep; A.syncAccountContext(); }
 });
 console.log(`billing-contract-dates-audit PASS (${passed} checks)`);

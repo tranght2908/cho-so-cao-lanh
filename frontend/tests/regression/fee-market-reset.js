@@ -5,7 +5,7 @@
  * never on page load; QĐ 480, other markets, layout, points, periods untouched. Fixtures are in-memory only. */
 const assert = require('assert');
 const path = require('path');
-const { createApp } = require('./harness');
+const { createApp, confirmEndingForSeed } = require('./harness');
 
 const ROOT = path.resolve(__dirname, '../..');
 let passed = 0;
@@ -172,7 +172,7 @@ ok('CASE 10: reload keeps the saved configuration', () => {
 });
 // ---- CASE 7: a new electricity price never changes an issued round ----
 ok('CASE 7: new electricity price for CL → issued receivables of CL_2026-11 unchanged', () => {
-  const hi = createApp(ROOT, { seedIssue: true }), B = hi.A, inv = () => json(B.db.invoices.filter(i => i.billingPeriodId === 'CL_2026-11'));
+  const hi = createApp(ROOT, { seedIssue: true, beforeSeedIssue: confirmEndingForSeed }), B = hi.A, inv = () => json(B.db.invoices.filter(i => i.billingPeriodId === 'CL_2026-11'));
   B.ui.sessionAccountId = 'AC-NV01'; B.ui.currentDemoAccountId = 'AC-NV01'; B.ui.market = 'CL'; B.syncAccountContext();
   const snap = inv();
   assert(JSON.parse(snap).length > 0, 'fixture: issued round');

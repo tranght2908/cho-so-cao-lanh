@@ -127,12 +127,32 @@
     if (applies.marketService && !c.priceTerms.services.length) c.priceTerms.services = (A.SERVICE_CFG ? A.SERVICE_CFG.list('extraServices') : []).filter(x => owned(x, c.market) && x.category !== 'VEHICLE' && lockable(x)).map(serviceTerm);
     return c.priceTerms;
   }
+  function amendmentAt(c, date) {
+    return (c.amendments || []).filter(x => x.effectiveFrom && x.effectiveFrom <= date)
+      .sort((a, b) => String(b.effectiveFrom).localeCompare(String(a.effectiveFrom)))[0] || null;
+  }
   function contractTermsAt(c, date) {
     if (!c) return null;
     if (!termsComplete(c)) { const before = JSON.stringify(c.priceTerms || null); freezeContractTerms(c); if (JSON.stringify(c.priceTerms || null) !== before) A.save(); }
-    const amendment = (c.amendments || []).filter(x => x.effectiveFrom && x.effectiveFrom <= date)
-      .sort((a, b) => String(b.effectiveFrom).localeCompare(String(a.effectiveFrom)))[0];
+    const amendment = amendmentAt(c, date);
     return amendment ? (amendment.priceTerms || amendment.terms || amendment) : c.priceTerms;
+  }
+  // Dấu vết đơn giá đã dùng (Giai đoạn B): giá đã khóa trên HĐ hoặc điều chỉnh (amendment) có hiệu lực tại ngày tra giá.
+  function priceSourceOf(c, date, policyId, unitPrice, unit) {
+    const a = amendmentAt(c, date);
+    return { contractId: c.id, termsAt: date, source: a ? 'AMENDMENT' : 'CONTRACT_TERMS', amendmentId: a ? (a.id || a.effectiveFrom) : null, policyId: policyId || null, unitPrice: Number(unitPrice || 0), unit: unit || '' };
+  }
+  // Căn cứ bao phủ (Giai đoạn B): chỉ chụp khi phần sau ngày kết thúc HĐ được dùng (xác nhận thực tế / dự kiến / khép).
+  const CS = () => A.features.contracts && A.features.contracts.service;
+  function coverageSnapshot(cov) {
+    if (!cov || cov.basis === 'CONTRACT' && !cov.closedBy) return null;
+    return { contractEnd: cov.contractEnd, from: cov.effFrom, billTo: cov.billTo, gap: cov.gap, basis: cov.basis, closedBy: cov.closedBy || null, planned: !!cov.planned, recordIds: (cov.recordIds || []).slice(), records: (cov.records || []).map(r => Object.assign({}, r)) };
+  }
+  const NOT_COVERED_TEXT = { LAND: 'Mặt bằng', USAGE: 'Điện, nước', SERVICE: 'Dịch vụ' };
+  function coverageWarning(out, kind, cov, base, label) {
+    const g = cov.gap;
+    warning(out, Object.assign({ code: kind + '_NOT_COVERED', gapFrom: g.from, gapTo: g.to, contractEnd: cov.contractEnd, action: { act: 'ct-view', id: base.contractId, label: 'Xác nhận sử dụng' },
+      message: NOT_COVERED_TEXT[kind] + ' ' + label + ': chưa có căn cứ sử dụng từ ' + U.dmy(g.from) + ' đến ' + U.dmy(g.to) + ' (hợp đồng ' + base.contractId + ' hết hạn ' + U.dmy(cov.contractEnd) + '). Tổ trưởng cần xác nhận tiếp tục / dự kiến / ngừng sử dụng.' }, base));
   }
   function warning(out, x) { out.warnings.push(Object.assign({ severity: 'BLOCKING' }, x)); }
   function itemName(type, meta) {
@@ -185,47 +205,67 @@
       const common = { market, marketId: market, period, billingPeriodId: bp.id, traderId: t.id, stallId: st.id, businessPointId: st.id, contractId: c.id };
       if (!Number.isFinite(Number(st.area)) || Number(st.area) <= 0) return warning(out, { code: 'MISSING_AREA', contractId: c.id, traderId: t.id, businessPointId: st.id, message: 'Điểm kinh doanh thiếu diện tích hợp lệ.' });
       if (!st.areaTypeId) return warning(out, { code: 'MISSING_AREA_TYPE', contractId: c.id, traderId: t.id, businessPointId: st.id, message: 'Điểm kinh doanh thiếu loại diện tích.' });
-      // ---- Mặt bằng: thu trước cho landMonth, chỉ những ngày hợp đồng còn hiệu lực (quy ước 30 ngày) ----
-      const landDays = landIds.has(c.id) ? landBillableDays(c, landMonth) : 0;
+      // ---- Mặt bằng: thu trước cho landMonth. Khoảng sử dụng xét theo NGÀY LỊCH (HĐ + xác nhận hợp lệ, CS.chargeCoverage);
+      // số ngày tính tiền vẫn theo quy ước 30 ngày (landBillableDays). Phần sau ngày kết thúc HĐ chưa có căn cứ → cảnh báo chặn.
+      const landCov = landIds.has(c.id) && CS() ? CS().chargeCoverage(c, landRange.from, landRange.to) : null;
+      if (landCov && landCov.applicable && landCov.gap) coverageWarning(out, 'LAND', landCov, { contractId: c.id, traderId: t.id, businessPointId: st.id, chargeType: 'LAND', chargeMonth: landMonth }, monthLabel(landMonth));
+      const landDays = landCov && landCov.applicable && landCov.billTo ? landBillableDays({ start: c.start, end: landCov.billTo }, landMonth) : 0;
       if (landDays > 0) {
         // KHOA_GIA_THEO_HOP_DONG: đơn giá lấy từ bảng giá đã khóa trên hợp đồng (amendment theo ngày nếu có), không đọc giá hiện hành.
-        const landTerms = contractTermsAt(c, clip(landRange.from, c.start, c.end || landRange.to)), lp = landTerms && landTerms.land;
+        const termsDay = clip(landRange.from, c.start, landCov.billTo), landTerms = contractTermsAt(c, termsDay), lp = landTerms && landTerms.land;
         if (!lp) warning(out, { code: 'MISSING_LAND_POLICY', contractId: c.id, businessPointId: st.id, message: 'Hợp đồng chưa có đơn giá sử dụng mặt bằng đã khóa.' });
         else {
-          const quantity = Number(st.area || 0), key = 'LAND|' + c.id, amount = landAmount(lp, quantity, landDays), full = landDays === LAND_MONTH_DAYS;
-          const row = draft(Object.assign({ sourceKey: key }, common), { chargeType: 'LAND', sourceType: 'CONTRACT', sourceId: c.id, name: 'Mặt bằng ' + monthLabel(landMonth), businessPointId: st.id, contractId: c.id, policyId: lp.policyId, policyReference: lp.docNo || '', quantity, unit: lp.unit, unitPrice: Number(lp.amount || 0), days: landDays, billableDays: landDays, fullMonth: full, targetMonth: landMonth, chargeMonth: landMonth, feePeriod: landMonth, amount, explanation: landExplain(lp, quantity, landDays) + (full ? ' (đủ tháng, quy ước 30 ngày)' : ' (hợp đồng hiệu lực một phần tháng ' + monthLabel(landMonth) + ')') });
+          const quantity = Number(st.area || 0), key = 'LAND|' + c.id, amount = landAmount(lp, quantity, landDays), full = landDays === LAND_MONTH_DAYS, coverage = coverageSnapshot(landCov);
+          const basisNote = coverage ? (coverage.planned ? ' · căn cứ dự kiến' : coverage.closedBy === 'STOPPED' ? ' · đến ngày trước ngày ngừng sử dụng' : ' · theo xác nhận tiếp tục sử dụng') : '';
+          const row = draft(Object.assign({ sourceKey: key }, common), { chargeType: 'LAND', sourceType: 'CONTRACT', sourceId: c.id, name: 'Mặt bằng ' + monthLabel(landMonth), businessPointId: st.id, contractId: c.id, policyId: lp.policyId, policyReference: lp.docNo || '', quantity, unit: lp.unit, unitPrice: Number(lp.amount || 0), days: landDays, billableDays: landDays, fullMonth: full, targetMonth: landMonth, chargeMonth: landMonth, feePeriod: landMonth, amount, coverage, priceSource: priceSourceOf(c, termsDay, lp.policyId, lp.amount, lp.unit), explanation: landExplain(lp, quantity, landDays) + (full ? ' (đủ tháng, quy ước 30 ngày)' : ' (sử dụng một phần tháng ' + monthLabel(landMonth) + ', quy ước 30 ngày)') + basisNote });
           out.drafts.push(row);
+          if (coverage && coverage.planned) warning(out, { severity: 'WARNING', code: 'PLANNED_BASIS', contractId: c.id, traderId: t.id, businessPointId: st.id, chargeType: 'LAND', message: 'Mặt bằng ' + monthLabel(landMonth) + ' của hợp đồng ' + c.id + ' tính theo căn cứ DỰ KIẾN (' + coverage.recordIds.join(', ') + ').' });
         }
       }
       // ---- Điện / Nước: chỉ số của khoảng sử dụng (lần ghi trước → lần ghi này), tháng sử dụng = tháng ghi chỉ số ----
-      const terms = contractTermsAt(c, clip(readDate, c.start, c.end || readDate));
+      // Khoảng đo (lần ghi trước, lần ghi này] phải được HĐ + xác nhận hợp lệ phủ (hoặc khép bên trong khoảng đo).
+      const nextOf = d => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + 1); return x.toISOString().slice(0, 10); };
+      const usageCov = usageIds.has(c.id) && CS() ? CS().chargeCoverage(c, nextOf(win.from), win.to) : null;
+      const usageBlocked = !!(usageCov && usageCov.applicable && usageCov.gap);
+      const terms = contractTermsAt(c, clip(readDate, c.start, usageCov && usageCov.billTo ? usageCov.billTo : (c.end || readDate)));
+      const usageTermsDay = clip(readDate, c.start, usageCov && usageCov.billTo ? usageCov.billTo : (c.end || readDate));
       // HINH_THUC_THU_DIEN_NUOC: chợ thu điện, nước chia đều như dịch vụ → không tạo dòng theo công tơ.
       const applies = chargeApplies(market, A.SERVICE_CFG && A.SERVICE_CFG.utilityMode(market) === 'SERVICE' ? Object.assign({}, c.serviceApplicability || {}, { electricity: false, water: false }) : (c.serviceApplicability || {}), readDate);
       const sharedMeter = (meterUsers.get(st.id) || []).length > 1;
       if (usageIds.has(c.id) && sharedMeter && (applies.electricity || applies.water)) warning(out, { code: 'SHARED_METER_READING', contractId: c.id, traderId: t.id, businessPointId: st.id, message: 'Nhiều hợp đồng cùng dùng chỉ số điện, nước của điểm ' + st.code + ' trong đợt này — cần xử lý trước khi tính (không tính một chỉ số hai lần).' });
       const reading = A.db.readings.find(x => x.stallId === st.id && (x.billingPeriodId === bp.id || (!x.billingPeriodId && x.period === period)));
-      if (usageIds.has(c.id) && !sharedMeter) [['electricity', 'ELECTRICITY', 'elecPrev', 'elecCur', 'elecPrice', 'elecUnit', 'điện', 'elecAvg'], ['water', 'WATER', 'waterPrev', 'waterCur', 'waterPrice', 'waterUnit', 'nước', 'waterAvg']].forEach(x => {
+      if (usageBlocked && (applies.electricity || applies.water)) coverageWarning(out, 'USAGE', usageCov, { contractId: c.id, traderId: t.id, businessPointId: st.id, chargeType: 'UTILITY', usageWindow: { from: win.from, to: win.to } }, 'khoảng đo ' + U.dmy(win.from) + ' → ' + U.dmy(win.to));
+      if (usageIds.has(c.id) && !sharedMeter && !usageBlocked) [['electricity', 'ELECTRICITY', 'elecPrev', 'elecCur', 'elecPrice', 'elecUnit', 'điện', 'elecAvg'], ['water', 'WATER', 'waterPrev', 'waterCur', 'waterPrice', 'waterUnit', 'nước', 'waterAvg']].forEach(x => {
         if (!applies[x[0]]) return;
         // KHOA_GIA_THEO_HOP_DONG: giá điện / nước đã khóa trên hợp đồng (chụp theo kind tại ngày bắt đầu).
         const locked = terms && terms[x[0]];
         const utility = locked ? { id: locked.policyId, legalBasis: { docNo: locked.docNo || '' }, [x[4]]: locked.price, [x[5]]: locked.unit } : null;
         if (!utility) return warning(out, { code: 'MISSING_UTILITY_POLICY', contractId: c.id, businessPointId: st.id, chargeType: x[1], message: 'Hợp đồng chưa có giá ' + x[6] + ' đã khóa.' });
-        if (!reading || reading[x[3]] == null || reading[x[2]] == null || reading.reviewRequired) return warning(out, { code: 'MISSING_METER_READING', contractId: c.id, businessPointId: st.id, chargeType: x[1], message: 'Thiếu chỉ số ' + x[6] + ' đã hợp lệ.' });
+        // Kỳ đã hoàn tất ghi chỉ số nhưng điểm này chưa có chỉ số hợp lệ → NV thu phí ghi BỔ SUNG (không mở lại cả kỳ).
+        if (!reading || reading[x[3]] == null || reading[x[2]] == null || reading.reviewRequired) return warning(out, MP().meterCompletedRecorded(bp)
+          ? { code: 'MISSING_METER_READING', supplementRequired: true, contractId: c.id, traderId: t.id, businessPointId: st.id, chargeType: x[1], message: 'Điểm ' + st.code + ' chưa có chỉ số ' + x[6] + ' hợp lệ sau khi kỳ đã hoàn tất ghi chỉ số. Cần NV thu phí ghi bổ sung chỉ số.' }
+          : { code: 'MISSING_METER_READING', contractId: c.id, businessPointId: st.id, chargeType: x[1], message: 'Thiếu chỉ số ' + x[6] + ' đã hợp lệ.' });
         const qty = Number(reading[x[3]]) - Number(reading[x[2]]);
         if (qty < 0) return warning(out, { code: 'INVALID_METER_READING', contractId: c.id, businessPointId: st.id, chargeType: x[1], message: 'Chỉ số ' + x[6] + ' mới nhỏ hơn chỉ số cũ.' });
         const price = Number(utility[x[4]] || 0), amount = qty * price, qtyUnit = consumptionUnit(utility[x[5]]);
         // Cảnh báo tiêu thụ bất thường chỉ chặn khi NV CHƯA kiểm tra/xác nhận chỉ số.
         if (Number(reading[x[7]]) && qty > Number(reading[x[7]]) * 1.5 && !MP().readingConfirmed(reading)) warning(out, { code: 'ABNORMAL_CONSUMPTION', contractId: c.id, traderId: t.id, businessPointId: st.id, chargeType: x[1], message: 'Sản lượng ' + x[6] + ' cao bất thường, cần xử lý ở dữ liệu nguồn.' });
-        const key = x[1] + '|' + c.id, row = draft(Object.assign({ sourceKey: key }, common), { chargeType: x[1], sourceType: 'METER_READING', sourceId: st.id + '|' + period + '|' + x[0], name: x[6].charAt(0).toUpperCase() + x[6].slice(1) + ' ' + monthLabel(usageMonth), businessPointId: st.id, contractId: c.id, meter: { previous: Number(reading[x[2]]), current: Number(reading[x[3]]), consumption: qty, unit: qtyUnit, readDate, usageFrom: win.from, usageTo: win.to }, policyId: utility.id, policyReference: (utility.legalBasis || {}).docNo || '', quantity: qty, quantityUnit: qtyUnit, unit: utility[x[5]], unitPrice: price, usageMonth, chargeMonth: usageMonth, usageWindow: { from: win.from, to: win.to }, feePeriod: usageMonth, amount, explanation: Number(reading[x[3]]).toLocaleString('vi-VN') + ' − ' + Number(reading[x[2]]).toLocaleString('vi-VN') + ' = ' + qty + ' ' + qtyUnit });
+        const key = x[1] + '|' + c.id, row = draft(Object.assign({ sourceKey: key }, common), { chargeType: x[1], sourceType: 'METER_READING', sourceId: st.id + '|' + period + '|' + x[0], name: x[6].charAt(0).toUpperCase() + x[6].slice(1) + ' ' + monthLabel(usageMonth), businessPointId: st.id, contractId: c.id, meter: { previous: Number(reading[x[2]]), current: Number(reading[x[3]]), consumption: qty, unit: qtyUnit, readDate, usageFrom: win.from, usageTo: win.to }, policyId: utility.id, policyReference: (utility.legalBasis || {}).docNo || '', quantity: qty, quantityUnit: qtyUnit, unit: utility[x[5]], unitPrice: price, coverage: coverageSnapshot(usageCov), priceSource: priceSourceOf(c, usageTermsDay, utility.id, price, utility[x[5]]), usageMonth, chargeMonth: usageMonth, usageWindow: { from: win.from, to: win.to }, feePeriod: usageMonth, amount, explanation: Number(reading[x[3]]).toLocaleString('vi-VN') + ' − ' + Number(reading[x[2]]).toLocaleString('vi-VN') + ' = ' + qty + ' ' + qtyUnit });
         out.drafts.push(row);
       });
       // ---- Dịch vụ: tháng sử dụng, phí theo tháng (không chia ngày) — chỉ khi hợp đồng có hiệu lực trong tháng đó ----
       const serviceApplies = chargeApplies(market, c.serviceApplicability || {}, usageRange.to).marketService;
-      if (serviceIds.has(c.id) && serviceApplies) {
-        const sTerms = contractTermsAt(c, clip(usageRange.to, c.start, c.end || usageRange.to));
+      const serviceCov = serviceIds.has(c.id) && serviceApplies && CS() ? CS().chargeCoverage(c, usageRange.from, usageRange.to) : null;
+      if (serviceCov && serviceCov.applicable && serviceCov.gap) coverageWarning(out, 'SERVICE', serviceCov, { contractId: c.id, traderId: t.id, businessPointId: st.id, chargeType: 'MARKET_SERVICE', chargeMonth: usageMonth }, monthLabel(usageMonth));
+      if (serviceIds.has(c.id) && serviceApplies && !(serviceCov && serviceCov.gap)) {
+        // GIẢ ĐỊNH prototype (chưa xác minh với đơn vị quản lý): dịch vụ thu TRỌN tháng, không chia ngày, kể cả khi chỉ
+        // sử dụng một phần tháng. Giữ nguyên cách tính hiện có; chỉ cảnh báo (không chặn) để Tổ trưởng biết.
+        if (serviceCov && serviceCov.billTo && serviceCov.billTo < usageRange.to) warning(out, { severity: 'WARNING', code: 'SERVICE_FULL_MONTH_ASSUMPTION', contractId: c.id, traderId: t.id, businessPointId: st.id, chargeType: 'MARKET_SERVICE', message: 'Dịch vụ ' + monthLabel(usageMonth) + ': sử dụng đến ' + U.dmy(serviceCov.billTo) + ' nhưng thu trọn tháng (giả định của prototype, chưa xác minh chính sách).' });
+        const sTermsDay = clip(usageRange.to, c.start, serviceCov && serviceCov.billTo ? serviceCov.billTo : (c.end || usageRange.to));
+        const sTerms = contractTermsAt(c, sTermsDay);
         const services = sTerms && Array.isArray(sTerms.services) ? sTerms.services : [];
         if (!services.length) warning(out, { code: 'MISSING_SERVICE_POLICY', contractId: c.id, traderId: t.id, businessPointId: st.id, message: 'Hợp đồng đăng ký Dịch vụ nhưng chưa có bảng giá dịch vụ đã khóa.' });
-        services.forEach(s => { const qty = s.calcMethod === 'area' ? Number(st.area || 0) : 1, amount = s.calcMethod === 'area' ? Math.round(qty * Number(s.amount || 0)) : Number(s.amount || 0), key = 'SERVICE|' + c.id + '|' + s.serviceId, row = draft(Object.assign({ sourceKey: key }, common), { chargeType: 'MARKET_SERVICE', sourceType: 'SERVICE_POLICY', sourceId: s.serviceId, name: 'Dịch vụ ' + monthLabel(usageMonth) + ' · ' + s.name, businessPointId: st.id, contractId: c.id, policyId: s.serviceId, policyReference: s.docNo || '', quantity: qty, unit: s.unit, unitPrice: Number(s.amount || 0), usageMonth, chargeMonth: usageMonth, feePeriod: usageMonth, amount, explanation: s.calcMethod === 'area' ? qty + ' m² × ' + Number(s.amount || 0).toLocaleString('vi-VN') + ' ' + s.unit : 'Mức thu gói dịch vụ đang áp dụng.' }); out.drafts.push(row); });
+        services.forEach(s => { const qty = s.calcMethod === 'area' ? Number(st.area || 0) : 1, amount = s.calcMethod === 'area' ? Math.round(qty * Number(s.amount || 0)) : Number(s.amount || 0), key = 'SERVICE|' + c.id + '|' + s.serviceId, row = draft(Object.assign({ sourceKey: key }, common), { chargeType: 'MARKET_SERVICE', sourceType: 'SERVICE_POLICY', sourceId: s.serviceId, name: 'Dịch vụ ' + monthLabel(usageMonth) + ' · ' + s.name, businessPointId: st.id, contractId: c.id, policyId: s.serviceId, policyReference: s.docNo || '', quantity: qty, unit: s.unit, unitPrice: Number(s.amount || 0), coverage: coverageSnapshot(serviceCov), priceSource: priceSourceOf(c, sTermsDay, s.serviceId, s.amount, s.unit), fullMonthAssumption: !!(serviceCov && serviceCov.billTo && serviceCov.billTo < usageRange.to), usageMonth, chargeMonth: usageMonth, feePeriod: usageMonth, amount, explanation: s.calcMethod === 'area' ? qty + ' m² × ' + Number(s.amount || 0).toLocaleString('vi-VN') + ' ' + s.unit : 'Mức thu gói dịch vụ đang áp dụng.' }); out.drafts.push(row); });
       }
     });
     // Issued receivables are immutable. Recalculation replaces only this period's
@@ -328,7 +368,7 @@
     if (U.log) U.log('Phát hành ' + issued.length + ' khoản phải thu kỳ ' + (bp.label || period) + ' tại ' + ((U.market(market) || {}).name || market));
     notifyIssued(market, period, issued, actor); A.save(); return { issued, blocking: [] };
   }
-  Object.assign(billing, { ensure, buildPriceTerms, contractTermsAt, freezeContractTerms, calculatePeriod, drafts, warnings, traderGroups, issue, nextMonth, daysInPeriod, landBillableDays, landAmount, LAND_MONTH_DAYS, consumptionUnit });
+  Object.assign(billing, { ensure, buildPriceTerms, contractTermsAt, priceSourceOf, freezeContractTerms, calculatePeriod, drafts, warnings, traderGroups, issue, nextMonth, daysInPeriod, landBillableDays, landAmount, LAND_MONTH_DAYS, consumptionUnit });
   // KHOA_GIA_THEO_HOP_DONG: migration cộng thêm, không đổi khóa localStorage và chạy lặp an toàn.
   document.addEventListener('DOMContentLoaded', () => {
     let migrated = false;

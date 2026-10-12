@@ -65,7 +65,8 @@ function createApp(root, opts) {
   };
   ctx.window = ctx; ctx.self = ctx; ctx.globalThis = ctx;
   // KY_11_DA_PHAT_HANH: test hồi quy giữ kỳ 11 ở bước ghi chỉ số; opts.seedIssue = true để nạp như trình duyệt.
-  if (!opts.seedIssue) ctx.__SKIP_SEED_ISSUE = true;
+  // opts.beforeSeedIssue(A): bước nghiệp vụ của fixture chạy TRƯỚC khi phát hành kỳ seed (vd Tổ trưởng xác nhận dự kiến).
+  if (!opts.seedIssue || opts.beforeSeedIssue) ctx.__SKIP_SEED_ISSUE = true;
   ctx.addEventListener = (ev, fn) => { (winListeners[ev] = winListeners[ev] || []).push(fn); };
   vm.createContext(ctx);
   if (opts.storage) Object.keys(opts.storage).forEach(k => localStorage.setItem(k, opts.storage[k]));
@@ -76,6 +77,12 @@ function createApp(root, opts) {
   const flush = () => { let n = 0; while (timers.length && n++ < 50) timers.shift()(); };
   (listeners.DOMContentLoaded || []).forEach(fn => fn());
   flush();
+  if (opts.seedIssue && opts.beforeSeedIssue) {
+    opts.beforeSeedIssue(A);
+    delete ctx.__SKIP_SEED_ISSUE;
+    if (A.features.finance.marketPeriod.applySeedIssue()) A.reindex();
+    flush();
+  }
   const trace = { saves: 0, toasts: [] };
   const origSave = A.save; A.save = function () { trace.saves++; return origSave.apply(this, arguments); };
   const origToast = A.U.toast; A.U.toast = function (m) { trace.toasts.push(String(m)); try { return origToast.apply(this, arguments); } catch (e) { return undefined; } };
@@ -88,4 +95,17 @@ function createApp(root, opts) {
     go: r => { location.hash = '#/' + r; flush(); }
   };
 }
-module.exports = { createApp, indexScripts };
+// Giai đoạn B (10/2026): seed có HĐ hết hạn giữa tháng mặt bằng của kỳ seed → chợ bị chặn phát hành. Fixture đi đúng luồng:
+// Tổ trưởng (NV01) xác nhận DỰ KIẾN tiếp tục sử dụng đến hết tháng mặt bằng cho các HĐ đó, rồi mới phát hành kỳ seed.
+// Không sửa dữ liệu seed.
+function confirmEndingForSeed(A) {
+  const CS = A.features.contracts.service, ui = A.ui, keep = [ui.sessionAccountId, ui.currentDemoAccountId, ui.market];
+  const login = m => { ui.sessionAccountId = 'AC-NV01'; ui.currentDemoAccountId = 'AC-NV01'; ui.market = m; A.syncAccountContext(); };
+  A.db.contracts.filter(c => CS.usageState(c) === 'ENDING_UNCOVERED').forEach(c => {
+    const em = CS.endingLandMonth(c); login(c.market);
+    const r = CS.confirmContinuation(c.id, { kind: 'CONTINUING', from: CS.nextContinuationFrom(c), until: em.landTo, evidence: 'COMMITMENT', note: 'Fixture: tiểu thương cam kết tiếp tục thuê' });
+    if (r.error) throw new Error('confirmEndingForSeed ' + c.id + ': ' + r.message);
+  });
+  [ui.sessionAccountId, ui.currentDemoAccountId, ui.market] = keep; A.syncAccountContext();
+}
+module.exports = { createApp, indexScripts, confirmEndingForSeed };

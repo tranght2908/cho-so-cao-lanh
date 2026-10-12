@@ -4,7 +4,7 @@
  * unit (kWh / m³), without writing anything. No "old rule" label is invented (no reliable version metadata). */
 const assert = require('assert');
 const path = require('path');
-const { createApp } = require('./harness');
+const { createApp, confirmEndingForSeed } = require('./harness');
 
 const ROOT = path.resolve(__dirname, '../..');
 let passed = 0;
@@ -39,7 +39,7 @@ const detail = (h, traderId, periodId) => {
 
 // ---- B. Issued receivable whose lines have the shape produced before the 10/2026 month rules ----
 {
-  const h = createApp(ROOT, { seedIssue: true }), A = h.A, MP = A.features.finance.marketPeriod;
+  const h = createApp(ROOT, { seedIssue: true, beforeSeedIssue: confirmEndingForSeed }), A = h.A, MP = A.features.finance.marketPeriod;
   const mp = MP.get('CL', '2026-11');
   const inv = A.db.invoices.find(i => i.traderId === 'TT0001' && i.billingPeriodId === mp.id);
   assert(inv && MP.isIssued(mp), 'fixture: issued CL_2026-11 receivable');

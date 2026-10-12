@@ -37,6 +37,14 @@
     c.expiryNotes.push(note);
     return note;
   };
+  // Xác nhận tình trạng sử dụng của hợp đồng hết hạn: chỉ thêm bản ghi; hủy là đánh dấu trên bản ghi (service).
+  repository.addContinuation = function (id, record) {
+    const c = repository.getById(id);
+    if (!c) return null;
+    c.continuations = Array.isArray(c.continuations) ? c.continuations : [];
+    c.continuations.push(record);
+    return record;
+  };
   // Signed paper copy metadata (mock upload): same shape and page numbering as legacy.
   repository.addSignedCopy = function (id, file) {
     const c = repository.getById(id);

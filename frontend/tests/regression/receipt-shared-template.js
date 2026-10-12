@@ -2,9 +2,9 @@
  * cho cùng một giao dịch. Dữ liệu: kỳ 11/2026 đã phát hành (opts.seedIssue), bà Hoa chuyển khoản đủ. */
 const assert = require('assert');
 const path = require('path');
-const { createApp } = require('./harness');
+const { createApp, confirmEndingForSeed } = require('./harness');
 
-const h = createApp(path.resolve(__dirname, '../..'), { seedIssue: true });
+const h = createApp(path.resolve(__dirname, '../..'), { seedIssue: true, beforeSeedIssue: confirmEndingForSeed });
 const A = h.A, U = A.U, R = A.features.finance.receipt;
 assert(R && typeof R.html === 'function', 'mẫu biên lai dùng chung');
 const inv = A.db.invoices.find(i => i.traderId === 'TT0001' && i.period === '2026-11');

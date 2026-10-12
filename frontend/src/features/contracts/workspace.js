@@ -10,7 +10,7 @@
   'use strict';
   const U = A.U, ui = A.ui;
   const CS = A.features.contracts.service, TS = A.features.traders.service, BP = A.features.businessPoints.service;
-  const st = () => ui.contractWs || (ui.contractWs = { mode: 'list', q: '', status: '', expiring: '', from: '', to: '' });
+  const st = () => ui.contractWs || (ui.contractWs = { mode: 'list', q: '', status: '', expiring: '', usage: '', from: '', to: '' });
   const pointOf = c => BP.get(c.businessPointId || c.stallId);
   const traderOf = c => TS.getProfile(c.traderId);
   const areaType = p => p ? (U.areaTypeLabel(p.areaTypeId || p.areaType) || p.areaType || '—') : '—';
@@ -22,6 +22,23 @@
   const life = c => CS.displayStatus(c);
   const expiring = c => CS.isExpiringSoon(c);
   const isLegacy = c => !!CS.DISPLAY_STATUS[life(c)].legacy;
+  // Hết hạn – chờ xử lý: số ngày quá hạn + tình trạng xác nhận sử dụng (contracts.service, dùng chung).
+  const usage = c => CS.usageState(c);
+  const canConfirmUse = c => CS.canConfirmContinuation(c);
+  const ENDING = ['ENDING_UNCOVERED', 'ENDING_PLANNED', 'ENDING_PLANNED_STOP'];
+  function usageTag(c) { const k = usage(c); if (!k) return ''; const d = CS.USAGE_STATE[k]; return `<span class="tag ${d.tone}">${d.label}</span>`; }
+  // Dòng phụ ở cột Trạng thái: quá hạn / sắp hết hạn trong tháng mặt bằng + căn cứ gần nhất (thực tế hay DỰ KIẾN).
+  function usageLine(c) {
+    const k = usage(c); if (!k) return '';
+    const through = CS.confirmedThrough(c), stop = CS.stoppedRecord(c), plan = CS.plannedStopRecord(c), last = CS.latestContinuation(c), planned = last && CS.isPlanned(last);
+    if (ENDING.indexOf(k) !== -1) {
+      const tail = k === 'ENDING_UNCOVERED' ? 'Chưa xác nhận dự kiến' : k === 'ENDING_PLANNED_STOP' ? 'Dự kiến ngừng từ ' + U.dmy(plan.plannedStopOn) : 'Dự kiến sử dụng đến ' + U.dmy(through);
+      return `<div class="small ctw-warn">Hết hạn ${U.dmy(c.end)}, trong tháng mặt bằng của kỳ thu</div><div class="small ${k === 'ENDING_UNCOVERED' ? 'ctw-danger' : 'muted'}">${tail}</div>`;
+    }
+    const tail = k === 'STOPPED' ? 'Ngừng sử dụng từ ' + U.dmy(stop.stoppedOn) : k === 'PLANNED_STOP' ? 'Dự kiến ngừng từ ' + U.dmy(plan.plannedStopOn) : k === 'UNCONFIRMED' ? 'Chưa xác nhận' : k === 'LAPSED' ? 'Xác nhận đã hết ' + U.dmy(through) : 'Xác nhận đến ' + U.dmy(through) + (planned ? ' (dự kiến)' : '');
+    return `<div class="small ctw-danger">Quá hạn ${CS.overdueDays(c)} ngày</div><div class="small ${k === 'CONFIRMED' ? 'muted' : 'ctw-warn'}">${tail}</div>`;
+  }
+  const USAGE_OPTIONS = [['', 'Tình trạng sử dụng: tất cả'], ['UNCONFIRMED', 'Chưa xác nhận'], ['CONFIRMED', 'Đang trong thời gian xác nhận'], ['EXPIRING', 'Xác nhận sắp hết (≤ ' + CS.CONTINUATION_WARN_DAYS + ' ngày)'], ['LAPSED', 'Xác nhận đã hết hiệu lực'], ['PLANNED_STOP', 'Dự kiến ngừng sử dụng'], ['STOPPED', 'Đã ngừng sử dụng – cần xử lý chấm dứt'], ['ENDING_UNCOVERED', 'Sắp hết hạn trong tháng mặt bằng – chưa xác nhận'], ['ENDING_PLANNED', 'Sắp hết hạn – đã xác nhận dự kiến'], ['ENDING_PLANNED_STOP', 'Sắp hết hạn – dự kiến ngừng']];
   // Mức thu + đơn vị: U.money đã có "đ" nên bỏ "đ" đầu đơn vị ("đ/m²/ngày" → "2.500 đ/m²/ngày").
   const price = (amount, unit) => { const u = String(unit || ''); return U.money(amount) + (!u ? '' : /^đ\//.test(u) ? U.esc(u.slice(1)) : ' ' + U.esc(u)); };
   const iso = d => d.getFullYear() + '-' + U.pad(d.getMonth() + 1) + '-' + U.pad(d.getDate());
@@ -39,7 +56,7 @@
   }
   // Nhãn trạng thái — đọc từ contracts.service.displayStatus (dùng chung với Mặt bằng / Điểm KD).
   function statusTag(c) { const d = CS.DISPLAY_STATUS[life(c)]; return `<span class="tag ${d.tone}">${d.label}</span>`; }
-  const STATUS_OPTIONS = [['', 'Tất cả trạng thái'], ['UPCOMING', 'Chưa hiệu lực'], ['ACTIVE', 'Còn hiệu lực'], ['EXPIRED', 'Đã hết hạn'], ['LEGACY', 'Dữ liệu cũ (chấm dứt / thanh lý)']];
+  const STATUS_OPTIONS = [['', 'Tất cả trạng thái'], ['UPCOMING', 'Chưa hiệu lực'], ['ACTIVE', 'Còn hiệu lực'], ['EXPIRED', 'Hết hạn – chờ xử lý'], ['LEGACY', 'Dữ liệu cũ (chấm dứt / thanh lý)']];
 
   // ================= Danh sách =================
   function filteredContracts() {
@@ -49,6 +66,7 @@
       if (q && ![c.id, t && t.name, t && t.phone, p && p.code].join(' ').toLowerCase().includes(q)) return false;
       if (s.status && (s.status === 'LEGACY' ? !isLegacy(c) : life(c) !== s.status)) return false;
       if (s.expiring && !(expiring(c) && left(c) <= Number(s.expiring))) return false;
+      if (s.usage && usage(c) !== s.usage) return false;
       // Khoảng hiệu lực: hợp đồng xuất hiện khi [start, end] giao với [Từ ngày, Đến ngày]
       // (start <= Đến ngày AND end >= Từ ngày); thiếu một đầu = không giới hạn đầu đó.
       if (s.from && c.end && c.end < s.from) return false;
@@ -59,13 +77,14 @@
   function listView() {
     const s = st(), all = CS.list().filter(c => c.market === ui.market), rows = filteredContracts();
     const kpi = (label, value, sub) => `<div class="card kpi"><div class="k-label">${label}</div><div class="k-value">${value}</div>${sub ? `<div class="k-sub">${sub}</div>` : ''}</div>`;
-    const kpis = `<div class="kpis ctw-kpis">${kpi('Tổng hợp đồng', all.length)}${kpi('Còn hiệu lực', all.filter(c => life(c) === 'ACTIVE').length)}${kpi('Sắp hết hạn', all.filter(expiring).length, 'Còn hiệu lực, ≤ 30 ngày')}${kpi('Đã hết hạn', all.filter(c => life(c) === 'EXPIRED').length)}</div>`;
+    const kpis = `<div class="kpis ctw-kpis">${kpi('Tổng hợp đồng', all.length)}${kpi('Còn hiệu lực', all.filter(c => life(c) === 'ACTIVE').length)}${kpi('Sắp hết hạn', all.filter(expiring).length, 'Còn hiệu lực, ≤ 30 ngày')}${(() => { const ex = all.filter(c => CS.isExpiredPending(c)), n = k => ex.filter(c => usage(c) === k).length, ending = all.filter(c => usage(c) === 'ENDING_UNCOVERED').length; return kpi('Hết hạn – chờ xử lý', ex.length, n('UNCONFIRMED') + ' chưa xác nhận · ' + (n('EXPIRING') + n('LAPSED')) + ' xác nhận sắp/đã hết' + (ending ? ' · ' + ending + ' sắp hết hạn chưa xác nhận dự kiến' : '')); })()}</div>`;
     const sel = (act, value, opts, label) => `<select class="input" data-ch="${act}" aria-label="${label}">${opts.map(o => `<option value="${o[0]}" ${String(value || '') === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>`;
-    const filtered = !!(s.q || s.status || s.expiring || s.from || s.to);
+    const filtered = !!(s.q || s.status || s.expiring || s.usage || s.from || s.to);
     const filters = `<div class="card ctw-filters"><div class="filters">
       <input class="input ctw-search" data-in="ctw-q" value="${U.esc(s.q || '')}" placeholder="Tìm mã HĐ, tên tiểu thương, SĐT, mã điểm" aria-label="Tìm kiếm hợp đồng">
       ${sel('ctw-status', s.status, STATUS_OPTIONS, 'Trạng thái')}
       ${sel('ctw-expiring', s.expiring, [['', 'Sắp hết hạn: tất cả'], ['30', 'Hết hạn ≤ 30 ngày'], ['15', 'Hết hạn ≤ 15 ngày']], 'Sắp hết hạn')}
+      ${sel('ctw-usage', s.usage, USAGE_OPTIONS, 'Tình trạng sử dụng sau hết hạn')}
       <fieldset class="ctw-range" title="Hợp đồng có khoảng hiệu lực giao với khoảng đã chọn"><legend>Khoảng hiệu lực</legend>
         <label class="ctw-date"><span>Từ ngày</span><input class="input" type="date" data-ch="ctw-from" value="${U.esc(s.from || '')}" aria-label="Khoảng hiệu lực từ ngày"></label>
         <label class="ctw-date"><span>Đến ngày</span><input class="input" type="date" data-ch="ctw-to" value="${U.esc(s.to || '')}" aria-label="Khoảng hiệu lực đến ngày"></label></fieldset>
@@ -74,7 +93,7 @@
     const body = rows.slice(pg.start, pg.end).map(c => {
       const t = traderOf(c), p = pointOf(c);
       const due = expiring(c) ? `<div class="small ${left(c) <= 15 ? 'ctw-danger' : 'ctw-warn'}">Còn ${left(c)} ngày</div>` : '';
-      return `<tr><td class="nowrap"><b>${U.esc(c.id)}</b></td><td>${t ? `<b>${U.esc(t.name)}</b><div class="small muted">${U.esc(t.phone || '')}</div>` : '—'}</td><td class="nowrap">${p ? U.esc(p.code) : '—'}</td><td>${U.esc(areaType(p))}</td><td class="nowrap">${U.dmy(c.start)}</td><td class="nowrap">${U.dmy(c.end)}</td><td class="nowrap">${durationText(c.start, c.end)}</td><td>${statusTag(c)}${due}</td><td><button class="btn sm" data-act="ct-view" data-id="${U.esc(c.id)}">Xem</button></td></tr>`;
+      return `<tr><td class="nowrap"><b>${U.esc(c.id)}</b></td><td>${t ? `<b>${U.esc(t.name)}</b><div class="small muted">${U.esc(t.phone || '')}</div>` : '—'}</td><td class="nowrap">${p ? U.esc(p.code) : '—'}</td><td>${U.esc(areaType(p))}</td><td class="nowrap">${U.dmy(c.start)}</td><td class="nowrap">${U.dmy(c.end)}</td><td class="nowrap">${durationText(c.start, c.end)}</td><td>${statusTag(c)}${due}${usageLine(c)}</td><td><button class="btn sm" data-act="ct-view" data-id="${U.esc(c.id)}">Xem</button></td></tr>`;
     });
     const cols = ['Mã HĐ', 'Tiểu thương', 'Điểm KD', 'Loại diện tích', 'Ngày bắt đầu', 'Ngày kết thúc', 'Thời hạn', 'Trạng thái', 'Thao tác'].map(t => ({ t }));
     const empty = all.length ? 'Không có hợp đồng phù hợp bộ lọc.' : 'Chợ chưa có hợp đồng nào.';
@@ -207,15 +226,50 @@
     // Chỉ còn thao tác In (nếu có quyền). Gia hạn / Chấm dứt / Thanh lý đã retire khỏi UI ở mọi trạng thái.
     const btn = A.canDo('hop-dong.in', c.market) ? [`<button class="btn" data-act="ct-print" data-id="${U.esc(c.id)}">In</button>`] : [];
     // Hết hạn chỉ là cảnh báo của hợp đồng: không đổi điểm KD, hồ sơ hay danh sách đăng ký thuê.
-    const notice = life(c) === 'EXPIRED' ? `<div class="note warn ctw-expired">Hợp đồng này đã hết hạn từ ngày ${U.dmy(c.end)}.</div>`
+    // Hết hạn – chờ xử lý / sắp hết hạn trong tháng mặt bằng: cảnh báo + căn cứ gần nhất (không đổi trạng thái HĐ).
+    const mode = CS.continuationMode(c), k = usage(c);
+    const usageNotice = () => {
+      const through = CS.confirmedThrough(c), stop = CS.stoppedRecord(c), plan = CS.plannedStopRecord(c), last = CS.latestContinuation(c), planned = last && CS.isPlanned(last);
+      if (k === 'STOPPED') return `Đã xác nhận ngừng sử dụng từ ${U.dmy(stop.stoppedOn)} — cần xử lý chấm dứt/quyết toán hợp đồng.`;
+      if (k === 'PLANNED_STOP' || k === 'ENDING_PLANNED_STOP') return `Dự kiến ngừng sử dụng từ ${U.dmy(plan.plannedStopOn)} (căn cứ: ${U.esc(CS.evidenceLabel(plan.evidence))}) — DỰ KIẾN, chưa phải tình trạng thực tế; điểm kinh doanh không thay đổi.`;
+      if (k === 'UNCONFIRMED') return '⚠ Chưa xác nhận tình trạng sử dụng thực tế của điểm kinh doanh.';
+      if (k === 'ENDING_UNCOVERED') return `⚠ Hợp đồng hết hạn trước khi hết tháng mặt bằng ${U.dmy(CS.endingLandMonth(c).landTo)} của kỳ thu đang mở. Cần xác nhận dự kiến tiếp tục hoặc ngừng sử dụng — nếu không, chợ bị chặn phát hành.`;
+      if (k === 'LAPSED') return `⚠ Xác nhận tiếp tục sử dụng đã hết hiệu lực từ ${U.dmy(CS.nextContinuationFrom(c))}. Cần xác nhận bổ sung hoặc xử lý hợp đồng.`;
+      return `Đã xác nhận ${planned ? 'DỰ KIẾN ' : ''}tiếp tục sử dụng đến ${U.dmy(through)}${mode === 'EXPIRED' ? ` (còn ${U.days(U.today(), through)} ngày)` : ''}.`;
+    };
+    const verify = CS.plannedToVerify(c);
+    const notice = life(c) === 'EXPIRED' ? `<div class="note warn ctw-expired"><b>Hết hạn – chờ xử lý</b> · Hợp đồng này đã hết hạn từ ngày ${U.dmy(c.end)}${k ? ` · Quá hạn ${CS.overdueDays(c)} ngày` : ''}.${k ? `<div>${usageNotice()}</div>` : ''}${verify.length ? `<div>⚠ Có ${verify.length} bản xác nhận dự kiến cần kiểm tra với tình trạng sử dụng thực tế.</div>` : ''}</div>`
+      : ENDING.indexOf(k) !== -1 ? `<div class="note warn ctw-expired"><b>Còn hiệu lực đến ${U.dmy(c.end)}</b> · Sắp hết hạn trong tháng mặt bằng của kỳ thu.<div>${usageNotice()}</div></div>`
       : isLegacy(c) ? '<div class="note ctw-legacy">Hợp đồng dữ liệu cũ (đã chấm dứt / thanh lý theo quy trình trước đây) — chỉ đọc.</div>' : '';
+    // Lịch sử xác nhận tình trạng sử dụng — RIÊNG với ghi chú hết hạn. Bản đã hủy / bị thay thế vẫn hiển thị (không xóa vật lý).
+    const confirmations = CS.continuations(c), latest = CS.latestContinuation(c);
+    const isoTime = v => v ? `${U.dmy(String(v).slice(0, 10))} ${String(v).slice(11, 16)}` : '—';
+    const recRange = r => r.kind === 'STOPPED' ? 'Ngừng từ ' + U.dmy(r.stoppedOn) : r.kind === 'PLANNED_STOP' ? 'Dự kiến ngừng từ ' + U.dmy(r.plannedStopOn) : U.dmy(r.from) + ' → ' + U.dmy(r.until);
+    const recKind = r => r.kind === 'STOPPED' ? 'Đã ngừng sử dụng' : r.kind === 'PLANNED_STOP' ? 'Dự kiến ngừng sử dụng' : r.basis === 'PLANNED' ? 'Dự kiến tiếp tục sử dụng' : 'Vẫn kinh doanh';
+    const basisTag = r => CS.isPlanned(r) ? '<span class="tag info">Dự kiến</span>' + (r.verifiedAt ? ' <span class="tag ok">Đã kiểm tra thực tế</span>' : '') : '<span class="tag ok">Thực tế</span>';
+    const recState = r => r.voidedAt ? ' <span class="tag">Đã hủy</span>' : r.supersededAt ? ` <span class="tag">Đã thay thế bởi ${U.esc(r.supersededById)}</span>` : CS.usedForIssuance(r.id) ? ' <span class="tag warn">Đã dùng để phát hành</span>' : '';
+    const recActions = r => {
+      if (!CS.isValidContinuation(r) || !canConfirmUse(c)) return '';
+      const out = [];
+      if (verify.indexOf(r) !== -1) out.push(`<button class="btn sm" data-act="ct-continue-verify" data-id="${U.esc(c.id)}" data-rec="${U.esc(r.id)}">Đúng thực tế</button>`, `<button class="btn sm" data-act="ct-continue-open" data-id="${U.esc(c.id)}" data-kind="${r.kind === 'PLANNED_STOP' ? 'CONTINUING' : 'STOPPED'}">Thực tế khác</button>`);
+      if (latest && latest.id === r.id && CS.canVoidContinuation(c, r.id)) out.push(`<button class="btn sm" data-act="ct-continue-void-open" data-id="${U.esc(c.id)}" data-rec="${U.esc(r.id)}">Hủy xác nhận</button>`);
+      return out.join(' ');
+    };
+    const recRows = confirmations.map(r => `<tr class="${CS.isValidContinuation(r) ? '' : 'ctw-voided'}"><td class="nowrap">${recRange(r)}</td><td>${recKind(r)} ${basisTag(r)}${recState(r)}</td><td>${r.evidence ? `<div class="small"><b>Căn cứ:</b> ${U.esc(CS.evidenceLabel(r.evidence))}</div>` : ''}${U.esc(r.note || '')}${r.voidedAt ? `<div class="small muted">Hủy bởi ${U.esc(r.voidedBy || 'Không rõ')} lúc ${U.esc(isoTime(r.voidedAt))} · Lý do: ${U.esc(r.voidReason || '')}</div>` : ''}${r.supersededAt ? `<div class="small muted">Thay thế bởi ${U.esc(r.supersededBy || '')} lúc ${U.esc(isoTime(r.supersededAt))} · ${U.esc(r.supersedeReason || '')}</div>` : ''}${r.verifiedAt ? `<div class="small muted">Kiểm tra thực tế bởi ${U.esc(r.verifiedBy || '')} lúc ${U.esc(isoTime(r.verifiedAt))}</div>` : ''}</td><td>${U.esc(r.confirmedBy || 'Không rõ')}</td><td class="nowrap">${U.esc(isoTime(r.confirmedAt))}</td><td>${recActions(r)}</td></tr>`).join('');
+    const canAddConfirm = !!mode && canConfirmUse(c) && !CS.stoppedRecord(c);
+    const confirmHint = mode ? `<div class="small muted ctw-continuation-hint">${usageTag(c)} Khoảng xác nhận phải liên tục từ ngày sau ngày hết hạn, tối đa ${CS.CONTINUATION_MAX_MONTHS} tháng mỗi lần. ${mode === 'ENDING' ? 'Trước ngày hết hạn chỉ được xác nhận DỰ KIẾN (bắt buộc căn cứ).' : 'Xác nhận không làm hợp đồng trở lại Còn hiệu lực.'}</div>` : '';
+    const confirmTable = recRows ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Thời gian xác nhận</th><th>Tình trạng</th><th>Căn cứ / ghi chú</th><th>Người xác nhận</th><th>Thời điểm thao tác</th><th></th></tr></thead><tbody>${recRows}</tbody></table></div>` : '<div class="small muted">Chưa có xác nhận tình trạng sử dụng nào.</div>';
+    // Chênh lệch sau phát hành (Giai đoạn B: chỉ ghi nhận; quyết toán ở Giai đoạn C).
+    const flags = CS.settlementFlags(c);
+    const flagBlock = !flags.length ? '' : `<section class="card ctw-block ctw-settlement"><h3>Chênh lệch cần quyết toán</h3><div class="small muted" style="margin-bottom:8px">Phát hiện khi tình trạng sử dụng thực tế khác căn cứ đã dùng để phát hành. Khoản phải thu, biên lai đã phát hành không thay đổi; xử lý hoàn / thu bổ sung / đối trừ thuộc giai đoạn quyết toán.</div><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Mã</th><th>Khoản phải thu</th><th>Tháng</th><th>Đã phát hành đến</th><th>Thực tế đến</th><th>Chênh lệch</th><th>Trạng thái</th></tr></thead><tbody>${flags.map(x => `<tr><td class="nowrap">${U.esc(x.id)}</td><td>${U.esc(x.invoiceId)}<div class="small muted">Mặt bằng</div></td><td>${U.esc(U.per ? U.per(x.month) : x.month)}</td><td>${x.billedTo ? U.dmy(x.billedTo) : '—'} (${x.billedDays} ngày)</td><td>${x.actualTo ? U.dmy(x.actualTo) : '—'} (${x.actualDays} ngày)</td><td><b>${x.direction === 'UNDER' ? 'Thu thiếu' : 'Thu thừa'}</b> ${Math.abs(x.diffDays)} ngày · ≈ ${U.money(x.amountEstimate)}</td><td>${U.esc(CS.SETTLEMENT_STATUS[x.status] || x.status)}</td></tr>`).join('')}</tbody></table></div></section>`;
+    const confirmBlock = !mode && !confirmations.length ? '' : `<section class="card ctw-block ctw-continuations"><div class="row"><h3>Xác nhận tình trạng sử dụng</h3><span class="spacer"></span>${canAddConfirm ? `<button class="btn primary" data-act="ct-continue-open" data-id="${U.esc(c.id)}">${mode === 'ENDING' ? 'Xác nhận dự kiến sử dụng' : 'Xác nhận tiếp tục sử dụng'}</button>` : ''}</div>${confirmHint}${confirmTable}</section>`;
     const expiryNotes = CS.expiryNotes(c);
     const noteTime = n => n.createdAt ? `${U.dmy(String(n.createdAt).slice(0, 10))} ${String(n.createdAt).slice(11, 16)}` : '—';
     const expiryNotesBlock = life(c) !== 'EXPIRED' ? '' : `<section class="card ctw-block ctw-expiry-notes"><div class="row"><h3>Ghi chú hợp đồng hết hạn</h3><span class="spacer"></span>${canAddExpiryNote(c.market) ? `<button class="btn primary" data-act="ct-expiry-note-open" data-id="${U.esc(c.id)}">+ Thêm ghi chú</button>` : ''}</div>${expiryNotes.length ? `<div class="ctw-note-list">${expiryNotes.map(n => `<article class="ctw-note"><div class="ctw-note-meta"><b>${U.esc(n.createdBy || 'Không rõ')}</b><span>${U.esc(noteTime(n))}</span></div><div>${U.esc(n.content || '')}</div></article>`).join('')}</div>` : '<div class="small muted">Chưa có ghi chú nào cho hợp đồng đã hết hạn này.</div>'}</section>`;
     const hist = (c.history || []).slice(0, 8).map(h => `<tr><td class="nowrap">${U.esc(h.at || '—')}</td><td>${U.esc(h.action || '')}</td><td>${U.esc(h.detail || '')}</td></tr>`).join('');
     return `<div class="ctw-page ctw-form"><div class="page-head ctw-detail-head"><div><h2>Hợp đồng ${U.esc(c.id)} ${statusTag(c)}</h2><p>${t ? U.esc(t.name) : '—'} · Điểm ${p ? U.esc(p.code) : '—'}</p></div><div class="ctw-actions">${btn.join('')}<button class="btn" data-act="ctw-list">← Danh sách</button></div></div>${notice}
       <div class="ctw-detail-grid">${block('Thông tin hợp đồng', info)}${block('Tiểu thương', traderBlock)}${block('Điểm kinh doanh', pointBlock)}${block('Khoản thu áp dụng', charges)}</div>
-      ${expiryNotesBlock}${hist ? `<section class="card ctw-block"><h3>Lịch sử</h3><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Thời gian</th><th>Sự kiện</th><th>Mô tả</th></tr></thead><tbody>${hist}</tbody></table></div></section>` : ''}</div>`;
+      ${confirmBlock}${flagBlock}${expiryNotesBlock}${hist ? `<section class="card ctw-block"><h3>Lịch sử</h3><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Thời gian</th><th>Sự kiện</th><th>Mô tả</th></tr></thead><tbody>${hist}</tbody></table></div></section>` : ''}</div>`;
   }
 
   // ================= Điều hướng & handler =================
@@ -231,9 +285,10 @@
   A.IN['ctw-q'] = el => { st().q = el.value; ui.page.ctw = 0; A.render(); };
   A.CH['ctw-status'] = el => { st().status = el.value; ui.page.ctw = 0; A.render(); };
   A.CH['ctw-expiring'] = el => { st().expiring = el.value; ui.page.ctw = 0; A.render(); };
+  A.CH['ctw-usage'] = el => { st().usage = el.value; ui.page.ctw = 0; A.render(); };
   A.CH['ctw-from'] = el => { st().from = el.value; ui.page.ctw = 0; A.render(); };
   A.CH['ctw-to'] = el => { st().to = el.value; ui.page.ctw = 0; A.render(); };
-  A.ACT['ctw-clear'] = () => { Object.assign(st(), { q: '', status: '', expiring: '', from: '', to: '' }); ui.page.ctw = 0; A.render(); };
+  A.ACT['ctw-clear'] = () => { Object.assign(st(), { q: '', status: '', expiring: '', usage: '', from: '', to: '' }); ui.page.ctw = 0; A.render(); };
   A.ACT['ctw-list'] = () => { const s = st(); s.mode = 'list'; s.detailId = null; s.success = null; A.closeModal(); if (A.current !== 'hop-dong') A.go('hop-dong'); else A.render(); };
   // + Tạo hợp đồng: luôn bắt đầu từ hồ sơ có điểm chờ tạo hợp đồng (không nhập tiểu thương / giá tại đây).
   A.ACT['ct-new'] = el => {
@@ -311,6 +366,100 @@
     if (result.error) return U.toast(result.message);
     U.log('Thêm ghi chú hợp đồng hết hạn ' + c.id);
     A.closeModal(); A.render(); U.toast('Đã lưu ghi chú hợp đồng.');
+  };
+  // ---- Xác nhận / hủy xác nhận tình trạng sử dụng (quyền hop-dong.xac-nhan-su-dung; service kiểm tra lại) ----
+  // EXPIRED: Vẫn kinh doanh (thực tế) / Dự kiến ngừng / Đã ngừng (thực tế). ENDING (trước ngày hết hạn): chỉ DỰ KIẾN.
+  function contractHead(c) {
+    const t = traderOf(c), p = pointOf(c), last = CS.latestContinuation(c), mode = CS.continuationMode(c);
+    const lastText = !last ? 'Chưa có' : CS.continuationText(last) + (CS.isPlanned(last) ? '' : ' (thực tế)');
+    return `<dl class="kv"><dt>Mã hợp đồng</dt><dd><b>${U.esc(c.id)}</b></dd><dt>Tiểu thương</dt><dd>${U.esc(t ? t.name : '—')}</dd><dt>Điểm kinh doanh</dt><dd>${U.esc(p ? p.code : '—')}</dd><dt>Ngày hết hạn</dt><dd>${U.dmy(c.end)}${mode === 'EXPIRED' ? ' · quá hạn ' + CS.overdueDays(c) + ' ngày' : ' · chưa hết hạn'}</dd><dt>Xác nhận gần nhất</dt><dd>${lastText}</dd></dl>`;
+  }
+  const fieldErr = (f, k) => f && f.error && f.error.field === k ? `<div class="ctw-err">${U.esc(f.error.message)}</div>` : '';
+  const KIND_OPTIONS = { EXPIRED: [['CONTINUING', 'Vẫn kinh doanh'], ['PLANNED_STOP', 'Dự kiến ngừng sử dụng'], ['STOPPED', 'Đã ngừng sử dụng']], ENDING: [['CONTINUING', 'Dự kiến tiếp tục sử dụng'], ['PLANNED_STOP', 'Dự kiến ngừng sử dụng']] };
+  function continueModal(c) {
+    const f = ui.ctContinue, mode = CS.continuationMode(c), from = CS.nextContinuationFrom(c), max = CS.continuationMaxUntil(from), kind = f.kind;
+    const planned = kind === 'PLANNED_STOP' || (kind === 'CONTINUING' && mode === 'ENDING'), plan = CS.plannedStopRecord(c);
+    const kindRadio = (v, label) => `<label><input type="radio" name="ct-continue-kind" data-ch="ct-continue-kind" value="${v}" ${kind === v ? 'checked' : ''}> ${label}</label>`;
+    const continuing = `<div class="field"><label for="ct-continue-from">Ngày bắt đầu ${mode === 'ENDING' ? 'dự kiến ' : ''}tiếp tục sử dụng</label><input id="ct-continue-from" class="input" type="date" value="${from}" disabled><div class="small muted">Tự điền để khoảng xác nhận liên tục.</div>${fieldErr(f, 'from')}</div>`
+      + `<div class="field"><label for="ct-continue-until">${mode === 'ENDING' ? 'Dự kiến sử dụng đến' : 'Xác nhận sử dụng đến'} <span class="req">*</span></label><input id="ct-continue-until" class="input" type="date" min="${from}" max="${max}" value="${U.esc(f.until || '')}"><div class="small muted">Tối đa ${CS.CONTINUATION_MAX_MONTHS} tháng mỗi lần (đến ${U.dmy(max)}). Muốn phủ trọn tháng phải xác nhận đến ngày cuối tháng (vd 31/12).</div>${fieldErr(f, 'until')}</div>`;
+    const dateField = (id, key, label, maxDate, hint) => `<div class="field"><label for="${id}">${label} <span class="req">*</span></label><input id="${id}" class="input" type="date" min="${CS.nextContinuationFrom({ end: c.end, continuations: [] }) || ''}" ${maxDate ? `max="${maxDate}"` : ''} value="${U.esc(f[key] || '')}"><div class="small muted">${hint}</div>${fieldErr(f, key)}</div>`;
+    const body = kind === 'STOPPED' ? dateField('ct-continue-stopped', 'stoppedOn', 'Ngày ngừng sử dụng', U.today(), 'Hợp đồng chuyển vào danh sách cần xử lý chấm dứt/quyết toán. Điểm kinh doanh không tự giải phóng.')
+      : kind === 'PLANNED_STOP' ? dateField('ct-continue-planned-stop', 'plannedStopOn', 'Ngày dự kiến ngừng sử dụng', from, 'DỰ KIẾN: chỉ là căn cứ tính phí, không chấm dứt hợp đồng, không giải phóng điểm; có thể thay đổi khi kiểm tra thực tế.')
+      : continuing;
+    const evidence = planned ? `<div class="field"><label for="ct-continue-evidence">Căn cứ của xác nhận dự kiến <span class="req">*</span></label><select id="ct-continue-evidence" class="input"><option value="">— Chọn căn cứ —</option>${CS.EVIDENCE_TYPES.map(x => `<option value="${x[0]}" ${f.evidence === x[0] ? 'selected' : ''}>${x[1]}</option>`).join('')}</select>${fieldErr(f, 'evidence')}</div>` : '';
+    return A.mHead(mode === 'ENDING' ? 'Xác nhận dự kiến tình trạng sử dụng' : 'Xác nhận tình trạng sử dụng') + `<div class="modal-b">${contractHead(c)}`
+      + (mode === 'ENDING' ? '<div class="note info" style="margin-top:12px">Hợp đồng chưa hết hạn: chỉ ghi nhận DỰ KIẾN sau ngày hết hạn để tính mặt bằng tháng N+1. Hợp đồng vẫn Còn hiệu lực đến ngày hết hạn.</div>' : '')
+      + (plan && kind !== 'PLANNED_STOP' ? `<div class="note warn" style="margin-top:12px">Bản dự kiến ngừng ${U.esc(plan.id)} (từ ${U.dmy(plan.plannedStopOn)}) sẽ được THAY THẾ bởi tình trạng thực tế này (vẫn lưu lịch sử).</div>` : '')
+      + `<div class="field" style="margin-top:14px"><label>${mode === 'ENDING' ? 'Tình trạng dự kiến' : 'Tình trạng thực tế'} <span class="req">*</span></label><div class="row" style="gap:16px">${KIND_OPTIONS[mode].map(x => kindRadio(x[0], x[1])).join('')}</div>${fieldErr(f, 'kind')}</div>`
+      + body + evidence
+      + `<div class="field"><label for="ct-continue-note">Ghi chú / lý do <span class="req">*</span></label><textarea id="ct-continue-note" class="input" rows="3" placeholder="Nhập ghi chú/lý do">${U.esc(f.note || '')}</textarea>${fieldErr(f, 'note')}</div>`
+      + (f.error && f.error.field === 'form' ? `<div class="note warn">${U.esc(f.error.message)}</div>` : '')
+      + `<div class="small muted">Người xác nhận và thời điểm xác nhận do hệ thống tự ghi nhận.</div></div>`
+      + `<div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="ct-continue-save" data-id="${U.esc(c.id)}">Lưu xác nhận</button></div>`;
+  }
+  // Giữ giá trị đang nhập khi vẽ lại modal (đổi tình trạng / báo lỗi).
+  function readContinueForm() {
+    const f = ui.ctContinue, v = id => { const el = document.getElementById(id); return el ? el.value : undefined; };
+    const fields = f.kind === 'STOPPED' ? [['stoppedOn', 'ct-continue-stopped']] : f.kind === 'PLANNED_STOP' ? [['plannedStopOn', 'ct-continue-planned-stop']] : [['until', 'ct-continue-until']];
+    fields.concat([['note', 'ct-continue-note']], f.kind === 'PLANNED_STOP' || (f.kind === 'CONTINUING' && f.mode === 'ENDING') ? [['evidence', 'ct-continue-evidence']] : []).forEach(([k, id]) => { const x = v(id); if (x !== undefined) f[k] = x; });
+  }
+  const continueTarget = id => { const c = CS.get(id); return c && c.market === ui.market && CS.continuationMode(c) && canConfirmUse(c) ? c : null; };
+  A.ACT['ct-continue-open'] = el => {
+    const c = continueTarget(el.dataset.id);
+    if (!c) return U.toast('Bạn không có quyền xác nhận tình trạng sử dụng của hợp đồng này.');
+    if (CS.stoppedRecord(c)) return U.toast('Hợp đồng đã được xác nhận ngừng sử dụng. Cần xử lý gia hạn hoặc chấm dứt hợp đồng.');
+    const mode = CS.continuationMode(c), wanted = el.dataset.kind, kind = KIND_OPTIONS[mode].some(x => x[0] === wanted) ? wanted : 'CONTINUING';
+    ui.ctContinue = { contractId: c.id, mode, kind, until: '', stoppedOn: '', plannedStopOn: '', evidence: '', note: '', error: null };
+    A.modal(continueModal(c), true);
+  };
+  A.CH['ct-continue-kind'] = el => {
+    const c = ui.ctContinue && continueTarget(ui.ctContinue.contractId);
+    if (!c) return;
+    readContinueForm(); ui.ctContinue.kind = el.value; ui.ctContinue.error = null;
+    A.modal(continueModal(c), true);
+  };
+  A.ACT['ct-continue-save'] = el => {
+    const c = continueTarget(el.dataset.id), f = ui.ctContinue;
+    if (!c || !f || f.contractId !== c.id) { A.closeModal(); return U.toast('Bạn không có quyền xác nhận tình trạng sử dụng của hợp đồng này.'); }
+    readContinueForm();
+    const input = f.kind === 'STOPPED' ? { kind: 'STOPPED', stoppedOn: f.stoppedOn, note: f.note }
+      : f.kind === 'PLANNED_STOP' ? { kind: 'PLANNED_STOP', plannedStopOn: f.plannedStopOn, evidence: f.evidence, note: f.note }
+      : { kind: 'CONTINUING', from: CS.nextContinuationFrom(c), until: f.until, evidence: f.evidence, note: f.note };
+    const result = CS.confirmContinuation(c.id, input);
+    if (result.error) { f.error = { field: result.field || 'form', message: result.message }; A.modal(continueModal(c), true); return U.toast(result.message); }
+    U.log(CS.continuationText(result.record) + ' — ' + c.id);
+    ui.ctContinue = null; A.closeModal(); A.render();
+    U.toast('Đã lưu xác nhận tình trạng sử dụng.' + (result.settlementFlags && result.settlementFlags.length ? ' Phát hiện ' + result.settlementFlags.length + ' chênh lệch cần quyết toán.' : ''));
+  };
+  // Kiểm tra thực tế bản dự kiến: "Đúng thực tế" (dự kiến tiếp tục → đánh dấu đã kiểm tra; dự kiến ngừng → ghi nhận ngừng thực tế).
+  A.ACT['ct-continue-verify'] = el => {
+    const c = continueTarget(el.dataset.id);
+    if (!c) return U.toast('Bạn không có quyền xác nhận tình trạng sử dụng của hợp đồng này.');
+    const result = CS.verifyPlanned(c.id, el.dataset.rec);
+    if (result.error) return U.toast(result.message);
+    U.log('Kiểm tra thực tế ' + el.dataset.rec + ' — ' + c.id);
+    A.render(); U.toast('Đã ghi nhận kiểm tra thực tế.' + (result.settlementFlags && result.settlementFlags.length ? ' Phát hiện ' + result.settlementFlags.length + ' chênh lệch cần quyết toán.' : ''));
+  };
+  function voidModal(c, r) {
+    const f = ui.ctContinueVoid || {};
+    return A.mHead('Hủy xác nhận tình trạng sử dụng') + `<div class="modal-b">${contractHead(c)}<div class="note warn" style="margin-top:12px">Hủy bản ghi ${U.esc(r.id)} (${U.esc(CS.continuationText(r))}). Bản ghi vẫn được lưu trong lịch sử nhưng không còn được tính là thời gian sử dụng hợp lệ.</div>`
+      + `<div class="field" style="margin-top:12px"><label for="ct-continue-void-reason">Lý do hủy <span class="req">*</span></label><textarea id="ct-continue-void-reason" class="input" rows="3" placeholder="Nhập lý do hủy xác nhận">${U.esc(f.reason || '')}</textarea>${f.error ? `<div class="ctw-err">${U.esc(f.error)}</div>` : ''}</div></div>`
+      + `<div class="modal-f"><button class="btn" data-act="close">Đóng</button><button class="btn danger" data-act="ct-continue-void-save" data-id="${U.esc(c.id)}" data-rec="${U.esc(r.id)}">Hủy xác nhận</button></div>`;
+  }
+  const voidTarget = id => { const c = CS.get(id); return c && c.market === ui.market && canConfirmUse(c) ? c : null; };
+  A.ACT['ct-continue-void-open'] = el => {
+    const c = voidTarget(el.dataset.id), r = c && (c.continuations || []).find(x => x.id === el.dataset.rec);
+    if (!c || !r || !CS.canVoidContinuation(c, r.id)) return U.toast(r && CS.usedForIssuance(r.id) ? 'Xác nhận đã được dùng để phát hành khoản thu, không thể hủy.' : 'Chỉ Tổ trưởng được hủy bản ghi xác nhận mới nhất của hợp đồng này.');
+    ui.ctContinueVoid = { contractId: c.id, recordId: r.id, reason: '', error: '' };
+    A.modal(voidModal(c, r), true);
+  };
+  A.ACT['ct-continue-void-save'] = el => {
+    const c = voidTarget(el.dataset.id), r = c && (c.continuations || []).find(x => x.id === el.dataset.rec), field = document.getElementById('ct-continue-void-reason');
+    if (!c || !r) { A.closeModal(); return U.toast('Bạn không có quyền hủy xác nhận của hợp đồng này.'); }
+    const reason = field ? field.value : '', result = CS.voidContinuation(c.id, r.id, { reason });
+    if (result.error) { ui.ctContinueVoid = { contractId: c.id, recordId: r.id, reason, error: result.message }; A.modal(voidModal(c, r), true); return U.toast(result.message); }
+    U.log('Hủy xác nhận sử dụng ' + r.id + ' của ' + c.id);
+    ui.ctContinueVoid = null; A.closeModal(); A.render(); U.toast('Đã hủy xác nhận.');
   };
   A.ACT['ctw-open-trader'] = el => {
     const t = TS.getProfile(el.dataset.id);
