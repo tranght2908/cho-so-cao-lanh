@@ -48,8 +48,11 @@
     const meterText = na ? '—' : row.meterStatus === 'NOT_REQUIRED' ? 'Không cần ghi' : `${row.meter.recorded}/${row.meter.required}${row.meterStatus === 'COMPLETED' ? ' ✓' : ''}`;
     const list = row.issued ? row.invoices : row.groups, sum = list.reduce((a, x) => a + Number(x.amount || 0), 0);
     const invalid = row.issued ? 0 : row.groups.filter(g => g.validationStatus !== 'VALID').length;
-    const missing = row.issued || !row.p ? 0 : new Set(MP().blockingWarnings(row.p).filter(w => /_NOT_COVERED$/.test(w.code || '')).map(w => w.contractId)).size;
-    const receivable = (list.length ? `${list.length} khoản · ${U.money(sum)}${invalid ? `<div class="small pm-warn-text">${invalid} cần xử lý</div>` : ''}` : '—') + (missing ? `<div class="small pm-warn-text">${missing} HĐ hết hạn thiếu căn cứ</div>` : '');
+    // G1: lý do "Cần xử lý" do thiếu căn cứ sử dụng (gộp theo HĐ) — nêu riêng dự kiến ngừng chưa xác minh / nháp lỗi thời.
+    const basis = row.issued || !row.p ? { ids: [], unverified: [], stale: [] } : MP().missingBasis(row.p), missing = basis.ids.length;
+    const basisText = !missing ? '' : `<div class="small pm-warn-text">${missing} HĐ hết hạn thiếu căn cứ${basis.unverified.length ? ` · ${basis.unverified.length} dự kiến ngừng chưa xác minh` : ''}</div>`
+      + (basis.stale.length ? `<div class="small pm-warn-text">Số liệu nháp đã lỗi thời — cần xác minh thực tế</div>` : '');
+    const receivable = (list.length ? `${list.length} khoản · ${U.money(sum)}${invalid ? `<div class="small pm-warn-text">${invalid} cần xử lý</div>` : ''}` : '—') + basisText;
     const issue = na ? '—' : row.issued ? dot('Đã phát hành', 'ok') : dot('Chưa phát hành');
     const collection = row.issued ? dot(`${row.paid}/${row.invoices.length}`, row.paid === row.invoices.length ? 'ok' : 'info') : '—';
     const recon = !row.issued ? '—' : row.recon ? dot(RECON_TEXT[row.recon], row.recon === 'RECONCILED' ? 'ok' : row.recon === 'NEEDS_RESOLUTION' ? 'danger' : 'warn') : dot('Chưa đối soát');

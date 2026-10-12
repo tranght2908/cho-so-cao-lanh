@@ -146,11 +146,15 @@
   const CS = () => A.features.contracts && A.features.contracts.service;
   function coverageSnapshot(cov) {
     if (!cov || cov.basis === 'CONTRACT' && !cov.closedBy) return null;
-    return { contractEnd: cov.contractEnd, from: cov.effFrom, billTo: cov.billTo, gap: cov.gap, basis: cov.basis, closedBy: cov.closedBy || null, planned: !!cov.planned, recordIds: (cov.recordIds || []).slice(), records: (cov.records || []).map(r => Object.assign({}, r)) };
+    return { contractEnd: cov.contractEnd, from: cov.effFrom, billTo: cov.billTo, gap: cov.gap, basis: cov.basis, closedBy: cov.closedBy || null, planned: !!cov.planned, evaluatedAt: cov.evaluatedAt || null, recordIds: (cov.recordIds || []).slice(), records: (cov.records || []).map(r => Object.assign({}, r)) };
   }
   const NOT_COVERED_TEXT = { LAND: 'Mặt bằng', USAGE: 'Điện, nước', SERVICE: 'Dịch vụ' };
   function coverageWarning(out, kind, cov, base, label) {
-    const g = cov.gap;
+    const g = cov.gap, plan = cov.unverifiedPlan;
+    // G1: dự kiến ngừng đã tới ngày (tại ngày đánh giá) mà chưa ghi nhận thực tế → chặn riêng, nêu rõ cần kiểm chứng.
+    if (plan) return warning(out, Object.assign({ code: 'PLANNED_STOP_UNVERIFIED', gapFrom: g.from, gapTo: g.to, contractEnd: cov.contractEnd, plannedStopOn: plan.plannedStopOn, recordId: plan.id, evaluatedAt: cov.evaluatedAt,
+      action: { act: 'ct-view', id: base.contractId, label: 'Ghi nhận thực tế' },
+      message: NOT_COVERED_TEXT[kind] + ' ' + label + ': dự kiến ngừng sử dụng từ ' + U.dmy(plan.plannedStopOn) + ' (hợp đồng ' + base.contractId + ') chưa được xác minh thực tế tại ngày đánh giá ' + U.dmy(cov.evaluatedAt) + '. Thiếu căn cứ từ ' + U.dmy(g.from) + ' đến ' + U.dmy(g.to) + ' — Tổ trưởng cần ghi nhận "Đã ngừng sử dụng" hoặc "Tiếp tục thuê".' }, base));
     warning(out, Object.assign({ code: kind + '_NOT_COVERED', gapFrom: g.from, gapTo: g.to, contractEnd: cov.contractEnd, action: { act: 'ct-view', id: base.contractId, label: 'Xác nhận sử dụng' },
       message: NOT_COVERED_TEXT[kind] + ' ' + label + ': chưa có căn cứ sử dụng từ ' + U.dmy(g.from) + ' đến ' + U.dmy(g.to) + ' (hợp đồng ' + base.contractId + ' hết hạn ' + U.dmy(cov.contractEnd) + '). Tổ trưởng cần xác nhận tiếp tục / dự kiến / ngừng sử dụng.' }, base));
   }
@@ -180,7 +184,9 @@
     if (MP().isClosed(bp)) { warning(out, { code: 'PERIOD_CLOSED', message: 'Kỳ thu đã chốt, không thể tính lại.' }); return out; }
     if (MP().isIssued(bp)) { warning(out, { code: 'PERIOD_ALREADY_ISSUED', message: 'Kỳ thu của chợ đã phát hành, không thể tính lại.' }); return out; }
     period = ctx.period;
-    const stampCalc = () => { bp.calculatedAt = stamp(); bp.calculatedBy = actor || ''; };
+    // G1: ngày đánh giá căn cứ sử dụng (ngày tính dự kiến). Lưu trên kỳ để phát hành kiểm tra lại bản dự kiến ngừng đã tới ngày.
+    const evalDate = U.today();
+    const stampCalc = () => { bp.calculatedAt = stamp(); bp.calculatedBy = actor || ''; bp.evaluatedAt = evalDate; };
     if (!MP().meterDone(bp)) {
       warning(out, { code: 'METER_PERIOD_NOT_CLOSED', message: 'Chỉ số điện, nước của kỳ chưa hoàn tất và khóa.' });
       A.db.billingWarnings = A.db.billingWarnings.filter(x => !periodMatch(x, market, bp)).concat(out.warnings.map(x => Object.assign({ market, marketId: market, period, billingPeriodId: bp.id }, x)));
@@ -207,7 +213,7 @@
       if (!st.areaTypeId) return warning(out, { code: 'MISSING_AREA_TYPE', contractId: c.id, traderId: t.id, businessPointId: st.id, message: 'Điểm kinh doanh thiếu loại diện tích.' });
       // ---- Mặt bằng: thu trước cho landMonth. Khoảng sử dụng xét theo NGÀY LỊCH (HĐ + xác nhận hợp lệ, CS.chargeCoverage);
       // số ngày tính tiền vẫn theo quy ước 30 ngày (landBillableDays). Phần sau ngày kết thúc HĐ chưa có căn cứ → cảnh báo chặn.
-      const landCov = landIds.has(c.id) && CS() ? CS().chargeCoverage(c, landRange.from, landRange.to) : null;
+      const landCov = landIds.has(c.id) && CS() ? CS().chargeCoverage(c, landRange.from, landRange.to, evalDate) : null;
       if (landCov && landCov.applicable && landCov.gap) coverageWarning(out, 'LAND', landCov, { contractId: c.id, traderId: t.id, businessPointId: st.id, chargeType: 'LAND', chargeMonth: landMonth }, monthLabel(landMonth));
       const landDays = landCov && landCov.applicable && landCov.billTo ? landBillableDays({ start: c.start, end: landCov.billTo }, landMonth) : 0;
       if (landDays > 0) {
@@ -225,7 +231,7 @@
       // ---- Điện / Nước: chỉ số của khoảng sử dụng (lần ghi trước → lần ghi này), tháng sử dụng = tháng ghi chỉ số ----
       // Khoảng đo (lần ghi trước, lần ghi này] phải được HĐ + xác nhận hợp lệ phủ (hoặc khép bên trong khoảng đo).
       const nextOf = d => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + 1); return x.toISOString().slice(0, 10); };
-      const usageCov = usageIds.has(c.id) && CS() ? CS().chargeCoverage(c, nextOf(win.from), win.to) : null;
+      const usageCov = usageIds.has(c.id) && CS() ? CS().chargeCoverage(c, nextOf(win.from), win.to, evalDate) : null;
       const usageBlocked = !!(usageCov && usageCov.applicable && usageCov.gap);
       const terms = contractTermsAt(c, clip(readDate, c.start, usageCov && usageCov.billTo ? usageCov.billTo : (c.end || readDate)));
       const usageTermsDay = clip(readDate, c.start, usageCov && usageCov.billTo ? usageCov.billTo : (c.end || readDate));
@@ -255,7 +261,7 @@
       });
       // ---- Dịch vụ: tháng sử dụng, phí theo tháng (không chia ngày) — chỉ khi hợp đồng có hiệu lực trong tháng đó ----
       const serviceApplies = chargeApplies(market, c.serviceApplicability || {}, usageRange.to).marketService;
-      const serviceCov = serviceIds.has(c.id) && serviceApplies && CS() ? CS().chargeCoverage(c, usageRange.from, usageRange.to) : null;
+      const serviceCov = serviceIds.has(c.id) && serviceApplies && CS() ? CS().chargeCoverage(c, usageRange.from, usageRange.to, evalDate) : null;
       if (serviceCov && serviceCov.applicable && serviceCov.gap) coverageWarning(out, 'SERVICE', serviceCov, { contractId: c.id, traderId: t.id, businessPointId: st.id, chargeType: 'MARKET_SERVICE', chargeMonth: usageMonth }, monthLabel(usageMonth));
       if (serviceIds.has(c.id) && serviceApplies && !(serviceCov && serviceCov.gap)) {
         // GIẢ ĐỊNH prototype (chưa xác minh với đơn vị quản lý): dịch vụ thu TRỌN tháng, không chia ngày, kể cả khi chỉ

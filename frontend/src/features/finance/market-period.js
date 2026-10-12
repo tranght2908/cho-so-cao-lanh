@@ -174,6 +174,26 @@
   // Mặt bằng: tháng N+1 thu trước.
   svc.landContracts = mp => !mp ? [] : (() => { const r = svc.monthRange(svc.landMonth(mp)); return (A.db.contracts || []).filter(c => signed(c, mp.marketId) && overlaps(c, r.from, r.to)); })();
   // Hợp đồng ACTIVE của chợ KHÔNG là ứng viên của kỳ kèm lý do (đối chiếu: ứng viên = có dòng nháp + có cảnh báo + loại có lý do).
+  // G1 (10/2026): kỳ được tính khi bản DỰ KIẾN ngừng còn ở tương lai (ngày đánh giá = mp.evaluatedAt), nay đã tới ngày dự kiến
+  // mà chưa ghi nhận thực tế → căn cứ cũ không còn dùng để phát hành; kỳ "Cần xử lý" cho tới khi xác minh và tính lại.
+  svc.staleBasis = function (mp, date) {
+    const cs = contractsService();
+    if (!mp || !cs || !cs.plannedStopRecord || svc.isIssued(mp) || svc.isClosed(mp)) return [];
+    const at = date || U.today(), evaluated = mp.evaluatedAt || String(mp.calculatedAt || '').slice(0, 10);
+    if (!evaluated) return [];
+    return (A.db.contracts || []).filter(c => signed(c, mp.marketId)).map(c => ({ contract: c, record: cs.plannedStopRecord(c) }))
+      .filter(x => x.record && x.record.plannedStopOn > evaluated && x.record.plannedStopOn <= at);
+  };
+  // G1 (thống kê hiển thị): hợp đồng THIẾU căn cứ sử dụng đang chặn phát hành kỳ chưa phát hành — gộp theo hợp đồng
+  // (không đếm trùng nhiều khoản / nhiều mã): *_NOT_COVERED + PLANNED_STOP_UNVERIFIED (chặn) + căn cứ dự kiến đã lỗi thời.
+  // unverified = các HĐ có dự kiến ngừng đã tới ngày mà chưa xác minh (đã tính lại hoặc nháp còn lỗi thời). Chỉ đọc.
+  svc.missingBasis = function (mp) {
+    if (!mp || svc.isIssued(mp) || svc.isClosed(mp)) return { ids: [], unverified: [], stale: [] };
+    const warns = svc.blockingWarnings(mp).filter(w => w.contractId && (/_NOT_COVERED$/.test(w.code || '') || w.code === 'PLANNED_STOP_UNVERIFIED'));
+    const stale = svc.staleBasis(mp).map(x => x.contract.id), uniq = list => Array.from(new Set(list));
+    return { ids: uniq(warns.map(w => w.contractId).concat(stale)), stale,
+      unverified: uniq(warns.filter(w => w.code === 'PLANNED_STOP_UNVERIFIED').map(w => w.contractId).concat(stale)) };
+  };
   svc.excludedContracts = mp => {
     if (!mp) return [];
     const ids = new Set(svc.contracts(mp).map(c => c.id)), w = svc.usageWindow(mp), land = svc.monthRange(svc.landMonth(mp));
@@ -300,6 +320,7 @@
     if (meter === 'RECORDING') return make('METER_RECORDING', mp);
     const drafts = svc.drafts(mp), blocking = svc.blockingWarnings(mp);
     if (blocking.length) return make('NEEDS_ACTION', mp);
+    if (svc.staleBasis(mp).length) return make('NEEDS_ACTION', mp, { stale: true });
     if (drafts.length) return make('READY_TO_ISSUE', mp);
     return make(mp.calculatedAt ? 'NEEDS_ACTION' : 'METER_COMPLETED', mp);
   };
@@ -429,6 +450,8 @@
   svc.blockReasons = function (mp, state) {
     const st = state || (mp ? svc.stateOf(mp.marketId, monthOf(mp)) : null), codes = {};
     (mp ? svc.blockingWarnings(mp) : []).forEach(w => { codes[w.code] = (codes[w.code] || 0) + 1; });
+    const stale = mp ? svc.staleBasis(mp).length : 0;
+    if (stale) codes.STALE_PLANNED_BASIS = stale;
     return { state: st ? st.id : 'NO_PERIOD', label: st ? st.label : 'Chưa có kỳ', codes, text: (st ? st.label : 'Chưa có kỳ') + (Object.keys(codes).length ? ' — ' + Object.keys(codes).map(k => k + ' × ' + codes[k]).join(', ') : '') };
   };
   svc.issueSummary = function (month) {

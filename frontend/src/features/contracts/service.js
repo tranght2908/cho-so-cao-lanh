@@ -194,12 +194,18 @@
   // Khoảng sử dụng hợp lệ của hợp đồng (NGÀY LỊCH thực tế): [start, end]. end = ngày trước ngày ngừng thực tế
   // (STOPPED), nếu không thì ngày trước ngày dự kiến ngừng (PLANNED_STOP), nếu không thì ngày cuối đã xác nhận.
   // closed = khoảng đã được khép (không còn chờ xác nhận thêm) bởi STOPPED / PLANNED_STOP.
-  service.usageCoverage = function (contractOrId) {
+  // G1 (10/2026): bản DỰ KIẾN ngừng chỉ là căn cứ kết thúc khi ngày dự kiến ngừng còn SAU ngày đánh giá (asOf = ngày tính
+  // dự kiến / ngày phát hành). Tới hoặc qua ngày đó mà chưa ghi nhận thực tế → không còn là căn cứ: khoảng sau phần đã có
+  // căn cứ là THIẾU căn cứ (unverifiedPlan) — không suy luận đã ngừng, cũng không suy luận còn thuê.
+  service.usageCoverage = function (contractOrId, asOf) {
     const c = getContract(contractOrId);
     if (!c || !c.start) return null;
+    const at = asOf || A.U.today();
     const stop = service.stoppedRecord(c), plan = !stop && service.plannedStopRecord(c), through = service.confirmedThrough(c);
-    const closer = stop || plan || null, end = closer ? addDays(closer.kind === 'STOPPED' ? closer.stoppedOn : closer.plannedStopOn, -1) : through;
-    return { start: c.start, end: closer && through && end > through ? through : end, closed: !!closer, closedBy: closer ? closer.kind : null, closer };
+    const planDue = !!plan && plan.plannedStopOn <= at, closer = stop || (plan && !planDue ? plan : null);
+    const end = closer ? addDays(closer.kind === 'STOPPED' ? closer.stoppedOn : closer.plannedStopOn, -1) : through;
+    return { start: c.start, end: closer && through && end > through ? through : end, closed: !!closer, closedBy: closer ? closer.kind : null, closer,
+      unverifiedPlan: planDue ? plan : null, evaluatedAt: at };
   };
   const recordSnapshot = r => ({ id: r.id, kind: r.kind, basis: r.kind === 'CONTINUING' ? (r.basis || 'ACTUAL') : r.kind === 'PLANNED_STOP' ? 'PLANNED' : 'ACTUAL',
     from: r.from || null, until: r.until || null, plannedStopOn: r.plannedStopOn || null, stoppedOn: r.stoppedOn || null,
@@ -209,13 +215,14 @@
   // phủ tới đâu. applicable=false: hợp đồng không phát sinh khoản này (chưa bắt đầu / đã khép trước khoảng).
   // gap ≠ null: phần sau ngày kết thúc HĐ chưa có căn cứ → khoản thu chưa đủ điều kiện (cảnh báo chặn).
   // billTo: ngày cuối được tính tiền (giới hạn bởi khoảng đã phủ). recordIds/records: căn cứ đã dùng (để lưu dấu vết).
-  service.chargeCoverage = function (contractOrId, from, to) {
-    const c = getContract(contractOrId);
+  // asOf: ngày đánh giá (mặc định ngày nghiệp vụ hiện tại) — chỉ ảnh hưởng tới bản dự kiến ngừng (xem usageCoverage).
+  service.chargeCoverage = function (contractOrId, from, to, asOf) {
+    const c = getContract(contractOrId), at = asOf || A.U.today();
     if (!c || !c.start || !from || !to || to < from) return { applicable: false };
     const effFrom = c.start > from ? c.start : from;
     if (effFrom > to) return { applicable: false };
-    if (!c.end || c.end >= to) return { applicable: true, covered: true, effFrom, billTo: to, gap: null, basis: 'CONTRACT', closedBy: null, planned: false, recordIds: [], records: [], contractEnd: c.end || null };
-    const cov = service.usageCoverage(c), lastDay = cov.end;
+    if (!c.end || c.end >= to) return { applicable: true, covered: true, effFrom, billTo: to, gap: null, basis: 'CONTRACT', closedBy: null, planned: false, recordIds: [], records: [], contractEnd: c.end || null, evaluatedAt: at, unverifiedPlan: null };
+    const cov = service.usageCoverage(c, at), lastDay = cov.end;
     if (cov.closed && lastDay < effFrom) return { applicable: false, closedBefore: true, closedBy: cov.closedBy };
     const billTo = lastDay >= to ? to : lastDay >= effFrom ? lastDay : null;
     const gap = !cov.closed && lastDay < to ? { from: lastDay >= effFrom ? addDays(lastDay, 1) : effFrom, to } : null;
@@ -223,8 +230,10 @@
       ? billTo && r.from <= billTo && r.until >= (effFrom > after ? effFrom : after)
       : r === cov.closer && (r.kind === 'STOPPED' ? r.stoppedOn : r.plannedStopOn) <= addDays(to, 1));
     const planned = used.some(service.isPlanned);
+    const unverifiedPlan = gap && cov.unverifiedPlan ? recordSnapshot(cov.unverifiedPlan) : null;
     return { applicable: true, covered: !gap, effFrom, billTo, gap, closedBy: cov.closedBy, planned,
-      basis: used.length ? (planned ? 'PLANNED' : 'ACTUAL') : 'CONTRACT', recordIds: used.map(r => r.id), records: used.map(recordSnapshot), contractEnd: c.end };
+      basis: used.length ? (planned ? 'PLANNED' : 'ACTUAL') : 'CONTRACT', recordIds: used.map(r => r.id), records: used.map(recordSnapshot), contractEnd: c.end,
+      evaluatedAt: at, unverifiedPlan };
   };
   // Tương thích Giai đoạn A: khoảng [from, to] được phủ bởi hợp đồng + xác nhận hợp lệ (khép tại ngày ngừng / dự kiến ngừng).
   service.coveredRange = function (contractOrId, from, to) {
@@ -295,6 +304,8 @@
       if (!isIsoDate(x[key])) return { field: key, message: 'Vui lòng nhập ngày ' + label + '.' };
       if (x[key] < first) return { field: key, message: 'Ngày ' + label + ' phải sau ngày hết hạn hợp đồng (từ ' + A.U.dmy(first) + ').' };
       if (x.kind === 'STOPPED' && x[key] > at) return { field: key, message: 'Ngày ngừng sử dụng không được sau ngày hiện tại.' };
+      // G1: dự kiến ngừng chỉ dành cho ngày TƯƠNG LAI; ngày đã tới / đã qua phải ghi nhận ngừng sử dụng thực tế (có kiểm chứng).
+      if (x.kind === 'PLANNED_STOP' && x[key] <= at) return { field: key, message: 'Ngày dự kiến ngừng sử dụng phải sau ngày hiện tại. Nếu tiểu thương đã ngừng, ghi nhận "Đã ngừng sử dụng" (thực tế).' };
       if (x[key] > expected) return { field: key, message: 'Khoảng từ ' + A.U.dmy(expected) + ' chưa được xác nhận. Ngày ' + label + ' không được sau ' + A.U.dmy(expected) + '.' };
     }
     const planned = x.kind === 'PLANNED_STOP' || (x.kind === 'CONTINUING' && mode === 'ENDING');
