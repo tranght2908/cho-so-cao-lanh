@@ -602,6 +602,15 @@
     $('#view').innerHTML = A.current
       ? (noMarketScope ? '<div class="empty">Tài khoản chưa được phân công chợ nào nên chưa có dữ liệu để hiển thị.</div>' : needsMarket ? A.marketRequiredHtml(A.current) : (view ? view() : '<div class="empty">Đang xây dựng</div>'))
       : '<div class="empty">Tài khoản hiện chưa được cấp quyền truy cập chức năng.</div>';
+    // Nghiệp vụ tài chính: ô "Chọn kỳ" do từng màn dựng (cùng data-ch/handler, cùng state) được đưa lên topbar cạnh ô Chợ.
+    // Chỉ MỘT ô trên mỗi màn (nhấc khỏi nội dung, không nhân đôi); màn không có ô kỳ thì ẩn vùng này.
+    const periodWrap = $('#period-wrap');
+    if (periodWrap) {
+      const sel = $('#view .pm-head .pm-period');
+      periodWrap.textContent = '';
+      if (sel) periodWrap.appendChild(sel);
+      periodWrap.style.display = sel ? '' : 'none';
+    }
     if (focusKey) {
       const el = document.querySelector(`[data-in="${focusKey}"]`);
       if (el) { el.focus(); try { el.setSelectionRange(caret, caret); } catch (e) { /* bỏ qua */ } }
