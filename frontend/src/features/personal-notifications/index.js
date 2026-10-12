@@ -62,15 +62,17 @@
   function ensureContractExpiryAlerts(date) {
     const CS = A.features && A.features.contracts && A.features.contracts.service;
     if (!A.db || !CS || !CS.expiryAlerts || !A.ACCOUNTS) return 0;
-    const managers = (A.ACCOUNTS.currentList ? A.ACCOUNTS.currentList() : A.ACCOUNTS.list()).filter(a => roleId(a) === 'market_manager' && A.ACCOUNTS.isActive(a));
     const keys = new Set(list().map(n => n && n.notificationKey).filter(Boolean));
     let added = 0;
-    CS.expiryAlerts(date).forEach(alert => managers.filter(a => A.allowedMarkets(a).indexOf(alert.contract.market) !== -1).forEach(a => {
+    CS.expiryAlerts(date).forEach(alert => {
+      const routing = A.features.markets.service.responsibleRecipient(alert.contract.market, 'hop-dong.xac-nhan-su-dung', date || U.today());
+      const a = routing.account;
+      if (!a) return; // No arbitrary recipient: the item remains visible in the contract worklist.
       const key = alert.key + '|' + a.id;
       if (keys.has(key)) return;
       keys.add(key); added++;
-      list().unshift({ id: uniqueId(), notificationKey: key, recipientAccountId: a.id, type: 'CONTRACT', title: alert.title, message: alert.message, createdAt: now(), readAt: null, targetRoute: 'hop-dong', targetId: alert.contract.id, targetMarket: alert.contract.market });
-    }));
+      list().unshift({ id: uniqueId(), notificationKey: key, recipientAccountId: a.id, recipientSource: routing.source, routingReason: routing.reason || null, type: 'CONTRACT', title: alert.title, message: alert.message, createdAt: now(), readAt: null, targetRoute: 'hop-dong', targetId: alert.contract.id, targetMarket: alert.contract.market });
+    });
     if (added) A.save();
     return added;
   }

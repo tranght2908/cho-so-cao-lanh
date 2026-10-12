@@ -38,42 +38,52 @@ ok('1 twelve markets kept, ids unchanged, legacy meta preserved', () => {
   assert(/Tổng số chợ/.test(view()) && /Chưa thiết lập mặt bằng/.test(view()));
   assert(/dmc-management-head/.test(view()) && /Tổ Quản lý chợ/.test(view()), 'shared management context is rendered');
   assert(/Phạm vi quản lý/.test(view()) && /12 chợ/.test(view()), 'management scope derives from the market catalog');
-  assert(/Tổ trưởng/.test(view()) && /Trần Minh Khoa/.test(view()), 'active current manager is rendered from Accounts');
-  const activeManager = A.ACCOUNTS.currentList().find(a => A.ACCOUNTS.primaryRole(a) === 'market_manager' && A.ACCOUNTS.isActive(a));
-  assert(view().includes(A.U.maskPhone(activeManager.phone)), 'manager phone uses the canonical masking helper');
-  assert(/data-act="dmc-toggle-manager-phone"/.test(view()), 'masked manager phone has a view control');
+  // Phân công người phụ trách theo từng chợ (10/2026): khung đầu màn chỉ nêu đơn vị / bộ phận quản lý dùng chung;
+  // không còn hiện một "Tổ trưởng" chung kèm số điện thoại cho cả danh mục.
+  assert(/Đơn vị quản lý/.test(view()) && /Bộ phận quản lý/.test(view()), 'shared unit and department are rendered');
+  assert(!/data-act="dmc-toggle-manager-phone"/.test(view()), 'no catalog-wide manager phone control');
   assert(!/<h2>Danh mục chợ<\/h2>|Quản lý thông tin, quy mô/.test(view()), 'duplicate content title and description are removed');
   assert(/dmc-market-name/.test(view()) && /dmc-address/.test(view()) && /dmc-col-actions/.test(view()), 'balanced table presentation is rendered');
   assert(!/Tổ trưởng phụ trách/.test(view()), 'manager column is not rendered');
   h.act('dmc-open', { id: 'CL' });
   assert(/Đơn vị quản lý<\/dt><dd>Tổ Quản lý chợ/.test(h.modal()), 'legacy unit is displayed as the shared unit');
   assert(!/Tổ trưởng phụ trách/.test(h.modal()), 'legacy manager is not rendered');
+  assert(/D\. PHÂN CÔNG QUẢN LÝ/.test(h.modal()) && /Chưa phân công/.test(h.modal()), 'per-market responsibility section, unassigned by default');
   A.closeModal();
 });
-ok('1b management context does not use a pending or locked manager', () => {
-  const manager = A.ACCOUNTS.currentList().find(a => A.ACCOUNTS.primaryRole(a) === 'market_manager');
+// Người phụ trách theo từng chợ (10/2026) — thông tin liên hệ lấy từ tài khoản được phân công, không từ Market.
+ok('1b responsibility shows the assigned account; a pending or locked account is never shown as active', () => {
+  const manager = A.ACCOUNTS.currentList().find(a => A.ACCOUNTS.primaryRole(a) === 'market_manager' && A.ACCOUNTS.isActive(a));
+  const out = MC.assign('CL', { accountId: manager.id, effectiveFrom: A.U.today(), reason: 'Kiểm thử phân công', note: '' }, A.currentAccount());
+  assert(out.ok, 'assignment saved: ' + JSON.stringify(out));
+  h.act('dmc-open', { id: 'CL' });
+  assert(h.modal().includes(manager.fullName) && /Đang phụ trách/.test(h.modal()), 'assigned account is rendered from Accounts');
   const previousStatus = manager.status;
   manager.status = 'PENDING_ACTIVATION';
-  assert(/Chưa có người đảm nhiệm/.test(view()), 'no active manager has a clear empty-state label');
+  h.act('dmc-open', { id: 'CL' });
+  assert(/Tài khoản không hoạt động \/ cần phân công lại/.test(h.modal()), 'pending account is flagged, not shown as active');
   manager.status = previousStatus;
+  A.closeModal();
 });
-ok('1c management context handles a missing manager phone without changing the account', () => {
-  const manager = A.ACCOUNTS.currentList().find(a => A.ACCOUNTS.primaryRole(a) === 'market_manager');
+ok('1c responsibility handles a missing account phone without changing the account', () => {
+  const manager = A.ACCOUNTS.get(MC.assignmentAt('CL').accountId);
   const previousPhone = manager.phone;
   manager.phone = '';
-  assert(/Số điện thoại<\/span><b[^>]*>Chưa cập nhật/.test(view()));
-  assert(!/data-act="dmc-toggle-manager-phone"/.test(view()), 'missing phone has no view control');
+  h.act('dmc-open', { id: 'CL' });
+  assert(/Số điện thoại<\/dt><dd>—/.test(h.modal()) && !/data-act="dmc-toggle-assignment-phone"/.test(h.modal()), 'missing phone: no view control');
   manager.phone = previousPhone;
+  A.closeModal();
 });
-ok('1d manager phone toggle is presentation-only and defaults to masked', () => {
-  const manager = A.ACCOUNTS.currentList().find(a => A.ACCOUNTS.primaryRole(a) === 'market_manager');
-  const before = manager.phone;
-  assert(view().includes(A.U.maskPhone(before)) && !view().includes(before));
-  h.act('dmc-toggle-manager-phone');
-  assert(view().includes(before) && /title="Ẩn số điện thoại"/.test(view()), 'full phone is shown after toggling');
-  h.act('dmc-toggle-manager-phone');
-  assert(view().includes(A.U.maskPhone(before)) && !view().includes(before));
+ok('1d responsibility phone is masked by default; toggle is presentation-only', () => {
+  const manager = A.ACCOUNTS.get(MC.assignmentAt('CL').accountId), before = manager.phone;
+  h.act('dmc-open', { id: 'CL' });
+  assert(h.modal().includes(A.U.maskPhone(before)) && !h.modal().includes(before), 'masked with the canonical helper');
+  h.act('dmc-toggle-assignment-phone');
+  assert(h.modal().includes(before), 'full phone after toggling');
+  h.act('dmc-toggle-assignment-phone');
+  assert(h.modal().includes(A.U.maskPhone(before)) && !h.modal().includes(before));
   assert.strictEqual(manager.phone, before, 'Account phone is not changed');
+  A.closeModal();
 });
 ok('2 layout status derived from layout store', () => {
   assert(MC.layoutReady('CL') && MC.layoutReady('TTD'));
@@ -95,12 +105,14 @@ ok('3 search / rank / status / layout filters compose', () => {
   MC.update('SQ', { status: sqStatus }, 't'); h.act('dmc-reset');
 });
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
-const REMOVED_UI = /dmc-phone"|id="dmc-phone|Số điện thoại|dmc-at-|dmc-price|Bảng giá áp dụng|LOẠI DIỆN TÍCH KINH DOANH ÁP DỤNG|Theo phiên|Có mái che|Không mái che|Tự sản tự tiêu|id="dmc-status"|Đơn vị quản lý/;
+const REMOVED_UI = /dmc-phone"|id="dmc-phone|Số điện thoại|dmc-at-|dmc-price|Bảng giá áp dụng|LOẠI DIỆN TÍCH KINH DOANH ÁP DỤNG|Theo phiên|Có mái che|Không mái che|Tự sản tự tiêu|id="dmc-status"/;
 ok('4 create form: basic info + scale only; no phone/unit/price/area-type/status inputs', () => {
   h.act('dmc-new');
   const m = h.modal();
   assert(/Thêm chợ mới/.test(m) && /A\. THÔNG TIN CHỢ/.test(m) && /B\. QUY MÔ CHỢ/.test(m));
   assert(!REMOVED_UI.test(m), 'removed field still rendered: ' + (m.match(REMOVED_UI) || [])[0]);
+  // Đơn vị quản lý chỉ còn là nhãn chỉ đọc của mục Phân công quản lý (10/2026) — không có ô nhập đơn vị chỉnh sửa được.
+  assert(!/id="dmc-unit"/.test(m) && (m.match(/<label>Đơn vị quản lý<\/label><input[^>]*>/g) || []).every(x => /disabled/.test(x)), 'management unit is read-only');
   assert(!QUOTA_UI.test(m), 'no quota UI');
   assert(/id="dmc-code" value="CHO\d+" readonly disabled/.test(m), 'code is system generated and read-only');
   ['dmc-name', 'dmc-address', 'dmc-rank', 'dmc-total-area', 'dmc-business-area'].forEach(id => assert(m.includes(`id="${id}"`), id));
@@ -167,7 +179,8 @@ ok('5 detail modal: image/placeholder, no area-type or price sections', () => {
   h.act('dmc-open', { id: 'CL' });
   m = h.modal();
   assert(m.includes('<span class="tag ok">Đã thiết lập</span>') && /Chưa có ảnh đại diện/.test(m), 'legacy market uses placeholder');
-  assert(!m.includes('0909') && !/Số điện thoại/.test(m), 'legacy market phone is not displayed');
+  // Số điện thoại cũ lưu trên Market (legacy) không bao giờ hiển thị; liên hệ chỉ lấy từ tài khoản người phụ trách (có che).
+  assert(!m.includes('0909'), 'legacy market phone is not displayed');
   assert(!/data-act="(mb-|qh-)/.test(m), 'no layout setup action for admin');
   A.closeModal();
 });

@@ -259,7 +259,7 @@
       return ids.indexOf(traderId) !== -1;
     });
   }
-  function incNotifyAccounts(accounts, i, type, title, message, suffix, targetRoute) {
+  function incNotifyAccounts(accounts, i, type, title, message, suffix, targetRoute, routing) {
     if (!i || !accounts || !accounts.length) return false;
     const records = incNotificationRecords();
     const cycle = (i.reassignmentHistory || []).length;
@@ -268,13 +268,14 @@
     accounts.forEach(account => {
       const id = 'PN-' + key + '-' + account.id;
       if (records.some(n => n && n.id === id)) return;
-      records.unshift({ id, recipientAccountId: account.id, type, title, message, createdAt: incNow(), readAt: null, targetRoute: targetRoute || 'su-co', targetId: i.id, targetMarket: i.market });
+      records.unshift({ id, recipientAccountId: account.id, type, title, message, createdAt: incNow(), readAt: null, targetRoute: targetRoute || 'su-co', targetId: i.id, targetMarket: i.market, recipientSource: routing && routing.source || null, routingReason: routing && routing.reason || null });
       changed = true;
     });
     return changed;
   }
-  function incNotifyManagers(i, type, title, message, suffix) {
-    return incNotifyAccounts(incAccountsByRole('market_manager', i && i.market), i, type, title, message, suffix);
+  function incNotifyManagers(i, type, title, message, suffix, requiredAction) {
+    const route = i && A.features.markets && A.features.markets.service && A.features.markets.service.responsibleRecipient(i.market, requiredAction || 'su-co.phan-cong');
+    return incNotifyAccounts(route && route.account ? [route.account] : [], i, type, title, message, suffix, undefined, route);
   }
   function incNotifyTechnician(i, type, title, message, suffix) {
     return incNotifyAccounts(incAccountsByStaffCode(i && i.assignee), i, type, title, message, suffix);
@@ -289,7 +290,7 @@
     return incNotifyTechnician(i, 'INCIDENT_ASSIGNED', 'Bạn được phân công phản ánh', i.id + ' · ' + (i.title || 'Phản ánh') + ' · hạn ' + incFmt(i.deadline));
   }
   function incNotifyAcceptanceWaiting(i) {
-    return incNotifyManagers(i, 'INCIDENT_ACCEPTANCE_WAITING', 'Phản ánh chờ nghiệm thu', i.id + ' · ' + (i.title || 'Phản ánh') + ' đã có kết quả xử lý, cần nghiệm thu.');
+    return incNotifyManagers(i, 'INCIDENT_ACCEPTANCE_WAITING', 'Phản ánh chờ nghiệm thu', i.id + ' · ' + (i.title || 'Phản ánh') + ' đã có kết quả xử lý, cần nghiệm thu.', '', 'su-co.chuyen-trang-thai');
   }
   function incNotifyTraderCompleted(i) {
     return incNotifyTraderAccount(i, 'INCIDENT_COMPLETED', 'Phản ánh đã hoàn thành', i.id + ' đã được nghiệm thu. Bạn có thể xem kết quả và đánh giá.');

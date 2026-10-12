@@ -349,16 +349,18 @@
   function ruleWired(rule) { return rule.triggerType === 'PERIOD_MILESTONE' ? !!MILESTONE_RECIPIENTS[rule.triggerEvent] : WIRED_EVENTS.has(rule.systemEventKey || rule.eventKey); }
   const fillText = (text, data) => String(text || '').replace(/\{([A-Za-z]+)\}/g, (_, k) => data[k] == null ? '{' + k + '}' : String(data[k]));
   const staffOf = (market, role) => A.ACCOUNTS.currentList().filter(a => A.ACCOUNTS.primaryRole(a) === role && A.ACCOUNTS.isActive(a) && A.allowedMarkets(a).includes(market));
-  function recipientsFor(kind, mp) {
+  const MANAGEMENT_ACTION_BY_MILESTONE = { PREPARATION: 'phai-thu.tinh-lai', COLLECTION_START: 'theo-doi-ky-thu.phat-hanh-ky' };
+  const MANAGEMENT_ACTION_BY_EVENT = { RECEIVABLE_ISSUED: 'phai-thu.tinh-lai', PERIOD_FULLY_COLLECTED: 'theo-doi-ky-thu.chot-ky' };
+  function recipientsFor(kind, mp, requiredAction) {
     const svc = A.features.finance.marketPeriod, tr = id => { const t = A.idx.trader.get(id) || {}; return { type: 'TRADER', id, name: t.name || id, role: 'trader' }; };
-    if (kind === 'market_manager') return staffOf(mp.marketId, 'market_manager').map(a => ({ type: 'MARKET_MANAGER', id: a.id, name: a.fullName, role: 'market_manager' }));
+    if (kind === 'market_manager') { const routed=A.features.markets.service.responsibleRecipient(mp.marketId, requiredAction); return routed.account ? [{ type: 'MARKET_MANAGER', id: routed.account.id, name: routed.account.fullName, role: 'market_manager', routingSource:routed.source, routingReason:routed.reason || null }] : []; }
     if (kind === 'fee_collector') { const c = A.ACCOUNTS.getMarketCollector && A.ACCOUNTS.getMarketCollector(mp.marketId); return c ? [{ type: 'FEE_COLLECTOR', id: c.id, name: c.fullName, role: 'fee_collector' }] : []; }
     if (kind === 'central_accountant') return A.ACCOUNTS.currentList().filter(a => A.ACCOUNTS.primaryRole(a) === 'central_accountant' && A.ACCOUNTS.isActive(a) && A.allowedMarkets(a).includes(mp.marketId)).map(a => ({ type: 'ACCOUNTANT', id: a.id, name: a.fullName, role: 'accountant' }));
     if (kind === 'contract_traders') return Array.from(new Set(svc.contracts(mp).map(c => c.traderId).filter(Boolean))).map(tr);
     if (kind === 'unpaid_traders') return svc.canCollect(mp) ? Array.from(new Set(svc.invoices(mp).filter(i => i.status !== 'paid').map(i => i.traderId))).map(tr) : [];
     return [];
   }
-  function recipientsForEntry(entry, mp, ctx) {
+  function recipientsForEntry(entry, mp, ctx, requiredAction) {
     const group = (entry && entry.actorGroup) || entry, condition = (entry && entry.condition) || '';
     if (group === 'TRADER') {
       if ((condition === 'JUST_PAID' || condition === 'HAS_ISSUED_RECEIVABLE') && ctx && ctx.traderId) { const x = A.idx.trader.get(ctx.traderId) || {}; return [{ type:'TRADER', id:ctx.traderId, name:x.name || ctx.traderId, role:'trader' }]; }
@@ -367,7 +369,7 @@
       return recipientsFor('contract_traders', mp);
     }
     if (group === 'FEE_COLLECTOR') return recipientsFor('fee_collector', mp);
-    if (group === 'MARKET_MANAGEMENT_LEADERS') return recipientsFor('market_manager', mp);
+    if (group === 'MARKET_MANAGEMENT_LEADERS' || group === 'market_manager') return recipientsFor('market_manager', mp, requiredAction);
     if (group === 'CENTRAL_ACCOUNTANT') return recipientsFor('central_accountant', mp);
     const role = { SYSTEM_ADMIN:'system_admin', CENTER_LEADERSHIP:'ward_leader', TECHNICAL_STAFF:'technician', OFFICE_LEADERS:'office_leader' }[group];
     return role ? staffOf(mp.marketId, role).map(a => ({ type:group, id:a.id, name:a.fullName, role })) : [];
@@ -384,7 +386,7 @@
     const data = Object.assign({ period: mp.label || U.per(mp.period), marketName: mk.name || mp.marketId, traderName: recipient.name, collectorName: recipient.name,
       dueDate: U.dmy(svc.dateOf(mp, 'dueDate')), amount: U.money(unpaid.reduce((a, i) => a + Math.max(0, Number(i.amount || 0) - Number(i.paid || 0)), 0)), totalAmount: U.money(unpaid.reduce((a, i) => a + Number(i.amount || 0), 0)) }, extra || {});
     return pushNotification({ notificationKey: keyParts.concat([mp.id, recipient.type, recipient.id]).join('|'), eventKey: rule.eventKey, eventConfigKey: rule.eventKey, kind: keyParts[0],
-      market: mp.marketId, marketId: mp.marketId, period: mp.period, billingPeriodId: mp.id, recipientType: recipient.type, recipientId: recipient.id, traderId: recipient.type === 'TRADER' ? recipient.id : undefined,
+      market: mp.marketId, marketId: mp.marketId, period: mp.period, billingPeriodId: mp.id, recipientType: recipient.type, recipientId: recipient.id, recipientSource: recipient.routingSource || null, routingReason: recipient.routingReason || null, traderId: recipient.type === 'TRADER' ? recipient.id : undefined,
       title: fillText(tpl.title || rule.label, data), body: fillText(tpl.body || '', data), group: recipient.name, channels: rule.channels || ['Web app quản lý'] });
   }
   // Mốc kỳ thu: chạy idempotent khi khởi tạo app cho các kỳ của chợ chưa chốt, có đối tượng thu và đã tới ngày mốc (snapshot).
@@ -399,7 +401,7 @@
       if (!date || date > today) return;
       // Mốc nội bộ (Chuẩn bị kỳ, Ghi chỉ số) chỉ dành cho Tổ trưởng + NV thu phí: tiểu thương chỉ nhận thông báo sau khi
       // khoản phải thu đã phát hành (lúc đó mới là nghĩa vụ thanh toán) — kể cả khi quy tắc được cấu hình thêm Tiểu thương.
-      (rule.recipients || []).forEach(entry => recipientsForEntry(entry, mp, {}).filter(r => !(INTERNAL_MILESTONES.has(rule.triggerEvent) && r.type === 'TRADER')).forEach(r => { if (send(rule, r.role, r, mp, ['MILESTONE', rule.triggerEvent])) n++; }));
+      (rule.recipients || []).forEach(entry => recipientsForEntry(entry, mp, {}, MANAGEMENT_ACTION_BY_MILESTONE[rule.triggerEvent]).filter(r => !(INTERNAL_MILESTONES.has(rule.triggerEvent) && r.type === 'TRADER')).forEach(r => { if (send(rule, r.role, r, mp, ['MILESTONE', rule.triggerEvent])) n++; }));
     }));
     if (n) A.save();
     return n;
@@ -411,7 +413,7 @@
     const configuredEventKey = LEGACY_RULE_KEYS[eventKey] || eventKey;
     let n = 0;
     ensureEvents().filter(r => r.enabled && (r.eventKey === configuredEventKey || r.systemEventKey === configuredEventKey)).forEach(rule => (rule.recipients || []).forEach(entry => {
-      recipientsForEntry(entry, mp, ctx).forEach(r => { if (send(rule, r.role, r, mp, ['EVENT', eventKey, ctx.paymentId || ''], ctx)) n++; });
+      recipientsForEntry(entry, mp, ctx, MANAGEMENT_ACTION_BY_EVENT[eventKey]).forEach(r => { if (send(rule, r.role, r, mp, ['EVENT', eventKey, ctx.paymentId || ''], ctx)) n++; });
     }));
     if (n) A.save();
     return n;

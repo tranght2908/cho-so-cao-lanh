@@ -190,6 +190,9 @@
         id: m.id, code: meta.code || m.id, name: m.name, address: m.address,
         // phone: LEGACY — chỉ đọc lại giá trị cũ đã lưu; số liên hệ thuộc tài khoản người phụ trách.
         rank: meta.rank, unit: meta.unit, manager: meta.manager, phone: meta.phone, image: imageOf(meta.image),
+        // Personnel responsibility is a dated relation.  `manager` remains
+        // legacy/read-compatible only and is never used as the source of truth.
+        managementAssignments: Array.isArray(meta.managementAssignments) ? meta.managementAssignments.map(x => Object.assign({}, x)) : [],
         priceConfigId: meta.priceConfigId, status: normalizeStatus(meta.status), layoutStatus: normalizeLayoutStatus(meta.layoutStatus), layoutLifecycleVersion: meta.layoutLifecycleVersion || 0, isCustom: false,
         createdBy: meta.createdBy, createdAt: meta.createdAt, updatedBy: meta.updatedBy, updatedAt: meta.updatedAt
       }, scaleOf(meta));
@@ -270,6 +273,7 @@
         allowedAreaTypeIds: Array.isArray(rec.allowedAreaTypeIds) ? rec.allowedAreaTypeIds.slice() : null,
         // Legacy: chỉ giữ nếu nơi gọi truyền vào (màn Danh mục chợ không còn truyền).
         capacityByAreaType: Array.isArray(rec.capacityByAreaType) ? rec.capacityByAreaType : null,
+        managementAssignments: Array.isArray(rec.managementAssignments) ? rec.managementAssignments.map(x => Object.assign({}, x)) : [],
         createdBy: user || 'Không rõ', createdAt: new Date().toISOString(), updatedBy: user || 'Không rõ', updatedAt: new Date().toISOString()
       };
       LIST.push(row);
@@ -294,7 +298,7 @@
         if (patch.name !== undefined) meta.name = String(patch.name || '').trim();
         if (patch.address !== undefined) meta.address = String(patch.address || '').trim();
       }
-      ['rank', 'unit', 'manager', 'priceConfigId', 'totalArea', 'businessArea', 'allowedAreaTypeIds', 'capacityByAreaType'].forEach(k => {
+      ['rank', 'unit', 'manager', 'priceConfigId', 'totalArea', 'businessArea', 'allowedAreaTypeIds', 'capacityByAreaType', 'managementAssignments'].forEach(k => {
         if (patch[k] !== undefined) meta[k] = patch[k];
       });
       if (patch.image !== undefined) meta.image = imageOf(patch.image);

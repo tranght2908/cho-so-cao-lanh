@@ -86,6 +86,7 @@
     // (xem được) — KHÔNG có 2 action này (chỉ đọc, đúng mục 2 yêu cầu).
     { key: 'action:danh-muc-cho.tao', kind: 'action', group: 'Điều hành', screenId: 'danh-muc-cho', label: 'Tạo chợ mới trong danh mục' },
     { key: 'action:danh-muc-cho.sua', kind: 'action', group: 'Điều hành', screenId: 'danh-muc-cho', label: 'Cập nhật thông tin chợ trong danh mục' },
+    { key: 'action:danh-muc-cho.phan-cong-nguoi-phu-trach', kind: 'action', group: 'Điều hành', screenId: 'danh-muc-cho', label: 'Phân công người phụ trách chợ' },
     { key: 'action:danh-muc-cho.xuat-excel', kind: 'action', group: 'Điều hành', screenId: 'danh-muc-cho', label: 'Xuất Excel danh mục chợ' },
     { key: 'action:theo-doi-ky-thu.phan-cong-cho', kind: 'action', group: 'Tài chính', screenId: 'theo-doi-ky-thu', label: 'Phân công chợ chưa có NV thu phí phụ trách' },
     { key: 'action:theo-doi-ky-thu.doi-nv-phu-trach', kind: 'action', group: 'Tài chính', screenId: 'theo-doi-ky-thu', label: 'Đổi NV thu phí phụ trách chợ' },
@@ -336,6 +337,7 @@
     const actionRoles = {
       'danh-muc-cho.tao': ['system_admin'],
       'danh-muc-cho.sua': ['system_admin'],
+      'danh-muc-cho.phan-cong-nguoi-phu-trach': ['system_admin'],
       'theo-doi-ky-thu.phan-cong-cho': ['market_manager'],
       'theo-doi-ky-thu.doi-nv-phu-trach': ['market_manager'],
       'theo-doi-ky-thu.chot-ky': ['market_manager'],
@@ -526,7 +528,7 @@
   //        lệch khiến loadState() đi thẳng nhánh RESEED TOÀN BỘ (freshState(), không qua
   //        mergeIntoCurrentSeed()), nên seedVersion v15 ở đây chỉ còn ý nghĩa tài liệu/đánh dấu, không
   //        phải cơ chế migrate chính cho lần đổi này (xem RBAC_MARKET_SCOPE_MIGRATION_REPORT.md).
-  const PERM_SEED_VERSION = 24; // 17: role market_accountant + DOI_SOAT_CUOI_NGAY; 18: (Bản đồ thu — đã retire); 19: trader/contract creation belongs to market_manager; 20: đối soát chuyển sang central_accountant (A05), A05 xem/xuất số liệu thu, technician bỏ màn Mặt bằng/Tài sản; 21: retire screen Nhân sự & phân công, chuyển action phân công chợ sang Theo dõi kỳ thu + quyền mini-app gửi/đánh giá phản ánh cho trader; 23: ghi chú hợp đồng đã hết hạn; 24: xác nhận tình trạng sử dụng hợp đồng hết hạn
+  const PERM_SEED_VERSION = 25; // 25: action phân công người phụ trách chợ, mặc định System Administrator.
   const RATE_POLICY_PERM_VERSION = 1;
   const BANK_ACCOUNT_PERM_VERSION = 1;
   const PC3A_SESSION_PERM_VERSION = 1;

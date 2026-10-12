@@ -126,7 +126,13 @@
     const tot = rpTotals(key, r);
     const kpis = rpKpis(key, r.rows);
     const scopeName = xmMkt === 'ALL' ? A.allowedMarkets(A.currentAccount()).map(U.mShort).join(', ') : U.market(xmMkt).name;
-    const who = A.currentAccount ? A.currentAccount() : null;
+    // Report previews are not an approval workflow.  The selected account is
+    // therefore never treated as a signer.  A market responsibility is shown
+    // only for a one-market report and at the report's reference date.
+    const responsible = xmMkt !== 'ALL' && A.features.markets && A.features.markets.service
+      ? A.features.markets.service.assignmentAt(xmMkt, rp.to) : null;
+    const responsibleAccount = responsible && A.ACCOUNTS.get(responsible.accountId);
+    const responsibleName = responsibleAccount ? responsibleAccount.fullName : 'Chưa phân công';
     return `<div class="rp-page-h"><h2>Báo cáo thống kê</h2><div class="muted">Tạo, xem trước và xuất các báo cáo quản lý chợ</div></div>
     <div class="grid g-report rp-grid">
       <div class="card no-print"><div class="card-h"><h3>Mẫu báo cáo</h3></div><div class="card-b rp-list"><div class="rp-group">Báo cáo theo mẫu Nhà nước</div>${(A.STATE_FORM_ORDER || []).map(k => `<button class="rp-item ${stateKey === k ? 'on' : ''}" data-act="rp" data-id="${k}"><span class="rp-ico">🏛️</span><span><b>${SF[k].mau} – ${SF[k].t}</b><small>${SF[k].vb} · ${SF[k].ky}</small></span></button>`).join('')}<div class="rp-group">Báo cáo điều hành</div>${Object.keys(R).map(k => `<button class="rp-item ${!stateKey && key === k ? 'on' : ''}" data-act="rp" data-id="${k}"><span class="rp-ico">📄</span><span><b>${R[k].t}</b><small>${RP_SUB[k] || ''}</small></span></button>`).join('')}</div></div>
@@ -148,7 +154,8 @@
               <div class="tbl-wrap"><table class="tbl rp-tbl"><thead><tr><th class="num rp-stt">STT</th>${cols.map((c, k) => `<th class="${numCol(k) ? 'num' : ''}">${U.esc(c)}</th>`).join('')}</tr></thead>
               <tbody>${r.rows.length ? r.rows.map((row, i) => `<tr><td class="num rp-stt">${i + 1}</td>${row.map((v, k) => `<td class="${typeof v === 'number' ? 'num' : ''} ${k === 0 ? 'rp-first' : ''}">${fmtCell(v, r.cols[k])}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length + 1}" class="empty">Không có dữ liệu trong phạm vi đã chọn</td></tr>`}</tbody>
               ${tot ? `<tfoot><tr class="rp-total"><td></td>${tot.map((v, k) => `<td class="${typeof v === 'number' ? 'num' : ''}">${v === '' ? '' : fmtCell(v, r.cols[k])}</td>`).join('')}</tr></tfoot>` : ''}</table></div></div>
-            <div class="rp-sign print-only"><div><div class="rp-sign-t">NGƯỜI LẬP BIỂU</div><div class="rp-sign-s">(Ký, ghi rõ họ tên)</div><div class="rp-sign-n">${U.esc(who && ['market_manager', 'collector'].indexOf(A.ACCOUNTS.primaryRole(who)) !== -1 ? who.fullName : 'Lê Thị Ngọc Hân')}</div></div><div><div class="rp-sign-t">TRƯỞNG BAN QUẢN LÝ CHỢ</div><div class="rp-sign-s">(Ký, đóng dấu)</div><div class="rp-sign-n">Trần Minh Khoa</div></div></div>
+            ${xmMkt !== 'ALL' ? `<div class="small muted print-only">Người phụ trách chợ tại ngày ${U.dmy(rp.to)}: ${U.esc(responsibleName)}.</div>` : '<div class="small muted print-only">Báo cáo liên chợ không gán người phụ trách của một chợ làm người ký.</div>'}
+            <div class="rp-sign print-only"><div><div class="rp-sign-t">NGƯỜI LẬP BIỂU</div><div class="rp-sign-s">(Ký, ghi rõ họ tên)</div><div class="rp-sign-n">Chưa xác định người lập</div></div><div><div class="rp-sign-t">NGƯỜI KÝ DUYỆT</div><div class="rp-sign-s">(Ký, đóng dấu)</div><div class="rp-sign-n">Chưa xác định người ký</div></div></div>
             <div class="small muted rp-note">Số liệu sinh tự động từ dữ liệu nghiệp vụ của hệ thống lúc ${U.nowTime()} ngày ${U.dmy(U.today())}.</div>
           </div>`}</div></div>
       </div></div>`;

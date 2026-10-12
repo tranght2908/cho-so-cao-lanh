@@ -63,35 +63,19 @@
   const STATUS_NOTE = 'Chợ chỉ chuyển sang hoạt động sau khi hoàn tất thiết lập mặt bằng và cấu hình mức thu riêng của chợ (mặt bằng, điện, nước, dịch vụ).';
   function canCreate() { return A.canDo('danh-muc-cho.tao'); }
   function canEdit() { return A.canDo('danh-muc-cho.sua'); }
-
-  // Tổ Quản lý chợ là đơn vị chung, độc lập với dữ liệu legacy trên từng Market.
-  // Chỉ account current + active mới được dùng để trình bày người đang đảm nhiệm.
-  function currentMarketManager() {
-    const accounts = A.ACCOUNTS;
-    const managers = accounts && accounts.currentList ? accounts.currentList().filter(a =>
-      accounts.primaryRole(a) === 'market_manager' && accounts.isActive(a)
-    ) : [];
-    if (managers.length === 1) return managers[0];
-    if (!managers.length) return null;
-    // Không chọn ngẫu nhiên khi dữ liệu current bất thường có nhiều Tổ trưởng active.
-    return 'AMBIGUOUS';
-  }
+  function canAssignManager() { return A.canDo('danh-muc-cho.phan-cong-nguoi-phu-trach'); }
 
   function managementContextHtml() {
     const markets = MC.rows();
     const unit = MC.managementUnit(markets[0] || {});
-    const manager = currentMarketManager();
-    const managerName = manager === 'AMBIGUOUS' ? 'Cần xác nhận dữ liệu' : manager ? (manager.fullName || manager.name || manager.code || 'Chưa cập nhật') : 'Chưa có người đảm nhiệm';
-    const hasPhone = !!(manager && manager !== 'AMBIGUOUS' && manager.phone);
-    const phone = hasPhone && ui.dmcShowManagerPhone ? manager.phone : hasPhone ? U.maskPhone(manager.phone) : manager && manager !== 'AMBIGUOUS' ? 'Chưa cập nhật' : '—';
-    const phoneControl = hasPhone ? `<button class="dmc-phone-toggle" data-act="dmc-toggle-manager-phone" aria-pressed="${ui.dmcShowManagerPhone ? 'true' : 'false'}" title="${ui.dmcShowManagerPhone ? 'Ẩn số điện thoại' : 'Xem số điện thoại'}" aria-label="${ui.dmcShowManagerPhone ? 'Ẩn số điện thoại' : 'Xem số điện thoại'}">${U.icon(ui.dmcShowManagerPhone ? 'eye-off' : 'eye')}</button>` : '';
     return `<section class="card dmc-management-context" aria-label="Thông tin đơn vị quản lý">
       <header class="dmc-management-head"><h3>${U.esc(unit)}</h3>${canCreate() ? '<button class="btn primary" data-act="dmc-new">+ Thêm chợ mới</button>' : ''}</header>
       <div class="dmc-management-body">
-        <div class="dmc-management-item"><span>Tổ trưởng</span><b>${U.esc(managerName)}</b></div>
-        <div class="dmc-management-item"><span>Số điện thoại</span><b class="dmc-phone-value">${U.esc(phone)}${phoneControl}</b></div>
+        <div class="dmc-management-item"><span>Đơn vị quản lý</span><b>Trung tâm Cung ứng dịch vụ công phường Cao Lãnh</b></div>
+        <div class="dmc-management-item"><span>Bộ phận quản lý</span><b>Tổ Quản lý chợ</b></div>
         <div class="dmc-management-item"><span>Phạm vi quản lý</span><b>${fmtNum(markets.length)} chợ</b></div>
       </div>
+      <div class="small muted" style="padding:0 16px 14px">Người phụ trách được phân công riêng theo từng chợ; phân công không tự cấp vai trò, quyền hoặc phạm vi chợ.</div>
     </section>`;
   }
 
@@ -121,6 +105,11 @@
     const edit = canEdit();
     const nonBiz = r.totalArea !== null && r.businessArea !== null ? fmtM2(r.totalArea - r.businessArea) : 'Chưa cập nhật';
     const ready = layoutKey(r) === 'set';
+    const ms = MC.assignmentStatus(r.id), ma = ms.assignment, person = ms.account;
+    const role = person && A.PERM.role(A.ACCOUNTS.primaryRole(person));
+    const phone = person && person.phone ? (canAssignManager() && ui.dmcShowAssignmentPhone ? person.phone : U.maskPhone(person.phone)) : '—';
+    const assignmentLabel = ms.state === 'ACTIVE' ? (ms.hasScope ? 'Đang phụ trách' : 'Đang phụ trách · chưa có phạm vi chợ') : ms.state === 'PLANNED' ? 'Phân công chưa đến ngày hiệu lực' : ms.state === 'ACCOUNT_INACTIVE' ? 'Tài khoản không hoạt động / cần phân công lại' : 'Chưa phân công';
+    const history = MC.assignments(r.id);
     return A.mHead(`${U.esc(r.name)} <span class="small muted">(${U.esc(r.code)})</span>`) + `<div class="modal-b dmc-detail">
       <section class="dmc-section"><h4>A. THÔNG TIN CHỢ</h4>
         ${marketImageHtml(r.image, 'dmc-image-detail')}
@@ -144,8 +133,19 @@
         <div>${ready ? `<span class="tag ok">Đã thiết lập</span> <span class="small muted">${fmtNum(MC.layoutZoneCount(r.id))} dãy đã khai báo</span>` : '<span class="tag">Chưa thiết lập</span>'}</div>
         <div class="small muted" style="margin-top:6px">Mặt bằng, điểm kinh doanh và loại diện tích do Tổ Quản lý chợ thiết lập tại màn "Mặt bằng & điểm kinh doanh"; mức thu riêng của chợ cấu hình sau khi mặt bằng được thiết lập. Chợ chỉ chuyển sang Đang hoạt động khi cấu hình mức thu của chợ đầy đủ.</div>
       </section>
+      <section class="dmc-section"><h4>D. PHÂN CÔNG QUẢN LÝ</h4>
+        <dl class="kv">
+          <dt>Người phụ trách</dt><dd>${U.esc(person ? person.fullName : 'Chưa phân công')}</dd>
+          <dt>Vai trò</dt><dd>${U.esc(role ? role.name : '—')}</dd>
+          <dt>Ngày bắt đầu</dt><dd>${U.esc(ma ? ma.effectiveFrom : '—')}</dd>
+          <dt>Tình trạng</dt><dd>${U.esc(assignmentLabel)}</dd>
+          <dt>Số điện thoại</dt><dd>${U.esc(phone)}${person && person.phone && canAssignManager() ? ` <button class="dmc-phone-toggle" data-act="dmc-toggle-assignment-phone">${U.icon(ui.dmcShowAssignmentPhone ? 'eye-off' : 'eye')}</button>` : ''}</dd>
+        </dl>
+        ${ms.state === 'ACTIVE' && !ms.hasScope ? '<div class="note warn">Người phụ trách chưa có phạm vi chợ phù hợp. Phân công không đồng nghĩa cấp quyền; Quản trị viên cần cấp phạm vi bằng cơ chế RBAC hiện có.</div>' : ''}
+        ${history.length ? `<details><summary>Lịch sử phân công (${history.length})</summary>${U.table([{t:'Hiệu lực'},{t:'Người phụ trách'},{t:'Lý do / ghi chú'},{t:'Thao tác'}], history.map(x => { const a=A.ACCOUNTS.get(x.accountId); return `<tr><td>${U.esc(x.effectiveFrom)}${x.effectiveTo?' – '+U.esc(x.effectiveTo):''}</td><td>${U.esc(a ? a.fullName : x.accountId)}</td><td>${U.esc(x.reason || '—')}${x.note?'<div class="small muted">'+U.esc(x.note)+'</div>':''}</td><td>${x.effectiveFrom > U.today() && canAssignManager() ? `<button class="btn sm" data-act="dmc-assignment-edit" data-market="${U.esc(r.id)}" data-id="${U.esc(x.id)}">Sửa</button><button class="btn sm" data-act="dmc-assignment-cancel" data-market="${U.esc(r.id)}" data-id="${U.esc(x.id)}">Hủy</button>` : '—'}</td></tr>`; }), {empty:''})}</details>` : '<div class="small muted">Chưa có lịch sử phân công.</div>'}
+      </section>
     </div>
-    <div class="modal-f"><button class="btn" data-act="close">Đóng</button>${edit ? `<button class="btn primary" data-act="dmc-edit" data-id="${U.esc(r.id)}">Chỉnh sửa</button>` : ''}</div>`;
+    <div class="modal-f"><button class="btn" data-act="close">Đóng</button>${canAssignManager() ? `<button class="btn" data-act="dmc-assignment-open" data-id="${U.esc(r.id)}">Thay đổi người phụ trách</button>` : ''}${edit ? `<button class="btn primary" data-act="dmc-edit" data-id="${U.esc(r.id)}">Chỉnh sửa</button>` : ''}</div>`;
   }
 
   // ---------- Form Thêm / Chỉnh sửa ----------
@@ -190,12 +190,25 @@
         <div class="dmc-derived"><span>Diện tích ngoài kinh doanh <small class="muted">(tự tính)</small></span><b id="dmc-nonbiz">—</b></div>
         <div class="small muted">Phần diện tích còn lại dành cho lối đi, khu quản lý, kỹ thuật và khu vực dùng chung.</div>
       </section>
+      ${!r ? assignmentFormHtml(null, false) : ''}
       <section class="dmc-section dmc-status-section"><div class="dmc-status-line"><span>Trạng thái</span>${r ? statusCell(r) : statusTag('NOT_ACTIVE')}</div>
         <div class="small muted">${STATUS_NOTE}</div>
       </section>
     </div>
     <div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="dmc-save" data-id="${r ? U.esc(r.id) : ''}">Lưu chợ</button></div>`;
   }
+
+  function assignmentOptions(selected) { return MC.eligibleResponsibleAccounts().map(a => { const role=A.PERM.role(A.ACCOUNTS.primaryRole(a)); return `<option value="${U.esc(a.id)}" ${a.id===selected?'selected':''}>${U.esc(a.fullName)} · ${U.esc(role ? role.name : a.code)}</option>`; }).join(''); }
+  function assignmentFormHtml(value, changing) {
+    const x=value||{}, id=x.accountId||'', start=x.effectiveFrom||U.today();
+    return `<section class="dmc-section dmc-assignment"><h4>${changing ? 'THAY ĐỔI NGƯỜI PHỤ TRÁCH' : 'C. PHÂN CÔNG QUẢN LÝ'}</h4>
+      <div class="form-grid"><div class="field"><label>Đơn vị quản lý</label><input class="input" value="Trung tâm Cung ứng dịch vụ công phường Cao Lãnh" disabled></div><div class="field"><label>Bộ phận quản lý</label><input class="input" value="Tổ Quản lý chợ" disabled></div></div>
+      <div class="form-grid"><div class="field"><label>Người phụ trách chợ${changing?' *':''}</label><select class="input" id="dmc-assignee"><option value="">${changing?'Chọn người phụ trách':'Chưa phân công'}</option>${assignmentOptions(id)}</select><div id="dmc-assignee-warning" class="small dmc-warn"></div></div><div class="field"><label>Ngày bắt đầu phụ trách${changing?' *':''}</label><input class="input" id="dmc-assignment-from" type="date" value="${U.esc(start)}" ${x.id ? 'readonly' : ''}></div></div>
+      ${changing ? '<div class="field"><label>Lý do thay đổi *</label><textarea class="input" id="dmc-assignment-reason" rows="2"></textarea></div>' : ''}<div class="field"><label>Ghi chú phân công</label><textarea class="input" id="dmc-assignment-note" rows="2">${U.esc(x.note||'')}</textarea></div>
+      <div class="note info">Phân công chỉ ghi nhận trách nhiệm; không tự cấp quyền nghiệp vụ, vai trò hoặc phạm vi chợ.</div>
+    </section>`;
+  }
+  function refreshAssignmentWarning(marketId) { const accountId=inputValue('dmc-assignee'), host=A.$('#dmc-assignee-warning'); if (!host) return; host.textContent=accountId && MC.scopeWarning(marketId, accountId) ? 'Cảnh báo: tài khoản chưa có phạm vi chợ phù hợp và chưa thể thao tác tại chợ này. Hãy cấp phạm vi qua RBAC/tài khoản.' : ''; }
 
   function inputValue(id) { const el = A.$('#' + id); return el ? String(el.value || '').trim() : ''; }
   // '' → null (bỏ trống); chuỗi không phải số → NaN.
@@ -287,9 +300,9 @@
   A.CH['dmc-rank'] = el => { filterState().rank = el.value; A.render(); };
   A.CH['dmc-status'] = el => { filterState().status = el.value; A.render(); };
   A.CH['dmc-layout'] = el => { filterState().layout = el.value; A.render(); };
+  A.CH['dmc-assignee'] = () => { const edit=A.$('#dmc-assignment-market'); refreshAssignmentWarning(edit ? edit.value : MC.nextCode()); };
   A.ACT['dmc-reset'] = () => { ui.dmcFilter = { search: '', rank: '', status: '', layout: '' }; A.render(); };
-  // Presentation-only state: never persists and naturally returns to masked after reload.
-  A.ACT['dmc-toggle-manager-phone'] = () => { ui.dmcShowManagerPhone = !ui.dmcShowManagerPhone; A.render(); };
+  A.ACT['dmc-toggle-assignment-phone'] = () => { ui.dmcShowAssignmentPhone = !ui.dmcShowAssignmentPhone; const open=ui.dmcOpenMarketId&&MC.get(ui.dmcOpenMarketId); if(open) A.modal(detailHtml(open), true); };
   A.ACT['dmc-csv'] = () => {
     U.csv('danh-muc-cho', ['Tên chợ', 'Mã chợ', 'Địa điểm', 'Hạng chợ', 'Đơn vị quản lý', 'Trạng thái chợ', 'Tổng diện tích (m²)', 'Diện tích kinh doanh (m²)', 'Diện tích ngoài kinh doanh (m²)', 'Tình trạng mặt bằng'],
       filteredRows().map(r => {
@@ -297,7 +310,7 @@
           r.totalArea !== null ? r.totalArea : '', r.businessArea !== null ? r.businessArea : '', r.nonBusinessArea !== null ? r.nonBusinessArea : '', LAYOUT_STATE[layoutKey(r)]];
       }));
   };
-  A.ACT['dmc-open'] = el => { const r = MC.get(el.dataset.id); if (r) A.modal(detailHtml(r), true); };
+  A.ACT['dmc-open'] = el => { const r = MC.get(el.dataset.id); if (r) { ui.dmcOpenMarketId=r.id; A.modal(detailHtml(r), true); } };
   A.ACT['dmc-new'] = () => { if (canCreate()) openForm(null); };
   A.ACT['dmc-edit'] = el => { const r = MC.get(el.dataset.id); if (r && canEdit()) openForm(r); };
   A.ACT['dmc-save'] = el => {
@@ -318,9 +331,20 @@
     // Chỉ thông tin cơ bản + quy mô. Không gửi trạng thái, bảng giá, loại diện tích, đơn vị quản lý, số điện
     // thoại: field cũ của bản ghi đã lưu giữ nguyên, chợ mới không được tự gán.
     const patch = Object.assign({ name, address, rank: inputValue('dmc-rank') || 'HANG_3', image: ui.dmcImageDraft || null }, scale.value);
+    if (!existing) {
+      const accountId=inputValue('dmc-assignee');
+      const prepared=MC.prepareInitialAssignment(MC.nextCode(), accountId ? { accountId, effectiveFrom:inputValue('dmc-assignment-from'), note:inputValue('dmc-assignment-note') } : null, acc);
+      if (!prepared.ok) { setText('dmc-err-summary', '<div class="note">Không thể lưu phân công: dữ liệu người phụ trách hoặc ngày hiệu lực không hợp lệ.</div>'); return; }
+      patch.managementAssignments=prepared.assignments;
+    }
     const saved = existing ? MC.update(existing.id, patch, user) : MC.add(Object.assign({ code: MC.nextCode() }, patch), user);
     if (!saved) { setText('dmc-err-summary', '<div class="note">Không lưu được dữ liệu trên trình duyệt (bộ nhớ có thể đã đầy). Vui lòng thử ảnh nhỏ hơn hoặc xóa ảnh rồi lưu lại.</div>'); return; }
     ui.dmcImageDraft = null;
     A.closeModal(); A.render(); U.toast(existing ? 'Đã cập nhật chợ.' : 'Thêm chợ thành công.');
   };
+  A.ACT['dmc-assignment-open'] = el => { const r=MC.get(el.dataset.id); if (!r || !canAssignManager()) return; ui.dmcOpenMarketId=r.id; A.modal(A.mHead('Thay đổi người phụ trách') + `<div class="modal-b">${assignmentFormHtml(null, true)}<input type="hidden" id="dmc-assignment-market" value="${U.esc(r.id)}"></div><div class="modal-f"><button class="btn" data-act="dmc-open" data-id="${U.esc(r.id)}">Hủy</button><button class="btn primary" data-act="dmc-assignment-save" data-market="${U.esc(r.id)}">Lưu thay đổi</button></div>`, true); refreshAssignmentWarning(r.id); };
+  A.ACT['dmc-assignment-save'] = el => { const marketId=el.dataset.market, accountId=inputValue('dmc-assignee'), reason=inputValue('dmc-assignment-reason'), effectiveFrom=inputValue('dmc-assignment-from'); const out=MC.assign(marketId,{accountId,effectiveFrom,reason,note:inputValue('dmc-assignment-note')},A.currentAccount()); if(!out.ok){ U.toast(out.reason==='OVERLAP'?'Ngày hiệu lực chồng chéo với một phân công đã có.':out.reason==='REASON_REQUIRED'?'Vui lòng nhập lý do thay đổi.':'Không thể lưu phân công.'); return; } A.closeModal(); A.render(); U.toast(out.scopeWarning?'Đã lưu phân công. Lưu ý người phụ trách chưa có phạm vi chợ phù hợp.':'Đã cập nhật người phụ trách chợ.'); };
+  A.ACT['dmc-assignment-edit'] = el => { const r=MC.get(el.dataset.market), row=r&&MC.assignments(r.id).find(x=>x.id===el.dataset.id); if(!r||!row||!canAssignManager())return; A.modal(A.mHead('Sửa kế hoạch phân công')+`<div class="modal-b">${assignmentFormHtml(row,true)}<input type="hidden" id="dmc-assignment-market" value="${U.esc(r.id)}"></div><div class="modal-f"><button class="btn" data-act="dmc-open" data-id="${U.esc(r.id)}">Hủy</button><button class="btn primary" data-act="dmc-assignment-edit-save" data-market="${U.esc(r.id)}" data-id="${U.esc(row.id)}">Lưu</button></div>`,true); refreshAssignmentWarning(r.id); };
+  A.ACT['dmc-assignment-edit-save'] = el => { const out=MC.updateFutureAssignment(el.dataset.market,el.dataset.id,{accountId:inputValue('dmc-assignee'),reason:inputValue('dmc-assignment-reason'),note:inputValue('dmc-assignment-note')},A.currentAccount()); if(!out.ok){U.toast(out.reason==='REASON_REQUIRED'?'Vui lòng nhập lý do thay đổi.':'Không thể sửa kế hoạch phân công.');return;} A.closeModal();A.render();U.toast('Đã cập nhật kế hoạch phân công.'); };
+  A.ACT['dmc-assignment-cancel'] = el => { const reason=window.prompt('Nhập lý do hủy kế hoạch phân công:'); if(reason===null)return; const out=MC.cancelFutureAssignment(el.dataset.market,el.dataset.id,reason,A.currentAccount()); if(!out.ok){U.toast(out.reason==='REASON_REQUIRED'?'Cần nhập lý do hủy.':'Không thể hủy kế hoạch phân công.');return;} const r=MC.get(el.dataset.market); A.modal(detailHtml(r),true);U.toast('Đã hủy kế hoạch phân công.'); };
 })(window.APP);
