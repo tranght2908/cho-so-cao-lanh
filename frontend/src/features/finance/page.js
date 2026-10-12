@@ -535,23 +535,11 @@
       : (a, b) => order[a.status] - order[b.status] || String(a.t.name).localeCompare(String(b.t.name), 'vi'));
     return { base, rows, flt, cnt: k => base.filter(r => k === 'all' || r.status === k).length };
   }
-  function ttReplaceTraderCodeColumn(rows) {
-    setTimeout(() => {
-      const header = Array.from(document.querySelectorAll('th')).find(x => x.textContent.trim() === 'Mã TT');
-      if (!header) return;
-      header.textContent = 'Mã khoản thu';
-      const table = header.closest('table');
-      if (!table) return;
-      Array.from(table.querySelectorAll('tbody tr')).forEach((tr, index) => {
-        const cell = tr.children[1], row = rows[index];
-        if (!cell || !row) return;
-        cell.innerHTML = '<b>' + U.esc(row.receivableCode) + '</b><div class="small muted">' + U.esc(row.inv.id) + '</div>';
-      });
-    }, 0);
-  }
   function ttListHtml(c) {
     const { base, rows, flt, cnt } = ttListRows(c), pg = U.pager('ttList', rows.length, 20);
     const canCollect = ttCanCollect(c.market) && c.state.id === 'COLLECTING';
+    // Mã khoản thu in TRỰC TIẾP từ dữ liệu của chính dòng khi dựng (trước đây thay cột bằng setTimeout theo vị trí dòng —
+    // gõ tìm kiếm / đổi lọc / phân trang nhanh làm timeout cũ ghi đè mã của dòng khác).
     const body = rows.slice(pg.start, pg.end).map(r => {
       const codes = r.stallIds.map(id => (A.idx.stall.get(id) || {}).code || id), st = TT_STATUS[r.status];
       const method = r.last ? U.esc(D.METHOD[r.last.method] || r.last.method) : '<span class="muted">—</span>';
@@ -559,18 +547,17 @@
       const action = r.status === 'PAID'
         ? (r.last ? `<button class="btn sm" data-act="tt-receipt" data-id="${U.esc(r.last.receipt)}">Xem biên lai</button>` : '')
         : canCollect ? `<button class="btn sm primary" data-act="tt-pay-open" data-id="${r.inv.id}">Thu tiền</button>` : '';
-      return `<tr><td><b>${U.esc(r.t.name)}</b>${r.t.phone ? `<div class="small muted">${U.maskPhone(r.t.phone)}</div>` : ''}${ttExpiredTag(r.inv)}</td><td>${U.esc(r.t.id)}<div class="small muted">${U.esc(r.inv.id)}</div></td>
+      return `<tr><td><b>${U.esc(r.t.name)}</b>${r.t.phone ? `<div class="small muted">${U.maskPhone(r.t.phone)}</div>` : ''}${ttExpiredTag(r.inv)}</td><td><b>${U.esc(r.receivableCode)}</b><div class="small muted">${U.esc(r.inv.id)}</div></td>
         <td>${codes.length} điểm<div class="small muted">${U.esc(codes.join(', '))}</div></td><td class="num">${U.money(r.inv.amount)}</td><td class="num">${U.money(r.inv.amount - r.remaining)}</td><td class="num"><b>${U.money(r.remaining)}</b></td>
         <td>${U.dmy(r.inv.due)}</td><td>${r.status !== 'PAID' && ttTransferIntent(r.inv.id) ? ttTag('Chờ ghi nhận CK', 'info') : ttTag(st[0], st[1])}</td><td>${r.status !== 'PAID' && ttTransferIntent(r.inv.id) ? 'Chuyển khoản <div class="small muted">chờ ngân hàng báo có</div>' : method}</td><td class="nowrap tt-actions">${action}${detail}</td></tr>`;
     });
-    ttReplaceTraderCodeColumn(rows.slice(pg.start, pg.end));
     return `<div class="card-b tt-toolbar">
         <input class="input tt-search" data-in="tt-search" placeholder="Tìm tiểu thương, mã TT, mã khoản, điểm KD..." value="${U.esc(f.ttSearch || '')}">
         <div class="seg">${[['all', 'Tất cả'], ['UNPAID', 'Chưa thu'], ['PAID', 'Đã thu đủ']].map(x => `<button class="${flt === x[0] ? 'on' : ''}" data-act="tt-status" data-id="${x[0]}">${x[1]} (${cnt(x[0])})</button>`).join('')}</div>
         <span class="spacer"></span>
         <button class="btn sm ${f.ttSort === 'due' ? 'on' : 'ghost'}" data-act="tt-sort">${f.ttSort === 'due' ? '✓ ' : ''}Sắp xếp theo hạn nộp</button>
         <button class="btn sm ghost" data-act="tt-export" ${base.length ? '' : 'disabled'}>Xuất danh sách</button></div>
-      <div class="card-b">${U.table([{ t: 'Tiểu thương' }, { t: 'Mã TT' }, { t: 'Điểm KD' }, { t: 'Tổng phải thu', num: true }, { t: 'Đã thu', num: true }, { t: 'Còn lại', num: true }, { t: 'Hạn nộp' }, { t: 'Trạng thái' }, { t: 'Phương thức' }, { t: 'Thao tác' }],
+      <div class="card-b">${U.table([{ t: 'Tiểu thương' }, { t: 'Mã khoản thu' }, { t: 'Điểm KD' }, { t: 'Tổng phải thu', num: true }, { t: 'Đã thu', num: true }, { t: 'Còn lại', num: true }, { t: 'Hạn nộp' }, { t: 'Trạng thái' }, { t: 'Phương thức' }, { t: 'Thao tác' }],
         body, { empty: c.rows.length ? 'Không có khoản phù hợp bộ lọc' : 'Chưa có khoản phải thu đã phát hành trong kỳ này' })}${pg.html}</div>`;
   }
   function ttReorderTransactionColumns() {
