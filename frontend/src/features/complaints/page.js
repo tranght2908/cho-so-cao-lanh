@@ -291,9 +291,6 @@
   function incNotifyAcceptanceWaiting(i) {
     return incNotifyManagers(i, 'INCIDENT_ACCEPTANCE_WAITING', 'Phản ánh chờ nghiệm thu', i.id + ' · ' + (i.title || 'Phản ánh') + ' đã có kết quả xử lý, cần nghiệm thu.');
   }
-  function incNotifyMaterialDecision(i, approved) {
-    return incNotifyTechnician(i, approved ? 'INCIDENT_MATERIAL_APPROVED' : 'INCIDENT_MATERIAL_REJECTED', approved ? 'Vật tư đã được duyệt' : 'Vật tư không được duyệt', i.id + ' · ' + ((i.materialRequest || {}).itemName || 'Vật tư phát sinh'));
-  }
   function incNotifyTraderCompleted(i) {
     return incNotifyTraderAccount(i, 'INCIDENT_COMPLETED', 'Phản ánh đã hoàn thành', i.id + ' đã được nghiệm thu. Bạn có thể xem kết quả và đánh giá.');
   }
@@ -337,37 +334,6 @@
         title: 'Phản ánh quá hạn cần xử lý',
         message: i.id + ' · ' + (i.title || 'Phản ánh quá hạn') + ' tại ' + U.mShort(i.market),
         createdAt: i.leaderReminder.at || incNow(),
-        readAt: null,
-        targetRoute: 'su-co',
-        targetId: i.id,
-        targetMarket: i.market
-      });
-      changed = true;
-    });
-    return changed;
-  }
-  function incAddMaterialRequestNotification(i) {
-    const m = i && i.materialRequest;
-    if (!A.db || !A.ACCOUNTS || !i || !m || !m.hasMaterial || m.status !== 'pending') return false;
-    A.db.personalNotifications = Array.isArray(A.db.personalNotifications) ? A.db.personalNotifications : [];
-    const createdAt = m.proposedAt || incNow();
-    const requestKey = String(createdAt).replace(/[^0-9A-Za-z]/g, '');
-    const accounts = (A.ACCOUNTS.list ? A.ACCOUNTS.list() : []).filter(a =>
-      A.ACCOUNTS.authStatus(a) === 'ACTIVE' &&
-      A.ACCOUNTS.primaryRole(a) === 'market_manager' &&
-      A.allowedMarkets(a).indexOf(i.market) !== -1
-    );
-    let changed = false;
-    accounts.forEach(account => {
-      const id = 'PN-INC-MATERIAL-' + account.id + '-' + i.id + '-' + requestKey;
-      if (A.db.personalNotifications.some(n => n && n.id === id)) return;
-      A.db.personalNotifications.unshift({
-        id,
-        recipientAccountId: account.id,
-        type: 'INCIDENT_MATERIAL_REQUEST',
-        title: 'Sự cố phát sinh vật tư/chi phí',
-        message: i.id + ' · ' + (m.itemName || 'Vật tư phát sinh') + ' (' + (m.quantity || 'chưa rõ số lượng') + ') tại ' + U.mShort(i.market),
-        createdAt,
         readAt: null,
         targetRoute: 'su-co',
         targetId: i.id,
@@ -500,7 +466,7 @@
       const asset = (A.db.marketAssets || []).find(a => a.id === d[4]);
       const stall = A.db.stalls.find(s => s.market === 'CL' && s.traderId);
       const created = d[5];
-      const i = { id:d[0], market:'CL', stallId:stall && stall.id, traderId:stall && stall.traderId, cat:d[3], title:d[2], desc:'Hồ sơ demo phục vụ trình diễn luồng tiếp nhận, phân công, xử lý, nghiệm thu và đánh giá.', source:n % 2 ? 'Nhập tại Ban Quản lý' : 'Mini app tiểu thương', state:d[1], assetId:asset && asset.id, assignee:d[1] === 'tiepnhan' ? null : 'NV05', deadline:d[6], created, rating:d[1] === 'dong' ? 5 : null, escalated:false, images:{report:[],inspection:[],work:[]}, inspection:null, work:null, acceptance:null, materialRequest:{hasMaterial:false,status:'none'}, history:[{at:created,action:'Tiếp nhận phản ánh',detail:'Nguồn: '+(n % 2 ? 'Nhập tại Ban Quản lý' : 'Mini app tiểu thương')}], log:[] };
+      const i = { id:d[0], market:'CL', stallId:stall && stall.id, traderId:stall && stall.traderId, cat:d[3], title:d[2], desc:'Hồ sơ demo phục vụ trình diễn luồng tiếp nhận, phân công, xử lý, nghiệm thu và đánh giá.', source:n % 2 ? 'Nhập tại Ban Quản lý' : 'Mini app tiểu thương', state:d[1], assetId:asset && asset.id, assignee:d[1] === 'tiepnhan' ? null : 'NV05', deadline:d[6], created, rating:d[1] === 'dong' ? 5 : null, escalated:false, images:{report:[],inspection:[],work:[]}, inspection:null, work:null, acceptance:null, history:[{at:created,action:'Tiếp nhận phản ánh',detail:'Nguồn: '+(n % 2 ? 'Nhập tại Ban Quản lý' : 'Mini app tiểu thương')}], log:[] };
       if (['dangxuly','chonghiemthu','hoanthanh','dong'].includes(d[1])) i.inspection = { at:'2026-10-28T09:15', by:'NV05', condition:'Kiểm tra tại hiện trường, đã xác định nguyên nhân cần xử lý.', note:'Ghi nhận kỹ thuật mẫu.' };
       if (['chonghiemthu','hoanthanh','dong'].includes(d[1])) i.work = { content:'Đã thực hiện xử lý theo hiện trạng ghi nhận.', result:'Thiết bị/vị trí hoạt động bình thường sau kiểm tra.', completedAt:'2026-10-28T11:20', completedBy:'NV05', note:'' };
       if (['hoanthanh','dong'].includes(d[1])) {
@@ -511,7 +477,6 @@
         i.feedback = { at:'2026-10-28T14:00', by:i.traderId || null, comment:'Xử lý nhanh, kết quả tốt.', source:'Mini app tiểu thương' };
         i.closeInfo = { at:'2026-10-28T14:00', by:'Hệ thống', reason:'TRADER_RATED', note:'Tự động đóng sau khi tiểu thương đánh giá.' };
       }
-      if (d[0] === 'SC-DEMO-04') i.materialRequest = { hasMaterial:true, itemName:'Ống PVC D34 và keo nối', quantity:'2 m ống, 1 hộp keo', estimatedCost:180000, actualCost:0, proposedBy:'NV05', proposedAt:'2026-10-25T10:10', confirmedBy:null, confirmedAt:'', status:'pending', note:'Chờ duyệt trước khi hoàn tất xử lý.', evidence:'bao-gia-ong-pvc.pdf' };
       incEnsureLeaderReminder(i);
       A.db.incidents.push(i); changed = true;
     });
@@ -750,10 +715,8 @@
     return '<span class="tag info">Bình thường</span>';
   }
   function incDisplayStatus(i) {
-    const material = i && i.materialRequest;
     const acceptance = i && i.acceptance;
     const work = i && i.work;
-    if (material && material.hasMaterial && material.status === 'pending') return { label: 'Chờ duyệt vật tư', cls: 'warn' };
     if (i && i.state === 'dangxuly' && acceptance && acceptance.result === 'rejected' && work && work.mode === 'rework') return { label: 'Không đạt nghiệm thu', cls: 'danger' };
     if (i && i.state === 'dangxuly' && acceptance && acceptance.result === 'rejected') return { label: 'Đang tiếp tục xử lý', cls: 'warn' };
     if (i && i.state === 'phancong') return { label: 'Chờ nhận xử lý', cls: late(i) ? 'danger' : 'info' };
@@ -1111,49 +1074,6 @@
       return `<div class="inc-timeline-i"><b>${incFmt(x.at)}</b><strong>${x.submitForAcceptance ? 'Gửi kết quả chờ nghiệm thu' : 'Cập nhật tiến độ #' + (xs.length - n)}</strong><span>${x.submitForAcceptance ? 'Người hoàn thành: ' + U.esc(completedBy) : 'Người cập nhật: ' + U.esc(actor)}${x.content ? '<br>' + U.esc(x.content) : ''}${x.result ? '<br>Kết quả: ' + U.esc(x.result) : ''}${x.note ? '<br>Ghi chú: ' + U.esc(x.note) : ''}</span></div>`;
     }).join('')}</div>` : '<div class="empty small">Chưa có cập nhật tiến độ.</div>';
   }
-  function incCostText(value) {
-    const n = Number(value || 0);
-    return n > 0 ? U.money(n) : '—';
-  }
-  function incMaterialStatusLabel(status) {
-    return ({ pending: 'Chờ xác nhận', approved: 'Đã xác nhận', rejected: 'Không duyệt' })[status] || 'Không phát sinh';
-  }
-  function incMaterialRequestHtml(i) {
-    const m = i.materialRequest;
-    if (!m || !m.hasMaterial) return '<div class="empty small">Không phát sinh vật tư/chi phí.</div>';
-    const canApprove = incCanAssignMarket(i.market) && m.status === 'pending';
-    return `<dl class="kv inc-detail-kv">
-      <dt>Trạng thái</dt><dd><span class="tag ${m.status === 'approved' ? 'success' : (m.status === 'rejected' ? 'danger' : 'warn')}">${incMaterialStatusLabel(m.status)}</span></dd>
-      <dt>Tên vật tư</dt><dd>${U.esc(m.itemName || '—')}</dd>
-      <dt>Số lượng</dt><dd>${U.esc(m.quantity || '—')}</dd>
-      <dt>Chi phí dự kiến</dt><dd>${incCostText(m.estimatedCost)}</dd>
-      <dt>Chi phí thực tế</dt><dd>${incCostText(m.actualCost)}</dd>
-      <dt>Người đề xuất</dt><dd>${U.esc(incActorLabel(m.proposedBy))}${m.proposedAt ? ' · ' + incFmt(m.proposedAt) : ''}</dd>
-      <dt>Người xác nhận</dt><dd>${m.confirmedBy ? U.esc(incActorLabel(m.confirmedBy)) + (m.confirmedAt ? ' · ' + incFmt(m.confirmedAt) : '') : '—'}</dd>
-      <dt>Ghi chú/chứng từ</dt><dd>${U.esc(m.note || '—')}${m.evidence ? '<br>' + U.esc(m.evidence) : ''}</dd>
-    </dl>${canApprove ? `<div class="row" style="margin-top:10px"><button class="btn primary" data-act="inc-material-approve" data-id="${i.id}">Xác nhận/phê duyệt</button><button class="btn danger" data-act="inc-material-reject" data-id="${i.id}">Không duyệt</button></div>` : ''}`;
-  }
-  function incMaterialFormHtml(i) {
-    const m = i.materialRequest || {};
-    const has = !!m.hasMaterial;
-    return `<section class="inc-section">
-      <h4>Phát sinh vật tư/chi phí</h4>
-      <div class="inc-work-mode">
-        <label><input type="radio" name="im-has" value="no" ${has ? '' : 'checked'} data-ch="inc-material-toggle"> Không phát sinh</label>
-        <label><input type="radio" name="im-has" value="yes" ${has ? 'checked' : ''} data-ch="inc-material-toggle"> Có phát sinh</label>
-      </div>
-      <div id="im-fields" ${has ? '' : 'hidden'}>
-        <div class="form-grid">
-          <div class="field"><label>Tên vật tư *</label><input class="input" id="im-item" value="${U.esc(m.itemName || '')}" placeholder="VD: bóng đèn, ống nước, dây điện"></div>
-          <div class="field"><label>Số lượng *</label><input class="input" id="im-qty" value="${U.esc(m.quantity || '')}" placeholder="VD: 2 cái, 5 m"></div>
-          <div class="field"><label>Chi phí dự kiến</label><input class="input" type="number" min="0" step="1000" id="im-est" value="${m.estimatedCost || ''}"></div>
-          <div class="field"><label>Chi phí thực tế</label><input class="input" type="number" min="0" step="1000" id="im-act" value="${m.actualCost || ''}"></div>
-        </div>
-        <div class="field"><label>Ghi chú/chứng từ nếu cần</label><textarea class="input" id="im-note" rows="2" placeholder="Ghi chú, số chứng từ, hoặc tên file minh chứng.">${U.esc(m.note || m.evidence || '')}</textarea></div>
-        ${m.status ? `<div class="small muted">Hiện trạng: ${incMaterialStatusLabel(m.status)}${m.confirmedBy ? ' · ' + U.esc(incActorLabel(m.confirmedBy)) : ''}</div>` : ''}
-      </div>
-    </section>`;
-  }
   function incAcceptanceHistoryHtml(i) {
     const xs = (i.acceptanceHistory || []).slice().reverse();
     return xs.length ? `<div class="inc-timeline">${xs.map(x => `<div class="inc-timeline-i"><b>${incFmt(x.at)}</b><strong>${x.result === 'rejected' ? 'Nghiệm thu không đạt' : 'Nghiệm thu hoàn thành'}</strong><span>Người nghiệm thu: ${U.esc(incActorLabel(x.by))}${x.note ? '<br>Ghi chú: ' + U.esc(x.note) : ''}</span></div>`).join('')}</div>` : '';
@@ -1173,7 +1093,6 @@
         ${incDetailSection('Thông tin phản ánh', `<dl class="kv inc-detail-kv"><dt>Người gửi</dt><dd>${U.esc(reporter)}</dd><dt>Nhóm vấn đề</dt><dd>${U.esc(incIssueGroup(i.cat))}</dd><dt>Nguồn phản ánh</dt><dd>${U.esc(i.source || '—')}</dd><dt>Thời gian gửi</dt><dd>${incFmt(i.created)}</dd><dt>Vị trí</dt><dd>${U.esc(st.code || i.locationText || '—')}</dd><dt>Nội dung</dt><dd>${U.esc(i.desc || '—')}</dd></dl>`)}
         ${a ? incDetailSection('Tài sản liên quan', `${incAssetPreview(a)}<button class="btn sm" data-act="asset-open" data-id="${a.id}">Xem tài sản</button>`) : ''}
         ${incDetailSection('Tiến độ xử lý', incWorkUpdatesHtml(i))}
-        ${incDetailSection('Phát sinh vật tư/chi phí', incMaterialRequestHtml(i))}
         ${incAcceptanceHistoryHtml(i) ? incDetailSection('Lịch sử nghiệm thu', incAcceptanceHistoryHtml(i)) : ''}
         ${incDetailSection('Hình ảnh', `<div class="inc-detail-images">${incImages((i.images && i.images.report || []).concat(i.images && i.images.inspection || [], i.images && i.images.work || []))}</div>`)}
         ${incDetailSection('Hoạt động', `<div class="seg asset-tabs inc-activity-tabs">${[['all','Tất cả'],['comments','Trao đổi'],['history','Lịch sử']].map(x=>`<button class="${activityTab===x[0]?'on':''}" data-act="inc-activity-tab" data-id="${i.id}" data-tab="${x[0]}">${x[1]}</button>`).join('')}</div><div class="inc-timeline">${history.map(h=>`<div class="inc-timeline-i"><b>${incFmt(h.at)}</b><strong>${U.esc(h.action)}</strong>${h.detail?`<span>${U.esc(h.detail)}</span>`:''}</div>`).join('') || '<div class="empty small">Chưa có hoạt động.</div>'}</div>`)}
@@ -1293,13 +1212,13 @@
     const previous = i.assignee, previousName = incStaff(i);
     i.reassignmentHistory = Array.isArray(i.reassignmentHistory) ? i.reassignmentHistory : [];
     i.reassignmentHistory.push({ at, by: incCurrentActor('BQL'), from: previous, to: code, reason, deadline: i.deadline, newDeadline: due, previousState: i.state,
-      previousProcessing: JSON.parse(JSON.stringify({ receive: i.receive, inspection: i.inspection, work: i.work, workUpdates: i.workUpdates, images: i.images, materialRequest: i.materialRequest, acceptance: i.acceptance, leaderReminder: i.leaderReminder })) });
+      previousProcessing: JSON.parse(JSON.stringify({ receive: i.receive, inspection: i.inspection, work: i.work, workUpdates: i.workUpdates, images: i.images, acceptance: i.acceptance, leaderReminder: i.leaderReminder })) });
     i.assignee = code;
     i.state = 'phancong';
     i.deadline = due; i.assignedAt = at; i.assignmentNote = reason;
     i.receive = null; i.inspection = null; i.work = null; i.workUpdates = [];
     i.images = { report: (i.images || {}).report || [], inspection: [], work: [] };
-    i.materialRequest = { hasMaterial: false, status: 'none' }; i.acceptance = null;
+    i.acceptance = null;
     i.leaderReminder = null; i.escalated = false;
     incHistory(i, 'Phân công lại sau quá hạn lần 2', previousName + ' → ' + staff.fullName + ' · ' + reason + ' · Hạn mới: ' + incFmt(due));
     const suffix = 'R' + i.reassignmentHistory.length;
@@ -1389,26 +1308,34 @@
   function workModal(i, mode) {
     const w = i.work || {}, r = i.receive || {}, ins = i.inspection || {};
     const submitMode = mode === 'done' ? 'done' : 'progress';
+    const title = submitMode === 'done' ? 'Gửi kết quả chờ nghiệm thu' : 'Cập nhật tiến độ xử lý';
+    const contentLabel = submitMode === 'done' ? 'Công việc đã hoàn tất *' : 'Tình trạng / công việc đã thực hiện *';
+    const contentHint = submitMode === 'done'
+      ? 'Mô tả rõ hạng mục đã xử lý, vị trí, phạm vi và cách xử lý.'
+      : 'Ghi rõ tình trạng hiện tại, việc đã kiểm tra hoặc công việc đã thực hiện trong lần cập nhật này.';
+    const noteLabel = submitMode === 'done' ? 'Ghi chú bàn giao nghiệm thu' : 'Bước tiếp theo / ghi chú nội bộ';
     ui.incImageDraft = {};
     const body = `
       <section class="inc-section inc-work-summary">
-        <dl class="kv"><dt>Người xử lý</dt><dd>${U.esc(incStaff(i))}</dd><dt>Đã nhận lúc</dt><dd>${incFmt(r.at)}</dd><dt>Hạn xử lý</dt><dd>${incFmt(i.deadline)}</dd></dl>
+        <dl class="kv"><dt>Người xử lý</dt><dd>${U.esc(incStaff(i))}</dd><dt>Đã nhận lúc</dt><dd>${incFmt(r.at)}</dd><dt>Hạn xử lý</dt><dd>${incFmt(i.deadline)}</dd>${ins.condition ? `<dt>Ghi nhận hiện trường</dt><dd>${U.esc(ins.condition)}</dd>` : ''}</dl>
       </section>
       <section class="inc-section"><h4>Các lần cập nhật trước</h4>${incWorkUpdatesHtml(i)}</section>
       <section class="inc-section inc-accept-work">
-        <h4>Cập nhật mới</h4>
+        <h4>${submitMode === 'done' ? 'Kết quả xử lý gửi nghiệm thu' : 'Thông tin cập nhật'}</h4>
         <input type="hidden" id="iw-submit-mode" value="${submitMode}">
-        <div class="field"><label>${submitMode === 'done' ? 'Nội dung đã xử lý' : 'Nội dung cập nhật'} *</label><textarea class="input" id="iw-content" rows="4" placeholder="${submitMode === 'done' ? 'Mô tả công việc đã hoàn tất.' : 'Ghi ngắn gọn việc đã kiểm tra / đã làm.'}">${submitMode === 'done' ? U.esc(w.content || '') : ''}</textarea></div>
-        <div class="field" id="iw-result-wrap" ${submitMode === 'done' ? '' : 'hidden'}><label>Kết quả sau xử lý *</label><textarea class="input" id="iw-result" rows="3" placeholder="Ví dụ: đã thông nghẹt, nước thoát bình thường.">${U.esc(w.result || '')}</textarea></div>
-        <input type="hidden" id="iw-at" value="${incNow()}">
-        <div class="field"><label>Ghi chú</label><textarea class="input" id="iw-note" rows="2"></textarea></div>
+        <div class="form-grid">
+          <div class="field"><label>${submitMode === 'done' ? 'Thời điểm hoàn thành *' : 'Thời điểm cập nhật *'}</label><input class="input" type="datetime-local" id="iw-at" value="${incNow()}"></div>
+          <div class="field"><label>Người cập nhật</label><input class="input" value="${U.esc(incActorLabel(incCurrentActor(i.assignee)))}" disabled></div>
+        </div>
+        <div class="field"><label>${contentLabel}</label><textarea class="input" id="iw-content" rows="4" placeholder="${contentHint}">${submitMode === 'done' ? U.esc(w.content || '') : ''}</textarea></div>
+        <div class="field" id="iw-result-wrap" ${submitMode === 'done' ? '' : 'hidden'}><label>Kết quả sau xử lý *</label><textarea class="input" id="iw-result" rows="3" placeholder="Ví dụ: đã khắc phục xong, khu vực vận hành bình thường, không còn nguy cơ mất an toàn.">${U.esc(w.result || '')}</textarea></div>
+        <div class="field"><label>${noteLabel}</label><textarea class="input" id="iw-note" rows="2" placeholder="${submitMode === 'done' ? 'Thông tin cần Tổ trưởng lưu ý khi nghiệm thu.' : 'Việc còn theo dõi, hỗ trợ cần thiết hoặc mốc dự kiến hoàn tất.'}"></textarea></div>
       </section>
-      ${submitMode === 'progress' ? incMaterialFormHtml(i) : ''}
-      <section class="inc-section"><h4>Hình ảnh <span class="muted small">(không bắt buộc)</span></h4>${incImageInput('work')}</section>`;
+      <section class="inc-section"><h4>Minh chứng xử lý <span class="muted small">(không bắt buộc)</span></h4>${incImageInput('work')}</section>`;
     const footer = submitMode === 'done'
       ? `<button class="btn" data-act="inc-work-open" data-id="${i.id}">Quay lại cập nhật tiến độ</button><button class="btn primary" data-act="inc-work-save" data-mode="done" data-id="${i.id}">Gửi chờ nghiệm thu</button>`
       : `<button class="btn" data-act="close">Hủy</button><button class="btn" data-act="inc-work-done-open" data-id="${i.id}">Gửi chờ nghiệm thu</button><button class="btn primary" data-act="inc-work-save" data-mode="progress" data-id="${i.id}">Lưu cập nhật</button>`;
-    incModal(submitMode === 'done' ? 'Gửi kết quả chờ nghiệm thu' : 'Cập nhật tiến độ xử lý', incHeader(i) + body, footer);
+    incModal(title, incHeader(i) + body, footer);
     return;
   }
   A.ACT['inc-work-open'] = el => { const i=A.db.incidents.find(x=>x.id===el.dataset.id);if(i&&i.state==='dangxuly'&&incCan(i,'transition'))workModal(i, 'progress'); };
@@ -1417,77 +1344,51 @@
     const explicitMode = submit || (A.$('#iw-submit-mode') || {}).value;
     const mode = explicitMode || (A.$('input[name="iw-mode"]:checked') || {}).value || 'progress', content = A.$('#iw-content').value.trim(), result = (A.$('#iw-result') && A.$('#iw-result').value.trim()) || '', at = A.$('#iw-at').value;
     if (!i || i.state !== 'dangxuly' || !incCan(i, 'transition')) return false;
+    if (!at) { U.toast('Vui lòng nhập thời điểm cập nhật.'); return false; }
     if (!content) { U.toast('Vui lòng nhập nội dung cập nhật.'); return false; }
     if (mode === 'done' && !result) { U.toast('Vui lòng nhập kết quả sau xử lý khi gửi chờ nghiệm thu.'); return false; }
     const note = A.$('#iw-note').value.trim();
     const actor = incCurrentActor(i.assignee);
-    const materialChoice = mode === 'progress' ? ((A.$('input[name="im-has"]:checked') || {}).value || 'no') : 'skip';
-    let materialDetail = '';
-    if (mode === 'done' && i.materialRequest && i.materialRequest.hasMaterial && i.materialRequest.status === 'pending') {
-      U.toast('Vật tư/chi phí phát sinh đang chờ Tổ trưởng xác nhận trước khi gửi nghiệm thu.');
-      return false;
-    }
-    if (materialChoice === 'yes') {
-      const itemName = (A.$('#im-item') && A.$('#im-item').value.trim()) || '';
-      const quantity = (A.$('#im-qty') && A.$('#im-qty').value.trim()) || '';
-      if (!itemName || !quantity) { U.toast('Vui lòng nhập tên vật tư và số lượng phát sinh.'); return false; }
-      const previous = i.materialRequest || {};
-      const wasPending = previous.hasMaterial && previous.status === 'pending';
-      const reuseProposal = previous.status === 'pending' || previous.status === 'approved';
-      i.materialRequest = {
-        hasMaterial: true,
-        itemName,
-        quantity,
-        estimatedCost: Number((A.$('#im-est') && A.$('#im-est').value) || 0),
-        actualCost: Number((A.$('#im-act') && A.$('#im-act').value) || 0),
-        proposedBy: previous.proposedBy || actor,
-        proposedAt: reuseProposal ? (previous.proposedAt || incNow()) : incNow(),
-        confirmedBy: previous.confirmedBy || null,
-        confirmedAt: previous.confirmedAt || '',
-        status: previous.status === 'approved' ? 'approved' : 'pending',
-        note: (A.$('#im-note') && A.$('#im-note').value.trim()) || '',
-        evidence: (A.$('#im-note') && A.$('#im-note').value.trim()) || ''
-      };
-      if (i.materialRequest.status === 'pending' && !wasPending) incAddMaterialRequestNotification(i);
-      materialDetail = ' · Phát sinh vật tư/chi phí: ' + itemName + ' (' + quantity + ')';
-    } else if (materialChoice === 'no' && (!i.materialRequest || i.materialRequest.status !== 'approved')) {
-      i.materialRequest = { hasMaterial: false, status: 'none' };
-    }
     i.inspection = Object.assign({}, i.inspection || {}, { at: (i.inspection || {}).at || incNow(), by: actor, condition: content });
     i.workUpdates = Array.isArray(i.workUpdates) ? i.workUpdates : [];
-    i.workUpdates.push({ at, by: actor, completedBy: mode === 'done' ? actor : null, content, result, note, materialRequest: i.materialRequest, submitForAcceptance: mode === 'done' });
+    i.workUpdates.push({ at, by: actor, completedBy: mode === 'done' ? actor : null, content, result, note, submitForAcceptance: mode === 'done' });
     i.work = { content, result: mode === 'done' ? result : ((i.work || {}).result || ''), completedAt: mode === 'done' ? at : ((i.work || {}).completedAt || ''), completedBy: mode === 'done' ? actor : ((i.work || {}).completedBy || null), note, mode };
     i.images = Object.assign({ report: [], inspection: [], work: [] }, i.images || {});
     i.images.work = (i.images.work || []).concat(incDraftNames('work'));
-    if (mode === 'done') { i.state = 'chonghiemthu'; incHistory(i, 'Gửi kết quả chờ nghiệm thu', result + materialDetail); incNotifyAcceptanceWaiting(i); }
-    else incHistory(i, mode === 'blocked' ? 'Báo cần hỗ trợ xử lý' : 'Cập nhật tiến độ xử lý', content + materialDetail);
+    if (mode === 'done') { i.state = 'chonghiemthu'; incHistory(i, 'Gửi kết quả chờ nghiệm thu', result); incNotifyAcceptanceWaiting(i); }
+    else incHistory(i, mode === 'blocked' ? 'Báo cần hỗ trợ xử lý' : 'Cập nhật tiến độ xử lý', content);
     A.save(); A.closeModal(); A.render(); U.toast(mode === 'done' ? 'Đã gửi kết quả, hồ sơ chuyển sang Chờ nghiệm thu.' : 'Đã lưu cập nhật tiến độ.');
     return true;
   }
   A.ACT['inc-work-save'] = el => saveWork(A.db.incidents.find(x=>x.id===el.dataset.id), el.dataset.mode || '');
   A.CH['inc-work-mode'] = el => { const wrap=A.$('#iw-result-wrap'); if(wrap) wrap.hidden=el.value!=='done'; };
-  A.CH['inc-material-toggle'] = el => { const fields=A.$('#im-fields'); if(fields) fields.hidden=el.value!=='yes'; };
-  A.ACT['inc-material-approve'] = el => {
+  A.ACT['inc-accept-open'] = el => {
     const i = A.db.incidents.find(x => x.id === el.dataset.id);
-    if (!i || !i.materialRequest || i.materialRequest.status !== 'pending' || !incCanAssignMarket(i.market)) return;
-    i.materialRequest.status = 'approved';
-    i.materialRequest.confirmedBy = incCurrentActor('BQL');
-    i.materialRequest.confirmedAt = incNow();
-    incHistory(i, 'Xác nhận phát sinh vật tư/chi phí', (i.materialRequest.itemName || '') + (i.materialRequest.quantity ? ' · ' + i.materialRequest.quantity : ''));
-    incNotifyMaterialDecision(i, true);
-    A.save(); A.render(); openIncident(i); U.toast('Đã xác nhận phát sinh vật tư/chi phí.');
+    if (!i || i.state !== 'chonghiemthu' || !incCan(i, 'accept')) return;
+    const work = i.work || {};
+    const images = (i.images || {}).work || [];
+    incModal('Nghiệm thu kết quả xử lý', incHeader(i) + `
+      <section class="inc-section inc-work-summary">
+        <dl class="kv">
+          <dt>Người xử lý</dt><dd>${U.esc(incStaff(i))}</dd>
+          <dt>Người hoàn thành</dt><dd>${U.esc(incActorLabel(work.completedBy || i.assignee))}</dd>
+          <dt>Thời gian gửi kết quả</dt><dd>${incFmt(work.completedAt)}</dd>
+          <dt>Nội dung đã xử lý</dt><dd>${U.esc(work.content || '—')}</dd>
+          <dt>Kết quả sau xử lý</dt><dd>${U.esc(work.result || '—')}</dd>
+          <dt>Ghi chú của kỹ thuật</dt><dd>${U.esc(work.note || '—')}</dd>
+        </dl>
+      </section>
+      <section class="inc-section">
+        <h4>Minh chứng xử lý</h4>
+        ${images.length ? incImages(images) : '<div class="empty small">Chưa có hình ảnh minh chứng.</div>'}
+      </section>
+      <section class="inc-section inc-accept-work">
+        <h4>Kết luận nghiệm thu</h4>
+        <div class="inc-check">${U.icon('check')} Đối chiếu nội dung phản ánh, kết quả xử lý và minh chứng trước khi xác nhận.</div>
+        <div class="field"><label>Ghi chú nghiệm thu</label><textarea class="input" id="ia-note-accept" rows="3" placeholder="Nếu đạt: ghi nhận kết quả nghiệm thu. Nếu không đạt: nêu rõ nội dung cần xử lý lại."></textarea></div>
+      </section>`,
+      `<button class="btn" data-act="close">Hủy</button><button class="btn danger" data-act="inc-accept-reject" data-id="${i.id}">Không đạt, trả xử lý lại</button><button class="btn primary" data-act="inc-accept-save" data-id="${i.id}">Xác nhận hoàn thành</button>`);
   };
-  A.ACT['inc-material-reject'] = el => {
-    const i = A.db.incidents.find(x => x.id === el.dataset.id);
-    if (!i || !i.materialRequest || i.materialRequest.status !== 'pending' || !incCanAssignMarket(i.market)) return;
-    i.materialRequest.status = 'rejected';
-    i.materialRequest.confirmedBy = incCurrentActor('BQL');
-    i.materialRequest.confirmedAt = incNow();
-    incHistory(i, 'Không duyệt phát sinh vật tư/chi phí', i.materialRequest.itemName || '');
-    incNotifyMaterialDecision(i, false);
-    A.save(); A.render(); openIncident(i); U.toast('Đã ghi nhận không duyệt phát sinh vật tư/chi phí.');
-  };
-  A.ACT['inc-accept-open'] = el => {const i=A.db.incidents.find(x=>x.id===el.dataset.id);if(!i||i.state!=='chonghiemthu'||!incCan(i,'accept'))return;incModal('Nghiệm thu kết quả xử lý',incHeader(i)+`<section class="inc-section"><dl class="kv"><dt>Người xử lý</dt><dd>${U.esc(incStaff(i))}</dd><dt>Người hoàn thành</dt><dd>${U.esc(incActorLabel((i.work||{}).completedBy || i.assignee))}</dd><dt>Thời gian gửi kết quả</dt><dd>${incFmt((i.work||{}).completedAt)}</dd><dt>Nội dung xử lý</dt><dd>${U.esc((i.work||{}).content||'—')}</dd><dt>Kết quả sau xử lý</dt><dd>${U.esc((i.work||{}).result||'—')}</dd></dl>${incImages((i.images||{}).work||[])}<div class="field"><label>Ghi chú / lý do nghiệm thu</label><textarea class="input" id="ia-note-accept" rows="3" placeholder="Nhập ghi chú nghiệm thu. Nếu không đạt, phải nêu rõ nội dung cần xử lý lại."></textarea></div></section>`,`<button class="btn" data-act="close">Hủy</button><button class="btn danger" data-act="inc-accept-reject" data-id="${i.id}">Không đạt, trả xử lý lại</button><button class="btn primary" data-act="inc-accept-save" data-id="${i.id}">Xác nhận hoàn thành</button>`);};
   A.ACT['inc-accept-save'] = el => {const i=A.db.incidents.find(x=>x.id===el.dataset.id);if(!i||i.state!=='chonghiemthu'||!incCan(i,'accept'))return;const note=(A.$('#ia-note-accept')&&A.$('#ia-note-accept').value.trim())||'';i.acceptance={at:incNow(),by:incCurrentActor('BQL'),note,result:'accepted'};i.acceptanceHistory=Array.isArray(i.acceptanceHistory)?i.acceptanceHistory:[];i.acceptanceHistory.push(i.acceptance);i.state='hoanthanh';incHistory(i,'Nghiệm thu hoàn thành',note);incHistory(i,'Thông báo kết quả cho người phản ánh','Tiểu thương có thể đánh giá kết quả xử lý trên cổng tiểu thương.');incNotifyTraderCompleted(i);notifyTraderIncident(i,'COMPLETED','Phản ánh đã được xử lý',(i.work||{}).result||('Phản ánh '+i.id+' đã hoàn thành.'));A.save();A.closeModal();A.render();U.toast('Đã nghiệm thu hoàn thành. Tiểu thương có thể đánh giá kết quả phản ánh.');};
   A.ACT['inc-accept-reject'] = el => {const i=A.db.incidents.find(x=>x.id===el.dataset.id);if(!i||i.state!=='chonghiemthu'||!incCan(i,'accept'))return;const note=(A.$('#ia-note-accept')&&A.$('#ia-note-accept').value.trim())||'';if(!note){U.toast('Vui lòng nhập lý do nghiệm thu không đạt.');return;}i.acceptance={at:incNow(),by:incCurrentActor('BQL'),note,result:'rejected'};i.acceptanceHistory=Array.isArray(i.acceptanceHistory)?i.acceptanceHistory:[];i.acceptanceHistory.push(i.acceptance);i.state='dangxuly';if(i.work)i.work.mode='rework';incHistory(i,'Nghiệm thu không đạt',note);A.save();A.closeModal();A.render();U.toast('Đã trả hồ sơ về Đang xử lý để nhân viên kỹ thuật cập nhật lại.');};
   A.ACT['inc-close-open'] = el => {const i=A.db.incidents.find(x=>x.id===el.dataset.id);if(!i||i.state!=='hoanthanh'||!incCan(i,'close'))return;incModal('Đóng sự cố',incHeader(i)+`<section class="inc-section"><div class="inc-check">${U.icon('check')} Đã xử lý</div><div class="inc-check">${U.icon('check')} Đã thông báo kết quả cho người phản ánh</div><dl class="kv"><dt>Người xử lý</dt><dd>${U.esc(incStaff(i))}</dd><dt>Người hoàn thành</dt><dd>${U.esc(incActorLabel((i.work||{}).completedBy || i.assignee))}</dd><dt>Hoàn thành</dt><dd>${incFmt((i.work||{}).completedAt)}</dd>${i.acceptance?`<dt>Người nghiệm thu</dt><dd>${U.esc(incActorLabel(i.acceptance.by))}</dd>`:''}${i.rating?`<dt>Đánh giá tiểu thương</dt><dd>${'★'.repeat(i.rating)}${'☆'.repeat(5-i.rating)}${(i.feedback||{}).comment?` · ${U.esc(i.feedback.comment)}`:''}</dd>`:''}</dl><div class="field"><label>Ghi chú khi đóng</label><textarea class="input" id="ic-note" rows="2"></textarea></div></section>`,`<button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="inc-close-save" data-id="${i.id}">Đóng sự cố</button>`);};
