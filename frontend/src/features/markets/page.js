@@ -205,10 +205,10 @@
       <div class="form-grid"><div class="field"><label>Đơn vị quản lý</label><input class="input" value="Trung tâm Cung ứng dịch vụ công phường Cao Lãnh" disabled></div><div class="field"><label>Bộ phận quản lý</label><input class="input" value="Tổ Quản lý chợ" disabled></div></div>
       <div class="form-grid"><div class="field"><label>Người phụ trách chợ${changing?' *':''}</label><select class="input" id="dmc-assignee"><option value="">${changing?'Chọn người phụ trách':'Chưa phân công'}</option>${assignmentOptions(id)}</select><div id="dmc-assignee-warning" class="small dmc-warn"></div></div><div class="field"><label>Ngày bắt đầu phụ trách${changing?' *':''}</label><input class="input" id="dmc-assignment-from" type="date" value="${U.esc(start)}" ${x.id ? 'readonly' : ''}></div></div>
       ${changing ? '<div class="field"><label>Lý do thay đổi *</label><textarea class="input" id="dmc-assignment-reason" rows="2"></textarea></div>' : ''}<div class="field"><label>Ghi chú phân công</label><textarea class="input" id="dmc-assignment-note" rows="2">${U.esc(x.note||'')}</textarea></div>
-      <div class="note info">Phân công chỉ ghi nhận trách nhiệm; không tự cấp quyền nghiệp vụ, vai trò hoặc phạm vi chợ.</div>
+      <div class="note info">Phân công xác định phạm vi chợ của Tổ trưởng kể từ ngày hiệu lực; không tự cấp thêm quyền nghiệp vụ hoặc thay đổi vai trò.</div>
     </section>`;
   }
-  function refreshAssignmentWarning(marketId) { const accountId=inputValue('dmc-assignee'), host=A.$('#dmc-assignee-warning'); if (!host) return; host.textContent=accountId && MC.scopeWarning(marketId, accountId) ? 'Cảnh báo: tài khoản chưa có phạm vi chợ phù hợp và chưa thể thao tác tại chợ này. Hãy cấp phạm vi qua RBAC/tài khoản.' : ''; }
+  function refreshAssignmentWarning(marketId) { const accountId=inputValue('dmc-assignee'), host=A.$('#dmc-assignee-warning'); if (!host) return; host.textContent=accountId && MC.scopeWarning(marketId, accountId) ? 'Cảnh báo: tài khoản legacy chưa được chuyển đổi và hiện chưa có phạm vi chợ phù hợp.' : ''; }
 
   function inputValue(id) { const el = A.$('#' + id); return el ? String(el.value || '').trim() : ''; }
   // '' → null (bỏ trống); chuỗi không phải số → NaN.

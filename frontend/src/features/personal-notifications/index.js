@@ -56,16 +56,16 @@
     A.db.personalNotificationSeedVersion = 1;
     A.save();
   }
-  // Cảnh báo hợp đồng Hết hạn – chờ xử lý cho Tổ trưởng (contracts.service.expiryAlerts). Không có job nền: kiểm tra lại
-  // khi hộp thông báo được đọc. notificationKey (sự kiện + hợp đồng [+ bản ghi xác nhận] + tài khoản) chống gửi trùng;
-  // người nhận = Tổ trưởng đang hoạt động có chợ của hợp đồng trong phạm vi (A.allowedMarkets).
+  // Cảnh báo theo dõi hợp đồng cho người phụ trách chợ. Không có job nền: chỉ
+  // kiểm tra khi ứng dụng/hộp thông báo được mở; key theo ngày không gửi bù ngày cũ.
+  // Người nhận luôn qua helper phân công + RBAC + marketScopes, không tự cấp quyền.
   function ensureContractExpiryAlerts(date) {
     const CS = A.features && A.features.contracts && A.features.contracts.service;
     if (!A.db || !CS || !CS.expiryAlerts || !A.ACCOUNTS) return 0;
     const keys = new Set(list().map(n => n && n.notificationKey).filter(Boolean));
     let added = 0;
     CS.expiryAlerts(date).forEach(alert => {
-      const routing = A.features.markets.service.responsibleRecipient(alert.contract.market, 'hop-dong.xac-nhan-su-dung', date || U.today());
+      const routing = A.features.markets.service.responsibleRecipient(alert.contract.market, alert.requiredAction || 'hop-dong.xac-nhan-su-dung', date || U.today());
       const a = routing.account;
       if (!a) return; // No arbitrary recipient: the item remains visible in the contract worklist.
       const key = alert.key + '|' + a.id;

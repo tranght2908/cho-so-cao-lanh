@@ -216,19 +216,33 @@
 
   // ---------- Chỉ số điện, nước ----------
   svc.utilityByService = marketId => !!(A.SERVICE_CFG && A.SERVICE_CFG.utilityMode && A.SERVICE_CFG.utilityMode(marketId) === 'SERVICE');
-  // Điểm cần ghi chỉ số: điểm có công tơ thuộc hợp đồng hiệu lực áp dụng điện/nước; chợ thu điện nước như dịch vụ → không có.
-  svc.meterPoints = function (mp) {
-    if (!mp || svc.utilityByService(mp.marketId)) return [];
-    const ids = new Set();
-    svc.usageContracts(mp).forEach(c => {
-      // Chỉ số ghi cho khoảng sử dụng của đợt; khoản đã ngừng áp dụng tại ngày ghi thì không cần ghi.
-      const st = A.idx.stall.get(c.businessPointId || c.stallId), sa = c.serviceApplicability || {}, day = svc.usageWindow(mp).to;
-      // Khoản điện / nước chợ đã ngừng áp dụng (Chính sách thu) không cần ghi chỉ số ở kỳ mới.
-      const on = k => !A.SERVICE_CFG || !A.SERVICE_CFG.chargeActiveAt || A.SERVICE_CFG.chargeActiveAt(mp.marketId, k, day);
-      if (st && st.hasMeter && (((sa.electricity || !c.serviceApplicability) && on('electricity')) || ((sa.water || !c.serviceApplicability) && on('water')))) ids.add(st.id);
-    });
-    return Array.from(ids).map(id => A.idx.stall.get(id));
+  // Helper DÙNG CHUNG cho màn Chỉ số điện, nước và tính phí (billing.calculatePeriod): khoản điện / nước của một hợp đồng
+  // CẦN GHI CHỈ SỐ trong đợt. Chợ thu điện, nước như dịch vụ → không khoản nào. Còn lại = hợp đồng đăng ký điện / nước
+  // (serviceApplicability) VÀ khoản đó còn áp dụng tại ngày ghi chỉ số (Chính sách thu). KHÔNG dùng cờ hasMeter của điểm
+  // (điểm tạo từ màn Mặt bằng luôn hasMeter=false). Hợp đồng thiếu serviceApplicability = không đăng ký — dữ liệu seed cũ
+  // được bổ sung một lần khi tải (shared/data/store.js), giống cách tính phí đã dùng từ trước.
+  svc.meterChargesFor = function (mp, c, day) {
+    const none = { electricity: false, water: false };
+    if (!mp || !c || svc.utilityByService(mp.marketId)) return none;
+    const sa = c.serviceApplicability || {}, at = day || svc.usageWindow(mp).to;
+    const on = k => !A.SERVICE_CFG || !A.SERVICE_CFG.chargeActiveAt || A.SERVICE_CFG.chargeActiveAt(mp.marketId, k, at);
+    return { electricity: !!sa.electricity && on('electricity'), water: !!sa.water && on('water') };
   };
+  // Điểm cần ghi chỉ số của đợt + loại chỉ số cần ghi (gộp các hợp đồng dùng điểm trong khoảng đo): Map stallId → kinds.
+  svc.meterRequirements = function (mp) {
+    const out = new Map();
+    if (!mp) return out;
+    svc.usageContracts(mp).forEach(c => {
+      const id = c.businessPointId || c.stallId, k = svc.meterChargesFor(mp, c);
+      if (!id || !A.idx.stall.get(id) || (!k.electricity && !k.water)) return;
+      const cur = out.get(id) || { electricity: false, water: false, contractIds: [] };
+      cur.electricity = cur.electricity || k.electricity; cur.water = cur.water || k.water; cur.contractIds.push(c.id);
+      out.set(id, cur);
+    });
+    return out;
+  };
+  svc.meterPoints = mp => Array.from(svc.meterRequirements(mp).keys()).map(id => A.idx.stall.get(id));
+  svc.meterKinds = (mp, stallId, req) => (req || svc.meterRequirements(mp)).get(stallId) || { electricity: false, water: false, contractIds: [] };
   svc.readingOf = (mp, stallId) => (A.db.readings || []).find(r => r.stallId === stallId && (r.billingPeriodId === mp.id || (!r.billingPeriodId && r.period === monthOf(mp))) )
     || (A.db.readings || []).find(r => r.stallId === stallId && r.period === monthOf(mp)) || null;
   const consumption = (r, cur, prev) => r[cur] == null || r[prev] == null ? null : Number(r[cur]) - Number(r[prev]);
@@ -238,15 +252,20 @@
   };
   // NV đã kiểm tra và xác nhận/điều chỉnh chỉ số → không còn là cảnh báo chặn.
   svc.readingConfirmed = r => !!(r && r.reviewedAt && !r.reviewRequired);
-  svc.readingState = function (r) {
-    if (!r || r.elecCur == null || r.waterCur == null) return 'NOT_RECORDED';
-    if (r.reviewRequired || ((svc.isAbnormal(r, 'elec') || svc.isAbnormal(r, 'water')) && !r.reviewedAt)) return 'NEEDS_REVIEW';
+  // kinds: loại chỉ số cần ghi của điểm (meterKinds); bỏ trống = cả điện và nước (tương thích nơi gọi cũ). Đủ chỉ số = mọi
+  // loại cần ghi có chỉ số kỳ này VÀ chỉ số kỳ trước / đầu kỳ (tính phí cần cả hai để ra sản lượng). Loại không đăng ký
+  // không bắt ghi — không tạo chỉ số giả.
+  svc.readingState = function (r, kinds) {
+    const k = kinds || { electricity: true, water: true }, need = [k.electricity && 'elec', k.water && 'water'].filter(Boolean);
+    if (!r || need.some(x => r[x + 'Cur'] == null || r[x + 'Prev'] == null)) return 'NOT_RECORDED';
+    if (r.reviewRequired || (need.some(x => svc.isAbnormal(r, x)) && !r.reviewedAt)) return 'NEEDS_REVIEW';
     return 'RECORDED';
   };
+  svc.pointReadingState = (mp, st, req) => svc.readingState(svc.readingOf(mp, st.id), svc.meterKinds(mp, st.id, req));
   svc.meterStats = function (mp) {
-    const points = svc.meterPoints(mp), s = { required: points.length, recorded: 0, review: 0, unrecorded: 0, started: 0 };
+    const req = svc.meterRequirements(mp), points = Array.from(req.keys()).map(id => A.idx.stall.get(id)), s = { required: points.length, recorded: 0, review: 0, unrecorded: 0, started: 0 };
     points.forEach(st => {
-      const r = svc.readingOf(mp, st.id), state = svc.readingState(r);
+      const r = svc.readingOf(mp, st.id), state = svc.readingState(r, req.get(st.id));
       if (r && (r.elecCur != null || r.waterCur != null)) s.started++;
       if (state === 'RECORDED') s.recorded++; else if (state === 'NEEDS_REVIEW') s.review++; else s.unrecorded++;
     });
@@ -402,7 +421,8 @@
   };
   svc.supplementPoints = function (mp) {
     if (!mp || !svc.meterCompletedRecorded(mp) || svc.isIssued(mp) || svc.isClosed(mp)) return [];
-    return svc.meterPoints(mp).filter(st => svc.readingState(svc.readingOf(mp, st.id)) !== 'RECORDED');
+    const req = svc.meterRequirements(mp);
+    return svc.meterPoints(mp).filter(st => svc.pointReadingState(mp, st, req) !== 'RECORDED');
   };
   svc.canSupplementMeter = (mp, stallId) => svc.supplementPoints(mp).some(st => st.id === stallId);
   // Quyền: dien-nuoc.ghi-chi-so (BR-03 — chỉ NV thu phí) + chợ thuộc phạm vi của tài khoản. Lý do bắt buộc.
@@ -415,13 +435,16 @@
     if (!svc.canSupplementMeter(mp, stallId)) return { error: 'NOT_ALLOWED', message: 'Điểm này không thuộc danh sách cần ghi bổ sung chỉ số.' };
     const x = input || {}, reason = String(x.reason || '').trim();
     if (!reason) return { error: 'REQUIRED', field: 'reason', message: 'Vui lòng nhập lý do ghi bổ sung chỉ số.' };
-    const num = v => v === '' || v == null ? null : Number(v), e = num(x.elecCur), w = num(x.waterCur);
-    if (e == null || w == null || !Number.isFinite(e) || !Number.isFinite(w)) return { error: 'INVALID', field: 'value', message: 'Vui lòng nhập đủ chỉ số điện và nước hợp lệ.' };
+    // Chỉ các loại chỉ số điểm cần ghi (meterKinds); loại không đăng ký giữ nguyên, không bắt nhập.
+    const k = svc.meterKinds(mp, st.id), label = [k.electricity && 'điện', k.water && 'nước'].filter(Boolean).join(' và ');
+    const num = v => v === '' || v == null ? null : Number(v), bad = v => v == null || !Number.isFinite(v);
     const r = svc.ensureReadingRow(mp, st);
+    const e = k.electricity ? num(x.elecCur) : r.elecCur, w = k.water ? num(x.waterCur) : r.waterCur;
+    if ((k.electricity && bad(e)) || (k.water && bad(w))) return { error: 'INVALID', field: 'value', message: 'Vui lòng nhập đủ chỉ số ' + label + ' hợp lệ.' };
     // Điểm chưa từng có chỉ số kỳ trước (vd điểm mới / bị bỏ sót từ đầu): bắt buộc nhập chỉ số đầu kỳ để tính sản lượng.
     const ep = r.elecPrev != null ? r.elecPrev : num(x.elecPrev), wp = r.waterPrev != null ? r.waterPrev : num(x.waterPrev);
-    if (ep == null || wp == null || !Number.isFinite(ep) || !Number.isFinite(wp)) return { error: 'INVALID', field: 'prev', message: 'Điểm chưa có chỉ số kỳ trước — vui lòng nhập chỉ số đầu kỳ điện và nước.' };
-    if (e < ep || w < wp) return { error: 'INVALID', field: 'value', message: 'Chỉ số kỳ này không được nhỏ hơn chỉ số kỳ trước.' };
+    if ((k.electricity && bad(ep)) || (k.water && bad(wp))) return { error: 'INVALID', field: 'prev', message: 'Điểm chưa có chỉ số kỳ trước — vui lòng nhập chỉ số đầu kỳ ' + label + '.' };
+    if ((k.electricity && e < ep) || (k.water && w < wp)) return { error: 'INVALID', field: 'value', message: 'Chỉ số kỳ này không được nhỏ hơn chỉ số kỳ trước.' };
     const by = acc.fullName || acc.code || acc.id || '', at = stamp(), entry = { stallId: st.id, code: st.code, at, by, byId: acc.id || '', reason, elecPrev: ep, waterPrev: wp, elecCur: e, waterCur: w, old: { elecPrev: r.elecPrev, waterPrev: r.waterPrev, elecCur: r.elecCur, waterCur: r.waterCur } };
     Object.assign(r, { elecPrev: ep, waterPrev: wp, elecCur: e, waterCur: w, recordedBy: acc.code || acc.id, recordedAt: at, status: 'RECORDED', billingPeriodId: mp.id, reviewRequired: false, reviewReason: null,
       reviewedAt: at, reviewedBy: by, reviewResult: 'SUPPLEMENT', reviewNote: reason, supplemental: { at, by, byId: acc.id || '', reason } });

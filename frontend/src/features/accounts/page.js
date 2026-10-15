@@ -30,12 +30,13 @@
     }
     // Cột quản trị phải hiển thị assignment đã persist kể cả khi account đang chờ kích hoạt/khóa;
     // A.allowedMarkets() vẫn là lớp authorization runtime riêng.
-    const ids = new Set((a.marketScopes || []).includes('ALL') ? scopeMarkets().map(m => m.id) : (a.marketScopes || []));
+    const ids = new Set(A.allowedMarkets(a));
     return scopeMarkets().filter(m => ids.has(m.id));
   }
   function accountScopePresentation(a) {
     const roleId = A.ACCOUNTS.primaryRole(a);
     if (isIncidentScoped(a)) return { kind: 'incident', label: INCIDENT_SCOPE_LABEL, markets: [], interactive: false };
+    if (A.ACCOUNTS.managerNeedsAssignmentReview && A.ACCOUNTS.managerNeedsAssignmentReview(a)) return { kind: 'review', label: 'Cần rà soát phân công chợ', markets: [], interactive: false };
     const markets = accountScopeMarkets(a);
     if (!markets.length) return { kind: 'empty', label: 'Chưa được phân công', markets, interactive: false };
     const global = roleId !== 'trader' && (a.marketScopes || []).includes('ALL');
@@ -52,7 +53,7 @@
   }
   function accScopeLabel(a) {
     const p = accountScopePresentation(a);
-    if (!p.interactive) return p.kind === 'empty' ? '<span class="muted">Chưa được phân công</span>' : U.esc(p.label);
+    if (!p.interactive) return p.kind === 'empty' ? '<span class="muted">Chưa được phân công</span>' : (p.kind === 'review' ? '<span class="tag warn">Cần rà soát phân công chợ</span>' : U.esc(p.label));
     const suffix = p.kind === 'global'
       ? '<span class="acc-scope-chevron" aria-hidden="true">▾</span>'
       : `<span class="acc-scope-more">+${p.markets.length - 1}</span>`;
@@ -119,7 +120,8 @@
     const t = a.traderId ? A.idx.trader.get(a.traderId) : null;
     const pairs = rows => `<dl class="contract-detail-kv">${rows.map(r => `<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('')}</dl>`;
     const sec = (icon, key, title, body) => `<section class="contract-detail-section"><h4><span>${U.icon(icon)}</span>${key}. ${title}</h4>${body}</section>`;
-    const scopeFull = isIncidentScoped(a) ? INCIDENT_SCOPE_LABEL : (a.marketScopes || []).includes('ALL') ? allMarketsLabel() : (accScopeNames(a).map(U.esc).join(', ') || '<span class="muted">Chưa phân công</span>');
+    const legacyReview = A.ACCOUNTS.managerNeedsAssignmentReview && A.ACCOUNTS.managerNeedsAssignmentReview(a);
+    const scopeFull = isIncidentScoped(a) ? INCIDENT_SCOPE_LABEL : legacyReview ? '<span class="tag warn">Cần rà soát phân công chợ</span>' : (accScopeNames(a).map(U.esc).join(', ') || '<span class="muted">Chưa phân công</span>');
     const userRows = [['Họ tên', `<b>${U.esc(a.fullName)}</b>`], ['Số điện thoại', accPhone(a)], ['Loại người dùng', USER_KIND[accKind(a)]]];
     if (a.title && a.title !== accRoleNames(a)) userRows.push(['Chức danh', U.esc(a.title)]);
     if (accountOrganization(a)) userRows.push(['Đơn vị', U.esc(accountOrganization(a))]);
@@ -128,7 +130,7 @@
       + sec('file', 'B', 'TÀI KHOẢN & PHÂN QUYỀN', pairs([['Mã tài khoản', `<b>${U.esc(a.code)}</b>`], ['Vai trò', accRoleNames(a)], ['Phạm vi chợ', scopeFull], ['Trạng thái', accStatusTag(a)]]));
     return `<div class="drawer-h tt-dossier-head"><h3>${U.icon('users')}Chi tiết tài khoản</h3><button class="x" data-act="close" aria-label="Đóng">×</button></div>
       <div class="drawer-b contract-detail-body"><div class="contract-detail-grid">${body}</div></div>
-      <div class="drawer-f contract-detail-footer">${canEdit ? `<button class="btn primary" data-act="acc-edit" data-id="${a.id}">${U.icon('edit')}Chỉnh sửa tài khoản</button>` : ''}<button class="btn" data-act="close">Đóng</button></div>`;
+      <div class="drawer-f contract-detail-footer">${legacyReview && canEdit ? `<button class="btn warn" data-act="acc-manager-convert-open" data-id="${a.id}">Xác nhận phân công chợ</button>` : ''}${canEdit ? `<button class="btn primary" data-act="acc-edit" data-id="${a.id}">${U.icon('edit')}Chỉnh sửa tài khoản</button>` : ''}<button class="btn" data-act="close">Đóng</button></div>`;
   }
   // FORM TÀI KHOẢN NỘI BỘ (Thêm + Sửa dùng chung renderAccForm/acc-form-save) — CHỈ quản lý danh tính tài khoản;
   // phần phạm vi ĐỘNG THEO VAI TRÒ và luôn chỉ đọc:
@@ -137,11 +139,12 @@
   //                      qua A.ACCOUNTS.saveCollectorAccount), không phải của Admin tạo tài khoản.
   //   technician (A04) → "Theo sự cố được giao" (Incident.assignee); marketScopes=['ALL'] chỉ là giá trị tương
   //                      thích để mở sự cố được giao, không hiển thị như phân công Chợ.
-  //   system_admin/market_manager/central_accountant/ward_leader → "Toàn bộ N chợ" (lưu ['ALL']).
+  //   system_admin/central_accountant/ward_leader → "Toàn bộ N chợ" (lưu ['ALL']);
+  //   market_manager mới/đã chuyển đổi → scope suy ra từ phân công chợ hiệu lực.
   //   trader → không gán phạm vi ở đây (Tiểu thương → Hồ sơ tiểu thương → Tài khoản Mini App).
   const ROLE_SCOPE_INFO = {
     system_admin: { title: 'Phạm vi dữ liệu', all: true },
-    market_manager: { title: 'Phạm vi quản lý', all: true, help: 'Quản lý hoạt động của Tổ Quản lý chợ trên toàn bộ hệ thống.' },
+    market_manager: { title: 'Phân công quản lý', value: 'Chưa được phân công phụ trách chợ', help: 'Sau khi tạo tài khoản, phân công người phụ trách tại Danh mục chợ.' },
     technician: { title: 'Phạm vi công việc', value: INCIDENT_SCOPE_LABEL, help: 'Nhân viên kỹ thuật được Tổ trưởng phân công theo từng phản ánh/sự cố.' },
     central_accountant: { title: 'Phạm vi dữ liệu', all: true, help: 'Thực hiện nghiệp vụ kế toán và đối soát theo quyền được phân.' },
     ward_leader: { title: 'Phạm vi theo dõi', all: true, help: 'Xem và giám sát số liệu tổng hợp theo quyền được phân.' }
@@ -159,10 +162,21 @@
       ? afInfoBox('Phân công công việc', 'Đang phụ trách: ' + names.join(', '), 'Phân công chợ do Tổ trưởng Tổ Quản lý chợ thực hiện.')
       : afInfoBox('Phân công công việc', 'Chưa được phân công chợ', 'Tổ trưởng Tổ Quản lý chợ sẽ phân công chợ sau khi tài khoản được tạo.');
   }
+  function afManagerInfoHtml(d) {
+    const account = d && d.id ? A.ACCOUNTS.get(d.id) : null;
+    if (account && A.ACCOUNTS.managerNeedsAssignmentReview && A.ACCOUNTS.managerNeedsAssignmentReview(account)) {
+      return afInfoBox('Phân công quản lý', 'Cần rà soát phân công chợ', 'Tài khoản legacy đang giữ phạm vi ALL tạm thời. Admin cần xác nhận phân công chợ trước khi chuyển đổi.');
+    }
+    const names = account ? A.allowedMarkets(account).map(id => U.mShort(id)) : [];
+    return names.length
+      ? afInfoBox('Phân công quản lý', 'Đang phụ trách: ' + names.join(', '), 'Phạm vi chợ được suy ra từ phân công đang có hiệu lực tại Danh mục chợ.')
+      : afInfoBox('Phân công quản lý', 'Chưa được phân công phụ trách chợ', 'Sau khi tạo tài khoản, phân công người phụ trách tại Danh mục chợ.');
+  }
   function afScopeSectionHtml(d) {
     const roleId = afRole(d);
     if (!roleId) return '<section class="af-scope af-scope-empty">Chọn vai trò để xác định phạm vi làm việc.</section>';
     if (roleId === 'collector') return afCollectorInfoHtml(d);
+    if (roleId === 'market_manager') return afManagerInfoHtml(d);
     if (roleId === 'trader') return afInfoBox('Phạm vi', 'Theo hồ sơ tiểu thương', 'Tài khoản Tiểu thương được quản lý qua Tiểu thương → Hồ sơ tiểu thương → Tài khoản Mini App.');
     const info = ROLE_SCOPE_INFO[roleId];
     if (info) return afInfoBox(info.title, info.all ? allMarketsLabel() : info.value, info.help);
@@ -335,6 +349,26 @@
     if (!U.can('tai-khoan') || !A.openAccountProfile) return;
     A.openAccountProfile(el.dataset.id);
   };
+  A.ACT['acc-manager-convert-open'] = el => {
+    if (!A.canDo('tai-khoan.sua')) return;
+    const a = A.ACCOUNTS.get(el.dataset.id);
+    if (!a || !A.ACCOUNTS.managerNeedsAssignmentReview(a)) return;
+    const MS = A.features && A.features.markets && A.features.markets.service;
+    const ids = MS && MS.assignedMarketIdsForAccount ? MS.assignedMarketIdsForAccount(a.id) : [];
+    const names = ids.map(id => U.mShort(id)).join(', ');
+    const body = ids.length
+      ? `<div class="note warn">Xác nhận sẽ chuyển tài khoản này sang phạm vi suy ra từ phân công có hiệu lực. Phạm vi ALL cũ sẽ không còn được dùng.</div><p>Chợ đang được phân công: <b>${U.esc(names)}</b>.</p><p class="small muted">Hệ thống không tạo lịch sử phân công và không cấp thêm quyền chức năng.</p>`
+      : '<div class="note warn">Chưa thể chuyển đổi vì tài khoản chưa có phân công chợ nào đang hiệu lực. Hãy phân công tại Danh mục chợ trước.</div>';
+    A.modal(A.mHead('Xác nhận chuyển đổi phạm vi Tổ trưởng') + `<div class="modal-b"><p><b>${U.esc(a.fullName)}</b> hiện là tài khoản legacy có phạm vi ALL và cần rà soát.</p>${body}</div><div class="modal-f"><button class="btn" data-act="close">Hủy</button>${ids.length ? `<button class="btn primary" data-act="acc-manager-convert-confirm" data-id="${U.esc(a.id)}">Xác nhận chuyển đổi</button>` : ''}</div>`);
+  };
+  A.ACT['acc-manager-convert-confirm'] = el => {
+    if (!A.canDo('tai-khoan.sua')) return;
+    const out = A.ACCOUNTS.convertMarketManager(el.dataset.id, A.currentAccount());
+    if (!out.ok) { U.toast(out.reason === 'NO_EFFECTIVE_ASSIGNMENT' ? 'Tài khoản chưa có phân công chợ nào đang hiệu lực.' : 'Không thể chuyển đổi tài khoản.'); return; }
+    U.log('Xác nhận chuyển đổi phạm vi Tổ trưởng "' + out.account.fullName + '" theo phân công chợ: ' + out.marketIds.join(', '));
+    if (A.currentAccount && A.currentAccount().id === out.account.id) A.syncAccountContext();
+    A.closeModal(); A.render(); U.toast('Đã chuyển đổi phạm vi theo phân công chợ.');
+  };
   // Fixed-position popover must not remain detached from its account row while the table scrolls.
   if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('scroll', closeScopePopover, true);
   A.ACT['acc-new'] = () => {
@@ -401,6 +435,7 @@
       // NV thu phí: form KHÔNG đổi phân công Chợ. Tạo mới / vừa đổi sang NV thu phí → [] (chưa được phân công, hợp
       // lệ ở mọi trạng thái); NV thu phí đã có → giữ nguyên Chợ đang phụ trách.
       if (roleId === 'collector') marketScopes = roleId === ownRole ? existing.marketScopes : [];
+      else if (roleId === 'market_manager') marketScopes = roleId === ownRole && existing ? existing.marketScopes : [];
       else if (scopeMode === 'ALL') marketScopes = ['ALL'];
       else if (roleId === ownRole) marketScopes = existing.marketScopes;
       else marketScopes = [];
@@ -409,7 +444,11 @@
     // Mã: tạo mới → hệ thống sinh ngay lúc Lưu (không lấy từ form); sửa → giữ nguyên mã cũ (bất biến).
     const code = isNew ? A.features.accounts.service.nextInternalAccountCode(roleId, U.pad) : existing.code;
     if (!code) { U.toast('Không xác định được mã tài khoản cho vai trò này.'); return; }
+    const managerScopeMode = roleId === 'market_manager'
+      ? (roleId === ownRole && existing ? existing.managerScopeMode : 'ASSIGNMENT')
+      : undefined;
     const patch = { code, fullName: d.fullName.trim(), phone: existing ? existing.phone : A.ACCOUNTS.normalizePhone(d.phone), accountType: d.accountType, roleIds: canAssign ? [roleId] : (existing ? existing.roleIds : []), organization, marketScopes, status: isNew ? ACC_PENDING : d.status };
+    if (managerScopeMode !== undefined) patch.managerScopeMode = managerScopeMode;
     const fullRecord = Object.assign({ id: d.id || ('AC-' + code) }, patch);
     // Prototype: chưa có nhà cung cấp SMS — chỉ tạo hướng dẫn kích hoạt (không khẳng định đã gửi thật).
     const createdMsg = 'Đã tạo tài khoản ' + code + '. Hướng dẫn kích hoạt đã được tạo cho số điện thoại đăng nhập ' + U.maskPhone(patch.phone) + '.';

@@ -102,6 +102,11 @@
     // A07 Tiểu thương: chợ = chợ của các hồ sơ liên kết (Account.traderIds). marketScopes KHÔNG quyết định phạm vi A07
     // và chợ chỉ là ngữ cảnh — quyền bản ghi luôn theo traderId của hồ sơ đang xem.
     if (account && A.ACCOUNTS && A.ACCOUNTS.primaryRole(account) === 'trader' && A.ACCOUNTS.traderMarketsOf) return A.ACCOUNTS.traderMarketsOf(account);
+    if (account && A.ACCOUNTS && A.ACCOUNTS.primaryRole(account) === 'market_manager'
+      && A.ACCOUNTS.managerScopeMode && A.ACCOUNTS.managerScopeMode(account) === 'ASSIGNMENT') {
+      const MS = A.features && A.features.markets && A.features.markets.service;
+      return MS && MS.assignedMarketIdsForAccount ? MS.assignedMarketIdsForAccount(account.id) : [];
+    }
     const scopes = (account && account.marketScopes) || [];
     const markets = typeof A.effectiveMarkets === 'function' ? A.effectiveMarkets() : D.MARKETS;
     if (scopes.indexOf('ALL') !== -1) return markets.map(m => m.id);

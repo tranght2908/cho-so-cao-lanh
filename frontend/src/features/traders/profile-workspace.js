@@ -75,6 +75,8 @@
       ${profileFormSections(d,false)}
       <div class="card tp-footer"><span class="spacer"></span><button class="btn" data-act="tp-wizard-cancel">Hủy</button><button class="btn primary" data-act="tp-save">Lưu hồ sơ</button></div></div>`;}
   function pointPicker(){const d=draft(), pts=BP.list().filter(p=>p.market===ui.market&&BP.isAllocatable(p)&&!CS.hasActiveForPoint(p.id));return A.mHead('Chọn điểm kinh doanh')+`<div class="modal-b"><p class="small muted">Chỉ hiển thị điểm còn trống, chưa được hợp đồng khác phân bổ.</p>${U.table([{t:''},{t:'Mã điểm'},{t:'Vị trí'},{t:'Diện tích'},{t:'Loại diện tích'},{t:'Ngành hàng'},{t:'Trạng thái'}],pts.map(p=>`<tr><td><input type="checkbox" data-tp-point="${p.id}" ${d.items.some(x=>x.pointId===p.id)?'checked':''}></td><td><b>${p.code}</b></td><td>${U.esc(location(p))}</td><td>${p.area} m²</td><td>${U.esc(areaType(p))}</td><td>${U.esc(BP.industry(p)||'—')}</td><td>Còn trống</td></tr>`),{empty:'Không còn điểm kinh doanh phù hợp để đăng ký thuê.'})}</div><div class="modal-f"><button class="btn" data-act="close">Hủy</button><button class="btn primary" data-act="tp-points-confirm">Xác nhận chọn</button></div>`;}
+  // G3: HĐ đã ghi nhận không tiếp tục thuê (thực tế) — chỉ thêm nhãn, trạng thái điểm / hồ sơ không đổi.
+  function closureTag(c){return CS.isPendingClosure(c)?` <span class="tag info">${U.esc(CS.PENDING_CLOSURE_LABEL)}</span>`:'';}
   function legacyDetail(t) {
     const items=rental(t), contracts=CS.listByTrader(t.id);
     const pending=items.filter(x=>x.status==='pending_contract').length;
@@ -87,7 +89,7 @@
     const linkedPoints=pointIds.map(point).filter(Boolean);
     const itemByPoint=id=>items.find(x=>x.pointId===id);
     const pointStatus=p=>A.mbStatusLabel(BP.displayStatus(p,U.today()));
-    const contractTag=c=>{const d=CS.DISPLAY_STATUS[CS.displayStatus(c,U.today())];return `<span class="tag ${d.tone}">${U.esc(d.label)}</span>`;};
+    const contractTag=c=>{const d=CS.DISPLAY_STATUS[CS.displayStatus(c,U.today())];return `<span class="tag ${d.tone}">${U.esc(d.label)}</span>${closureTag(c)}`;};
     const chargeText=x=>{
       if(!x) return '<span class="muted">Chưa có cấu hình thuê lưu trong hồ sơ</span>';
       const c=x.charges||{};
@@ -121,7 +123,7 @@
     // copy, so rendering a profile never mutates the trader or rentalDraft.
     const d={files:Object.assign({},t.docFiles||{}),name:t.name||'',phone:t.phone||'',idType:t.idType||'CCCD',idNo:t.idNo||'',address:t.address||'',items:rental(t).map(x=>Object.assign({},x,{charges:Object.assign({},x.charges)})),ocr:null};
     const contracts=CS.listByTrader(t.id), pending=d.items.filter(x=>x.status==='pending_contract').length;
-    const contractRows=contracts.map(c=>{const p=point(c.businessPointId||c.stallId),s=CS.DISPLAY_STATUS[CS.displayStatus(c,U.today())];return `<tr><td><button class="btn link" data-act="ct-view" data-id="${U.esc(c.id)}">${U.esc(c.id)}</button></td><td>${U.esc(p?p.code:'—')}</td><td class="nowrap">${U.dmy(c.start)} → ${U.dmy(c.end)}</td><td><span class="tag ${s.tone}">${U.esc(s.label)}</span></td></tr>`;});
+    const contractRows=contracts.map(c=>{const p=point(c.businessPointId||c.stallId),s=CS.DISPLAY_STATUS[CS.displayStatus(c,U.today())];return `<tr><td><button class="btn link" data-act="ct-view" data-id="${U.esc(c.id)}">${U.esc(c.id)}</button></td><td>${U.esc(p?p.code:'—')}</td><td class="nowrap">${U.dmy(c.start)} → ${U.dmy(c.end)}</td><td><span class="tag ${s.tone}">${U.esc(s.label)}</span>${closureTag(c)}</td></tr>`;});
     const history=[]
       .concat(Array.isArray(t.history)?t.history:[])
       .concat(contracts.flatMap(c=>(c.history||[]).map(h=>Object.assign({contractId:c.id},h))))

@@ -38,7 +38,7 @@ const mk = (label, end, opts) => {
 const K = { main: mk('MAIN', D(-5)), stop: mk('STOP', D(-14)), scope: mk('SCOPE', D(-3)), next: mk('NEXT', D(-1)), live: mk('LIVE', D(900), { keepEnd: true }) };
 const add = (iso, k) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + k); return d.toISOString().slice(0, 10); };
 const U1 = D(60);
-const confirm = (c, input, date) => CS.confirmContinuation(c.id, Object.assign({ kind: 'CONTINUING', note: 'Kiểm tra thực tế' }, input), date);
+const confirm = (c, input, date) => CS.confirmContinuation(c.id, Object.assign({ kind: 'CONTINUING', evidence: 'SITE_CHECK', note: 'Kiểm tra thực tế' }, input), date);
 
 ok('CASE 1: hết hạn → "Hết hạn – chờ xử lý", quá hạn N ngày, điểm vẫn Đang thuê', () => {
   const c = K.main.c;
@@ -153,7 +153,7 @@ ok('CASE 4b (yêu cầu bổ sung 4/5): hủy bản mới nhất rồi tạo l�
   same(CS.validContinuations(c).map(x => x.until), [U1, add(U1, 30)]);
 });
 ok('Q5: đã ngừng sử dụng → không cho xác nhận tiếp; điểm không tự giải phóng', () => {
-  const c = K.stop.c, stopped = input => CS.confirmContinuation(c.id, Object.assign({ kind: 'STOPPED', note: 'Đã dọn hàng' }, input));
+  const c = K.stop.c, stopped = input => CS.confirmContinuation(c.id, Object.assign({ kind: 'STOPPED', evidence: 'SITE_CHECK', note: 'Đã dọn hàng' }, input));
   assert.strictEqual(stopped({ stoppedOn: D(1) }).field, 'stoppedOn', 'future');
   assert.strictEqual(stopped({ stoppedOn: c.end }).field, 'stoppedOn', 'on end date');
   assert.strictEqual(stopped({ stoppedOn: add(c.end, 5) }).field, 'stoppedOn', 'after unconfirmed gap');
@@ -186,14 +186,14 @@ ok('CASE 8: thông báo nội bộ chống trùng, chỉ Tổ trưởng trong ph
   assert.strictEqual(PN.ensureContractExpiryAlerts(), 0, 'second run adds nothing');
   assert.strictEqual(forScope().length, 1);
   assert.strictEqual(forScope()[0].recipientAccountId, 'AC-NV01');
-  assert.strictEqual(forScope()[0].notificationKey, 'CONTRACT_EXPIRED_PENDING|' + K.scope.c.id + '|AC-NV01');
+  assert.strictEqual(forScope()[0].notificationKey, 'CONTRACT_VERIFY_OVERDUE_DAILY|' + K.scope.c.id + '|' + TODAY + '|AC-NV01');
   assert(!A.db.personalNotifications.some(x => x.targetId === K.scope.c.id && x.recipientAccountId !== 'AC-NV01'), 'collector/leader not notified');
-  assert(!A.db.personalNotifications.some(x => x.targetId === K.stop.c.id), 'stopped contract not reminded');
-  // Nhắc khi xác nhận còn ≤ 7 ngày và khi hết hiệu lực: theo bản ghi xác nhận, không trùng.
+  assert(A.db.personalNotifications.some(x => x.targetId === K.stop.c.id && /^CONTRACT_PENDING_CLOSURE\|/.test(x.notificationKey || '')), 'stopped contract follows closure work');
+  // Tiếp tục thuê không bị nhắc xác minh lại theo thời gian; chỉ có việc theo dõi hồ sơ, không trùng.
   const end = CS.confirmedThrough(K.main.c);
   [add(end, -3), add(end, -3), add(end, 2), add(end, 2)].forEach(d => PN.ensureContractExpiryAlerts(d));
   const main = A.db.personalNotifications.filter(x => x.targetId === K.main.c.id).map(x => x.notificationKey.split('|')[0]).sort();
-  same(main, ['CONTINUATION_EXPIRING', 'CONTINUATION_LAPSED']);
+  same(main, ['CONTRACT_DOSSIER_DUE_DAILY', 'CONTRACT_DOSSIER_OVERDUE_DAILY', 'CONTRACT_DOSSIER_TRACK']);
   assert.strictEqual(new Set(A.db.personalNotifications.map(x => x.id)).size, A.db.personalNotifications.length, 'unique ids');
   assert.strictEqual(PN.add({ recipientAccountId: 'AC-NV01', notificationKey: forScope()[0].notificationKey }), null, 'add() dedupes too');
 });
@@ -204,27 +204,31 @@ ok('CASE 9 + 10: hợp đồng cũ hiển thị đúng; hết hạn không bao g
   L.migrate(); L.syncExpiry();
   [K.main, K.stop, K.scope].forEach(k => { assert.strictEqual(k.c.status, 'ACTIVE'); assert(!CS.DISPLAY_STATUS[CS.displayStatus(k.c)].legacy); });
 });
-ok('UI: danh sách (KPI, lọc tình trạng sử dụng, quá hạn) + chi tiết + popup xác nhận/hủy qua handler', () => {
+// G3 (10/2026): giao diện 3 kết quả xác minh — bộ lọc "Kết quả xác minh" + "Cần xử lý" thay bộ lọc tình trạng sử dụng;
+// một mục "Theo dõi xử lý hợp đồng" (xác minh + ghi chú) và một popup "Cập nhật xử lý".
+ok('UI: danh sách (KPI, lọc kết quả xác minh / cần xử lý, quá hạn) + chi tiết + popup cập nhật/hủy qua handler', () => {
   login('AC-NV01', 'CL');
   A.ui.contractWs = null; h.go('hop-dong');
   let v = h.view();
   assert(v.includes('<div class="k-label">Hết hạn – chờ xử lý</div>'));
-  assert(v.includes('data-ch="ctw-usage"'));
-  A.CH['ctw-usage']({ value: 'UNCONFIRMED' }); h.flush();
+  assert(v.includes('data-ch="ctw-outcome"') && v.includes('data-ch="ctw-attention"'), 'new filters');
+  assert(!v.includes('data-ch="ctw-usage"') && !v.includes('data-ch="ctw-expiring"'), 'old usage / expiring filters removed');
+  A.CH['ctw-outcome']({ value: 'NONE' }); h.flush();
   v = h.view();
-  assert(v.includes(K.scope.c.id) && !v.includes(K.main.c.id) && v.includes('Quá hạn 3 ngày'));
+  assert(v.includes(K.scope.c.id) && !v.includes(K.main.c.id) && v.includes('Quá hạn 3 ngày') && v.includes('Thiếu căn cứ sử dụng'));
   A.ACT['ctw-clear'](); h.flush();
   h.act('ct-view', { id: K.scope.c.id });
   v = h.view();
-  assert(v.includes('Hết hạn – chờ xử lý') && v.includes('Quá hạn 3 ngày') && v.includes('Chưa xác nhận tình trạng sử dụng'));
-  assert(v.includes('data-act="ct-continue-open"') && v.includes('Ghi chú hợp đồng hết hạn'));
+  assert(v.includes('Hết hạn – chờ xử lý') && v.includes('Quá hạn 3 ngày') && v.includes('Theo dõi xử lý hợp đồng') && (v.match(/Chưa xác minh/g) || []).length === 1);
+  assert(v.includes('Theo dõi xử lý hợp đồng') && v.includes('data-act="ct-continue-open"'), 'one follow-up section + one action');
+  assert(!v.includes('Ghi chú hợp đồng hết hạn') && !v.includes('ct-expiry-note-open') && !v.includes('ct-continue-verify'), 'separate note block / buttons merged');
   h.act('ct-continue-open', { id: K.scope.c.id });
-  assert(/Tình trạng thực tế/.test(h.modal()) && h.modal().includes('value="' + D(-2) + '"'));
-  h.input('#ct-continue-until', D(30)); h.input('#ct-continue-note', 'Vẫn bán hàng'); h.input('#ct-continue-stopped', '');
+  assert(/Kết quả xác minh/.test(h.modal()) && h.modal().includes('value="' + D(-2) + '"'));
+  h.input('#ct-continue-until', D(30)); h.input('#ct-continue-evidence', 'SITE_CHECK'); h.input('#ct-continue-note', 'Vẫn bán hàng');
   h.act('ct-continue-save', { id: K.scope.c.id });
   assert.strictEqual(CS.confirmedThrough(K.scope.c), D(30));
   v = h.view();
-  assert(v.includes('Xác nhận tình trạng sử dụng') && v.includes(dmy(D(-2)) + ' → ' + dmy(D(30))) && v.includes('data-act="ct-continue-void-open"'));
+  assert(v.includes('Lịch sử xác minh') && v.includes(dmy(D(-2)) + ' → ' + dmy(D(30))) && v.includes('data-act="ct-continue-void-open"'));
   h.act('ct-continue-void-open', { id: K.scope.c.id, rec: CS.latestContinuation(K.scope.c).id });
   h.input('#ct-continue-void-reason', 'Nhập nhầm');
   h.act('ct-continue-void-save', { id: K.scope.c.id, rec: CS.latestContinuation(K.scope.c).id });

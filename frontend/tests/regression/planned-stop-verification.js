@@ -31,7 +31,7 @@ const mk = (label, end) => {
   c.end = end; L.migrate();
   return { c, p };
 };
-const conf = (k, input, date) => { const r = CS.confirmContinuation(K[k].c.id, Object.assign({ note: 'G1 ' + k }, input), date); if (r.error) throw new Error(k + ': ' + r.message); return r.record; };
+const conf = (k, input, date) => { const r = CS.confirmContinuation(K[k].c.id, Object.assign({ evidence: 'SITE_CHECK', note: 'G1 ' + k }, input), date); if (r.error) throw new Error(k + ': ' + r.message); return r.record; };
 const K = { stop: mk('STOP', '2026-10-15'), reality: mk('REAL', '2026-10-15'), cont: mk('CONT', '2026-10-15'), stopped: mk('DONE', '2026-10-10') };
 const land = (k, o) => (o || B.drafts('CL', mp.id)).filter(d => d.contractId === K[k].c.id && d.items[0].chargeType === 'LAND');
 const warns = (k, o) => (o || B.warnings('CL', mp.id)).filter(w => w.contractId === K[k].c.id);
@@ -105,7 +105,7 @@ ok('tính lại ngày 02/11: thiếu căn cứ PLANNED_STOP_UNVERIFIED (chặn),
   assert(/2 dự kiến ngừng chưa xác minh/.test(screen('theo-doi-ky-thu')) && !/Số liệu nháp đã lỗi thời/.test(h.view()));
 });
 ok('xác minh thực tế: đã ngừng → không tính mặt bằng sau ngày kết thúc; vẫn kinh doanh → tính đủ; hết chặn', () => {
-  const r1 = CS.verifyPlanned(K.stop.c.id, K.stop.plan.id);
+  const r1 = CS.verifyPlanned(K.stop.c.id, K.stop.plan.id, { evidence: 'SITE_CHECK', note: 'Kiểm tra tại điểm: đã ngừng' });
   assert(!r1.error && r1.record.kind === 'STOPPED' && r1.record.stoppedOn === '2026-11-01', r1.message);
   conf('reality', { kind: 'CONTINUING', from: '2026-11-01', until: '2026-12-31' });
   assert(K.reality.plan.supersededAt && !K.reality.plan.voidedAt, 'plan superseded, kept in history');

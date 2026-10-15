@@ -53,6 +53,14 @@
   service.assignments = marketId => assignmentRows(marketId);
   service.assignmentAt = (marketId, date) => assignmentRows(marketId).find(x => inRange(x, isoDate(date) || today())) || null;
   service.currentAssignment = marketId => service.assignmentAt(marketId, today());
+  // For new/converted managers, active assignments are the single scope source.
+  service.assignedMarketIdsForAccount = function (accountId, date) {
+    const at = isoDate(date) || today();
+    return service.effectiveMarkets().map(m => m.id).filter(marketId => {
+      const row = service.assignmentAt(marketId, at);
+      return !!row && row.accountId === accountId;
+    });
+  };
   service.eligibleResponsibleAccounts = function () {
     return (A.ACCOUNTS.currentList ? A.ACCOUNTS.currentList() : A.ACCOUNTS.list()).filter(a => activeInternal(a) && RESPONSIBLE_ROLE_IDS.indexOf(A.ACCOUNTS.primaryRole(a)) !== -1);
   };
@@ -68,6 +76,7 @@
   };
   service.scopeWarning = (marketId, accountId) => {
     const account = accountId && A.ACCOUNTS.get(accountId);
+    if (account && A.ACCOUNTS.managerScopeMode && A.ACCOUNTS.managerScopeMode(account) === 'ASSIGNMENT') return false;
     return !!account && A.allowedMarkets(account).indexOf(marketId) === -1;
   };
   service.canManageAssignments = function () {

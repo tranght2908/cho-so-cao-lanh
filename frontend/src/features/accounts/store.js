@@ -32,6 +32,7 @@
   // Các account/role này có phạm vi nghiệp vụ được chốt là toàn bộ market. `ALL` là convention
   // sẵn có; A.allowedMarkets() là nơi duy nhất giải mã nó sang danh sách market hiệu lực.
   const CANONICAL_MARKET_MANAGER_ID = 'AC-NV01';
+  const MANAGER_SCOPE_ASSIGNMENT = 'ASSIGNMENT';
   // technician: ['ALL'] chỉ để mở sự cố được giao ở bất kỳ chợ nào (Incident.assignee là nguồn phân công).
   const ALL_SCOPE_ROLE_IDS = ['system_admin', 'ward_leader', 'central_accountant', 'technician'];
   // Explicit former per-market manager seed IDs only. Never infer legacy status
@@ -127,7 +128,7 @@
     list.forEach(a => {
       if (!isCurrentOrganization(a)) return;
       const roleId = (a.roleIds || [])[0];
-      const fixedAll = ALL_SCOPE_ROLE_IDS.indexOf(roleId) !== -1 || (a.id === CANONICAL_MARKET_MANAGER_ID && roleId === 'market_manager');
+      const fixedAll = ALL_SCOPE_ROLE_IDS.indexOf(roleId) !== -1 || (a.id === CANONICAL_MARKET_MANAGER_ID && roleId === 'market_manager' && a.managerScopeMode !== MANAGER_SCOPE_ASSIGNMENT);
       if (!fixedAll || (Array.isArray(a.marketScopes) && a.marketScopes.length === 1 && a.marketScopes[0] === 'ALL')) return;
       a.marketScopes = ['ALL'];
       changed = true;
@@ -447,8 +448,10 @@
     primaryRole: account => (account && account.roleIds && account.roleIds[0]) || null,
     // scopeType (mục 5 yêu cầu) — suy ra từ marketScopes, KHÔNG lưu field riêng (xem comment đầu
     // file). 'GLOBAL' = system_admin/ward_leader (marketScopes chứa 'ALL'); 'MARKET' = còn lại.
-    scopeType: account => (account && Array.isArray(account.marketScopes) && account.marketScopes.indexOf('ALL') !== -1) ? 'GLOBAL' : 'MARKET',
-    scopeModeForRole: roleId => roleId === 'trader' ? 'TRADER' : (roleId === 'market_manager' || ALL_SCOPE_ROLE_IDS.indexOf(roleId) !== -1 ? 'ALL' : 'MARKET'),
+    scopeType: account => (account && Array.isArray(account.marketScopes) && account.marketScopes.indexOf('ALL') !== -1 && A.ACCOUNTS.primaryRole(account) !== 'market_manager') ? 'GLOBAL' : 'MARKET',
+    managerScopeMode: account => account && A.ACCOUNTS.primaryRole(account) === 'market_manager' && account.managerScopeMode === MANAGER_SCOPE_ASSIGNMENT ? MANAGER_SCOPE_ASSIGNMENT : 'LEGACY',
+    managerNeedsAssignmentReview: account => !!account && A.ACCOUNTS.primaryRole(account) === 'market_manager' && A.ACCOUNTS.managerScopeMode(account) !== MANAGER_SCOPE_ASSIGNMENT && (account.marketScopes || []).indexOf('ALL') !== -1,
+    scopeModeForRole: roleId => roleId === 'trader' ? 'TRADER' : (roleId === 'market_manager' ? MANAGER_SCOPE_ASSIGNMENT : (ALL_SCOPE_ROLE_IDS.indexOf(roleId) !== -1 ? 'ALL' : 'MARKET')),
     // Vai trò của form "Thêm/Sửa tài khoản nội bộ": role hiện hành CÓ trong danh mục actor (D.ACTORS), trừ
     // Tiểu thương (tài khoản Mini App đi luồng riêng). Không có A06/market_accountant/role legacy.
     internalRoles: () => A.PERM.currentRoles().filter(r => r.id !== 'trader' && (D.ACTORS || []).some(x => x.roleId === r.id)),
@@ -470,6 +473,21 @@
     isKnownLegacyManagerSeed: account => isLegacyManagerRecord(account),
     isRetiredDemoAccount: account => !!account && RETIRED_DEMO_ACCOUNT_IDS.has(account.id),
     isCurrentOrganization: account => isCurrentOrganization(account),
+    convertMarketManager: (accountId, actor) => {
+      const account = A.ACCOUNTS.get(accountId);
+      if (!account || A.ACCOUNTS.primaryRole(account) !== 'market_manager') return { ok: false, reason: 'NOT_MARKET_MANAGER' };
+      if (!A.ACCOUNTS.managerNeedsAssignmentReview(account)) return { ok: false, reason: 'NOT_LEGACY_REVIEW' };
+      const MS = A.features && A.features.markets && A.features.markets.service;
+      const marketIds = MS && MS.assignedMarketIdsForAccount ? MS.assignedMarketIdsForAccount(account.id) : [];
+      if (!marketIds.length) return { ok: false, reason: 'NO_EFFECTIVE_ASSIGNMENT' };
+      const at = new Date().toISOString();
+      account.managerScopeMode = MANAGER_SCOPE_ASSIGNMENT;
+      account.managerScopeConversion = { convertedAt: at, convertedBy: actor && actor.id || null, previousMarketScopes: (account.marketScopes || []).slice(), effectiveMarketIds: marketIds.slice() };
+      // Compatibility metadata only after conversion; it can no longer grant access.
+      account.marketScopes = [];
+      saveAccounts();
+      return { ok: true, account, marketIds };
+    },
     // Current organization list (màn Tài khoản, KPI, thanh demo, ứng viên phân công). Legacy/retired records
     // remain in ACCOUNTS/list/localStorage for compatibility and history lookups.
     currentList: () => ACCOUNTS.filter(isCurrentOrganization),

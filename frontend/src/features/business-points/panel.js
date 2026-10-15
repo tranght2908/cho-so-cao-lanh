@@ -72,7 +72,7 @@
       ${sec('C. Hợp đồng hiện hành', c
         ? `<dl class="kv"><dt>Số hợp đồng</dt><dd>${c.id}</dd>
         <dt>Thời hạn</dt><dd>${U.dmy(c.start)} – ${U.dmy(c.end)}<br><span class="small muted">${left < 0 ? '<b style="color:#df2225">Đã hết hạn</b>' : left <= 30 ? `<b style="color:#df2225">còn ${left} ngày</b>` : 'còn ' + left + ' ngày'}</span></dd>
-        <dt>Trạng thái</dt><dd>${(d => `<span class="tag ${d.tone}">${d.label}</span>`)(A.features.contracts.service.DISPLAY_STATUS[A.features.contracts.service.displayStatus(c)])}</dd></dl>`
+        <dt>Trạng thái</dt><dd>${(d => `<span class="tag ${d.tone}">${d.label}</span>`)(A.features.contracts.service.DISPLAY_STATUS[A.features.contracts.service.displayStatus(c)])}${(A.features.contracts.service.isPendingClosure(c) ? ' <span class="tag info">' + A.features.contracts.service.PENDING_CLOSURE_LABEL + '</span>' : '')}</dd></dl>`
         : '<div class="note info">Chưa có hợp đồng hiệu lực.</div>')}
       <div class="divider"></div>
       ${actions.length ? `<div class="row" style="gap:8px;flex-wrap:wrap">${actions.join('')}</div>` : ''}`;

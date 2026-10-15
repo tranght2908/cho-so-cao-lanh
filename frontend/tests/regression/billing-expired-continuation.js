@@ -80,7 +80,7 @@ ok('PLANNED_STOP đã dùng để phát hành, thực tế vẫn kinh doanh → 
   const c = K.under.c;
   assert.strictEqual(CS.usageState(c), 'PLANNED_STOP');
   assert(CS.plannedToVerify(c).some(r => r.id === K.under.rec.id), 'reminder to verify reality');
-  const r = CS.confirmContinuation(c.id, { kind: 'CONTINUING', from: '2026-11-06', until: '2026-12-31', note: 'Thực tế vẫn kinh doanh' });
+  const r = CS.confirmContinuation(c.id, { kind: 'CONTINUING', from: '2026-11-06', until: '2026-12-31', evidence: 'SITE_CHECK', note: 'Thực tế vẫn kinh doanh' });
   assert(!r.error, r.message);
   assert.strictEqual(r.replaced.id, K.under.rec.id); assert(K.under.rec.supersededAt && K.under.rec.supersededById === r.record.id && !K.under.rec.voidedAt);
   assert.strictEqual(r.settlementFlags.length, 1);
@@ -94,7 +94,7 @@ ok('PLANNED_STOP đã dùng để phát hành, thực tế vẫn kinh doanh → 
   assert.strictEqual(CS.usageState(c), 'CONFIRMED');
 });
 ok('CONTINUING dự kiến đã phát hành, thực tế ngừng sớm → STOPPED + chênh lệch THU THỪA', () => {
-  const r = CS.confirmContinuation(K.over.c.id, { kind: 'STOPPED', stoppedOn: '2026-11-12', note: 'Đã dọn đi' });
+  const r = CS.confirmContinuation(K.over.c.id, { kind: 'STOPPED', stoppedOn: '2026-11-12', evidence: 'SITE_CHECK', note: 'Đã dọn đi' });
   assert(!r.error, r.message);
   const f = r.settlementFlags[0];
   assert.strictEqual(f.direction, 'OVER'); assert.strictEqual(f.billedDays, 30); assert.strictEqual(f.actualDays, 11); assert.strictEqual(f.diffDays, -19);
@@ -108,7 +108,10 @@ ok('sau ngày hết hạn: nhắc kiểm tra thực tế bản dự kiến (ch�
   const c = K.verify.c, key = 'PLANNED_VERIFY|' + c.id + '|' + K.verify.rec.id + '|AC-NV01';
   PN.ensureContractExpiryAlerts(); PN.ensureContractExpiryAlerts();
   assert.strictEqual(A.db.personalNotifications.filter(x => x.notificationKey === key).length, 1);
-  const r = CS.verifyPlanned(c.id, K.verify.rec.id);
+  // G3: xác minh thực tế bắt buộc căn cứ + ghi chú.
+  assert.strictEqual(CS.verifyPlanned(c.id, K.verify.rec.id).field, 'evidence');
+  assert.strictEqual(CS.verifyPlanned(c.id, K.verify.rec.id, { evidence: 'SITE_CHECK', note: ' ' }).field, 'note');
+  const r = CS.verifyPlanned(c.id, K.verify.rec.id, { evidence: 'SITE_CHECK', note: 'Kiểm tra tại điểm: vẫn kinh doanh' });
   assert(!r.error, r.message);
   assert(K.verify.rec.verifiedAt && K.verify.rec.verifiedBy && K.verify.rec.basis === 'PLANNED', 'stays planned, marked verified');
   assert.strictEqual(CS.plannedToVerify(c).length, 0);

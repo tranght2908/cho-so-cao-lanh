@@ -1,6 +1,6 @@
 /* Focused regression: popup "Thêm/Sửa tài khoản nội bộ" — chỉ quản lý danh tính tài khoản; phạm vi hiển thị
  * theo vai trò, chỉ đọc. A03 không phân công Chợ ở đây (Tổ trưởng phân công sau); A04 "Theo sự cố được giao";
- * A01/A02/A05/A08 "Toàn bộ N chợ" (['ALL']). */
+ * A01/A05/A08 "Toàn bộ N chợ" (['ALL]); A02 uses dated market assignments. */
 const assert = require('assert');
 const path = require('path');
 const { createApp } = require('./harness');
@@ -40,7 +40,7 @@ ok('role dropdown: exactly the 6 current internal roles (no A06, market_accounta
 });
 [
   ['system_admin', 'Phạm vi dữ liệu', ALL_LABEL],
-  ['market_manager', 'Phạm vi quản lý', ALL_LABEL, 'Quản lý hoạt động của Tổ Quản lý chợ trên toàn bộ hệ thống.'],
+  ['market_manager', 'Phân công quản lý', 'Chưa được phân công phụ trách chợ', 'Sau khi tạo tài khoản, phân công người phụ trách tại Danh mục chợ.'],
   ['central_accountant', 'Phạm vi dữ liệu', ALL_LABEL, 'Thực hiện nghiệp vụ kế toán và đối soát theo quyền được phân.'],
   ['ward_leader', 'Phạm vi theo dõi', ALL_LABEL, 'Xem và giám sát số liệu tổng hợp theo quyền được phân.'],
   ['technician', 'Phạm vi công việc', 'Theo sự cố được giao', 'Nhân viên kỹ thuật được Tổ trưởng phân công theo từng phản ánh/sự cố.']
@@ -86,6 +86,18 @@ ok('new collector saved PENDING with marketScopes=[]; add never changes existing
   eq(assignmentSnapshot(), before, 'other collectors untouched');
   eq(A.ACCOUNTS.getMarketCollector('HA').id, haBefore);
   A.D.MARKETS.forEach(m => assert(A.ACCOUNTS.getMarketCollectors(m.id).length <= 1, m.id));
+});
+ok('new market manager has no ALL scope; active assignment is the only market source', () => {
+  open(); fill('FORM-QL', '0987111012'); pickRole('market_manager'); h.act('acc-form-save');
+  const ql = created('FORM-QL'); assert(ql, lastToast());
+  eq(ql.marketScopes, []); assert.strictEqual(ql.managerScopeMode, 'ASSIGNMENT');
+  eq(A.allowedMarkets(ql), []);
+  A.ACCOUNTS.setStatus(ql.id, 'ACTIVE');
+  const MC = A.features.markets.service, admin = A.ACCOUNTS.get('AC-QT01');
+  const out = MC.assign('HA', { accountId: ql.id, effectiveFrom: A.U.today(), reason: 'Phân công test', note: '' }, admin);
+  assert(out.ok, JSON.stringify(out)); eq(A.allowedMarkets(ql), ['HA']);
+  const future = MC.assign('TVH', { accountId: ql.id, effectiveFrom: '2099-01-01', reason: 'Kế hoạch test', note: '' }, admin);
+  assert(future.ok, JSON.stringify(future)); eq(A.allowedMarkets(ql), ['HA']);
 });
 ok('edit existing assigned collector: read-only Markets, no checkbox, scopes retained', () => {
   const nv02 = A.ACCOUNTS.get('AC-NV02'), scopes = JSON.stringify(nv02.marketScopes);

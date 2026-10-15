@@ -128,8 +128,8 @@
     // js/v-tieuthuong.js).
     { key: 'action:tieu-thuong.xac-minh', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'tieu-thuong', label: 'Khoá/mở khoá truy cập tài khoản Mini App của tiểu thương' },
     { key: 'action:hop-dong.tao', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Tạo hợp đồng (từ màn Hợp đồng)' },
-    { key: 'action:hop-dong.ghi-chu-het-han', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Thêm ghi chú hợp đồng đã hết hạn' },
-    { key: 'action:hop-dong.xac-nhan-su-dung', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Xác nhận / hủy xác nhận tình trạng sử dụng của hợp đồng hết hạn' },
+    { key: 'action:hop-dong.ghi-chu-het-han', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Ghi chú theo dõi hợp đồng sắp hết hạn / hết hạn' },
+    { key: 'action:hop-dong.xac-nhan-su-dung', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Xác minh / hủy kết quả xác minh hợp đồng sắp hết hạn / hết hạn' },
     { key: 'action:hop-dong.gia-han', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Gia hạn hợp đồng' },
     { key: 'action:hop-dong.thanh-ly', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'Thanh lý hợp đồng' },
     { key: 'action:hop-dong.in', kind: 'action', group: 'Tiểu thương & hợp đồng', screenId: 'hop-dong', label: 'In hợp đồng giấy' },

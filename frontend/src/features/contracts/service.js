@@ -89,10 +89,15 @@
   };
   // Theo dõi hết hạn chỉ thêm lịch sử ghi chú, tuyệt đối không sửa ngày,
   // trạng thái hợp đồng, điểm kinh doanh hoặc hồ sơ tiểu thương.
+  // G3 (10/2026): ghi chú theo dõi được từ khi hợp đồng còn ≤ 30 ngày (cửa sổ xác minh trước hạn) và sau khi hết hạn.
+  service.canAddFollowUpNote = function (contractOrId, date) {
+    const c = typeof contractOrId === 'string' ? repository.getById(contractOrId) : contractOrId, at = date || A.U.today();
+    return !!c && c.status === 'ACTIVE' && (service.displayStatus(c, at) === 'EXPIRED' || !!service.continuationMode(c, at));
+  };
   service.addExpiryNote = function (id, input) {
     const c = repository.getById(id);
     if (!c) return { error: 'NOT_FOUND', message: 'Không tìm thấy hợp đồng.' };
-    if (service.displayStatus(c) !== 'EXPIRED') return { error: 'NOT_EXPIRED', message: 'Chỉ được ghi chú cho hợp đồng đã hết hạn.' };
+    if (!service.canAddFollowUpNote(c)) return { error: 'NOT_IN_WINDOW', message: 'Chỉ ghi chú theo dõi cho hợp đồng sắp hết hạn (còn ≤ 30 ngày) hoặc đã hết hạn.' };
     const content = String(input && input.content || '').trim();
     if (!content) return { error: 'REQUIRED', message: 'Vui lòng nhập nội dung ghi chú.' };
     const createdAt = new Date().toISOString();
@@ -119,8 +124,10 @@
   const CONTINUATION_PERMISSION = service.CONTINUATION_PERMISSION = 'hop-dong.xac-nhan-su-dung';
   const CONTINUATION_MAX_MONTHS = service.CONTINUATION_MAX_MONTHS = 3;
   const CONTINUATION_WARN_DAYS = service.CONTINUATION_WARN_DAYS = 7;
-  // Căn cứ bắt buộc của bản ghi DỰ KIẾN (tiếp tục sử dụng trước ngày hết hạn / dự kiến ngừng sử dụng).
-  service.EVIDENCE_TYPES = [['APPLICATION', 'Đơn đề nghị gia hạn'], ['COMMITMENT', 'Cam kết của tiểu thương'], ['MINUTES', 'Biên bản làm việc'], ['OTHER', 'Khác']];
+  // Căn cứ / hình thức xác minh. G3 (10/2026): bắt buộc cho MỌI bản ghi mới (dự kiến và thực tế); bản ghi cũ thiếu căn cứ vẫn hợp lệ.
+  service.EVIDENCE_TYPES = [['SITE_CHECK', 'Kiểm tra trực tiếp tại điểm'], ['TRADER_CONTACT', 'Làm việc với tiểu thương'], ['APPLICATION', 'Đơn đề nghị gia hạn'], ['COMMITMENT', 'Cam kết của tiểu thương'], ['MINUTES', 'Biên bản làm việc'], ['OTHER', 'Khác']];
+  // Cửa sổ xác minh trước hạn: hợp đồng còn hiệu lực và còn ≤ 30 ngày (ngoài trường hợp hết hạn trong tháng mặt bằng).
+  const VERIFICATION_WINDOW_DAYS = service.VERIFICATION_WINDOW_DAYS = 30;
   const evidenceLabel = service.evidenceLabel = code => (service.EVIDENCE_TYPES.find(x => x[0] === code) || [null, ''])[1];
   const addDays = (iso, n) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
   // Ngày cuối được phép của một lần xác nhận: from + 3 tháng − 1 ngày (cuối tháng được kẹp: 31/10 → 30/01).
@@ -275,19 +282,22 @@
   const canConfirm = c => !!c && !!A.canDo && A.canDo(CONTINUATION_PERMISSION, c.market);
   service.canConfirmContinuation = function (contractOrId) { return canConfirm(getContract(contractOrId)); };
   // Chế độ xác nhận cho hợp đồng tại ngày xét: EXPIRED (thực tế) | ENDING (dự kiến trước ngày hết hạn) | null.
+  // G3: ENDING mở từ khi còn ≤ 30 ngày, hoặc khi hết hạn trong tháng mặt bằng của kỳ thu đang mở (như trước).
   service.continuationMode = function (contractOrId, date) {
     const c = getContract(contractOrId), at = date || A.U.today();
     if (service.isExpiredPending(c, at)) return 'EXPIRED';
+    if (c && c.status === 'ACTIVE' && service.displayStatus(c, at) === 'ACTIVE' && c.end && A.U.days(at, c.end) <= VERIFICATION_WINDOW_DAYS) return 'ENDING';
     return service.endingLandMonth(c, at) ? 'ENDING' : null;
   };
   // Kiểm tra dùng chung cho form và service. Trả về null hoặc { field, message }.
   //   EXPIRED: CONTINUING (thực tế) / PLANNED_STOP / STOPPED. ENDING: CONTINUING (dự kiến) / PLANNED_STOP.
-  //   Bản ghi dự kiến bắt buộc căn cứ. Đã ngừng thực tế → không nhận thêm. Có dự kiến ngừng → bản thực tế mới thay thế nó.
+  //   Mọi bản ghi mới bắt buộc căn cứ / hình thức xác minh + ghi chú (G3). Đã ngừng thực tế → không nhận thêm.
+  //   Có dự kiến ngừng → bản thực tế mới thay thế nó.
   service.validateContinuation = function (contractOrId, input, date) {
     const c = getContract(contractOrId), at = date || A.U.today(), x = input || {};
     if (!c) return { field: 'form', message: 'Không tìm thấy hợp đồng.' };
     const mode = service.continuationMode(c, at);
-    if (!mode) return { field: 'form', message: 'Chỉ xác nhận cho hợp đồng Hết hạn – chờ xử lý hoặc sắp hết hạn trong tháng mặt bằng của kỳ thu đang mở.' };
+    if (!mode) return { field: 'form', message: 'Chỉ xác minh cho hợp đồng sắp hết hạn (còn ≤ ' + VERIFICATION_WINDOW_DAYS + ' ngày), hết hạn trong tháng mặt bằng của kỳ thu đang mở, hoặc Hết hạn – chờ xử lý.' };
     if (service.stoppedRecord(c)) return { field: 'form', message: 'Hợp đồng đã được xác nhận ngừng sử dụng. Không thể xác nhận tiếp tục sử dụng; cần xử lý gia hạn hoặc chấm dứt hợp đồng.' };
     const kinds = mode === 'EXPIRED' ? ['CONTINUING', 'PLANNED_STOP', 'STOPPED'] : ['CONTINUING', 'PLANNED_STOP'];
     if (kinds.indexOf(x.kind) === -1) return { field: 'kind', message: 'Vui lòng chọn tình trạng thực tế.' };
@@ -309,7 +319,7 @@
       if (x[key] > expected) return { field: key, message: 'Khoảng từ ' + A.U.dmy(expected) + ' chưa được xác nhận. Ngày ' + label + ' không được sau ' + A.U.dmy(expected) + '.' };
     }
     const planned = x.kind === 'PLANNED_STOP' || (x.kind === 'CONTINUING' && mode === 'ENDING');
-    if (planned && !evidenceLabel(x.evidence)) return { field: 'evidence', message: 'Vui lòng chọn căn cứ của xác nhận dự kiến.' };
+    if (!evidenceLabel(x.evidence)) return { field: 'evidence', message: planned ? 'Vui lòng chọn căn cứ của xác nhận dự kiến.' : 'Vui lòng chọn căn cứ / hình thức xác minh thực tế.' };
     if (!String(x.note || '').trim()) return { field: 'note', message: 'Vui lòng nhập ghi chú/lý do.' };
     return null;
   };
@@ -345,7 +355,7 @@
     const record = x.kind === 'CONTINUING' ? Object.assign(base, { basis: mode === 'ENDING' ? 'PLANNED' : 'ACTUAL', from: x.from, until: x.until })
       : x.kind === 'PLANNED_STOP' ? Object.assign(base, { plannedStopOn: x.plannedStopOn, from: x.plannedStopOn, until: null })
       : Object.assign(base, { stoppedOn: x.stoppedOn, from: x.stoppedOn, until: null });
-    if (service.isPlanned(record)) record.evidence = x.evidence;
+    record.evidence = x.evidence;
     // Thực tế khác dự kiến ngừng: bản ghi mới THAY THẾ (không hủy) bản dự kiến, giữ nguyên lịch sử.
     const replaced = x.kind !== 'PLANNED_STOP' ? service.plannedStopRecord(c) : null, replacedBefore = replaced && Object.assign({}, replaced);
     if (replaced) { Object.assign(replaced, { supersededAt: confirmedAt, supersededBy: actor.name, supersededById: recId, supersedeReason: record.note }); record.supersedes = replaced.id; }
@@ -374,17 +384,85 @@
     const rec = (c.continuations || []).find(r => r && r.id === recordId);
     if (!rec || !isValid(rec) || !service.isPlanned(rec)) return { error: 'INVALID', message: 'Chỉ kiểm tra bản ghi dự kiến còn hiệu lực.' };
     if (!service.isExpiredPending(c)) return { error: 'INVALID', message: 'Chỉ kiểm tra thực tế sau ngày hợp đồng hết hạn.' };
-    const note = String(input && input.note || '').trim() || 'Kiểm tra thực tế: đúng như dự kiến';
+    // G3: xác minh thực tế bắt buộc căn cứ / hình thức và ghi chú (không còn ghi chú mặc định).
+    const evidence = input && input.evidence, note = String(input && input.note || '').trim();
+    if (!evidenceLabel(evidence)) return { error: 'INVALID', field: 'evidence', message: 'Vui lòng chọn căn cứ / hình thức xác minh thực tế.' };
+    if (!note) return { error: 'INVALID', field: 'note', message: 'Vui lòng nhập ghi chú/lý do.' };
     if (rec.kind === 'PLANNED_STOP') {
       if (rec.plannedStopOn > A.U.today()) return { error: 'INVALID', message: 'Chưa tới ngày dự kiến ngừng sử dụng (' + A.U.dmy(rec.plannedStopOn) + ').' };
-      return service.confirmContinuation(c.id, { kind: 'STOPPED', stoppedOn: rec.plannedStopOn, note });
+      return service.confirmContinuation(c.id, { kind: 'STOPPED', stoppedOn: rec.plannedStopOn, evidence, note });
     }
     const actor = actorOf(), verifiedAt = new Date().toISOString();
-    Object.assign(rec, { verifiedAt, verifiedBy: actor.name, verifiedById: actor.id, verifyNote: note });
-    const entry = { at: stampOf(verifiedAt), action: 'Kiểm tra thực tế xác nhận dự kiến', detail: rec.id + ' (' + recText(rec) + ') · ' + note, by: actor.name };
+    Object.assign(rec, { verifiedAt, verifiedBy: actor.name, verifiedById: actor.id, verifyNote: note, verifyEvidence: evidence });
+    const entry = { at: stampOf(verifiedAt), action: 'Kiểm tra thực tế xác nhận dự kiến', detail: rec.id + ' (' + recText(rec) + ') · Căn cứ: ' + evidenceLabel(evidence) + ' · ' + note, by: actor.name };
     repository.addHistory(c.id, entry);
-    if (!persistOrRollback(() => { ['verifiedAt', 'verifiedBy', 'verifiedById', 'verifyNote'].forEach(k => delete rec[k]); c.history = c.history.filter(h => h !== entry); })) return { error: 'SAVE_FAILED', message: 'Không thể lưu vào bộ nhớ của trình duyệt.' };
+    if (!persistOrRollback(() => { ['verifiedAt', 'verifiedBy', 'verifiedById', 'verifyNote', 'verifyEvidence'].forEach(k => delete rec[k]); c.history = c.history.filter(h => h !== entry); })) return { error: 'SAVE_FAILED', message: 'Không thể lưu vào bộ nhớ của trình duyệt.' };
     return { record: rec };
+  };
+  // G3 (10/2026): "Không tiếp tục thuê" — Tổ trưởng nhập NGÀY CUỐI CÒN SỬ DỤNG; ngày ngừng = ngày đó + 1.
+  // Ngày ngừng còn ở tương lai → dự kiến ngừng (PLANNED_STOP); đã tới / đã qua → đã ngừng thực tế (STOPPED).
+  // Ngày cuối nằm sau phần đã có căn cứ → báo khoảng thiếu; KHÔNG tự tạo bản "tiếp tục thuê" để lấp khoảng.
+  service.recordNotContinuing = function (id, input, date) {
+    const c = repository.getById(id), at = date || A.U.today(), x = input || {}, last = x.lastUseDate;
+    if (!c) return { error: 'NOT_FOUND', message: 'Không tìm thấy hợp đồng.' };
+    if (!canConfirm(c)) return { error: 'FORBIDDEN', message: 'Bạn không có quyền xác nhận tình trạng sử dụng của hợp đồng này.' };
+    if (!isIsoDate(last)) return { error: 'INVALID', field: 'lastUseDate', message: 'Vui lòng nhập ngày cuối còn sử dụng.' };
+    if (c.end && last < c.end) return { error: 'INVALID', field: 'lastUseDate', message: 'Ngày cuối sử dụng không được trước ngày hết hạn hợp đồng (' + A.U.dmy(c.end) + '). Ngừng trước hạn thuộc thủ tục chấm dứt hợp đồng, chưa áp dụng trên hệ thống.' };
+    const through = service.confirmedThrough(c);
+    if (through && last > through) return { error: 'INVALID', field: 'lastUseDate', gap: { from: addDays(through, 1), to: last },
+      message: 'Từ ' + A.U.dmy(addDays(through, 1)) + ' đến ' + A.U.dmy(last) + ' chưa có căn cứ sử dụng. Ghi nhận "Tiếp tục thuê" cho khoảng này trước (thao tác riêng, có căn cứ), rồi mới ghi nhận "Không tiếp tục thuê".' };
+    const stopOn = addDays(last, 1), kind = stopOn > at ? 'PLANNED_STOP' : 'STOPPED';
+    const r = service.confirmContinuation(c.id, Object.assign({ kind, evidence: x.evidence, note: x.note }, kind === 'STOPPED' ? { stoppedOn: stopOn } : { plannedStopOn: stopOn }), at);
+    if (r.error && (r.field === 'stoppedOn' || r.field === 'plannedStopOn')) r.field = 'lastUseDate';
+    return r;
+  };
+  // ---- G3 (10/2026): lớp DIỄN GIẢI cho Tổ trưởng — chỉ đọc, không đổi dữ liệu lưu ----
+  // 3 kết quả xác minh suy từ bản ghi hợp lệ: NONE = Chưa xác minh; CONTINUING = Tiếp tục thuê; NOT_CONTINUING = Không
+  // tiếp tục thuê (dự kiến ngừng / đã ngừng). planned = căn cứ dự kiến chưa kiểm tra thực tế. Mã nội bộ (USAGE_STATE,
+  // kind/basis) giữ nguyên cho tính phí và thông báo.
+  service.VERIFICATION_OUTCOME = { NONE: { label: 'Chưa xác minh', tone: 'warn' }, CONTINUING: { label: 'Tiếp tục thuê', tone: 'ok' }, NOT_CONTINUING: { label: 'Không tiếp tục thuê', tone: 'info' } };
+  service.verificationOutcome = function (contractOrId) {
+    const c = getContract(contractOrId);
+    if (!c || c.status !== 'ACTIVE') return null;
+    const stop = service.stoppedRecord(c), plan = service.plannedStopRecord(c), last = service.latestContinuation(c);
+    if (stop) return { key: 'NOT_CONTINUING', planned: false, record: stop, stopOn: stop.stoppedOn, lastUseDate: addDays(stop.stoppedOn, -1) };
+    if (plan) return { key: 'NOT_CONTINUING', planned: true, record: plan, stopOn: plan.plannedStopOn, lastUseDate: addDays(plan.plannedStopOn, -1) };
+    if (last && last.kind === 'CONTINUING') return { key: 'CONTINUING', planned: service.isPlanned(last) && !last.verifiedAt, record: last, through: service.confirmedThrough(c) };
+    return { key: 'NONE', planned: false, record: null };
+  };
+  // Hợp đồng thuộc diện theo dõi xử lý: đang trong cửa sổ xác minh / đã hết hạn, hoặc đã có bản ghi / ghi chú.
+  service.followUpApplies = function (contractOrId, date) {
+    const c = getContract(contractOrId);
+    return !!c && c.status === 'ACTIVE' && (!!service.continuationMode(c, date) || !!(c.continuations || []).length || !!(c.expiryNotes || []).length);
+  };
+  // Mốc hồ sơ (nhắc việc, không phải thời hạn pháp lý): ngày sau ngày hết hạn + 3 tháng (ngày cuối của khoảng 3 tháng đầu).
+  service.dossierMilestone = function (contractOrId) {
+    const c = getContract(contractOrId);
+    return c && c.end ? maxUntil(addDays(c.end, 1)) : null;
+  };
+  // "Không tiếp tục thuê" đã ngừng thực tế: điểm KD giữ nguyên trạng thái, chỉ hiển thị nhãn chờ thủ tục kết thúc.
+  service.PENDING_CLOSURE_LABEL = 'Chờ thủ tục kết thúc';
+  service.isPendingClosure = function (contractOrId) {
+    const c = getContract(contractOrId);
+    return !!c && c.status === 'ACTIVE' && !!service.stoppedRecord(c);
+  };
+  // Các việc cần xử lý (nhãn nhắc việc; không chặn tiền, không đổi trạng thái): thiếu căn cứ, căn cứ sắp hết,
+  // dự kiến cần xác nhận thực tế, mốc hồ sơ (chỉ khi Tiếp tục thuê), chờ thủ tục kết thúc.
+  service.attentionFlags = function (contractOrId, date) {
+    const c = getContract(contractOrId), at = date || A.U.today(), out = [];
+    if (!c || c.status !== 'ACTIVE') return out;
+    const s = service.usageState(c, at), o = service.verificationOutcome(c), flag = (code, label, tone) => out.push({ code, label, tone });
+    if (s === 'UNCONFIRMED' || s === 'LAPSED') flag('MISSING_BASIS', 'Thiếu căn cứ sử dụng', 'danger');
+    if (s === 'ENDING_UNCOVERED') flag('MISSING_BASIS', 'Cần xác minh trước kỳ thu', 'danger');
+    if (s === 'EXPIRING') flag('BASIS_ENDING', 'Căn cứ sắp hết (' + A.U.dmy(service.confirmedThrough(c)) + ')', 'warn');
+    if (service.plannedToVerify(c, at).length) flag('VERIFY_PLANNED', 'Dự kiến cần xác nhận thực tế', 'warn');
+    if (o && o.key === 'CONTINUING' && service.isExpiredPending(c, at)) {
+      const m = service.dossierMilestone(c), d = A.U.days(at, m);
+      if (d < 0) flag('DOSSIER_OVERDUE', 'Quá mốc hồ sơ ' + A.U.dmy(m), 'warn');
+      else if (d <= CONTINUATION_WARN_DAYS) flag('DOSSIER_DUE', 'Sắp tới mốc hồ sơ ' + A.U.dmy(m), 'info');
+    }
+    if (o && o.key === 'NOT_CONTINUING' && !o.planned) flag('PENDING_CLOSURE', service.PENDING_CLOSURE_LABEL, 'info');
+    return out;
   };
   // Chỉ hủy được bản ghi hợp lệ MỚI NHẤT (giữ tính liên tục) và CHƯA được dùng để phát hành khoản thu. Bản đã dùng
   // chỉ được thay đổi bằng bản ghi tình trạng thực tế mới (phát sinh dấu vết chênh lệch), không hủy trực tiếp.
@@ -453,20 +531,43 @@
     if (!flags && !out.length) delete c.settlementFlags;
     return out;
   };
-  // Cảnh báo cho Tổ trưởng (giao qua hộp thông báo nội bộ). notificationKey ổn định để chống trùng:
-  // chưa xác nhận → theo hợp đồng; sắp hết / hết hiệu lực → theo bản ghi xác nhận (xác nhận mới = nhắc mới);
-  // sắp hết hạn trong tháng mặt bằng → theo hợp đồng + kỳ; kiểm tra thực tế bản dự kiến → theo bản ghi.
+  // Cảnh báo hợp đồng cho hộp thông báo nội bộ. Đây là projection chỉ đọc từ G3:
+  // không sửa hợp đồng, bản xác minh, điểm kinh doanh hoặc dữ liệu tính phí.
+  // Key có ngày chỉ dùng cho nhắc hằng ngày; key còn lại là nhắc việc một lần.
   service.expiryAlerts = function (date) {
     const at = date || A.U.today(), out = [];
+    const marketName = c => ((A.U.market && A.U.market(c.market)) || {}).name || c.market;
+    const add = (key, kind, contract, title, message, record) => out.push({ key, kind, contract, title, message, record: record || null, requiredAction: CONTINUATION_PERMISSION });
     repository.list().forEach(c => {
-      const s = service.usageState(c, at);
-      if (!s) return;
-      const last = service.latestContinuation(c), through = service.confirmedThrough(c);
-      if (s === 'UNCONFIRMED') out.push({ key: 'CONTRACT_EXPIRED_PENDING|' + c.id, kind: s, contract: c, title: 'Hợp đồng hết hạn – chờ xử lý', message: 'Hợp đồng ' + c.id + ' đã hết hạn từ ' + A.U.dmy(c.end) + ' và chưa được xác nhận tình trạng sử dụng.' });
-      else if (s === 'EXPIRING') out.push({ key: 'CONTINUATION_EXPIRING|' + c.id + '|' + last.id, kind: s, contract: c, title: 'Xác nhận sử dụng sắp hết hạn', message: 'Xác nhận tiếp tục sử dụng của hợp đồng ' + c.id + ' hết hiệu lực ngày ' + A.U.dmy(through) + '.' });
-      else if (s === 'LAPSED') out.push({ key: 'CONTINUATION_LAPSED|' + c.id + '|' + (last ? last.id : ''), kind: s, contract: c, title: 'Xác nhận sử dụng đã hết hiệu lực', message: 'Xác nhận tiếp tục sử dụng của hợp đồng ' + c.id + ' đã hết hiệu lực từ ' + A.U.dmy(addDays(through, 1)) + '. Cần xác nhận bổ sung hoặc xử lý hợp đồng.' });
-      else if (s === 'ENDING_UNCOVERED') { const em = service.endingLandMonth(c, at); out.push({ key: 'CONTRACT_ENDING_IN_LAND_MONTH|' + c.id + '|' + em.periodId, kind: s, contract: c, title: 'Hợp đồng sắp hết hạn trong tháng mặt bằng', message: 'Hợp đồng ' + c.id + ' hết hạn ngày ' + A.U.dmy(c.end) + ', trước khi hết tháng mặt bằng ' + A.U.dmy(em.landTo) + '. Cần xác nhận dự kiến tiếp tục hoặc ngừng sử dụng trước khi phát hành kỳ thu.' }); }
-      service.plannedToVerify(c, at).forEach(r => out.push({ key: 'PLANNED_VERIFY|' + c.id + '|' + r.id, kind: 'PLANNED_VERIFY', contract: c, record: r, title: 'Kiểm tra tình trạng sử dụng thực tế', message: 'Hợp đồng ' + c.id + ' đã hết hạn. Bản xác nhận dự kiến ' + r.id + ' (' + recText(r) + ') cần được kiểm tra với tình trạng sử dụng thực tế.' }));
+      if (!c || c.status !== 'ACTIVE' || !c.end) return;
+      const outcome = service.verificationOutcome(c), daysToEnd = A.U.days(at, c.end), place = marketName(c);
+      // Chưa xác minh: một nhắc trong cửa sổ 30 ngày, sau đó hằng ngày trong
+      // 7 ngày cuối và sau ngày hết hạn. Không gửi bù ngày cũ.
+      if (outcome && outcome.key === 'NONE') {
+        if (daysToEnd >= 8 && daysToEnd <= VERIFICATION_WINDOW_DAYS) {
+          add('CONTRACT_VERIFY_WINDOW|' + c.id, 'VERIFY_WINDOW', c, 'Cần xác minh hợp đồng sắp hết hạn', 'Chợ ' + place + ' · Hợp đồng ' + c.id + ' hết hạn ngày ' + A.U.dmy(c.end) + '. Vui lòng xác minh tiểu thương có tiếp tục thuê hay không.');
+        } else if (daysToEnd >= 0 && daysToEnd <= CONTINUATION_WARN_DAYS) {
+          add('CONTRACT_VERIFY_FINAL_DAILY|' + c.id + '|' + at, 'VERIFY_FINAL_DAILY', c, 'Nhắc xác minh hợp đồng sắp hết hạn', 'Chợ ' + place + ' · Hợp đồng ' + c.id + ' còn ' + daysToEnd + ' ngày đến hạn (' + A.U.dmy(c.end) + ') và chưa có kết quả xác minh.');
+        } else if (daysToEnd < 0) {
+          add('CONTRACT_VERIFY_OVERDUE_DAILY|' + c.id + '|' + at, 'VERIFY_OVERDUE_DAILY', c, 'Hợp đồng hết hạn chưa xác minh', 'Chợ ' + place + ' · Hợp đồng ' + c.id + ' đã hết hạn ngày ' + A.U.dmy(c.end) + ' và chưa có kết quả xác minh.');
+        }
+      }
+      // Bản dự kiến chỉ tạo một việc kiểm tra thực tế, không tạo nhắc lặp hằng ngày.
+      service.plannedToVerify(c, at).forEach(r => add('PLANNED_VERIFY|' + c.id + '|' + r.id, 'PLANNED_VERIFY', c, 'Cần kiểm tra kết quả thực tế', 'Chợ ' + place + ' · Hợp đồng ' + c.id + ' có bản dự kiến ' + r.id + ' (' + recText(r) + ') cần được kiểm tra thực tế.', r));
+      // Đã xác minh tiếp tục thuê: chuyển sang theo dõi hoàn thiện hồ sơ.
+      // Mốc ba tháng là nhắc việc nội bộ, không làm thay đổi căn cứ tính phí.
+      if (outcome && outcome.key === 'CONTINUING' && service.isExpiredPending(c, at)) {
+        const milestone = service.dossierMilestone(c), daysToMilestone = A.U.days(at, milestone), recordId = outcome.record && outcome.record.id || 'CURRENT';
+        if (daysToMilestone < 0) add('CONTRACT_DOSSIER_OVERDUE_DAILY|' + c.id + '|' + recordId + '|' + at, 'DOSSIER_OVERDUE_DAILY', c, 'Hồ sơ hợp đồng quá mốc theo dõi', 'Chợ ' + place + ' · Hợp đồng ' + c.id + ' đã qua mốc theo dõi hồ sơ ' + A.U.dmy(milestone) + '. Việc này không làm dừng tính phí hoặc thay đổi trạng thái hợp đồng.');
+        else if (daysToMilestone <= CONTINUATION_WARN_DAYS) add('CONTRACT_DOSSIER_DUE_DAILY|' + c.id + '|' + recordId + '|' + at, 'DOSSIER_DUE_DAILY', c, 'Sắp tới mốc theo dõi hồ sơ hợp đồng', 'Chợ ' + place + ' · Hợp đồng ' + c.id + ' còn ' + daysToMilestone + ' ngày đến mốc theo dõi hồ sơ ' + A.U.dmy(milestone) + '.');
+        else add('CONTRACT_DOSSIER_TRACK|' + c.id + '|' + recordId, 'DOSSIER_TRACK', c, 'Theo dõi hoàn thiện hồ sơ hợp đồng', 'Chợ ' + place + ' · Hợp đồng ' + c.id + ' đã ghi nhận tiếp tục thuê. Theo dõi hoàn thiện hồ sơ trước mốc nội bộ ' + A.U.dmy(milestone) + '.');
+      }
+      // Không tiếp tục thuê đã xác minh: chỉ theo dõi thủ tục kết thúc, không
+      // nhắc yêu cầu tiếp tục thuê và không tự chấm dứt/thanh lý.
+      if (outcome && outcome.key === 'NOT_CONTINUING' && !outcome.planned) {
+        const recordId = outcome.record && outcome.record.id || 'CURRENT';
+        add('CONTRACT_PENDING_CLOSURE|' + c.id + '|' + recordId, 'PENDING_CLOSURE', c, 'Hợp đồng chờ thủ tục kết thúc', 'Chợ ' + place + ' · Hợp đồng ' + c.id + ' đã xác minh không tiếp tục thuê và đang chờ thủ tục kết thúc/thanh lý. Điểm kinh doanh và khoản phí hiện có không tự thay đổi.');
+      }
     });
     return out;
   };

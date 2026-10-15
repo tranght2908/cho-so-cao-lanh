@@ -34,7 +34,9 @@
     const acc = A.currentAccount();
     if (!acc || A.ACCOUNTS.authStatus(acc) !== 'ACTIVE') return false;
     if (!A.PERM.canAction(ui.role, actionKey)) return false;
-    if (targetMarket != null && targetMarket !== ui.market) return false;
+    // Do not rely solely on the selected-market UI invariant: handlers/services
+    // may be invoked directly with a forged UI context.
+    if (targetMarket != null && (targetMarket !== ui.market || A.allowedMarkets(acc).indexOf(targetMarket) === -1)) return false;
     return true;
   };
 })(window.APP);

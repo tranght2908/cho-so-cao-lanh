@@ -36,7 +36,7 @@ ok('chưa có căn cứ → chặn khoảng đo; điểm thuộc danh sách ghi 
   assert.strictEqual(MP.stateOf('CL', '2026-11').id, 'NEEDS_ACTION');
 });
 ok('Tổ trưởng xác nhận tiếp tục sử dụng → tự tính lại; còn thiếu chỉ số → MISSING_METER_READING (ghi bổ sung)', () => {
-  const r = CS.confirmContinuation(c.id, { kind: 'CONTINUING', from: '2026-10-21', until: '2026-12-31', note: 'Vẫn kinh doanh' });
+  const r = CS.confirmContinuation(c.id, { kind: 'CONTINUING', from: '2026-10-21', until: '2026-12-31', evidence: 'SITE_CHECK', note: 'Vẫn kinh doanh' });
   assert(!r.error, r.message);
   const w = B.warnings('CL', mp.id).filter(x => x.contractId === c.id);
   assert(!w.some(x => x.code === 'USAGE_NOT_COVERED'), 'meter window now covered');

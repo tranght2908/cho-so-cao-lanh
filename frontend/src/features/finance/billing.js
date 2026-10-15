@@ -199,7 +199,7 @@
     // ISSUE-07: một chỉ số (điểm × đợt) chỉ được tính cho MỘT hợp đồng. Nhiều hợp đồng cùng dùng khoảng chỉ số của một
     // điểm → cảnh báo chặn, không tự chia / không tính hai lần.
     const meterUsers = new Map();
-    MP().usageContracts(bp).forEach(c => { const sa = c.serviceApplicability || {}; if (!sa.electricity && !sa.water) return; const pid = c.businessPointId || c.stallId; meterUsers.set(pid, (meterUsers.get(pid) || []).concat(c.id)); });
+    MP().usageContracts(bp).forEach(c => { const k = MP().meterChargesFor(bp, c); if (!k.electricity && !k.water) return; const pid = c.businessPointId || c.stallId; meterUsers.set(pid, (meterUsers.get(pid) || []).concat(c.id)); });
     const clip = (d, lo, hi) => d < lo ? lo : d > hi ? hi : d;
     MP().contracts(bp).forEach(c => {
       const st = A.idx.stall.get(c.businessPointId || c.stallId), t = A.idx.trader.get(c.traderId);
@@ -235,8 +235,9 @@
       const usageBlocked = !!(usageCov && usageCov.applicable && usageCov.gap);
       const terms = contractTermsAt(c, clip(readDate, c.start, usageCov && usageCov.billTo ? usageCov.billTo : (c.end || readDate)));
       const usageTermsDay = clip(readDate, c.start, usageCov && usageCov.billTo ? usageCov.billTo : (c.end || readDate));
-      // HINH_THUC_THU_DIEN_NUOC: chợ thu điện, nước chia đều như dịch vụ → không tạo dòng theo công tơ.
-      const applies = chargeApplies(market, A.SERVICE_CFG && A.SERVICE_CFG.utilityMode(market) === 'SERVICE' ? Object.assign({}, c.serviceApplicability || {}, { electricity: false, water: false }) : (c.serviceApplicability || {}), readDate);
+      // HINH_THUC_THU_DIEN_NUOC: chợ thu điện, nước chia đều như dịch vụ → không tạo dòng theo công tơ. Khoản điện / nước
+      // cần chỉ số lấy từ helper dùng chung với màn Chỉ số (marketPeriod.meterChargesFor) → hai màn luôn cùng danh sách.
+      const applies = MP().meterChargesFor(bp, c, readDate);
       const sharedMeter = (meterUsers.get(st.id) || []).length > 1;
       if (usageIds.has(c.id) && sharedMeter && (applies.electricity || applies.water)) warning(out, { code: 'SHARED_METER_READING', contractId: c.id, traderId: t.id, businessPointId: st.id, message: 'Nhiều hợp đồng cùng dùng chỉ số điện, nước của điểm ' + st.code + ' trong đợt này — cần xử lý trước khi tính (không tính một chỉ số hai lần).' });
       const reading = A.db.readings.find(x => x.stallId === st.id && (x.billingPeriodId === bp.id || (!x.billingPeriodId && x.period === period)));
@@ -266,7 +267,7 @@
       if (serviceIds.has(c.id) && serviceApplies && !(serviceCov && serviceCov.gap)) {
         // GIẢ ĐỊNH prototype (chưa xác minh với đơn vị quản lý): dịch vụ thu TRỌN tháng, không chia ngày, kể cả khi chỉ
         // sử dụng một phần tháng. Giữ nguyên cách tính hiện có; chỉ cảnh báo (không chặn) để Tổ trưởng biết.
-        if (serviceCov && serviceCov.billTo && serviceCov.billTo < usageRange.to) warning(out, { severity: 'WARNING', code: 'SERVICE_FULL_MONTH_ASSUMPTION', contractId: c.id, traderId: t.id, businessPointId: st.id, chargeType: 'MARKET_SERVICE', message: 'Dịch vụ ' + monthLabel(usageMonth) + ': sử dụng đến ' + U.dmy(serviceCov.billTo) + ' nhưng thu trọn tháng (giả định của prototype, chưa xác minh chính sách).' });
+        if (serviceCov && serviceCov.billTo && serviceCov.billTo < usageRange.to) warning(out, { severity: 'WARNING', code: 'SERVICE_FULL_MONTH_ASSUMPTION', contractId: c.id, traderId: t.id, businessPointId: st.id, chargeType: 'MARKET_SERVICE', message: 'Dịch vụ ' + monthLabel(usageMonth) + ': sử dụng đến ' + U.dmy(serviceCov.billTo) + ' — tạm tính trọn tháng, cần khảo sát thực tế (giả định của prototype, chưa có chính sách).' });
         const sTermsDay = clip(usageRange.to, c.start, serviceCov && serviceCov.billTo ? serviceCov.billTo : (c.end || usageRange.to));
         const sTerms = contractTermsAt(c, sTermsDay);
         const services = sTerms && Array.isArray(sTerms.services) ? sTerms.services : [];
